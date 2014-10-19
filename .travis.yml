@@ -12,8 +12,9 @@ script:
 - conda build devtools/conda-recipe
 - source activate $python
 - conda install $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
+- tar ztf $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
 - conda list -e
-- nosetests -vv
+- nosetests -vv tests-nose
 
 env:
   matrix:
