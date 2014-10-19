@@ -12,7 +12,7 @@ fi
 
 if [[ "2.7 3.3" =~ "$python" ]]; then
     conda install --yes binstar
-    binstar -t $BINSTAR_TOKEN upload --force -u omnia -p openmmtools $HOME/miniconda/conda-bld/linux-64/openmmtools-*
+    binstar -t $BINSTAR_TOKEN upload --force -u omnia -p openmmtools $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
 fi
 
 if [[ "$python" != "2.7" ]]; then

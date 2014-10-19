@@ -1,16 +1,17 @@
 language: c
 
 install:
+- export PACKAGENAME="openmmtools"
 - source devtools/ci/install.sh
 - export PYTHONUNBUFFERED=true
 
 script:
 - export CC="gcc -std=c89"
 - source deactivate
-- conda install --yes conda-build
+- conda install --yes conda-build jinja2
 - conda build devtools/conda-recipe
 - source activate $python
-- conda install $HOME/miniconda/conda-bld/linux-64/openmmtools-*
+- conda install $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
 - conda list -e
 - nosetests -vv
 
