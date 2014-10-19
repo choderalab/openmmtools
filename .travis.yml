@@ -12,7 +12,7 @@ script:
 - conda build devtools/conda-recipe
 - source activate $python
 - conda install $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
-- tar ztf $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
+- tar ztf $HOME/miniconda/conda-bld/linux-64/openmmtools-0.0.0-py27_0.tar.bz2
 - conda list -e
 - nosetests -vv tests-nose
 
