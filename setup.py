@@ -89,10 +89,15 @@ if not release:
 
     a = open(filename, 'w')
     try:
-        a.write(cnt % {'version': VERSION,
+        contents = cnt % {'version': VERSION,
                        'full_version': FULLVERSION,
                        'git_revision': GIT_REVISION,
-                       'isrelease': str(ISRELEASED)})
+                       'isrelease': str(ISRELEASED)}
+        a.write(contents)
+        print("Writing version.py to %s :" % os.path.abspath(filename))
+        print('------------version.py-----------------')
+        print(contents)
+        print('---------------------------------------')
     finally:
         a.close()
 
