@@ -144,19 +144,20 @@ def subrandom_particle_positions(nparticles, box_vectors):
 
     Examples
     --------
-    >>> npartcles = 216
-    >>> box_vectors = unit.Quantity(openmm.Vec3(1, 0, 0), openmm.Vec3(0, 1, 0), openmm.Vec3(0, 0, 1), unit.nanometer)
+    >>> nparticles = 216
+    >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
     >>> positions = subrandom_particle_positions(nparticles, box_vectors)
 
     """
     # Create positions array.
-    positions = unit.Quantity(np.array(nparticles,3), unit.nanometers)
+    positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.nanometers)
 
     # Fill in each dimension.
     primes = [2,3,5] # prime bases for Halton sequence
     for dim in range(3):
         x = halton_sequence(primes[dim], nparticles)
-        positions[:,dim] = x * box_vectors[dim][dim]
+        l = box_vectors[dim][dim]
+        positions[:,dim] = unit.Quantity(x * l/l.unit, l.unit)
 
     return positions
 
@@ -757,20 +758,14 @@ class DiatomicFluid(TestSystem):
     >>> diatom = DiatomicFluid(constraint=True, nx=8, ny=8, nz=8)
     >>> system, positions = diatom.system, diatom.positions
 
-    TODO
-    ----
-    
-    Add subrandom selection of orientations.
-    Add multiple electrostatics treatments.
-
     """
 
-    def __init__(self, 
+    def __init__(self,
         K=424.0* unit.kilocalories_per_mole / unit.angstrom**2,
-        r0=1.383 * unit.angstroms,  
+        r0=1.383 * unit.angstroms,
         m1=14.01 * unit.amu,
         m2=14.01 * unit.amu,
-        epsilon=0.1700 * unit.kilocalories_per_mole, 
+        epsilon=0.1700 * unit.kilocalories_per_mole,
         sigma=1.8240 * unit.angstroms,
         charge=0.0 * unit.elementary_charge,
         switch=True,
@@ -779,9 +774,9 @@ class DiatomicFluid(TestSystem):
         constraint=False,
         dispersion_correction=True,
         nx=7, ny=7, nz=7):
-        
+
         nmolecules = nx * ny * nz
-        natoms = 2 * nmolecules
+        nparticles = 2 * nmolecules
 
         # Create an empty system object.
         system = openmm.System()
@@ -804,61 +799,35 @@ class DiatomicFluid(TestSystem):
 
         # Set up nonbonded interactions.
         nb = openmm.NonbondedForce()
-            
-        positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
 
-        maxX = 0.0 * unit.angstrom
-        maxY = 0.0 * unit.angstrom
-        maxZ = 0.0 * unit.angstrom
+        # Create particle pairs.
+        for atom_index in range(nmolecules):
+            nb.addParticle(+charge, sigma, epsilon)
+            nb.addParticle(-charge, sigma, epsilon)
 
-        dx = r0/2
-        dy = 0 * sigma
-        dz = 0 * sigma
+        # Set box size.
+        maxX = 2.0 * sigma * nx
+        maxY = 2.0 * sigma * ny
+        maxZ = 2.0 * sigma * nz
 
-        scaleStepSizeX = 2.0
-        scaleStepSizeY = 2.0
-        scaleStepSizeZ = 2.0
+        a = unit.Quantity((maxX,                0*unit.angstrom, 0*unit.angstrom))
+        b = unit.Quantity((0*unit.angstrom,                maxY, 0*unit.angstrom))
+        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, maxZ))
+        system.setDefaultPeriodicBoxVectors(a, b, c)
 
-        atom_index = 0
-        for ii in range(nx):
-            for jj in range(ny):
-                for kk in range(nz):
-                    # Compute particle center.
-                    x = sigma*scaleStepSizeX*ii
-                    y = sigma*scaleStepSizeY*jj
-                    z = sigma*scaleStepSizeZ*kk
-
-                    # Add particle 1.
-                    nb.addParticle(+charge, sigma, epsilon)
-
-                    positions[atom_index,0] = x - dx
-                    positions[atom_index,1] = y - dy
-                    positions[atom_index,2] = z - dz
-                    atom_index += 1
-
-                    # Add particle 2.
-                    nb.addParticle(-charge, sigma, epsilon)
-
-                    positions[atom_index,0] = x + dx
-                    positions[atom_index,1] = y + dy
-                    positions[atom_index,2] = z + dz
-                    atom_index += 1
-                    
-                    # Wrap center positions as needed.
-                    if x>maxX: maxX = x
-                    if y>maxY: maxY = y
-                    if z>maxZ: maxZ = z
+        # Create initial coordinates using subrandom positions.
+        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
+        # Set positions of second particles based on first particle.
+        for atom_index in range(0, nparticles, 2):
+            vector = positions[atom_index+1,:] - positions[atom_index+0,:]
+            unit_vector = vector / unit.norm(vector)
+            positions[atom_index+1,:] = positions[atom_index+0,:] + r0 * unit_vector
 
         # Add exceptions.
         for molecule_index in range(nmolecules):
             nb.addException(2*molecule_index+0, 2*molecule_index+1, 0.0*charge*charge, sigma, 0.0*epsilon)
 
         system.addForce(nb)
-                    
-        # Set periodic box vectors.
-        x = maxX+2*sigma*scaleStepSizeX
-        y = maxY+2*sigma*scaleStepSizeY
-        z = maxZ+2*sigma*scaleStepSizeZ
 
         if not cutoff:
             min_width = min(maxX, maxY, maxZ)
@@ -870,13 +839,8 @@ class DiatomicFluid(TestSystem):
         nb.setCutoffDistance(cutoff)
         nb.setSwitchingDistance(cutoff-switch_width)
 
-        a = unit.Quantity((x,                0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom,                y, 0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, z))
-        system.setDefaultPeriodicBoxVectors(a, b, c)
-
         # Store number of degrees of freedom.
-        self.ndof = 3*natoms - nmolecules*constraint
+        self.ndof = 3*nparticles - nmolecules*constraint
 
         # Store system and positions.
         self._system = system
@@ -1644,13 +1608,13 @@ class CustomLennardJonesFluidMixture(TestSystem):
 
 class WCAFluid(TestSystem):
 
-    def __init__(self, N=216, density=0.96, mass=39.9*unit.amu, epsilon=120.0*unit.kelvin*kB, sigma=3.4*unit.angstrom):
+    def __init__(self, nparticles=216, density=0.96, mass=39.9*unit.amu, epsilon=120.0*unit.kelvin*kB, sigma=3.4*unit.angstrom):
         """
         Create a Weeks-Chandler-Andersen system.
 
         Parameters:
         -----------
-        N : int, optional, default = 216
+        npartocles : int, optional, default = 216
             Number of particles.
         density : float, optional, default = 0.96
             Reduced density, N sigma^3 / V.
@@ -1666,7 +1630,7 @@ class WCAFluid(TestSystem):
         system = openmm.System()
 
         # Compute total system volume.
-        volume = N / density
+        volume = nparticles / density
 
         # Make system cubic in dimension.
         length = volume**(1.0/3.0)
@@ -1677,7 +1641,7 @@ class WCAFluid(TestSystem):
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Add particles to system.
-        for n in range(N):
+        for n in range(nparticles):
             system.addParticle(mass)
 
         # Create nonbonded force term implementing Kob-Andersen two-component Lennard-Jones interaction.
@@ -1691,7 +1655,7 @@ class WCAFluid(TestSystem):
         force.addGlobalParameter('sigma', sigma)
 
         # Add particles
-        for n in range(N):
+        for n in range(nparticles):
             force.addParticle([])
 
         # Set periodic boundary conditions with cutoff.
@@ -1701,11 +1665,11 @@ class WCAFluid(TestSystem):
         # Add nonbonded force term to the system.
         system.addForce(force)
 
-        # Create initial coordinates using random positions.
-        coordinates = unit.Quantity(numpy.random.rand(N,3), unit.nanometer) * (length / unit.nanometer)
+        # Create initial coordinates using subrandom positions.
+        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
 
         # Store system.
-        self.system, self.positions = system, coordinates
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Ideal gas
@@ -1741,11 +1705,11 @@ class IdealGas(TestSystem):
 
     def __init__(self, nparticles=216, mass=39.9 * unit.amu, temperature=298.0 * unit.kelvin, pressure=1.0 * unit.atmosphere, volume=None):
 
-        if volume is None: 
+        if volume is None:
             volume = (nparticles * temperature * unit.BOLTZMANN_CONSTANT_kB / pressure).in_units_of(unit.nanometers**3)
 
         charge   = 0.0 * unit.elementary_charge
-        sigma    = 3.350 * unit.angstrom # argon LJ 
+        sigma    = 3.350 * unit.angstrom # argon LJ
         epsilon  = 0.0 * unit.kilojoule_per_mole # zero interaction
 
         # Create an empty system object.
@@ -1762,14 +1726,8 @@ class IdealGas(TestSystem):
         for index in range(nparticles):
             system.addParticle(mass)
 
-        # Place particles at random positions within the box.
-        # TODO: Use reproducible seed.
-        # NOTE: This may not be thread-safe.
-
-        state = np.random.get_state()
-        np.random.seed(0)
-        positions = unit.Quantity((length/unit.nanometer) * np.random.rand(nparticles,3), unit.nanometer)
-        np.random.set_state(state)
+        # Create initial coordinates using subrandom positions.
+        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
 
         self.system, self.positions = system, positions
         self.ndof = 3 * nparticles
@@ -1779,20 +1737,20 @@ class IdealGas(TestSystem):
 
         Arguments
         ---------
-        
+
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
+
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return 0.0 * unit.kilojoules_per_mole
-        
+
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
@@ -2583,7 +2541,7 @@ class CustomGBForceSystem(TestSystem):
         sigma    = 3.350 * unit.angstrom
         epsilon  = 0.001603 * unit.kilojoule_per_mole
         cutoff   = 2.0 * unit.nanometers
-        
+
         system = openmm.System()
         for i in range(numParticles):
             system.addParticle(mass)
@@ -2591,7 +2549,7 @@ class CustomGBForceSystem(TestSystem):
         system.setDefaultPeriodicBoxVectors(openmm.Vec3(boxSize, 0.0, 0.0), openmm.Vec3(0.0, boxSize, 0.0), openmm.Vec3(0.0, 0.0, boxSize))
 
         # Create NonbondedForce.
-        nonbonded = openmm.NonbondedForce()    
+        nonbonded = openmm.NonbondedForce()
         nonbonded.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nonbonded.setCutoffDistance(cutoff)
 
@@ -2599,7 +2557,7 @@ class CustomGBForceSystem(TestSystem):
         custom = openmm.CustomGBForce()
         custom.setNonbondedMethod(openmm.CustomGBForce.CutoffPeriodic)
         custom.setCutoffDistance(cutoff)
-        
+
         custom.addPerParticleParameter("q")
         custom.addPerParticleParameter("radius")
         custom.addPerParticleParameter("scale")
@@ -2631,7 +2589,7 @@ class CustomGBForceSystem(TestSystem):
                 charge = -1.0 * unit.elementary_charge
                 radius = 0.1 * unit.nanometers
                 scale = 0.5
-                nonbonded.addParticle(charge, sigma, epsilon)            
+                nonbonded.addParticle(charge, sigma, epsilon)
                 custom.addParticle([charge, radius, scale]);
             else:
                 charge = 1.0 * unit.elementary_charge
@@ -2643,20 +2601,14 @@ class CustomGBForceSystem(TestSystem):
                 charge = -1.0 * unit.elementary_charge
                 radius = 0.1 * unit.nanometers
                 scale = 0.8
-                nonbonded.addParticle(charge, sigma, epsilon)            
+                nonbonded.addParticle(charge, sigma, epsilon)
                 custom.addParticle([charge, radius, scale]);
 
         system.addForce(nonbonded)
-        system.addForce(custom)    
+        system.addForce(custom)
 
-        # Place particles at random positions within the box.
-        # TODO: Use reproducible random number seed.
-        # NOTE: This may not be thread-safe.
-        
-        state = np.random.get_state()
-        np.random.seed(0)
-        positions = unit.Quantity((boxSize/unit.nanometer) * np.random.rand(numParticles,3), unit.nanometer)
-        np.random.set_state(state)
+        # Create initial coordinates using subrandom positions.
+        positions = subrandom_particle_positions(numParticles, system.getDefaultPeriodicBoxVectors())
 
         self.system, self.positions = system, positions
 
@@ -2669,7 +2621,7 @@ class AMOEBAIonBox(TestSystem):
 
     >>> testsystem = AMOEBAIonBox()
     >>> system, positions = testsystem.system, testsystem.positions
-    
+
     """
     def __init__(self):
         pdb_filename = get_data_filename("data/amoeba/ion-in-water.pdb")
