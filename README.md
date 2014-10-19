@@ -4,11 +4,9 @@
 <!--- [![Binstar Badge](https://binstar.org/omnia/openmmtools/badges/version.svg)](https://binstar.org/omnia/openmmtools) -->
 <!--- [![Downloads](https://pypip.in/d/mdtraj/badge.png)](https://pypi.python.org/pypi/openmmtools) -->
 
-# OpenMM Test Systems
+# Various Python tools for OpenMM
 
-Test systems for OpenMM
-
-# Description
+## `openmmtools.testsystems`
 
 This repository contains a suite of molecular systems that can be used
 for the testing of various molecular mechanics related software.  The
@@ -18,5 +16,3 @@ OpenMM objects for simulating the desired systems.
 These classes will also contain the member functions that calculate known
 analytical properties of these systems, enabling the proper testing.
 
-Note: setup.py does not currently work.  Also, the doctests must be run
-from the testsystems directory.  This will be fixed.
