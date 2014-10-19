@@ -8,6 +8,7 @@ requirements:
     - python
     - cython
     - numpy
+    - nose
     - scipy
     - setuptools
     - openmm
@@ -16,6 +17,7 @@ requirements:
     - python
     - scipy
     - openmm
+    - nose
 
 about:
   home: https://github.com/choderalab/openmm-testsystems
