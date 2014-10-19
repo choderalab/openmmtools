@@ -6,7 +6,7 @@ from simtk import openmm
 import tempfile
 import logging
 
-import testsystems
+from openmmtools import testsystems
 
 def test_doctest():
     import doctest

@@ -1,8 +1,8 @@
-.. currentmodule:: testsystems.testsystems
+.. currentmodule:: openmmtools.testsystems
 
-The testsystems Module
+The :module:`testsystems` Module
 ======================
 
-testsystems contains a number of test systems that you can use with OpenMM
+:module:`testsystems` contains a number of test systems that you can use with OpenMM, many of which have analytically computable properties that can be compared with simulation results.
 
-.. automodule:: testsystems.testsystems
+.. automodule:: openmmtools.testsystems

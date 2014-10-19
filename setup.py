@@ -1,5 +1,5 @@
 """
-Test systems for OpenMM.
+Various Python tools for OpenMM.
 """
 from __future__ import print_function
 import os
@@ -131,12 +131,12 @@ def check_dependencies():
     bar = ('-' * 70) + "\n" + ('-' * 70)
     if found_openmm:
         if not found_openmm_61_or_later:
-            msg = [bar, '[Unmet Dependency] openmm-testsystems requires OpenMM version 6.1 or later. You have version %s.' % openmm_version, bar]
+            msg = [bar, '[Unmet Dependency] openmmtools requires OpenMM version 6.1 or later. You have version %s.' % openmm_version, bar]
     else:
-        msg = [bar, '[Unmet Dependency] openmm-testsystems requires the OpenMM python package. Refer to <http://openmm.org> for details and installation instructions.', bar]
+        msg = [bar, '[Unmet Dependency] openmmtools requires the OpenMM python package. Refer to <http://openmm.org> for details and installation instructions.', bar]
 
     if not found_numpy:
-        msg = [bar, '[Unmet Dependency] openmm-testsystems requires the numpy python package. Refer to <http://www.scipy.org/scipylib/download.html> for numpy installation instructions.', bar]
+        msg = [bar, '[Unmet Dependency] openmmtools requires the numpy python package. Refer to <http://www.scipy.org/scipylib/download.html> for numpy installation instructions.', bar]
 
     if msg is not None:
         import textwrap
@@ -152,22 +152,22 @@ extensions = []
 
 write_version_py()
 setup(
-    name='testsystems',
+    name='openmmtools',
     author='John Chodera',
     author_email='john.chodera@choderalab.org',
     description=DOCLINES[0],
     long_description="\n".join(DOCLINES[2:]),
     version=__version__,
     license='LGPL',
-    url='https://github.com/choderalab/openmm-testsystems',
+    url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
-    packages=["testsystems"],
-    package_dir={'testsystems': 'src'},
+    packages=['openmmtools'],
+    package_dir={'openmmtools': 'src/openmmtools'},
+    package_data={'openmmtools': ['src/data/*']},
     install_requires=['numpy', 'nose'],
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,
-    package_data={'testsystems.data': ['src/data/*']},
     )
 check_dependencies()

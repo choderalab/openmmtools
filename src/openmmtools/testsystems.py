@@ -64,7 +64,7 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files in testsystems.
 
-    In the source distribution, these files are in ``repex/data/*/``,
+    In the source distribution, these files are in ``openmmtools/data/*/``,
     but on installation, they're moved to somewhere in the user's python
     site-packages directory.
 
@@ -76,7 +76,7 @@ def get_data_filename(relative_path):
     """
 
     from pkg_resources import resource_filename
-    fn = resource_filename('testsystems', relative_path)
+    fn = resource_filename('openmmtools', relative_path)
 
     if not os.path.exists(fn):
         raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
