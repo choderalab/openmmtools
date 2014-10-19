@@ -100,11 +100,11 @@ if not release:
 # USEFUL SUBROUTINES
 ################################################################################
 
-def find_package_data(root='src'):
+def find_package_data(data_root, package_root):
     files = []
-    for root, dirnames, filenames in os.walk(root):
+    for root, dirnames, filenames in os.walk(data_root):
         for fn in filenames:
-            files.append(relpath(join(root, fn), 'src'))
+            files.append(relpath(join(root, fn), package_root))
     return files
 
 
@@ -165,7 +165,7 @@ setup(
     classifiers=CLASSIFIERS.splitlines(),
     packages=['openmmtools'],
     package_dir={'openmmtools': 'src/openmmtools'},
-    package_data={'openmmtools': find_package_data('src/openmmtools/data')},
+    package_data={'openmmtools': find_package_data('src/openmmtools/data', 'src/openmmtools')},
     install_requires=['numpy', 'nose'],
     zip_safe=False,
     scripts=[],
