@@ -165,7 +165,7 @@ setup(
     classifiers=CLASSIFIERS.splitlines(),
     packages=['openmmtools'],
     package_dir={'openmmtools': 'src/openmmtools'},
-    package_data={'openmmtools': ['src/data/*']},
+    package_data={'openmmtools': find_package_data('src/openmmtools/data')},
     install_requires=['numpy', 'nose'],
     zip_safe=False,
     scripts=[],
