@@ -83,6 +83,83 @@ def get_data_filename(relative_path):
 
     return fn
 
+def halton_sequence(p,n):
+    """
+    Halton deterministic sequence on [0,1].
+
+    Parameters
+    ----------
+    p : int
+       Prime number for sequence.
+    n : int
+       Sequence length to generate.
+
+    Returns
+    -------
+    u : numpy.array of double
+       Sequence on [0,1].
+
+    Notes
+    -----
+    Code source: http://blue.math.buffalo.edu/sauer2py/
+    More info: http://en.wikipedia.org/wiki/Halton_sequence
+
+    Examples
+    --------
+    Generate some sequences with different prime number bases.
+    >>> x = halton_sequence(2,100)
+    >>> y = halton_sequence(3,100)
+    >>> z = halton_sequence(5,100)
+
+    """
+    eps = np.finfo(np.double).eps
+    b = np.zeros( np.ceil(np.log(n)/np.log(p)) )   # largest number of digits
+    u = np.empty( n )
+    for j in range(n):
+        i = 0
+        b[0] += 1                       # add one to current integer
+        while b[i] > p-1+eps:           # this loop does carrying in base p
+            b[i] = 0
+            i = i+1
+            b[i] += 1
+        u[j] = 0
+        for k in range(len(b)):         # add up reversed digits
+            u[j] += b[k]*p**-(k+1)
+    return u
+
+def subrandom_particle_positions(nparticles, box_vectors):
+    """Generate a deterministic list of subrandom particle positions.
+
+    Parameters
+    ----------
+    nparticles : int
+        The number of particles.
+    box_vectors : simtk.unit.Quantity of (3,3) with units compatible with nanometer
+        Periodic box vectors in which particles should lie.
+
+    Returns
+    -------
+    positions : simtk.unit.Quantity of (natoms,3) with units compatible with nanometer
+        The particle positions.
+
+    Examples
+    --------
+    >>> npartcles = 216
+    >>> box_vectors = unit.Quantity(openmm.Vec3(1, 0, 0), openmm.Vec3(0, 1, 0), openmm.Vec3(0, 0, 1), unit.nanometer)
+    >>> positions = subrandom_particle_positions(nparticles, box_vectors)
+
+    """
+    # Create positions array.
+    positions = unit.Quantity(np.array(nparticles,3), unit.nanometers)
+
+    # Fill in each dimension.
+    primes = [2,3,5] # prime bases for Halton sequence
+    for dim in range(3):
+        x = halton_sequence(primes[dim], nparticles)
+        positions[:,dim] = x * box_vectors[dim][dim]
+
+    return positions
+
 #=============================================================================================
 # Thermodynamic state description
 #=============================================================================================
