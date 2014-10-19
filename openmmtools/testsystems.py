@@ -12,7 +12,7 @@ EXAMPLES
 
 Create a 3D harmonic oscillator.
 
->>> import testsystems
+>>> from openmmtools import testsystems
 >>> ho = testsystems.HarmonicOscillator()
 >>> system, positions = ho.system, ho.positions
 
@@ -113,7 +113,7 @@ def halton_sequence(p,n):
 
     """
     eps = np.finfo(np.double).eps
-    b = np.zeros( np.ceil(np.log(n)/np.log(p)) )   # largest number of digits
+    b = np.zeros( np.ceil(np.log(n)/np.log(p)) + 1 )   # largest number of digits (adding one for halton_sequence(2,64) corner case)
     u = np.empty( n )
     for j in range(n):
         i = 0
@@ -173,7 +173,7 @@ class ThermodynamicState(object):
 
     Specify an NVT state for a water box at 298 K.
 
-    >>> from repex import testsystems
+    >>> from openmmtools import testsystems
     >>> system_container = testsystems.WaterBox()
     >>> (system, positions) = system_container.system, system_container.positions
     >>> state = ThermodynamicState(system=system, temperature=298.0*unit.kelvin)
