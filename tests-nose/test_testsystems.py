@@ -64,6 +64,7 @@ def test_energy_all_testsystems(skip_slow_tests=False):
             logging.info("Skipping potential energy test for testsystem %s." % class_name)
             continue
         logging.info("Testing potential energy test for testsystem %s" % class_name)
+        print class_name # DEBUG
 
         # Create system.
         testsystem = testsystem_class()
