@@ -1,21 +1,25 @@
 language: c
+
 install:
 - source devtools/ci/install.sh
 - export PYTHONUNBUFFERED=true
+
 script:
 - export CC="gcc -std=c89"
 - source deactivate
 - conda install --yes conda-build
 - conda build devtools/conda-recipe
 - source activate $python
-- conda install $HOME/miniconda/conda-bld/linux-64/openmm-testsystems-*
+- conda install $HOME/miniconda/conda-bld/linux-64/openmmtools-*
 - conda list -e
 - nosetests -vv
+
 env:
   matrix:
   - python=2.7  CONDA_PY=27
   global:
-    secure: URIeSr3l5RdKkEep5132pCrJyM3Vregz7G8097rHuGfppp1jJTvtPWNt+2/aRirC1cEHnARDjimlYTeg5rOnukk3t16ySxADf7nwu6bkF1QZR5PBmYdHaetCWL0gks03bSwEtPPePd0zmGWme0BoVxEjGrmitHrpq19OJrdlHvs=
+  - secure: "RMyNnsH1n7y8S+jJeYTdu3Lu4GF0NMERBCbf7yMf7ptTVvJx7+bOz/l9+/Ap+tEdXomow6i8Lrk/uG9+DOYHl3WBhYqIywtv10anP83opkUlOAcrIBDpf4B72dBgNJ5Oc5evEsf9hkMcdYrqI/GkcKFUYq2knEJtDGP6TsDHJic="
+
 after_success:
 - echo "after_success"
 - source devtools/ci/after_sucess.sh

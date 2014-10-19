@@ -1,5 +1,5 @@
 package:
-  name: openmm-testsystems
+  name: openmmtools
   version: !!str dev
 
 
@@ -20,6 +20,6 @@ requirements:
     - nose
 
 about:
-  home: https://github.com/choderalab/openmm-testsystems
+  home: https://github.com/choderalab/openmmtools
   license: GNU Lesser General Public License v2 or later (LGPLv2+)
 
