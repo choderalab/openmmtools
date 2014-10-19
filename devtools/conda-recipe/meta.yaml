@@ -1,7 +1,6 @@
 package:
   name: openmmtools
-  version: !!str dev
-
+  version: 0.0.0
 
 requirements:
   build:
@@ -13,11 +12,17 @@ requirements:
     - setuptools
     - openmm
 
+
   run:
     - python
     - scipy
     - openmm
     - nose
+
+build:
+  # Preserve the Python egg directory. This is needed for some packages
+  # that use setuptools specific features.
+  preserve_egg_dir: yes # (default no)
 
 about:
   home: https://github.com/choderalab/openmmtools
