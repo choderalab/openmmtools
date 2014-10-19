@@ -1,5 +1,5 @@
 package:
-  name: pymbar
+  name: gaff2xml
   version: !!str dev
 
 
@@ -10,13 +10,19 @@ requirements:
     - numpy
     - scipy
     - setuptools
+    - mdtraj-dev
+    - openmm    
+    - ambermini    
+
   run:
     - python
-    - cython
-    - numpy
+    - pandas
     - scipy
+    - mdtraj-dev
+    - openmm    
+    - ambermini    
 
 about:
-  home: https://github.com/choderalab/pymbar
+  home: https://github.com/choderalab/gaff2xml
   license: GNU Lesser General Public License v2 or later (LGPLv2+)
-  summary: Python implementation of the multistate Bennett acceptance ratio (MBAR) method.
+

@@ -1,5 +1,13 @@
-cython
 numpy
 scipy
+pytables
+cython
+pandas
+pyyaml
 pip
 nose
+mdtraj-dev
+openmm
+ambermini
+jinja2
+#rdkit # rdkit conda packages are only available on python 2.7, so this will cause travis to screw up.  
