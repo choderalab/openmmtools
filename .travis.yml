@@ -13,7 +13,9 @@ script:
 - source activate $python
 - conda install $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
 - conda list -e
-- nosetests -vv tests-nose
+- cd tests-nose
+- nosetests -vv
+- cd ..
 
 env:
   matrix:
