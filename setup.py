@@ -155,7 +155,7 @@ def check_dependencies():
 
 extensions = []
 
-write_version_py('src/openmmtools/version.py')
+write_version_py('openmmtools/version.py')
 
 setup(
     name='openmmtools',
@@ -169,8 +169,8 @@ setup(
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
     packages=['openmmtools'],
-    package_dir={'openmmtools': 'src/openmmtools'},
-    package_data={'openmmtools': find_package_data('src/openmmtools/data', 'src/openmmtools')},
+    package_dir={'openmmtools': 'openmmtools'},
+    package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     install_requires=['numpy', 'nose'],
     zip_safe=False,
     scripts=[],
