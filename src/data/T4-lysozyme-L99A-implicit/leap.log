@@ -1,0 +1,907 @@
+log started: Thu Jun 25 06:55:50 2009
+
+Log file: ./leap.log
+>> #
+>> # ----- leaprc for loading the Cornell et al. topology and
+>> #       parm96.dat for proteins
+>> #       assumes that any unspecified nucleic acids are DNA 
+>> #
+>> #	load atom type hybridizations
+>> #
+>> addAtomTypes {
+>> 	{ "H"   "H" "sp3" }
+>> 	{ "HO"  "H" "sp3" }
+>> 	{ "HS"  "H" "sp3" }
+>> 	{ "H1"  "H" "sp3" }
+>> 	{ "H2"  "H" "sp3" }
+>> 	{ "H3"  "H" "sp3" }
+>> 	{ "H4"  "H" "sp3" }
+>> 	{ "H5"  "H" "sp3" }
+>> 	{ "HW"  "H" "sp3" }
+>> 	{ "HC"  "H" "sp3" }
+>> 	{ "HA"  "H" "sp3" }
+>> 	{ "HP"  "H" "sp3" }
+>> 	{ "OH"  "O" "sp3" }
+>> 	{ "OS"  "O" "sp3" }
+>> 	{ "O"   "O" "sp2" }
+>> 	{ "O2"  "O" "sp2" }
+>> 	{ "OW"  "O" "sp3" }
+>> 	{ "CT"  "C" "sp3" }
+>> 	{ "CH"  "C" "sp3" }
+>> 	{ "C2"  "C" "sp3" }
+>> 	{ "C3"  "C" "sp3" }
+>> 	{ "C"   "C" "sp2" }
+>> 	{ "C*"  "C" "sp2" }
+>> 	{ "CA"  "C" "sp2" }
+>> 	{ "CB"  "C" "sp2" }
+>> 	{ "CC"  "C" "sp2" }
+>> 	{ "CN"  "C" "sp2" }
+>> 	{ "CM"  "C" "sp2" }
+>> 	{ "CK"  "C" "sp2" }
+>> 	{ "CQ"  "C" "sp2" }
+>> 	{ "CD"  "C" "sp2" }
+>> 	{ "CE"  "C" "sp2" }
+>> 	{ "CF"  "C" "sp2" }
+>> 	{ "CG"  "C" "sp2" }
+>> 	{ "CP"  "C" "sp2" }
+>> 	{ "CI"  "C" "sp2" }
+>> 	{ "CJ"  "C" "sp2" }
+>> 	{ "CW"  "C" "sp2" }
+>> 	{ "CV"  "C" "sp2" }
+>> 	{ "CR"  "C" "sp2" }
+>> 	{ "CA"  "C" "sp2" }
+>> 	{ "CY"  "C" "sp2" }
+>> 	{ "C0"  "C" "sp2" }
+>> 	{ "MG"  "Mg" "sp3" }
+>> 	{ "N"   "N" "sp2" }
+>> 	{ "NA"  "N" "sp2" }
+>> 	{ "N2"  "N" "sp2" }
+>> 	{ "N*"  "N" "sp2" }
+>> 	{ "NP"  "N" "sp2" }
+>> 	{ "NQ"  "N" "sp2" }
+>> 	{ "NB"  "N" "sp2" }
+>> 	{ "NC"  "N" "sp2" }
+>> 	{ "NT"  "N" "sp3" }
+>> 	{ "N3"  "N" "sp3" }
+>> 	{ "S"   "S" "sp3" }
+>> 	{ "SH"  "S" "sp3" }
+>> 	{ "P"   "P" "sp3" }
+>> 	{ "LP"  ""  "sp3" }
+>> 	{ "F"   "F" "sp3" }
+>> 	{ "CL"  "Cl" "sp3" }
+>> 	{ "BR"  "Br" "sp3" }
+>> 	{ "I"   "I"  "sp3" }
+>> 	{ "FE"  "Fe" "sp3" }
+>> # glycam
+>> 	{ "OG"  "O" "sp3" }
+>> 	{ "OL"  "O" "sp3" }
+>> 	{ "AC"  "C" "sp3" }
+>> 	{ "EC"  "C" "sp3" }
+>> }
+>> #
+>> #	Load the main parameter set.
+>> #
+>> parm96 = loadamberparams parm96.dat
+Loading parameters: /Users/jchodera/local/src/amber10/dat/leap/parm/parm96.dat
+Reading title:
+PARM96 for DNA, RNA and proteins with TIP3P Water. USE SCEE=1.2 in energy progs
+(UNKNOWN ATOM TYPE: IM)
+(UNKNOWN ATOM TYPE: Li)
+(UNKNOWN ATOM TYPE: IP)
+(UNKNOWN ATOM TYPE: K)
+(UNKNOWN ATOM TYPE: Rb)
+(UNKNOWN ATOM TYPE: Cs)
+(UNKNOWN ATOM TYPE: IB)
+>> #
+>> #	Load DNA/RNA libraries
+>> #
+>> loadOff all_nucleic94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_nucleic94.lib
+Loading: DA
+Loading: DA3
+Loading: DA5
+Loading: DAN
+Loading: DC
+Loading: DC3
+Loading: DC5
+Loading: DCN
+Loading: DG
+Loading: DG3
+Loading: DG5
+Loading: DGN
+Loading: DT
+Loading: DT3
+Loading: DT5
+Loading: DTN
+Loading: RA
+Loading: RA3
+Loading: RA5
+Loading: RAN
+Loading: RC
+Loading: RC3
+Loading: RC5
+Loading: RCN
+Loading: RG
+Loading: RG3
+Loading: RG5
+Loading: RGN
+Loading: RU
+Loading: RU3
+Loading: RU5
+Loading: RUN
+>> #
+>> #	Load main chain and terminating 
+>> #	amino acid libraries.
+>> #
+>> loadOff all_amino94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_amino94.lib
+Loading: ALA
+Loading: ARG
+Loading: ASH
+Loading: ASN
+Loading: ASP
+Loading: CYM
+Loading: CYS
+Loading: CYX
+Loading: GLH
+Loading: GLN
+Loading: GLU
+Loading: GLY
+Loading: HID
+Loading: HIE
+Loading: HIP
+Loading: ILE
+Loading: LEU
+Loading: LYN
+Loading: LYS
+Loading: MET
+Loading: PHE
+Loading: PRO
+Loading: SER
+Loading: THR
+Loading: TRP
+Loading: TYR
+Loading: VAL
+>> loadOff all_aminoct94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_aminoct94.lib
+Loading: CALA
+Loading: CARG
+Loading: CASN
+Loading: CASP
+Loading: CCYS
+Loading: CCYX
+Loading: CGLN
+Loading: CGLU
+Loading: CGLY
+Loading: CHID
+Loading: CHIE
+Loading: CHIP
+Loading: CILE
+Loading: CLEU
+Loading: CLYS
+Loading: CMET
+Loading: CPHE
+Loading: CPRO
+Loading: CSER
+Loading: CTHR
+Loading: CTRP
+Loading: CTYR
+Loading: CVAL
+Loading: NHE
+Loading: NME
+>> loadOff all_aminont94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_aminont94.lib
+Loading: ACE
+Loading: NALA
+Loading: NARG
+Loading: NASN
+Loading: NASP
+Loading: NCYS
+Loading: NCYX
+Loading: NGLN
+Loading: NGLU
+Loading: NGLY
+Loading: NHID
+Loading: NHIE
+Loading: NHIP
+Loading: NILE
+Loading: NLEU
+Loading: NLYS
+Loading: NMET
+Loading: NPHE
+Loading: NPRO
+Loading: NSER
+Loading: NTHR
+Loading: NTRP
+Loading: NTYR
+Loading: NVAL
+>> 
+>> loadOff ions94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/ions94.lib
+Loading: CIO
+Loading: Cl-
+Loading: Cs+
+Loading: IB
+Loading: K+
+Loading: Li+
+Loading: MG2
+Loading: Na+
+Loading: Rb+
+>> loadOff solvents.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/solvents.lib
+Loading: CHCL3BOX
+Loading: DC4
+Loading: MEOHBOX
+Loading: NMABOX
+Loading: PL3
+Loading: POL3BOX
+Loading: QSPCFWBOX
+Loading: SPC
+Loading: SPCBOX
+Loading: SPCFWBOX
+Loading: SPF
+Loading: SPG
+Loading: T4E
+Loading: TIP3PBOX
+Loading: TIP3PFBOX
+Loading: TIP4PBOX
+Loading: TIP4PEWBOX
+Loading: TP3
+Loading: TP4
+Loading: TP5
+Loading: TPF
+>> HOH = TP3
+>> WAT = TP3
+>> 
+>> 
+>> #
+>> #	Define the PDB name map for the amino acids and DNA.
+>> #
+>> addPdbResMap {
+>>   { 0 "ALA" "NALA" } { 1 "ALA" "CALA" }
+>>   { 0 "ARG" "NARG" } { 1 "ARG" "CARG" }
+>>   { 0 "ASN" "NASN" } { 1 "ASN" "CASN" }
+>>   { 0 "ASP" "NASP" } { 1 "ASP" "CASP" }
+>>   { 0 "CYS" "NCYS" } { 1 "CYS" "CCYS" }
+>>   { 0 "CYX" "NCYX" } { 1 "CYX" "CCYX" }
+>>   { 0 "GLN" "NGLN" } { 1 "GLN" "CGLN" }
+>>   { 0 "GLU" "NGLU" } { 1 "GLU" "CGLU" }
+>>   { 0 "GLY" "NGLY" } { 1 "GLY" "CGLY" }
+>>   { 0 "HID" "NHID" } { 1 "HID" "CHID" }
+>>   { 0 "HIE" "NHIE" } { 1 "HIE" "CHIE" }
+>>   { 0 "HIP" "NHIP" } { 1 "HIP" "CHIP" }
+>>   { 0 "ILE" "NILE" } { 1 "ILE" "CILE" }
+>>   { 0 "LEU" "NLEU" } { 1 "LEU" "CLEU" }
+>>   { 0 "LYS" "NLYS" } { 1 "LYS" "CLYS" }
+>>   { 0 "MET" "NMET" } { 1 "MET" "CMET" }
+>>   { 0 "PHE" "NPHE" } { 1 "PHE" "CPHE" }
+>>   { 0 "PRO" "NPRO" } { 1 "PRO" "CPRO" }
+>>   { 0 "SER" "NSER" } { 1 "SER" "CSER" }
+>>   { 0 "THR" "NTHR" } { 1 "THR" "CTHR" }
+>>   { 0 "TRP" "NTRP" } { 1 "TRP" "CTRP" }
+>>   { 0 "TYR" "NTYR" } { 1 "TYR" "CTYR" }
+>>   { 0 "VAL" "NVAL" } { 1 "VAL" "CVAL" }
+>>   { 0 "HIS" "NHIS" } { 1 "HIS" "CHIS" }
+>>   { 0 "GUA" "DG5"  } { 1 "GUA" "DG3"  } { "GUA" "DG" }
+>>   { 0 "ADE" "DA5"  } { 1 "ADE" "DA3"  } { "ADE" "DA" }
+>>   { 0 "CYT" "DC5"  } { 1 "CYT" "DC3"  } { "CYT" "DC" }
+>>   { 0 "THY" "DT5"  } { 1 "THY" "DT3"  } { "THY" "DT" }
+>>   { 0 "G" "DG5"  } { 1 "G" "DG3"  } { "G" "DG" } { "GN" "DGN" }
+>>   { 0 "A" "DA5"  } { 1 "A" "DA3"  } { "A" "DA" } { "AN" "DAN" }
+>>   { 0 "C" "DC5"  } { 1 "C" "DC3"  } { "C" "DC" } { "CN" "DCN" }
+>>   { 0 "T" "DT5"  } { 1 "T" "DT3"  } { "T" "DT" } { "TN" "DTN" }
+>>   { 0 "C5" "DC5" }
+>>   { 0 "G5" "DG5" }
+>>   { 0 "A5" "DA5" }
+>>   { 0 "T5" "DT5" }
+>>   { 1 "C3" "DC3" }
+>>   { 1 "G3" "DG3" }
+>>   { 1 "A3" "DA3" }
+>>   { 1 "T3" "DT3" }
+>> 
+>> }
+>> 
+>> addPdbAtomMap {
+>>   { "O5*" "O5'" }
+>>   { "C5*" "C5'" }
+>>   { "C4*" "C4'" }
+>>   { "O4*" "O4'" }
+>>   { "C3*" "C3'" }
+>>   { "O3*" "O3'" }
+>>   { "C2*" "C2'" }
+>>   { "C1*" "C1'" }
+>>   { "C5M" "C7"  }
+>>   { "H1*" "H1'" }
+>>   { "H2*1" "H2'1" }
+>>   { "H2*2" "H2'2" }
+>>   { "H3*" "H3'" }
+>>   { "H4*" "H4'" }
+>>   { "H5*1" "H5'1" }
+>>   { "H5*2" "H5'2" }
+>> # old ff atom names -> new
+>>   { "O1'" "O4'" }
+>>   { "OA"  "O1P" }
+>>   { "OB"  "O2P" }
+>> }
+>> 
+>> 
+>> #
+>> # assumed that most often proteins use HIE
+>> #
+>> NHIS = NHIE
+>> HIS = HIE
+>> CHIS = CHIE
+> 
+> 
+> # Load GAFF parameters.
+> source leaprc.gaff
+----- Source: /Users/jchodera/local/src/amber10/dat/leap/cmd/leaprc.gaff
+----- Source of /Users/jchodera/local/src/amber10/dat/leap/cmd/leaprc.gaff done
+>> logFile leap.log
+log started: Thu Jun 25 06:55:50 2009
+
+Log file: ./leap.log
+>> #
+>> # ----- leaprc for loading the general Amber Force field.
+>> #       This file is mostly for use with Antechamber
+>> #
+>> #	load atom type hybridizations
+>> #
+>> addAtomTypes {
+>> 	{ "h1"  "H" "sp3" }
+>> 	{ "h2"  "H" "sp3" }
+>> 	{ "h3"  "H" "sp3" }
+>> 	{ "h4"  "H" "sp3" }
+>> 	{ "h5"  "H" "sp3" }
+>> 	{ "ha"  "H" "sp3" }
+>> 	{ "hc"  "H" "sp3" }
+>> 	{ "hn"  "H" "sp3" }
+>> 	{ "ho"  "H" "sp3" }
+>> 	{ "hp"  "H" "sp3" }
+>> 	{ "hs"  "H" "sp3" }
+>> 	{ "hw"  "H" "sp3" }
+>> 	{ "hx"  "H" "sp3" }
+>> 	{ "o"  "O" "sp2" }
+>> 	{ "o2"  "O" "sp2" }
+>> 	{ "oh"  "O" "sp3" }
+>> 	{ "os"  "O" "sp3" }
+>> 	{ "ow"  "O" "sp3" }
+>> 	{ "c"  "C" "sp2" }
+>> 	{ "c1"  "C" "sp2" }
+>> 	{ "c2"  "C" "sp2" }
+>> 	{ "c3"  "C" "sp3" }
+>> 	{ "ca"  "C" "sp2" }
+>> 	{ "cc"  "C" "sp2" }
+>> 	{ "cd"  "C" "sp2" }
+>> 	{ "ce"  "C" "sp2" }
+>> 	{ "cf"  "C" "sp2" }
+>> 	{ "cg"  "C" "sp2" }
+>> 	{ "ch"  "C" "sp2" }
+>> 	{ "cp"  "C" "sp2" }
+>> 	{ "cq"  "C" "sp2" }
+>> 	{ "cu"  "C" "sp2" }
+>> 	{ "cv"  "C" "sp2" }
+>> 	{ "cx"  "C" "sp2" }
+>> 	{ "cy"  "C" "sp2" }
+>> 	{ "n"   "N" "sp2" }
+>> 	{ "n1"  "N" "sp2" }
+>> 	{ "n2"  "N" "sp2" }
+>> 	{ "n3"  "N" "sp3" }
+>> 	{ "n4"  "N" "sp3" }
+>> 	{ "na"  "N" "sp2" }
+>> 	{ "nb"  "N" "sp2" }
+>> 	{ "nc"  "N" "sp2" }
+>> 	{ "nd"  "N" "sp2" }
+>> 	{ "ne"  "N" "sp2" }
+>> 	{ "nf"  "N" "sp2" }
+>> 	{ "nh"  "N" "sp2" }
+>> 	{ "no"  "N" "sp2" }
+>> 	{ "s"   "S" "sp2" }
+>> 	{ "s2"   "S" "sp2" }
+>> 	{ "s3"   "S" "sp3" }
+>> 	{ "s4"   "S" "sp3" }
+>> 	{ "s6"   "S" "sp3" }
+>> 	{ "sh"   "S" "sp3" }
+>> 	{ "ss"   "S" "sp3" }
+>> 	{ "sx"   "S" "sp3" }
+>> 	{ "sy"   "S" "sp3" }
+>> 	{ "p2"   "P" "sp2" }
+>> 	{ "p3"   "P" "sp3" }
+>> 	{ "p4"   "P" "sp3" }
+>> 	{ "p5"   "P" "sp3" }
+>> 	{ "pb"   "P" "sp3" }
+>> 	{ "pd"   "P" "sp3" }
+>> 	{ "px"   "P" "sp3" }
+>> 	{ "py"   "P" "sp3" }
+>> 	{ "f"   "F" "sp3" }
+>> 	{ "cl"  "Cl" "sp3" }
+>> 	{ "br"  "Br" "sp3" }
+>> 	{ "i"   "I"  "sp3" }
+>> }
+>> #
+>> #	Load the general force field parameter set.
+>> #
+>> gaff = loadamberparams gaff.dat
+Loading parameters: /Users/jchodera/local/src/amber10/dat/leap/parm/gaff.dat
+Reading title:
+AMBER General Force Field for organic mol., add. info. at the end (June, 2003)
+> 
+> 
+> # Set GB radii to recommended values for OBC.
+> set default PBRadii mbondi2 
+Using H(N)-modified Bondi radii
+> 
+> # Load in protein.
+> receptor = loadPdb receptor.pdb
+Loading PDB file: ./receptor.pdb
+Enter zPdbReadScan from call depth  0.
+Exit  zPdbReadScan from call depth  0.
+Matching PDB residue names to LEaP variables.
+Mapped residue MET, term: Terminal/beginning, seq. number: 0 to: NMET.
+(Residue 1: ASN, Nonterminal, was not found in name map.)
+(Residue 2: ILE, Nonterminal, was not found in name map.)
+(Residue 3: PHE, Nonterminal, was not found in name map.)
+(Residue 4: GLU, Nonterminal, was not found in name map.)
+(Residue 5: MET, Nonterminal, was not found in name map.)
+(Residue 6: LEU, Nonterminal, was not found in name map.)
+(Residue 7: ARG, Nonterminal, was not found in name map.)
+(Residue 8: ILE, Nonterminal, was not found in name map.)
+(Residue 9: ASP, Nonterminal, was not found in name map.)
+(Residue 10: GLU, Nonterminal, was not found in name map.)
+(Residue 11: GLY, Nonterminal, was not found in name map.)
+(Residue 12: LEU, Nonterminal, was not found in name map.)
+(Residue 13: ARG, Nonterminal, was not found in name map.)
+(Residue 14: LEU, Nonterminal, was not found in name map.)
+(Residue 15: LYS, Nonterminal, was not found in name map.)
+(Residue 16: ILE, Nonterminal, was not found in name map.)
+(Residue 17: TYR, Nonterminal, was not found in name map.)
+(Residue 18: LYS, Nonterminal, was not found in name map.)
+(Residue 19: ASP, Nonterminal, was not found in name map.)
+(Residue 20: THR, Nonterminal, was not found in name map.)
+(Residue 21: GLU, Nonterminal, was not found in name map.)
+(Residue 22: GLY, Nonterminal, was not found in name map.)
+(Residue 23: TYR, Nonterminal, was not found in name map.)
+(Residue 24: TYR, Nonterminal, was not found in name map.)
+(Residue 25: THR, Nonterminal, was not found in name map.)
+(Residue 26: ILE, Nonterminal, was not found in name map.)
+(Residue 27: GLY, Nonterminal, was not found in name map.)
+(Residue 28: ILE, Nonterminal, was not found in name map.)
+(Residue 29: GLY, Nonterminal, was not found in name map.)
+(Residue 30: HIE, Nonterminal, was not found in name map.)
+(Residue 31: LEU, Nonterminal, was not found in name map.)
+(Residue 32: LEU, Nonterminal, was not found in name map.)
+(Residue 33: THR, Nonterminal, was not found in name map.)
+(Residue 34: LYS, Nonterminal, was not found in name map.)
+(Residue 35: SER, Nonterminal, was not found in name map.)
+(Residue 36: PRO, Nonterminal, was not found in name map.)
+(Residue 37: SER, Nonterminal, was not found in name map.)
+(Residue 38: LEU, Nonterminal, was not found in name map.)
+(Residue 39: ASN, Nonterminal, was not found in name map.)
+(Residue 40: ALA, Nonterminal, was not found in name map.)
+(Residue 41: ALA, Nonterminal, was not found in name map.)
+(Residue 42: LYS, Nonterminal, was not found in name map.)
+(Residue 43: SER, Nonterminal, was not found in name map.)
+(Residue 44: GLU, Nonterminal, was not found in name map.)
+(Residue 45: LEU, Nonterminal, was not found in name map.)
+(Residue 46: ASP, Nonterminal, was not found in name map.)
+(Residue 47: LYS, Nonterminal, was not found in name map.)
+(Residue 48: ALA, Nonterminal, was not found in name map.)
+(Residue 49: ILE, Nonterminal, was not found in name map.)
+(Residue 50: GLY, Nonterminal, was not found in name map.)
+(Residue 51: ARG, Nonterminal, was not found in name map.)
+(Residue 52: ASN, Nonterminal, was not found in name map.)
+(Residue 53: THR, Nonterminal, was not found in name map.)
+(Residue 54: ASN, Nonterminal, was not found in name map.)
+(Residue 55: GLY, Nonterminal, was not found in name map.)
+(Residue 56: VAL, Nonterminal, was not found in name map.)
+(Residue 57: ILE, Nonterminal, was not found in name map.)
+(Residue 58: THR, Nonterminal, was not found in name map.)
+(Residue 59: LYS, Nonterminal, was not found in name map.)
+(Residue 60: ASP, Nonterminal, was not found in name map.)
+(Residue 61: GLU, Nonterminal, was not found in name map.)
+(Residue 62: ALA, Nonterminal, was not found in name map.)
+(Residue 63: GLU, Nonterminal, was not found in name map.)
+(Residue 64: LYS, Nonterminal, was not found in name map.)
+(Residue 65: LEU, Nonterminal, was not found in name map.)
+(Residue 66: PHE, Nonterminal, was not found in name map.)
+(Residue 67: ASN, Nonterminal, was not found in name map.)
+(Residue 68: GLN, Nonterminal, was not found in name map.)
+(Residue 69: ASP, Nonterminal, was not found in name map.)
+(Residue 70: VAL, Nonterminal, was not found in name map.)
+(Residue 71: ASP, Nonterminal, was not found in name map.)
+(Residue 72: ALA, Nonterminal, was not found in name map.)
+(Residue 73: ALA, Nonterminal, was not found in name map.)
+(Residue 74: VAL, Nonterminal, was not found in name map.)
+(Residue 75: ARG, Nonterminal, was not found in name map.)
+(Residue 76: GLY, Nonterminal, was not found in name map.)
+(Residue 77: ILE, Nonterminal, was not found in name map.)
+(Residue 78: LEU, Nonterminal, was not found in name map.)
+(Residue 79: ARG, Nonterminal, was not found in name map.)
+(Residue 80: ASN, Nonterminal, was not found in name map.)
+(Residue 81: ALA, Nonterminal, was not found in name map.)
+(Residue 82: LYS, Nonterminal, was not found in name map.)
+(Residue 83: LEU, Nonterminal, was not found in name map.)
+(Residue 84: LYS, Nonterminal, was not found in name map.)
+(Residue 85: PRO, Nonterminal, was not found in name map.)
+(Residue 86: VAL, Nonterminal, was not found in name map.)
+(Residue 87: TYR, Nonterminal, was not found in name map.)
+(Residue 88: ASP, Nonterminal, was not found in name map.)
+(Residue 89: SER, Nonterminal, was not found in name map.)
+(Residue 90: LEU, Nonterminal, was not found in name map.)
+(Residue 91: ASP, Nonterminal, was not found in name map.)
+(Residue 92: ALA, Nonterminal, was not found in name map.)
+(Residue 93: VAL, Nonterminal, was not found in name map.)
+(Residue 94: ARG, Nonterminal, was not found in name map.)
+(Residue 95: ARG, Nonterminal, was not found in name map.)
+(Residue 96: ALA, Nonterminal, was not found in name map.)
+(Residue 97: ALA, Nonterminal, was not found in name map.)
+(Residue 98: ALA, Nonterminal, was not found in name map.)
+(Residue 99: ILE, Nonterminal, was not found in name map.)
+(Residue 100: ASN, Nonterminal, was not found in name map.)
+(Residue 101: MET, Nonterminal, was not found in name map.)
+(Residue 102: VAL, Nonterminal, was not found in name map.)
+(Residue 103: PHE, Nonterminal, was not found in name map.)
+(Residue 104: GLN, Nonterminal, was not found in name map.)
+(Residue 105: MET, Nonterminal, was not found in name map.)
+(Residue 106: GLY, Nonterminal, was not found in name map.)
+(Residue 107: GLU, Nonterminal, was not found in name map.)
+(Residue 108: THR, Nonterminal, was not found in name map.)
+(Residue 109: GLY, Nonterminal, was not found in name map.)
+(Residue 110: VAL, Nonterminal, was not found in name map.)
+(Residue 111: ALA, Nonterminal, was not found in name map.)
+(Residue 112: GLY, Nonterminal, was not found in name map.)
+(Residue 113: PHE, Nonterminal, was not found in name map.)
+(Residue 114: THR, Nonterminal, was not found in name map.)
+(Residue 115: ASN, Nonterminal, was not found in name map.)
+(Residue 116: SER, Nonterminal, was not found in name map.)
+(Residue 117: LEU, Nonterminal, was not found in name map.)
+(Residue 118: ARG, Nonterminal, was not found in name map.)
+(Residue 119: MET, Nonterminal, was not found in name map.)
+(Residue 120: LEU, Nonterminal, was not found in name map.)
+(Residue 121: GLN, Nonterminal, was not found in name map.)
+(Residue 122: GLN, Nonterminal, was not found in name map.)
+(Residue 123: LYS, Nonterminal, was not found in name map.)
+(Residue 124: ARG, Nonterminal, was not found in name map.)
+(Residue 125: TRP, Nonterminal, was not found in name map.)
+(Residue 126: ASP, Nonterminal, was not found in name map.)
+(Residue 127: GLU, Nonterminal, was not found in name map.)
+(Residue 128: ALA, Nonterminal, was not found in name map.)
+(Residue 129: ALA, Nonterminal, was not found in name map.)
+(Residue 130: VAL, Nonterminal, was not found in name map.)
+(Residue 131: ASN, Nonterminal, was not found in name map.)
+(Residue 132: LEU, Nonterminal, was not found in name map.)
+(Residue 133: ALA, Nonterminal, was not found in name map.)
+(Residue 134: LYS, Nonterminal, was not found in name map.)
+(Residue 135: SER, Nonterminal, was not found in name map.)
+(Residue 136: ARG, Nonterminal, was not found in name map.)
+(Residue 137: TRP, Nonterminal, was not found in name map.)
+(Residue 138: TYR, Nonterminal, was not found in name map.)
+(Residue 139: ASN, Nonterminal, was not found in name map.)
+(Residue 140: GLN, Nonterminal, was not found in name map.)
+(Residue 141: THR, Nonterminal, was not found in name map.)
+(Residue 142: PRO, Nonterminal, was not found in name map.)
+(Residue 143: ASN, Nonterminal, was not found in name map.)
+(Residue 144: ARG, Nonterminal, was not found in name map.)
+(Residue 145: ALA, Nonterminal, was not found in name map.)
+(Residue 146: LYS, Nonterminal, was not found in name map.)
+(Residue 147: ARG, Nonterminal, was not found in name map.)
+(Residue 148: VAL, Nonterminal, was not found in name map.)
+(Residue 149: ILE, Nonterminal, was not found in name map.)
+(Residue 150: THR, Nonterminal, was not found in name map.)
+(Residue 151: THR, Nonterminal, was not found in name map.)
+(Residue 152: PHE, Nonterminal, was not found in name map.)
+(Residue 153: ARG, Nonterminal, was not found in name map.)
+(Residue 154: THR, Nonterminal, was not found in name map.)
+(Residue 155: GLY, Nonterminal, was not found in name map.)
+(Residue 156: THR, Nonterminal, was not found in name map.)
+(Residue 157: TRP, Nonterminal, was not found in name map.)
+(Residue 158: ASP, Nonterminal, was not found in name map.)
+(Residue 159: ALA, Nonterminal, was not found in name map.)
+(Residue 160: TYR, Nonterminal, was not found in name map.)
+Mapped residue LYS, term: Terminal/last, seq. number: 161 to: CLYS.
+Joining NMET - ASN
+Joining ASN - ILE
+Joining ILE - PHE
+Joining PHE - GLU
+Joining GLU - MET
+Joining MET - LEU
+Joining LEU - ARG
+Joining ARG - ILE
+Joining ILE - ASP
+Joining ASP - GLU
+Joining GLU - GLY
+Joining GLY - LEU
+Joining LEU - ARG
+Joining ARG - LEU
+Joining LEU - LYS
+Joining LYS - ILE
+Joining ILE - TYR
+Joining TYR - LYS
+Joining LYS - ASP
+Joining ASP - THR
+Joining THR - GLU
+Joining GLU - GLY
+Joining GLY - TYR
+Joining TYR - TYR
+Joining TYR - THR
+Joining THR - ILE
+Joining ILE - GLY
+Joining GLY - ILE
+Joining ILE - GLY
+Joining GLY - HIE
+Joining HIE - LEU
+Joining LEU - LEU
+Joining LEU - THR
+Joining THR - LYS
+Joining LYS - SER
+Joining SER - PRO
+Joining PRO - SER
+Joining SER - LEU
+Joining LEU - ASN
+Joining ASN - ALA
+Joining ALA - ALA
+Joining ALA - LYS
+Joining LYS - SER
+Joining SER - GLU
+Joining GLU - LEU
+Joining LEU - ASP
+Joining ASP - LYS
+Joining LYS - ALA
+Joining ALA - ILE
+Joining ILE - GLY
+Joining GLY - ARG
+Joining ARG - ASN
+Joining ASN - THR
+Joining THR - ASN
+Joining ASN - GLY
+Joining GLY - VAL
+Joining VAL - ILE
+Joining ILE - THR
+Joining THR - LYS
+Joining LYS - ASP
+Joining ASP - GLU
+Joining GLU - ALA
+Joining ALA - GLU
+Joining GLU - LYS
+Joining LYS - LEU
+Joining LEU - PHE
+Joining PHE - ASN
+Joining ASN - GLN
+Joining GLN - ASP
+Joining ASP - VAL
+Joining VAL - ASP
+Joining ASP - ALA
+Joining ALA - ALA
+Joining ALA - VAL
+Joining VAL - ARG
+Joining ARG - GLY
+Joining GLY - ILE
+Joining ILE - LEU
+Joining LEU - ARG
+Joining ARG - ASN
+Joining ASN - ALA
+Joining ALA - LYS
+Joining LYS - LEU
+Joining LEU - LYS
+Joining LYS - PRO
+Joining PRO - VAL
+Joining VAL - TYR
+Joining TYR - ASP
+Joining ASP - SER
+Joining SER - LEU
+Joining LEU - ASP
+Joining ASP - ALA
+Joining ALA - VAL
+Joining VAL - ARG
+Joining ARG - ARG
+Joining ARG - ALA
+Joining ALA - ALA
+Joining ALA - ALA
+Joining ALA - ILE
+Joining ILE - ASN
+Joining ASN - MET
+Joining MET - VAL
+Joining VAL - PHE
+Joining PHE - GLN
+Joining GLN - MET
+Joining MET - GLY
+Joining GLY - GLU
+Joining GLU - THR
+Joining THR - GLY
+Joining GLY - VAL
+Joining VAL - ALA
+Joining ALA - GLY
+Joining GLY - PHE
+Joining PHE - THR
+Joining THR - ASN
+Joining ASN - SER
+Joining SER - LEU
+Joining LEU - ARG
+Joining ARG - MET
+Joining MET - LEU
+Joining LEU - GLN
+Joining GLN - GLN
+Joining GLN - LYS
+Joining LYS - ARG
+Joining ARG - TRP
+Joining TRP - ASP
+Joining ASP - GLU
+Joining GLU - ALA
+Joining ALA - ALA
+Joining ALA - VAL
+Joining VAL - ASN
+Joining ASN - LEU
+Joining LEU - ALA
+Joining ALA - LYS
+Joining LYS - SER
+Joining SER - ARG
+Joining ARG - TRP
+Joining TRP - TYR
+Joining TYR - ASN
+Joining ASN - GLN
+Joining GLN - THR
+Joining THR - PRO
+Joining PRO - ASN
+Joining ASN - ARG
+Joining ARG - ALA
+Joining ALA - LYS
+Joining LYS - ARG
+Joining ARG - VAL
+Joining VAL - ILE
+Joining ILE - THR
+Joining THR - THR
+Joining THR - PHE
+Joining PHE - ARG
+Joining ARG - THR
+Joining THR - GLY
+Joining GLY - THR
+Joining THR - TRP
+Joining TRP - ASP
+Joining ASP - ALA
+Joining ALA - TYR
+Joining TYR - CLYS
+  total atoms in file: 1290
+  Leap added 1313 missing atoms according to residue templates:
+       1313 H / lone pairs
+> 
+> # Load parameters for ligand.
+> mods = loadAmberParams ligand.frcmod
+Loading parameters: ./ligand.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+remark goes here
+> 
+> # Load parameters for ligand.
+> loadAmberParams ligand.frcmod
+Loading parameters: ./ligand.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+remark goes here
+> 
+> # Load ligand.
+> ligand = loadMol2 ligand.mol2
+Loading Mol2 file: ./ligand.mol2
+Reading MOLECULE named TMP 
+> 
+> # Create complex.
+> complex = combine { receptor ligand }
+  Sequence: 
+  Sequence: TMP
+> 
+> # Check complex.
+> check complex
+Checking 'complex'....
+WARNING: The unperturbed charge of the unit: 8.000200 is not zero.
+Warning: Close contact of 1.518782 angstroms between .R<THR 142>.A<HG1 12> and .R<GLN 105>.A<HE21 14>
+Warning: Close contact of 2.072268 angstroms between .R<GLY 30>.A<H 2> and .R<TYR 18>.A<HH 15>
+Checking parameters for unit 'complex'.
+Checking for bond parameters.
+Checking for angle parameters.
+check:  Warnings: 3
+Unit is OK.
+> 
+> # Report on net charge.
+> charge complex
+Total unperturbed charge:   8.000200
+Total perturbed charge:     8.000200
+> 
+> # Write parameters.
+> saveAmberParm ligand ligand.prmtop ligand.crd
+Checking Unit.
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+ total 6 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 - 
+   these don't have chain types marked:
+
+	res	total affected
+
+	TMP	1
+  )
+ (no restraints)
+> saveAmberParm receptor receptor.prmtop receptor.crd
+Checking Unit.
+WARNING: The unperturbed charge of the unit: 8.000000 is not zero.
+
+ -- ignoring the warning.
+
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+ ** Warning: No sp2 improper torsion term for  C*-CN-CB-CA
+        atoms are: CG CE2 CD2 CE3
+ ** Warning: No sp2 improper torsion term for  NA-CA-CN-CB
+        atoms are: NE1 CZ2 CE2 CD2
+ ** Warning: No sp2 improper torsion term for  C*-CN-CB-CA
+        atoms are: CG CE2 CD2 CE3
+ ** Warning: No sp2 improper torsion term for  NA-CA-CN-CB
+        atoms are: NE1 CZ2 CE2 CD2
+ ** Warning: No sp2 improper torsion term for  C*-CN-CB-CA
+        atoms are: CG CE2 CD2 CE3
+ ** Warning: No sp2 improper torsion term for  NA-CA-CN-CB
+        atoms are: NE1 CZ2 CE2 CD2
+ total 516 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 - 
+   these don't have chain types marked:
+
+	res	total affected
+
+	CLYS	1
+	NMET	1
+  )
+ (no restraints)
+> saveAmberParm complex complex.prmtop complex.crd
+Checking Unit.
+WARNING: The unperturbed charge of the unit: 8.000200 is not zero.
+
+ -- ignoring the warning.
+
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+ ** Warning: No sp2 improper torsion term for  NA-CA-CN-CB
+        atoms are: NE1 CZ2 CE2 CD2
+ ** Warning: No sp2 improper torsion term for  C*-CN-CB-CA
+        atoms are: CG CE2 CD2 CE3
+ ** Warning: No sp2 improper torsion term for  NA-CA-CN-CB
+        atoms are: NE1 CZ2 CE2 CD2
+ ** Warning: No sp2 improper torsion term for  C*-CN-CB-CA
+        atoms are: CG CE2 CD2 CE3
+ ** Warning: No sp2 improper torsion term for  NA-CA-CN-CB
+        atoms are: NE1 CZ2 CE2 CD2
+ ** Warning: No sp2 improper torsion term for  C*-CN-CB-CA
+        atoms are: CG CE2 CD2 CE3
+ total 522 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 - 
+   these don't have chain types marked:
+
+	res	total affected
+
+	CLYS	1
+	NMET	1
+	TMP	1
+  )
+ (no restraints)
+> 
+> # Exit
+> quit
+	Quit

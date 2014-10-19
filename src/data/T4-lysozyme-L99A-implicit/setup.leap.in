@@ -1,0 +1,40 @@
+# Set up complex for GBSA simulation with OBC model.
+
+# Load AMBER '96 forcefield for protein.
+source leaprc.ff96
+
+# Load GAFF parameters.
+source leaprc.gaff
+
+# Set GB radii to recommended values for OBC.
+set default PBRadii mbondi2 
+
+# Load in protein.
+receptor = loadPdb receptor.pdb
+
+# Load parameters for ligand.
+mods = loadAmberParams ligand.frcmod
+
+# Load parameters for ligand.
+loadAmberParams ligand.frcmod
+
+# Load ligand.
+ligand = loadMol2 ligand.mol2
+
+# Create complex.
+complex = combine { receptor ligand }
+
+# Check complex.
+check complex
+
+# Report on net charge.
+charge complex
+
+# Write parameters.
+saveAmberParm ligand ligand.prmtop ligand.crd
+saveAmberParm receptor receptor.prmtop receptor.crd
+saveAmberParm complex complex.prmtop complex.crd
+
+# Exit
+quit
+

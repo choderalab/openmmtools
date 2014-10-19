@@ -1,0 +1,124 @@
+~/datasets/lysozyme_am1bcc/amber-gbsa ~/datasets/lysozyme_am1bcc/amber-gbsa
+-I: Adding /Users/jchodera/local/src/amber10/dat/leap/prep to search path.
+-I: Adding /Users/jchodera/local/src/amber10/dat/leap/lib to search path.
+-I: Adding /Users/jchodera/local/src/amber10/dat/leap/parm to search path.
+-I: Adding /Users/jchodera/local/src/amber10/dat/leap/cmd to search path.
+-f: Source setup.leap.in.
+
+Welcome to LEaP!
+(no leaprc in search path)
+Sourcing: ./setup.leap.in
+----- Source: /Users/jchodera/local/src/amber10/dat/leap/cmd/leaprc.ff96
+----- Source of /Users/jchodera/local/src/amber10/dat/leap/cmd/leaprc.ff96 done
+Log file: ./leap.log
+Loading parameters: /Users/jchodera/local/src/amber10/dat/leap/parm/parm96.dat
+Reading title:
+PARM96 for DNA, RNA and proteins with TIP3P Water. USE SCEE=1.2 in energy progs
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_nucleic94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_amino94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_aminoct94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/all_aminont94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/ions94.lib
+Loading library: /Users/jchodera/local/src/amber10/dat/leap/lib/solvents.lib
+----- Source: /Users/jchodera/local/src/amber10/dat/leap/cmd/leaprc.gaff
+----- Source of /Users/jchodera/local/src/amber10/dat/leap/cmd/leaprc.gaff done
+Log file: ./leap.log
+Loading parameters: /Users/jchodera/local/src/amber10/dat/leap/parm/gaff.dat
+Reading title:
+AMBER General Force Field for organic mol., add. info. at the end (June, 2003)
+Using H(N)-modified Bondi radii
+Loading PDB file: ./receptor.pdb
+  total atoms in file: 1290
+  Leap added 1313 missing atoms according to residue templates:
+       1313 H / lone pairs
+Loading parameters: ./ligand.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+remark goes here
+Loading parameters: ./ligand.frcmod
+Reading force field modification type file (frcmod)
+Reading title:
+remark goes here
+Loading Mol2 file: ./ligand.mol2
+Reading MOLECULE named TMP 
+Checking 'complex'....
+WARNING: The unperturbed charge of the unit: 8.000200 is not zero.
+Warning: Close contact of 1.518782 angstroms between .R<THR 142>.A<HG1 12> and .R<GLN 105>.A<HE21 14>
+Warning: Close contact of 2.072268 angstroms between .R<GLY 30>.A<H 2> and .R<TYR 18>.A<HH 15>
+Checking parameters for unit 'complex'.
+Checking for bond parameters.
+Checking for angle parameters.
+check:  Warnings: 3
+Unit is OK.
+Total unperturbed charge:   8.000200
+Total perturbed charge:     8.000200
+Checking Unit.
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+ total 6 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 - 
+   these don't have chain types marked:
+
+	res	total affected
+
+	TMP	1
+  )
+ (no restraints)
+Checking Unit.
+WARNING: The unperturbed charge of the unit: 8.000000 is not zero.
+
+ -- ignoring the warning.
+
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+ total 516 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 - 
+   these don't have chain types marked:
+
+	res	total affected
+
+	CLYS	1
+	NMET	1
+  )
+ (no restraints)
+Checking Unit.
+WARNING: The unperturbed charge of the unit: 8.000200 is not zero.
+
+ -- ignoring the warning.
+
+Building topology.
+Building atom parameters.
+Building bond parameters.
+Building angle parameters.
+Building proper torsion parameters.
+Building improper torsion parameters.
+ total 522 improper torsions applied
+Building H-Bond parameters.
+Not Marking per-residue atom chain types.
+Marking per-residue atom chain types.
+  (Residues lacking connect0/connect1 - 
+   these don't have chain types marked:
+
+	res	total affected
+
+	CLYS	1
+	NMET	1
+	TMP	1
+  )
+ (no restraints)
+	Quit
+~/datasets/lysozyme_am1bcc/amber-gbsa

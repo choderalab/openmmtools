@@ -1,0 +1,8 @@
+Minimization
+ &cntrl
+  imin = 1, maxcyc = 500, ncyc = 50,
+  ntb = 0,
+  igb=2, cut=999.0, rgbmax=999.0,
+  ntpr = 1, 
+ &end
+

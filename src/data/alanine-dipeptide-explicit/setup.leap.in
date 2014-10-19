@@ -1,0 +1,23 @@
+# Create terminally-blocked alanine peptide model with AMBER ff96 and OBC GBSA.
+
+# Load AMBER '96 forcefield for protein.
+source leaprc.ff96
+
+# Create sequence.
+peptide = sequence { ACE ALA NME }
+
+# Check peptide.
+check peptide
+
+# Report on net charge.
+charge peptide
+
+# Solvate in water box.
+solvateBox peptide TIP3PBOX 9.0 iso
+
+# Write parameters.
+saveAmberParm peptide alanine-dipeptide.prmtop alanine-dipeptide.crd
+
+# Exit
+quit
+

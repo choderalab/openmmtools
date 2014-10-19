@@ -1,0 +1,154 @@
+
+          -------------------------------------------------------
+          Amber 9  SANDER                              2006
+          -------------------------------------------------------
+
+| Run on 06/25/2009 at 07:23:53
+  [-O]verwriting output
+
+File Assignments:
+|  MDIN: testenergy.sander.in                                                  
+| MDOUT: receptor-testenergy.sander.out                                        
+|INPCRD: receptor-minimized.crd                                                
+|  PARM: receptor.prmtop                                                       
+|RESTRT: receptor-testenergy.crd                                               
+|  REFC: refc                                                                  
+| MDVEL: mdvel                                                                 
+|  MDEN: mden                                                                  
+| MDCRD: mdcrd                                                                 
+|MDINFO: mdinfo                                                                
+|INPDIP: inpdip                                                                
+|RSTDIP: rstdip                                                                
+
+
+ Here is the input file:
+
+Single-point energy evaluation                                                 
+ &cntrl                                                                        
+  nstlim = 0, dt=0.002,                                                        
+  ntb=0,                                                                       
+  igb=2, cut=999.0, rgbmax=999.0,                                              
+  ntt=3, tempi=300.0, temp0=300., gamma_ln=95.,                                
+  ntc=2, ntf=2, tol=0.00000001,                                                
+ &end                                                                          
+                                                                               
+                                                                               
+
+--------------------------------------------------------------------------------
+   1.  RESOURCE   USE: 
+--------------------------------------------------------------------------------
+
+| Flags:                                                                        
+| New format PARM file being parsed.
+| Version =    1.000 Date = 06/25/09 Time = 06:55:51
+ NATOM  =    2603 NTYPES =      14 NBONH =    1313 MBONA  =    1310
+ NTHETH =    2969 MTHETA =    1765 NPHIH =    5312 MPHIA  =    3079
+ NHPARM =       0 NPARM  =       0 NNB   =   14304 NRES   =     162
+ NBONA  =    1310 NTHETA =    1765 NPHIA =    3079 NUMBND =      39
+ NUMANG =      86 NPTRA  =      29 NATYP =      26 NPHB   =       0
+ IFBOX  =       0 NMXRS  =      24 IFCAP =       0 NEXTRA =       0
+ NCOPY  =       0
+
+ Implicit solvent radii are H(N)-modified Bondi radii (mbondi2)                                             
+
+|     Memory Use     Allocated
+|     Real              135717
+|     Hollerith          15782
+|     Integer           146565
+|     Max Pairs              1
+|     nblistReal             0
+|     nblist Int             0
+|       Total             1694 kbytes
+| Duplicated    0 dihedrals
+| Duplicated    0 dihedrals
+
+--------------------------------------------------------------------------------
+   2.  CONTROL  DATA  FOR  THE  RUN
+--------------------------------------------------------------------------------
+
+                                                                                
+
+General flags:
+     imin    =       0, nmropt  =       0
+
+Nature and format of input:
+     ntx     =       1, irest   =       0, ntrx    =       1
+
+Nature and format of output:
+     ntxo    =       1, ntpr    =      50, ntrx    =       1, ntwr    =     500
+     iwrap   =       0, ntwx    =       0, ntwv    =       0, ntwe    =       0
+     ioutfm  =       0, ntwprt  =       0, idecomp =       0, rbornstat=      0
+
+Potential function:
+     ntf     =       2, ntb     =       0, igb     =       2, nsnb    =      25
+     ipol    =       0, gbsa    =       0, iesp    =       0
+     dielc   =   1.00000, cut     = 999.00000, intdiel =   1.00000
+     saltcon =   0.00000, offset  =   0.09000, gbalpha=    0.80000
+     gbbeta  =   0.00000, gbgamma =   2.90912, surften =   0.00500
+     rdt     =   0.00000, rgbmax  = 999.00000
+     alpb  =        0
+     scnb    =   2.00000, scee    =   1.20000
+
+Frozen or restrained atoms:
+     ibelly  =       0, ntr     =       0
+
+Molecular dynamics:
+     nstlim  =         0, nscm    =      1000, nrespa  =         1
+     t       =   0.00000, dt      =   0.00200, vlimit  =  20.00000
+
+Langevin dynamics temperature regulation:
+     ig      =   71277
+     temp0   = 300.00000, tempi   = 300.00000, gamma_ln=  95.00000
+
+SHAKE:
+     ntc     =       2, jfastw  =       0
+     tol     =   0.00000
+|  INFO: Old style inpcrd file read
+
+
+--------------------------------------------------------------------------------
+   3.  ATOMIC COORDINATES AND VELOCITIES
+--------------------------------------------------------------------------------
+
+                                                                                
+ begin time read from input coords =     0.000 ps
+
+ Number of triangulated 3-point waters found:        0
+
+--------------------------------------------------------------------------------
+   4.  RESULTS
+--------------------------------------------------------------------------------
+
+
+ NSTEP =        0   TIME(PS) =       0.000  TEMP(K) =   363.22  PRESS =     0.0
+ Etot   =     -5730.3067  EKtot   =      2344.3718  EPtot      =     -8074.6784
+ BOND   =       100.5792  ANGLE   =       254.6516  DIHED      =       748.6363
+ 1-4 NB =       476.2971  1-4 EEL =      5274.0436  VDWAALS    =     -1436.7332
+ EELEC  =    -10968.7577  EGB     =     -2523.3953  RESTRAINT  =         0.0000
+ ------------------------------------------------------------------------------
+
+
+--------------------------------------------------------------------------------
+   5.  TIMINGS
+--------------------------------------------------------------------------------
+
+|    Read coords time           0.01 ( 0.52% of Total)
+|    Fast Water setup           0.00 ( 0.01% of Total)
+|                Calc gb radii              0.28 (17.08% of Gen B)
+|                Calc gb diag               0.59 (36.76% of Gen B)
+|                Calc gb off-diag           0.75 (46.16% of Gen B)
+|             Gen Born time              1.62 (100.0% of Nonbo)
+|          Nonbond force              1.62 (99.57% of Force)
+|          Bond/Angle/Dihedral        0.01 ( 0.43% of Force)
+|       Force time                 1.62 (100.0% of Runmd)
+|       Other                      0.00 ( 0.06% of Runmd)
+|    Runmd Time                 1.62 (96.24% of Total)
+|    Other                      0.05 ( 3.23% of Total)
+| Total time                 1.69 (100.0% of ALL  )
+
+| Highest rstack allocated:          0
+| Highest istack allocated:          0
+|           Job began  at 07:23:53.889  on 06/25/2009
+|           Setup done at 07:23:53.953  on 06/25/2009
+|           Run   done at 07:23:55.576  on 06/25/2009
+|     wallclock() was called      28 times
