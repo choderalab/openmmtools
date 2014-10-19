@@ -1,8 +1,8 @@
-[![Linux Build Status](https://travis-ci.org/choderalab/openmm-testsystems.png?branch=master)](https://travis-ci.org/choderalab/openmm-testsystems)
+[![Linux Build Status](https://travis-ci.org/choderalab/openmmtools.png?branch=master)](https://travis-ci.org/choderalab/openmmtools)
 <!--- [![Windows Build status](https://ci.appveyor.com/api/projects/status/80ov9tdffg5jkr7i/branch/master)](https://ci.appveyor.com/project/rmcgibbo/mdtraj-813/branch/master) -->
-<!--- [![PyPI Version](https://badge.fury.io/py/openmm-testsystems.png)](https://pypi.python.org/pypi/openmm-testsystems) -->
-<!--- [![Binstar Badge](https://binstar.org/omnia/openmm-testsystems/badges/version.svg)](https://binstar.org/omnia/openmm-testsystems) -->
-<!--- [![Downloads](https://pypip.in/d/mdtraj/badge.png)](https://pypi.python.org/pypi/openmm-testsystems) -->
+<!--- [![PyPI Version](https://badge.fury.io/py/openmmtools.png)](https://pypi.python.org/pypi/openmmtools) -->
+<!--- [![Binstar Badge](https://binstar.org/omnia/openmmtools/badges/version.svg)](https://binstar.org/omnia/openmmtools) -->
+<!--- [![Downloads](https://pypip.in/d/mdtraj/badge.png)](https://pypi.python.org/pypi/openmmtools) -->
 
 # OpenMM Test Systems
 
