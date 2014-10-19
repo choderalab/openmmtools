@@ -1,28 +1,22 @@
 language: c
-
 install:
-  - source devtools/ci/install.sh
-  - export PYTHONUNBUFFERED=true
-
+- source devtools/ci/install.sh
+- export PYTHONUNBUFFERED=true
 script:
-  - export CC="gcc -std=c89"
-  - source deactivate
-  - conda install --yes conda-build
-  - conda build devtools/conda-recipe
-  - source activate $python
-  - conda install $HOME/miniconda/conda-bld/linux-64/openmm-testsystems-dev-*
-  - conda list -e
-  - nosetests -vv
-
+- export CC="gcc -std=c89"
+- source deactivate
+- conda install --yes conda-build
+- conda build devtools/conda-recipe
+- source activate $python
+- conda install $HOME/miniconda/conda-bld/linux-64/openmm-testsystems-dev-*
+- conda list -e
+- nosetests -vv
 env:
   matrix:
-    - python=2.7  CONDA_PY=27
-    # - python=3.3  CONDA_PY=33
-
+  - python=2.7  CONDA_PY=27
   global:
-    # encrypted BINSTAR_TOKEN for push of dev package to binstar
-    - secure: "HvroLIlN+DZJYdE3SvL3fy9z96b2LLl5nClveLduioGHZNScFnmlnDf9maKZQw0p2eqV/LPsYVuiU66+oyWuym0UuqAo19zfCg63HWAJ/zEdGYu2gxz0eNZq3oL1lDjbS+R/4tfCpudRXjUh2MUgYfXii6DHKBm48lBgHOFuYo4="
-
+  - secure: HvroLIlN+DZJYdE3SvL3fy9z96b2LLl5nClveLduioGHZNScFnmlnDf9maKZQw0p2eqV/LPsYVuiU66+oyWuym0UuqAo19zfCg63HWAJ/zEdGYu2gxz0eNZq3oL1lDjbS+R/4tfCpudRXjUh2MUgYfXii6DHKBm48lBgHOFuYo4=
+  - secure: BlwZk6umYOfFcxJ3oXhgw0cNAt21MdzuI/NOt8WlwrbrEeIhPYk6qTJ3lqY3iW+ZXI9pvNU/S5Ousxr9Cc4T2/I5GQBBhmmCgQBKKzUBnPDaQ79mFdKlp6EB4JzXIKVZTTL+eiu36KXlZYKxsLX0AYvRk/T86+zJhB3OOpF0ZJs=
 after_success:
-  - echo "after_success"
-  - source devtools/ci/after_sucess.sh
+- echo "after_success"
+- source devtools/ci/after_sucess.sh
