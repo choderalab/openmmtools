@@ -15,7 +15,7 @@ env:
   matrix:
   - python=2.7  CONDA_PY=27
   global:
-    secure: ECh06mJEGIhqj2yCTSLcx9069+VeLyOi0ixnpTlJOY8nQJaIT9zVuyYf7uH8xcy4kYB3FNMxoHT5aosQNrGQn4846PryG2QdPxSW652PSDTgnCd+vRbwue8+aoeZI3Fhr3z0o2SH2GhT2rbWAxNUyrPeehY7AgLcIV1jQP77O1w=
+  - secure: ECh06mJEGIhqj2yCTSLcx9069+VeLyOi0ixnpTlJOY8nQJaIT9zVuyYf7uH8xcy4kYB3FNMxoHT5aosQNrGQn4846PryG2QdPxSW652PSDTgnCd+vRbwue8+aoeZI3Fhr3z0o2SH2GhT2rbWAxNUyrPeehY7AgLcIV1jQP77O1w=
 after_success:
 - echo "after_success"
 - source devtools/ci/after_sucess.sh
