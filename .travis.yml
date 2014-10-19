@@ -8,7 +8,7 @@ script:
 - conda install --yes conda-build
 - conda build devtools/conda-recipe
 - source activate $python
-- conda install $HOME/miniconda/conda-bld/linux-64/openmm-testsystems-dev-*
+- conda install $HOME/miniconda/conda-bld/linux-64/openmm-testsystems-*
 - conda list -e
 - nosetests -vv
 env:
