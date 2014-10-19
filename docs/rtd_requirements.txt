@@ -1,0 +1,4 @@
+numpy
+nose
+numpydoc
+mock
