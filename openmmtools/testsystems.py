@@ -229,7 +229,7 @@ class TestSystem(object):
 
     Parameters
     ----------
-    
+
     Attributes
     ----------
     system : simtk.openmm.System
@@ -287,10 +287,6 @@ class TestSystem(object):
         # Store positions.
         self._positions = unit.Quantity(np.zeros([0,3], np.float), unit.nanometers)
 
-        # Store thermodynamic parameters.
-        self._temperature = temperature
-        self._pressure = pressure
-        
         return
 
     @property
@@ -318,16 +314,6 @@ class TestSystem(object):
     @positions.deleter
     def positions(self):
         del self._positions
-
-    @property
-    def temperature(self):
-        """The temperature for which analytical data is available, with units compatible with simtk.unit.kelvin."""
-        return copy.deepcopy(self._temperature)
-
-    @property
-    def pressure(self):
-        """The pressure for which analytical data is available, with units compatible with simtk.unit.atmospheres."""
-        return copy.deepcopy(self._pressure)
 
     @property
     def analytical_properties(self):
@@ -403,7 +389,7 @@ class HarmonicOscillator(TestSystem):
         harmonic restraining potential
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
-    
+
     Attributes
     ----------
     system : simtk.openmm.System
@@ -447,9 +433,9 @@ class HarmonicOscillator(TestSystem):
     >>> thermodynamic_state = ThermodynamicState(temperature=298.0*u.kelvin, system=system)
     >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
     >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
-    
+
     """
-    
+
     def __init__(self, K=100.0 * unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948 * unit.amu, **kwargs):
 
         TestSystem.__init__(self, kwargs)
@@ -468,10 +454,10 @@ class HarmonicOscillator(TestSystem):
         force.addGlobalParameter('K', K)
         force.addParticle(0, [])
         system.addForce(force)
-        
+
         self.K, self.mass = K, mass
         self.system, self.positions = system, positions
-        
+
         # Number of degrees of freedom.
         self.ndof = 3
 
@@ -480,35 +466,35 @@ class HarmonicOscillator(TestSystem):
 
         Arguments
         ---------
-        
+
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
+
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (3./2.) * kB * state.temperature
-        
+
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
         Arguments
         ---------
-        
+
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
+
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
-        
+
         """
 
         return (3./2.) * kB * state.temperature
