@@ -180,7 +180,7 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 # TESTS
 #=============================================================================================
 
-def test_stabilities():
+def test_stabilities_harmonic_oscillator():
    """
    Test integrators for stability over a short number of steps of a harmonic oscillator.
 
@@ -194,5 +194,21 @@ def test_stabilities():
          integrator = getattr(integrators, methodname)()
          integrator.__doc__ = methodname
          check_stability.description = "Testing %s for stability over a short number of integration steps of a harmonic oscillator." % methodname
+         yield check_stability, integrator, test
+
+def test_stabilities_alanine_dipeptide():
+   """
+   Test integrators for stability over a short number of steps of a harmonic oscillator.
+
+   """
+   from openmmtools import integrators, testsystems
+
+   test = testsystems.AlanineDipeptideImplicit()
+
+   for methodname in dir(integrators):
+      if re.match('.*Integrator$', methodname):
+         integrator = getattr(integrators, methodname)()
+         integrator.__doc__ = methodname
+         check_stability.description = "Testing %s for stability over a short number of integration steps of alanine dipeptide in implicit solvent." % methodname
          yield check_stability, integrator, test
 
