@@ -248,18 +248,23 @@ class TestSystem(object):
     Create a test system.
 
     >>> testsystem = TestSystem()
-    
+
     Retrieve System object.
 
     >>> system = testsystem.system
 
     Retrieve the positions.
-    
+
     >>> positions = testsystem.positions
 
     Serialize system and positions to XML (to aid in debugging).
 
     >>> (system_xml, positions_xml) = testsystem.serialize()
+
+    Retrueve temperature and pressure for which analytical results are available.
+
+    >>> temperature = testsystem.temperature
+    >>> pressure = testsystem.pressure
 
     """
     def __init__(self, temperature=None, pressure=None):
@@ -275,7 +280,7 @@ class TestSystem(object):
             The pressure of the system.
 
         """
-        
+
         # Create an empty system object.
         self._system = openmm.System()
 
@@ -309,10 +314,20 @@ class TestSystem(object):
     @positions.setter
     def positions(self, value):
         self._positions = value
-    
+
     @positions.deleter
     def positions(self):
         del self._positions
+
+    @property
+    def temperature(self):
+        """The temperature for which analytical data is available, with units compatible with simtk.unit.kelvin."""
+        return copy.deepcopy(self._temperature)
+
+    @property
+    def pressure(self):
+        """The pressure for which analytical data is available, with units compatible with simtk.unit.atmospheres."""
+        return copy.deepcopy(self._pressure)
 
     @property
     def analytical_properties(self):
