@@ -13,13 +13,14 @@ Test custom integrators.
 # GLOBAL IMPORTS
 #=============================================================================================
 
+import re
 import sys
 import math
 import doctest
 import numpy
 import time
 
-import simtk.unit as units
+import simtk.unit as unit
 import simtk.openmm as openmm
 from simtk.openmm import app
 
@@ -30,60 +31,11 @@ from openmmtools import integrators
 # CONSTANTS
 #=============================================================================================
 
-kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
+kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 
 #=============================================================================================
 # UTILITY SUBROUTINES
 #=============================================================================================
-
-def computeHarmonicOscillatorExpectations(K, mass, temperature):
-   """
-   Compute mean and variance of potential and kinetic energies for harmonic oscillator.
-
-   Numerical quadrature is used.
-
-   ARGUMENTS
-
-   K - spring constant
-   mass - mass of particle
-   temperature - temperature
-
-   RETURNS
-
-   values
-
-   """
-
-   values = dict()
-
-   # Compute thermal energy and inverse temperature from specified temperature.
-   kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
-   kT = kB * temperature # thermal energy
-   beta = 1.0 / kT # inverse temperature
-
-   # Compute standard deviation along one dimension.
-   sigma = 1.0 / units.sqrt(beta * K)
-
-   # Define limits of integration along r.
-   r_min = 0.0 * units.nanometers # initial value for integration
-   r_max = 10.0 * sigma      # maximum radius to integrate to
-
-   # Compute mean and std dev of potential energy.
-   V = lambda r : (K/2.0) * (r*units.nanometers)**2 / units.kilojoules_per_mole # potential in kJ/mol, where r in nm
-   q = lambda r : 4.0 * math.pi * r**2 * math.exp(-beta * (K/2.0) * (r*units.nanometers)**2) # q(r), where r in nm
-   (IqV2, dIqV2) = scipy.integrate.quad(lambda r : q(r) * V(r)**2, r_min / units.nanometers, r_max / units.nanometers)
-   (IqV, dIqV)   = scipy.integrate.quad(lambda r : q(r) * V(r), r_min / units.nanometers, r_max / units.nanometers)
-   (Iq, dIq)     = scipy.integrate.quad(lambda r : q(r), r_min / units.nanometers, r_max / units.nanometers)
-   values['potential'] = dict()
-   values['potential']['mean'] = (IqV / Iq) * units.kilojoules_per_mole
-   values['potential']['stddev'] = (IqV2 / Iq) * units.kilojoules_per_mole
-
-   # Compute mean and std dev of kinetic energy.
-   values['kinetic'] = dict()
-   values['kinetic']['mean'] = (3./2.) * kT
-   values['kinetic']['stddev'] = math.sqrt(3./2.) * kT
-
-   return values
 
 def statisticalInefficiency(A_n, B_n=None, fast=False, mintime=3):
   """
@@ -205,10 +157,10 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 
    # Create Context and initialize positions.
    if platform:
-      context = openmm.Context(system, integrator, platform)
+      context = openmm.Context(test.system, integrator, platform)
    else:
-      context = openmm.Context(system, integrator)
-   context.setPositions(positions)
+      context = openmm.Context(test.system, integrator)
+   context.setPositions(test.positions)
    context.setVelocitiesToTemperature(temperature) # TODO: Make deterministic.
 
    # Take a number of steps.
@@ -218,7 +170,7 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
    state = context.getState(getEnergy=True)
    potential = state.getPotentialEnergy() / kT
    if numpy.isnan(potential):
-      raise Exception("Potential energy became NaN.")
+      raise Exception("Potential energy for integrator %s became NaN." % integrator.__doc__)
 
    del context
 
@@ -228,24 +180,19 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 # TESTS
 #=============================================================================================
 
-def test_dummy_integrator():
+def test_stabilities():
    """
-   Test DummyIntegrator for stability over a short number of steps of a harmonic oscillator.
+   Test integrators for stability over a short number of steps of a harmonic oscillator.
 
    """
    from openmmtools import integrators, testsystems
-   integrator = integrators.DummyIntegrator()
+
    test = testsystems.HarmonicOscillator()
-   check_stability(integrator, test)
 
-def test_gradient_descent():
-   """
-   Test GradientDescentMinimizationIntegrator for stability over a short number of steps of a harmonic oscillator.
-
-   """
-   from openmmtools import integrators, testsystems
-   integrator = integrators.GradientDescentMinimizationIntegrator()
-   test = testsystems.HarmonicOscillator()
-   check_stability(integrator, test)
-
+   for methodname in dir(integrators):
+      if re.match('.*Integrator$', methodname):
+         integrator = getattr(integrators, methodname)()
+         integrator.__doc__ = methodname
+         check_stability.description = "Testing %s for stability over a short number of integration steps of a harmonic oscillator." % methodname
+         yield check_stability, integrator, test
 
