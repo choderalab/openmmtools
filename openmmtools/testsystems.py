@@ -1655,7 +1655,8 @@ class WCAFluid(TestSystem):
             force.addParticle([])
 
         # Set periodic boundary conditions with cutoff.
-        force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffNonPeriodic)
+        force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+        rmin = 2.**(1./6.) * sigma # distance of minimum energy for Lennard-Jones potential
         force.setCutoffDistance(sigma)
 
         # Add nonbonded force term to the system.
