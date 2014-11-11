@@ -229,7 +229,7 @@ class TestSystem(object):
 
     Parameters
     ----------
-    
+
     Attributes
     ----------
     system : simtk.openmm.System
@@ -248,13 +248,13 @@ class TestSystem(object):
     Create a test system.
 
     >>> testsystem = TestSystem()
-    
+
     Retrieve System object.
 
     >>> system = testsystem.system
 
     Retrieve the positions.
-    
+
     >>> positions = testsystem.positions
 
     Serialize system and positions to XML (to aid in debugging).
@@ -275,17 +275,13 @@ class TestSystem(object):
             The pressure of the system.
 
         """
-        
+
         # Create an empty system object.
         self._system = openmm.System()
 
         # Store positions.
         self._positions = unit.Quantity(np.zeros([0,3], np.float), unit.nanometers)
 
-        # Store thermodynamic parameters.
-        self._temperature = temperature
-        self._pressure = pressure
-        
         return
 
     @property
@@ -309,7 +305,7 @@ class TestSystem(object):
     @positions.setter
     def positions(self, value):
         self._positions = value
-    
+
     @positions.deleter
     def positions(self):
         del self._positions
@@ -388,7 +384,7 @@ class HarmonicOscillator(TestSystem):
         harmonic restraining potential
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
-    
+
     Attributes
     ----------
     system : simtk.openmm.System
@@ -432,9 +428,9 @@ class HarmonicOscillator(TestSystem):
     >>> thermodynamic_state = ThermodynamicState(temperature=298.0*u.kelvin, system=system)
     >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
     >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
-    
+
     """
-    
+
     def __init__(self, K=100.0 * unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948 * unit.amu, **kwargs):
 
         TestSystem.__init__(self, kwargs)
@@ -453,10 +449,10 @@ class HarmonicOscillator(TestSystem):
         force.addGlobalParameter('K', K)
         force.addParticle(0, [])
         system.addForce(force)
-        
+
         self.K, self.mass = K, mass
         self.system, self.positions = system, positions
-        
+
         # Number of degrees of freedom.
         self.ndof = 3
 
@@ -465,35 +461,35 @@ class HarmonicOscillator(TestSystem):
 
         Arguments
         ---------
-        
+
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
+
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (3./2.) * kB * state.temperature
-        
+
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
         Arguments
         ---------
-        
+
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
+
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
-        
+
         """
 
         return (3./2.) * kB * state.temperature
@@ -1659,7 +1655,8 @@ class WCAFluid(TestSystem):
             force.addParticle([])
 
         # Set periodic boundary conditions with cutoff.
-        force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffNonPeriodic)
+        force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+        rmin = 2.**(1./6.) * sigma # distance of minimum energy for Lennard-Jones potential
         force.setCutoffDistance(sigma)
 
         # Add nonbonded force term to the system.
