@@ -261,11 +261,6 @@ class TestSystem(object):
 
     >>> (system_xml, positions_xml) = testsystem.serialize()
 
-    Retrueve temperature and pressure for which analytical results are available.
-
-    >>> temperature = testsystem.temperature
-    >>> pressure = testsystem.pressure
-
     """
     def __init__(self, temperature=None, pressure=None):
         """Abstract base class for test system.
