@@ -14,7 +14,7 @@ script:
 - conda install $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
 - conda list -e
 - cd tests-nose
-- nosetests
+- nosetests --with-doctest --verbosity=2 --nocapture
 - cd ..
 
 env:
