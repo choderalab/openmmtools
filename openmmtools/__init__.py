@@ -11,3 +11,5 @@ __version__ = version.version
 
 # Import modules.
 import testsystems
+import integrators
+
