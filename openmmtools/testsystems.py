@@ -2976,12 +2976,10 @@ class LennardJonesPair(BindingTestSystem):
     ----------
     mass : simtk.unit.Quantity with units compatible with amu, optional, default=39.9*amu
        The mass of each particle.
-    epsilon : simtk.unit.Quantity with units compatible with kilojoules_per_mole, optional, default=0.0*elementary_charge
+    epsilon : simtk.unit.Quantity with units compatible with kilojoules_per_mole, optional, default=1.0*kilocalories_per_mole
        The effective Lennard-Jones sigma parameter.
     sigma : simtk.unit.Quantity with units compatible with nanometers, optional, default=3.350*angstroms
        The effective Lennard-Jones sigma parameter.
-    charge : simtk.unit.Quantity with units compatible with elementary_charge, optional, default=0.001603*unit.kilojoules_per_mole
-       The charge magnitude on each particle; each particle will have opposite charge of the other.
 
     Examples
     --------
@@ -2993,27 +2991,29 @@ class LennardJonesPair(BindingTestSystem):
     >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
 
-    Create Lennard-Jones pair with opposing charges.
+    Create Lennard-Jones pair with different well depth.
 
-    >>> test = LennardJonesPair(charge=1.0*unit.elementary_charge)
+    >>> test = LennardJonesPair(epsilon=11.0*unit.kilocalories_per_mole)
     >>> system, positions = test.system, test.positions
     >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
 
-    Create Lennard-Jones pair with different well depth.
+    Create Lennard-Jones pair with different well depth and sigma.
 
-    >>> test = LennardJonesPair(epsilon=1.0*unit.kilojoules_per_mole)
+    >>> test = LennardJonesPair(epsilon=7.0*unit.kilocalories_per_mole, sigma=6.0*unit.angstroms)
     >>> system, positions = test.system, test.positions
     >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
 
     """
-    def __init__(self, mass=39.9*unit.amu, charge=0.0*unit.elementary_charge, sigma=3.350*unit.angstrom, epsilon=0.001603*unit.kilojoules_per_mole):
+    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole):
         # Store parameters
         self.mass = mass
-        self.charge = charge
         self.sigma = sigma
         self.epsilon = epsilon
+
+        # Charge must be zero.
+        charge = 0.0 * unit.elementary_charge
 
         # Create an empty system object.
         system = openmm.System()
@@ -3063,27 +3063,36 @@ class LennardJonesPair(BindingTestSystem):
         context = openmm.Context(self.system, integrator, platform)
         context.setPositions(self.positions)
 
-        def integrand(x):
+        def integrand(x, args):
+            [context] = args
             positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
-            positions[1,0] = r * self.sigma
+            positions[1,0] = x * self.sigma
             context.setPositions(positions)
             state = context.getState(getEnergy=True)
             u = state.getPotentialEnergy() / kT # effective energy
-            integrand = 4.0*pi*(x**2) * np.exp(-u) * (sigma/unit.angstrom)**3
+            integrand = 4.0*pi*(x**2) * np.exp(-u)
             return integrand
 
-        # Integrate the free energy of binding.
-        xmin = 0.1 # in units of sigma
-        xmax = 6.0 # in units of sigma
-        from scipy.integrate import quad
-        [integral, abserr, infodict] = quad(integrand, xmin, xmax)
-
-        # Clean up.
-        #del context, integrator
-
-        # Standard state volume
+        # Compute standard state volume
         V0 = (unit.liter / (unit.AVOGADRO_CONSTANT_NA * unit.mole)).in_units_of(unit.angstrom**3)
 
-        binding_free_energy = kT * np.log(integral / V0)
+        # Integrate the free energy of binding in unitless coordinate system.
+        xmin = 0.15 # in units of sigma
+        xmax = 6.0 # in units of sigma
+        from scipy.integrate import quad
+        [integral, abserr] = quad(integrand, xmin, xmax, epsabs=0.01, args=[context])
+        # correct for performing unitless integration
+        integral = integral * (self.sigma ** 3)
+
+        # Correct for actual integration volume (which exceeds standard state volume).
+        rmax = xmax * self.sigma
+        Vint = (4.0/3.0) * pi * (rmax**3)
+        integral = integral * (V0 / Vint)
+
+        # Clean up.
+        del context, integrator
+
+        # Compute standard state binding free energy.
+        binding_free_energy = -kT * np.log(integral / V0)
 
         return binding_free_energy
