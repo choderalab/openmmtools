@@ -523,7 +523,7 @@ class PowerOscillator(TestSystem):
     
     def __init__(self, K=100.0, b=2.0, mass=39.948 * unit.amu, **kwargs):
 
-        TestSystem.__init__(self, kwargs)
+        TestSystem.__init__(self, **kwargs)
         
         K = K * unit.kilocalories_per_mole / unit.angstroms ** b
 
@@ -3000,7 +3000,7 @@ class LennardJonesPair(BindingTestSystem):
 
     Create Lennard-Jones pair with different well depth and sigma.
 
-    >>> test = LennardJonesPair(epsilon=7.0*unit.kilocalories_per_mole, sigma=6.0*unit.angstroms)
+    >>> test = LennardJonesPair(epsilon=7.0*unit.kilocalories_per_mole, sigma=4.5*unit.angstroms)
     >>> system, positions = test.system, test.positions
     >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
@@ -3041,6 +3041,10 @@ class LennardJonesPair(BindingTestSystem):
         # Store system and positions.
         self.system, self.positions = system, positions
 
+        # Store ligand and receptor particle indices.
+        self.ligand_indices = [0]
+        self.receptor_indices = [1]
+
     def get_binding_free_energy(self, thermodynamic_state):
         """
         Compute the binding free energy of the two particles at the given thermodynamic state.
@@ -3079,8 +3083,8 @@ class LennardJonesPair(BindingTestSystem):
         # Integrate the free energy of binding in unitless coordinate system.
         xmin = 0.15 # in units of sigma
         xmax = 6.0 # in units of sigma
-        from scipy.integrate import quad
-        [integral, abserr] = quad(integrand, xmin, xmax, epsabs=0.01, args=[context])
+        from scipy.integrate import quadrature
+        [integral, abserr] = quadrature(integrand, xmin, xmax, args=[context])
         # correct for performing unitless integration
         integral = integral * (self.sigma ** 3)
 
