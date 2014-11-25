@@ -49,13 +49,17 @@ import numpy as np
 import numpy.random
 import math
 import copy
+
+import scipy
 import scipy.special
+import scipy.integrate
 
 from simtk import openmm
 from simtk import unit
 from simtk.openmm import app
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+pi = np.pi
 
 #=============================================================================================
 # SUBROUTINES
@@ -262,17 +266,11 @@ class TestSystem(object):
     >>> (system_xml, positions_xml) = testsystem.serialize()
 
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         """Abstract base class for test system.
 
         Parameters
         ----------
-
-        temperature : simtk.unit.Quantity, optional, units compatible with simtk.unit.kelvin
-            The temperature of the system.
-
-        pressure : simtk.unit.Quantity, optional, units compatible with simtk.unit.atmospheres
-            The pressure of the system.
 
         """
 
@@ -433,7 +431,7 @@ class HarmonicOscillator(TestSystem):
 
     def __init__(self, K=100.0 * unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948 * unit.amu, **kwargs):
 
-        TestSystem.__init__(self, kwargs)
+        TestSystem.__init__(self, **kwargs)
 
         # Create an empty system object.
         system = openmm.System()
@@ -3038,12 +3036,12 @@ class LennardJonesPair(BindingTestSystem):
         force.addParticle(-charge, sigma, epsilon)
 
         # Add the nonbonded force.
-        system.addForce(nb)
+        system.addForce(force)
 
         # Store system and positions.
         self.system, self.positions = system, positions
 
-    def get_binding_free_energy(thermodynamic_state):
+    def get_binding_free_energy(self, thermodynamic_state):
         """
         Compute the binding free energy of the two particles at the given thermodynamic state.
 
@@ -3066,7 +3064,6 @@ class LennardJonesPair(BindingTestSystem):
         context.setPositions(self.positions)
 
         def integrand(x):
-            from numpy import pi
             positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
             positions[1,0] = r * self.sigma
             context.setPositions(positions)
@@ -3076,10 +3073,10 @@ class LennardJonesPair(BindingTestSystem):
             return integrand
 
         # Integrate the free energy of binding.
-        import scipy
         xmin = 0.1 # in units of sigma
         xmax = 6.0 # in units of sigma
-        [integral, abserr, infodict] = scipy.quad(integrand, xmin, xmax)
+        from scipy.integrate import quad
+        [integral, abserr, infodict] = quad(integrand, xmin, xmax)
 
         # Clean up.
         #del context, integrator
