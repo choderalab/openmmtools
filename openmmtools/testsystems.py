@@ -1703,10 +1703,6 @@ class IdealGas(TestSystem):
         if volume is None:
             volume = (nparticles * temperature * unit.BOLTZMANN_CONSTANT_kB / pressure).in_units_of(unit.nanometers**3)
 
-        charge   = 0.0 * unit.elementary_charge
-        sigma    = 3.350 * unit.angstrom # argon LJ
-        epsilon  = 0.0 * unit.kilojoule_per_mole # zero interaction
-
         # Create an empty system object.
         system = openmm.System()
 
@@ -2759,7 +2755,6 @@ class AlchemicalTestSystem(object):
         energy_expression += "lambda = lennard_jones_lambda;" # lambda
 
         # Create atom groups.
-        natoms = system.getNumParticles()
         atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
         atomset2 = set(range(system.getNumParticles())) - atomset1 # all atoms minus intra-alchemical region
 
