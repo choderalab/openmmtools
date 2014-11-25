@@ -3067,13 +3067,24 @@ class LennardJonesPair(BindingTestSystem):
         context = openmm.Context(self.system, integrator, platform)
         context.setPositions(self.positions)
 
-        def integrand(x, args):
+        def integrand_openmm(xvec, args):
+            """OpenMM implementation of integrand (for sanity checks)."""
             [context] = args
             positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
-            positions[1,0] = x * self.sigma
-            context.setPositions(positions)
-            state = context.getState(getEnergy=True)
-            u = state.getPotentialEnergy() / kT # effective energy
+            integrands = 0.0 * xvec
+            for (i, x) in enumerate(xvec):
+                positions[1,0] = x * self.sigma
+                context.setPositions(positions)
+                state = context.getState(getEnergy=True)
+                u = state.getPotentialEnergy() / kT # effective energy
+                integrand = 4.0*pi*(x**2) * np.exp(-u)
+                integrands[i] = integrand
+
+            return integrands
+
+        def integrand_numpy(x, args):
+            """NumPy implementation of integrand (for speed)."""
+            u = 4.0*(self.epsilon)*(x**(-12) - x**(-6)) / kT
             integrand = 4.0*pi*(x**2) * np.exp(-u)
             return integrand
 
@@ -3084,7 +3095,7 @@ class LennardJonesPair(BindingTestSystem):
         xmin = 0.15 # in units of sigma
         xmax = 6.0 # in units of sigma
         from scipy.integrate import quadrature
-        [integral, abserr] = quadrature(integrand, xmin, xmax, args=[context])
+        [integral, abserr] = quadrature(integrand_numpy, xmin, xmax, args=[context], maxiter=500)
         # correct for performing unitless integration
         integral = integral * (self.sigma ** 3)
 
