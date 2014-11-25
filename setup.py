@@ -171,7 +171,7 @@ setup(
     packages=['openmmtools'],
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
-    install_requires=['numpy', 'nose', 'pymbar'],
+    install_requires=['numpy', 'nose'],
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,
