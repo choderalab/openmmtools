@@ -14,18 +14,10 @@ Test custom integrators.
 #=============================================================================================
 
 import re
-import sys
-import math
-import doctest
 import numpy
-import time
 
-import simtk.unit as unit
-import simtk.openmm as openmm
-from simtk.openmm import app
-
-from openmmtools import testsystems
-from openmmtools import integrators
+from simtk import unit
+from simtk import openmm
 
 #=============================================================================================
 # CONSTANTS

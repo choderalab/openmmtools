@@ -4,7 +4,6 @@ from simtk import unit
 from simtk import openmm
 
 import os, os.path
-import tempfile
 import logging
 
 from openmmtools import testsystems
