@@ -155,7 +155,7 @@ def check_dependencies():
 
 extensions = []
 
-write_version_py('openmmtools/version.py')
+write_version_py('src/openmmtools/version.py')
 
 setup(
     name='openmmtools',
