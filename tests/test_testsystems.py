@@ -11,7 +11,7 @@ from openmmtools import testsystems
 from functools import partial
 
 def test_doctest():
-    """Performing doctests.
+    """Performing testsystems doctests.
     """
     import doctest
     doctest.testmod(testsystems)
