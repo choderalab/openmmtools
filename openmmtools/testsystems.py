@@ -2943,28 +2943,11 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
 # BINDING FREE ENERGY TESTS
 #=============================================================================================
 
-class BindingTestSystem(TestSystem):
-    """Abstract base class for test systems that have associated binding free energies available.
-
-    Attributes
-    ----------
-    system : simtk.openmm.System
-        System object for test system.
-    positions : list
-        positions of test system atoms.
-    ligand_atoms : list of int
-        List of atoms associated with ligand.
-    receptor_atoms : list of int
-        List of atoms associated with receptor.
-
-    """
-    pass
-
 #=============================================================================================
 # Lennard-Jones pair
 #=============================================================================================
 
-class LennardJonesPair(BindingTestSystem):
+class LennardJonesPair(TestSystem):
     """Create a pair of Lennard-Jones particles.
 
     Parameters

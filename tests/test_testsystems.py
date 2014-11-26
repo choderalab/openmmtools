@@ -8,6 +8,8 @@ import logging
 
 from openmmtools import testsystems
 
+from functools import partial
+
 def test_doctest():
     """Performing doctests.
     """
@@ -52,6 +54,36 @@ def test_properties_all_testsystems():
 
 fast_testsystems = ["HarmonicOscillator", "PowerOscillator", "Diatom", "ConstraintCoupledHarmonicOscillator", "HarmonicOscillatorArray", "SodiumChlorideCrystal", "LennardJonesCluster", "LennardJonesFluid", "IdealGas", "AlanineDipeptideVacuum"]
 
+def check_potential_energy(system, positions):
+    """
+    Compute potential energy for system and positions and ensure that it is finite.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+       The system
+    positions : simtk.unit.Quantity
+       The positions
+
+    """
+
+    # Create a Context.
+    timestep = 1.0 * unit.femtoseconds
+    integrator = openmm.VerletIntegrator(timestep)
+    context = openmm.Context(system, integrator)
+    context.setPositions(positions)
+
+    # Compute potential energy to make sure it is finite.
+    openmm_state = context.getState(getEnergy=True)
+    potential_energy = openmm_state.getPotentialEnergy()
+
+    # Check if finite.
+    if np.isnan(potential_energy / unit.kilocalories_per_mole):
+        raise Exception("Energy is NaN.")
+
+    # Clean up
+    del context, integrator
+
 def test_energy_all_testsystems(skip_slow_tests=False):
     """Testing computation of potential energy for all systems.
     """
@@ -62,25 +94,10 @@ def test_energy_all_testsystems(skip_slow_tests=False):
         if skip_slow_tests and not (class_name in fast_testsystems):
             logging.info("Skipping potential energy test for testsystem %s." % class_name)
             continue
-        logging.info("Testing potential energy test for testsystem %s" % class_name)
-        print class_name # DEBUG
 
-        # Create system.
+        # Create test.
         testsystem = testsystem_class()
+        f = partial(check_potential_energy, testsystem.system, testsystem.positions)
+        f.description = "Testing potential energy test for testsystem %s" % class_name
+        yield f
 
-        # Create a Context.
-        timestep = 1.0 * unit.femtoseconds
-        integrator = openmm.VerletIntegrator(timestep)
-        context = openmm.Context(testsystem.system, integrator)
-        context.setPositions(testsystem.positions)
-
-        # Compute potential energy to make sure it is finite.
-        openmm_state = context.getState(getEnergy=True)
-        potential_energy = openmm_state.getPotentialEnergy()
-
-        # Check if finite.
-        if np.isnan(potential_energy / unit.kilocalories_per_mole):
-            raise Exception("Energy of test system %s is NaN." % class_name)
-
-        # Clean up
-        del context, integrator
