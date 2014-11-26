@@ -169,7 +169,7 @@ setup(
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
     packages=['openmmtools'],
-    package_dir={'openmmtools': 'openmmtools'},
+    package_dir={'openmmtools': 'src/openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     install_requires=['numpy', 'nose'],
     zip_safe=False,
