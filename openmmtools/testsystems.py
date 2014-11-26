@@ -49,13 +49,17 @@ import numpy as np
 import numpy.random
 import math
 import copy
+
+import scipy
 import scipy.special
+import scipy.integrate
 
 from simtk import openmm
 from simtk import unit
 from simtk.openmm import app
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+pi = np.pi
 
 #=============================================================================================
 # SUBROUTINES
@@ -262,17 +266,11 @@ class TestSystem(object):
     >>> (system_xml, positions_xml) = testsystem.serialize()
 
     """
-    def __init__(self, temperature=None, pressure=None):
+    def __init__(self, **kwargs):
         """Abstract base class for test system.
 
         Parameters
         ----------
-
-        temperature : simtk.unit.Quantity, optional, units compatible with simtk.unit.kelvin
-            The temperature of the system.
-
-        pressure : simtk.unit.Quantity, optional, units compatible with simtk.unit.atmospheres
-            The pressure of the system.
 
         """
 
@@ -433,7 +431,7 @@ class HarmonicOscillator(TestSystem):
 
     def __init__(self, K=100.0 * unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948 * unit.amu, **kwargs):
 
-        TestSystem.__init__(self, kwargs)
+        TestSystem.__init__(self, **kwargs)
 
         # Create an empty system object.
         system = openmm.System()
@@ -525,7 +523,7 @@ class PowerOscillator(TestSystem):
     
     def __init__(self, K=100.0, b=2.0, mass=39.948 * unit.amu, **kwargs):
 
-        TestSystem.__init__(self, kwargs)
+        TestSystem.__init__(self, **kwargs)
         
         K = K * unit.kilocalories_per_mole / unit.angstroms ** b
 
@@ -1657,7 +1655,7 @@ class WCAFluid(TestSystem):
         # Set periodic boundary conditions with cutoff.
         force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
         rmin = 2.**(1./6.) * sigma # distance of minimum energy for Lennard-Jones potential
-        force.setCutoffDistance(sigma)
+        force.setCutoffDistance(rmin)
 
         # Add nonbonded force term to the system.
         system.addForce(force)
@@ -1704,10 +1702,6 @@ class IdealGas(TestSystem):
 
         if volume is None:
             volume = (nparticles * temperature * unit.BOLTZMANN_CONSTANT_kB / pressure).in_units_of(unit.nanometers**3)
-
-        charge   = 0.0 * unit.elementary_charge
-        sigma    = 3.350 * unit.angstrom # argon LJ
-        epsilon  = 0.0 * unit.kilojoule_per_mole # zero interaction
 
         # Create an empty system object.
         system = openmm.System()
@@ -2629,14 +2623,14 @@ class AMOEBAIonBox(TestSystem):
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True, nonbondedCutoff=7.0*unit.angstroms)
 
         positions = pdbfile.getPositions()
-        
+
         self.system, self.positions = system, positions
 
 class AMOEBAProteinBox(TestSystem):
     """PDB 1AP4 in water box.
 
     >>> testsystem = AMOEBAProteinBox()
-    >>> system, positions = testsystem.system, testsystem.positions    
+    >>> system, positions = testsystem.system, testsystem.positions
 
     """
     def __init__(self):
@@ -2647,7 +2641,7 @@ class AMOEBAProteinBox(TestSystem):
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True)
 
         positions = pdbfile.getPositions()
-        
+
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -2657,13 +2651,13 @@ class AMOEBAProteinBox(TestSystem):
 class AlchemicalState(object):
     """
     Alchemical state description.
-        
+
     These parameters describe the parameters that affect computation of the energy.
 
     Attributes
     ----------
     relativeRestraints : float
-        Scaling factor for remaining receptor-ligand relative restraint terms (to help keep ligand near protein).     
+        Scaling factor for remaining receptor-ligand relative restraint terms (to help keep ligand near protein).
     ligandElectrostatics : float
         Scaling factor for ligand charges, intrinsic Born radii, and surface area term.
     ligandSterics : float
@@ -2680,7 +2674,7 @@ class AlchemicalState(object):
     * Rework these structure members into something more general and flexible?
     * Add receptor modulation back in?
     """
-        
+
     def __init__(self, relativeRestraints=0.0, ligandElectrostatics=1.0, ligandSterics=1.0, ligandTorsions=1.0, annihilateElectrostatics=True, annihilateSterics=False):
         """
         Create an Alchemical state.
@@ -2688,7 +2682,7 @@ class AlchemicalState(object):
         Parameters
         ----------
         relativeRestraints : float, optional, default = 0.0
-            Scaling factor for remaining receptor-ligand relative restraint terms (to help keep ligand near protein).     
+            Scaling factor for remaining receptor-ligand relative restraint terms (to help keep ligand near protein).
         ligandElectrostatics : float, optional, default = 1.0
             Scaling factor for ligand charges, intrinsic Born radii, and surface area term.
         ligandSterics : float, optional, default = 1.0
@@ -2704,7 +2698,7 @@ class AlchemicalState(object):
         --------
 
         Create a fully-interacting, unrestrained alchemical state.
-        
+
         >>> alchemical_state = AlchemicalState(relativeRestraints=0.0, ligandElectrostatics=1.0, ligandSterics=1.0, ligandTorsions=1.0)
         >>> # This is equivalent to
         >>> alchemical_state = AlchemicalState()
@@ -2747,7 +2741,7 @@ class AlchemicalTestSystem(object):
         Alchemical softcore parameter.
         a, b, c : float, optional, default a=1, b=1, c=6
         Parameters describing softcore force.
-        
+
         """
 
         import simtk.openmm as openmm
@@ -2755,24 +2749,23 @@ class AlchemicalTestSystem(object):
         # Create CustomNonbondedForce to handle softcore interactions between alchemically-modified system and rest of system.
 
         energy_expression = "4*epsilon*(lambda^a)*x*(x-1.0);"
-        energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);" 
+        energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
         energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
         energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
         energy_expression += "lambda = lennard_jones_lambda;" # lambda
 
         # Create atom groups.
-        natoms = system.getNumParticles()
         atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
         atomset2 = set(range(system.getNumParticles())) - atomset1 # all atoms minus intra-alchemical region
 
         # Create alchemically modified nonbonded force.
         # TODO: Create a _createCustomNonbondedForce method to duplicate parameters?
         energy_expression += "alpha = %f;" % alpha
-        energy_expression += "a = %f; b = %f; c = %f;" % (a,b,c)    
-        custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)            
+        energy_expression += "a = %f; b = %f; c = %f;" % (a,b,c)
+        custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
         custom_nonbonded_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod()) # TODO: Make sure these method indices are identical.
-        custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction()) 
-        custom_nonbonded_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance()) 
+        custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
+        custom_nonbonded_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
         custom_nonbonded_force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
         custom_nonbonded_force.addGlobalParameter("lennard_jones_lambda", alchemical_state.ligandSterics);
         custom_nonbonded_force.addPerParticleParameter("sigma") # Lennard-Jones sigma
@@ -2787,11 +2780,11 @@ class AlchemicalTestSystem(object):
         # Create CustomBondedForce to handle softcore exceptions if alchemically annihilating ligand.
         if alchemical_state.annihilateSterics:
             energy_expression = "4*epsilon*(lambda^a)*x*(x-1.0);"
-            energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);" 
+            energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
             energy_expression += "alpha = %f;" % alpha
             energy_expression += "a = %f; b = %f; c = %f;" % (a,b,c)
             energy_expression += "lambda = lennard_jones_lambda;"
-            custom_bond_force = openmm.CustomBondForce(energy_expression)            
+            custom_bond_force = openmm.CustomBondForce(energy_expression)
             custom_bond_force.addGlobalParameter("lennard_jones_lambda", alchemical_state.ligandSterics);
             custom_bond_force.addPerBondParameter("sigma") # Lennard-Jones sigma
             custom_bond_force.addPerBondParameter("epsilon") # Lennard-Jones epsilon
@@ -2799,12 +2792,12 @@ class AlchemicalTestSystem(object):
         else:
             # Decoupling of sterics.
             # Add a second CustomNonbondedForce to restore "intra-alchemical" interactions to full strength.
-            energy_expression = "4*epsilon*((sigma/r)^12 - (sigma/r)^6);" 
+            energy_expression = "4*epsilon*((sigma/r)^12 - (sigma/r)^6);"
             energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
             energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-            custom_nonbonded_force2 = openmm.CustomNonbondedForce(energy_expression)            
-            custom_nonbonded_force2.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction()) 
-            custom_nonbonded_force2.setSwitchingDistance(nonbonded_force.getSwitchingDistance()) 
+            custom_nonbonded_force2 = openmm.CustomNonbondedForce(energy_expression)
+            custom_nonbonded_force2.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
+            custom_nonbonded_force2.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
             custom_nonbonded_force2.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
             custom_nonbonded_force2.addPerParticleParameter("sigma") # Lennard-Jones sigma
             custom_nonbonded_force2.addPerParticleParameter("epsilon") # Lennard-Jones epsilon
@@ -2821,9 +2814,9 @@ class AlchemicalTestSystem(object):
             # Add corresponding particle to softcore interactions.
             if particle_index in alchemical_atom_indices:
                 # Turn off Lennard-Jones contribution from alchemically-modified particles.
-                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon*0.0) 
+                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon*0.0)
             # Add contribution back to custom force.
-            custom_nonbonded_force.addParticle([sigma, epsilon])            
+            custom_nonbonded_force.addParticle([sigma, epsilon])
             if not alchemical_state.annihilateSterics:
                 custom_nonbonded_force2.addParticle([sigma, epsilon])
 
@@ -2871,7 +2864,7 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
     ny : int, optional, default=3
         number of particles in the y direction
     nz : int, optional, default=3
-        number of particles in the z direction        
+        number of particles in the z direction
     K : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
         harmonic restraining potential
 
@@ -2879,7 +2872,7 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
     --------
 
     Create Lennard-Jones cluster.
-    
+
     >>> cluster = AlchemicalLennardJonesCluster()
     >>> system, positions = cluster.system, cluster.positions
 
@@ -2946,3 +2939,153 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
         self.system, self.positions = system, positions
 
 
+#=============================================================================================
+# BINDING FREE ENERGY TESTS
+#=============================================================================================
+
+#=============================================================================================
+# Lennard-Jones pair
+#=============================================================================================
+
+class LennardJonesPair(TestSystem):
+    """Create a pair of Lennard-Jones particles.
+
+    Parameters
+    ----------
+    mass : simtk.unit.Quantity with units compatible with amu, optional, default=39.9*amu
+       The mass of each particle.
+    epsilon : simtk.unit.Quantity with units compatible with kilojoules_per_mole, optional, default=1.0*kilocalories_per_mole
+       The effective Lennard-Jones sigma parameter.
+    sigma : simtk.unit.Quantity with units compatible with nanometers, optional, default=3.350*angstroms
+       The effective Lennard-Jones sigma parameter.
+
+    Examples
+    --------
+
+    Create Lennard-Jones pair.
+
+    >>> test = LennardJonesPair()
+    >>> system, positions = test.system, test.positions
+    >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
+    >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
+
+    Create Lennard-Jones pair with different well depth.
+
+    >>> test = LennardJonesPair(epsilon=11.0*unit.kilocalories_per_mole)
+    >>> system, positions = test.system, test.positions
+    >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
+    >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
+
+    Create Lennard-Jones pair with different well depth and sigma.
+
+    >>> test = LennardJonesPair(epsilon=7.0*unit.kilocalories_per_mole, sigma=4.5*unit.angstroms)
+    >>> system, positions = test.system, test.positions
+    >>> thermodynamic_state = ThermodynamicState(temperature=300.0*unit.kelvin)
+    >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
+
+    """
+    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole):
+        # Store parameters
+        self.mass = mass
+        self.sigma = sigma
+        self.epsilon = epsilon
+
+        # Charge must be zero.
+        charge = 0.0 * unit.elementary_charge
+
+        # Create an empty system object.
+        system = openmm.System()
+
+        # Create a NonbondedForce object with no cutoff.
+        force = openmm.NonbondedForce()
+        force.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
+
+        # Create positions.
+        positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
+        # Move the second particle along the x axis to be at the potential minimum.
+        positions[1,0] = 2.0**(1.0/6.0) * sigma
+
+        # Create first particle.
+        system.addParticle(mass)
+        force.addParticle(charge, sigma, epsilon)
+
+        # Create second particle.
+        system.addParticle(mass)
+        force.addParticle(-charge, sigma, epsilon)
+
+        # Add the nonbonded force.
+        system.addForce(force)
+
+        # Store system and positions.
+        self.system, self.positions = system, positions
+
+        # Store ligand and receptor particle indices.
+        self.ligand_indices = [0]
+        self.receptor_indices = [1]
+
+    def get_binding_free_energy(self, thermodynamic_state):
+        """
+        Compute the binding free energy of the two particles at the given thermodynamic state.
+
+        Parameters
+        ----------
+        thermodynamic_state : ThermodynamicState
+           The thermodynamic state specifying the temperature for which the binding free energy is to be computed.
+
+        This is currently computed by numerical integration.
+
+        """
+
+        # Compute thermal energy.
+        kT = kB * thermodynamic_state.temperature
+
+        # Form the integrand function for integration in reduced units (r/sigma).
+        platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(self.system, integrator, platform)
+        context.setPositions(self.positions)
+
+        def integrand_openmm(xvec, args):
+            """OpenMM implementation of integrand (for sanity checks)."""
+            [context] = args
+            positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
+            integrands = 0.0 * xvec
+            for (i, x) in enumerate(xvec):
+                positions[1,0] = x * self.sigma
+                context.setPositions(positions)
+                state = context.getState(getEnergy=True)
+                u = state.getPotentialEnergy() / kT # effective energy
+                integrand = 4.0*pi*(x**2) * np.exp(-u)
+                integrands[i] = integrand
+
+            return integrands
+
+        def integrand_numpy(x, args):
+            """NumPy implementation of integrand (for speed)."""
+            u = 4.0*(self.epsilon)*(x**(-12) - x**(-6)) / kT
+            integrand = 4.0*pi*(x**2) * np.exp(-u)
+            return integrand
+
+        # Compute standard state volume
+        V0 = (unit.liter / (unit.AVOGADRO_CONSTANT_NA * unit.mole)).in_units_of(unit.angstrom**3)
+
+        # Integrate the free energy of binding in unitless coordinate system.
+        xmin = 0.15 # in units of sigma
+        xmax = 6.0 # in units of sigma
+        from scipy.integrate import quadrature
+        [integral, abserr] = quadrature(integrand_numpy, xmin, xmax, args=[context], maxiter=500)
+        # correct for performing unitless integration
+        integral = integral * (self.sigma ** 3)
+
+        # Correct for actual integration volume (which exceeds standard state volume).
+        rmax = xmax * self.sigma
+        Vint = (4.0/3.0) * pi * (rmax**3)
+        integral = integral * (V0 / Vint)
+
+        # Clean up.
+        del context, integrator
+
+        # Compute standard state binding free energy.
+        binding_free_energy = -kT * np.log(integral / V0)
+
+        return binding_free_energy
