@@ -67,6 +67,12 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 #=============================================================================================
 # TESTS
 #=============================================================================================
+def test_doctest():
+    """Performing integrators doctests.
+    """
+    from openmmtools import integrators
+    import doctest
+    doctest.testmod(integrators)
 
 def test_stabilities_harmonic_oscillator():
    """
