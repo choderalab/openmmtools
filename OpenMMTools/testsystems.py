@@ -65,7 +65,7 @@ pi = np.pi
 # SUBROUTINES
 #=============================================================================================
 
-def to_openmm_units(quantity):
+def in_openmm_units(quantity):
     """Strip the units from a simtk.unit.Quantity object after converting to natural OpenMM units
 
     Parameters
@@ -1541,8 +1541,8 @@ class CustomLennardJonesFluidMixture(TestSystem):
             energy_expression += "sigma = 0.5*(sigma1+sigma2);"
             energy_expression += "epsilon = sqrt(epsilon1*epsilon2);"
             energy_expression += "S = (cutoff^2 - r^2)^2 * (cutoff^2 + 2*r^2 - 3*switch^2) / (cutoff^2 - switch^2)^3;"
-            energy_expression += 'cutoff = testsystems_CustomLennardJonesFluidMixture_cutoff;'
             energy_expression += 'switch = testsystems_CustomLennardJonesFluidMixture_switch;'
+            energy_expression += 'cutoff = testsystems_CustomLennardJonesFluidMixture_cutoff;'
             cnb = openmm.CustomNonbondedForce(energy_expression)
             cnb.addGlobalParameter('testsystems_CustomLennardJonesFluidMixture_switch', switch)
             cnb.addGlobalParameter('testsystems_CustomLennardJonesFluidMixture_cutoff', cutoff)
@@ -1553,8 +1553,8 @@ class CustomLennardJonesFluidMixture(TestSystem):
             cnb.setCutoffDistance(cutoff)
         else:
             energy_expression  = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
-            energy_expression  = 'sigma = %f;' % in_openmm_units(sigma)
-            energy_expression  = 'epsilon = %f;' % in_openmm_units(epsilon)
+            energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
+            energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
             cnb = openmm.CustomNonbondedForce(energy_expression)
             cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             cnb.setCutoffDistance(cutoff)
@@ -1617,7 +1617,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
             density = natoms / volume
             per_particle_dispersion_energy = -(8./3.)*math.pi*epsilon*(sigma**6)/(cutoff**3)*density  # attraction
             per_particle_dispersion_energy += (8./9.)*math.pi*epsilon*(sigma**12)/(cutoff**9)*density  # repulsion
-            energy_expression = "%f" % (per_particle_dispersion_energy / unit.kilojoules_per_mole)
+            energy_expression = "%f;" % (per_particle_dispersion_energy / unit.kilojoules_per_mole)
             force = openmm.CustomExternalForce(energy_expression)
             for i in range(natoms):
                 force.addParticle(i, [])
@@ -1669,7 +1669,7 @@ class WCAFluid(TestSystem):
             system.addParticle(mass)
 
         # Create nonbonded force term implementing Kob-Andersen two-component Lennard-Jones interaction.
-        energy_expression  = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon'
+        energy_expression  = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon;'
         energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
         energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
 
