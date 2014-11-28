@@ -65,6 +65,25 @@ pi = np.pi
 # SUBROUTINES
 #=============================================================================================
 
+def to_openmm_units(quantity):
+    """Strip the units from a simtk.unit.Quantity object after converting to natural OpenMM units
+
+    Parameters
+    ----------
+    quantity : simtk.unit.Quantity
+       The quantity to convert
+
+    Returns
+    -------
+    unitless_quantity : float
+       The quantity in natural OpenMM units, stripped of units.
+
+    """
+
+    unitless_quantity = quantity.in_unit_system(unit.md_unit_system)
+    unitless_quantity /= unitless_quantity.unit
+    return unitless_quantity
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files in testsystems.
 
@@ -1534,8 +1553,8 @@ class CustomLennardJonesFluidMixture(TestSystem):
             cnb.setCutoffDistance(cutoff)
         else:
             energy_expression  = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
-            energy_expression  = 'sigma = %f;' % sigma.in_unit_system(unit.md_unit_system)
-            energy_expression  = 'epsilon = %f;' % epsilon.in_unit_system(unit.md_unit_system)
+            energy_expression  = 'sigma = %f;' % in_openmm_units(sigma)
+            energy_expression  = 'epsilon = %f;' % in_openmm_units(epsilon)
             cnb = openmm.CustomNonbondedForce(energy_expression)
             cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             cnb.setCutoffDistance(cutoff)
@@ -1651,8 +1670,8 @@ class WCAFluid(TestSystem):
 
         # Create nonbonded force term implementing Kob-Andersen two-component Lennard-Jones interaction.
         energy_expression  = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon'
-        energy_expression += 'sigma = %f;' % sigma.in_unit_system(unit.md_unit_system)
-        energy_expression += 'epsilon = %f;' % epsilon.in_unit_system(unit.md_unit_system)
+        energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
+        energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
 
         # Create force.
         force = openmm.CustomNonbondedForce(energy_expression)
