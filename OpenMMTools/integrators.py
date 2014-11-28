@@ -660,8 +660,8 @@ def VVVRIntegrator(temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simt
     #
     # Integrator initialization.
     #
-    integrator.addGlobalVariable("kT", kT) # thermal energy
-    integrator.addGlobalVariable("b", numpy.exp(-gamma*timestep)) # velocity mixing parameter
+    integrator.addGlobalVariable("VVVR_kT", kT) # thermal energy
+    integrator.addGlobalVariable("VVVR_b", numpy.exp(-gamma*timestep)) # velocity mixing parameter
     integrator.addPerDofVariable("sigma", 0)
     integrator.addPerDofVariable("x1", 0) # position before application of constraints
 
@@ -675,12 +675,12 @@ def VVVRIntegrator(temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simt
     # This only needs to be done once, but it needs to be done for each degree of freedom.
     # Could move this to initialization?
     #
-    integrator.addComputePerDof("sigma", "sqrt(kT/m)")
+    integrator.addComputePerDof("sigma", "sqrt(VVVR_kT/m)")
 
     #
     # Velocity perturbation.
     #
-    integrator.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+    integrator.addComputePerDof("v", "sqrt(b)*v + sqrt(1-VVVR_b)*sigma*gaussian")
     integrator.addConstrainVelocities();
 
     #
@@ -696,7 +696,7 @@ def VVVRIntegrator(temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simt
     #
     # Velocity randomization
     #
-    integrator.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
+    integrator.addComputePerDof("v", "sqrt(b)*v + sqrt(1-VVVR_b)*sigma*gaussian")
     integrator.addConstrainVelocities();
 
     return integrator
