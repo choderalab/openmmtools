@@ -1,30 +1,43 @@
 package:
   name: openmmtools
-  version: 0.0.0
+  version: !!str 0.0.0
+
+#source:
+#  fn: master.zip
+#  url: https://github.com/choderalab/openmmtools/archive/master.zip
+
+build:
+  preserve_egg_dir: True
+  number: 0
 
 requirements:
   build:
     - python
     - cython
     - numpy
-    - nose
     - scipy
+    - nose
     - setuptools
     - openmm
-
+    - jinja2
 
   run:
     - python
     - scipy
     - openmm
     - nose
+    - setuptools
+    - jinja2
 
-build:
-  # Preserve the Python egg directory. This is needed for some packages
-  # that use setuptools specific features.
-  preserve_egg_dir: yes # (default no)
+
+test:
+  requires:
+    - nose
+  imports:
+    - openmmtools
+  commands:
+    - nosetests openmmtools --with-doctest --verbosity=2 --nocapture
 
 about:
   home: https://github.com/choderalab/openmmtools
   license: GNU Lesser General Public License v2 or later (LGPLv2+)
-
