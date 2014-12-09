@@ -15,12 +15,14 @@ requirements:
     - nose
     - setuptools
     - openmm
+    - jinja2
 
   run:
     - python
     - scipy
     - openmm
     - nose
+    - jinja2
 
   test:
     requires:
