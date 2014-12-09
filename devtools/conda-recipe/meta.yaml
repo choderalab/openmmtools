@@ -22,7 +22,9 @@ requirements:
     - scipy
     - openmm
     - nose
+    - setuptools
     - jinja2
+
 
   test:
     requires:
@@ -30,7 +32,7 @@ requirements:
     imports:
       - openmmtools
     commands:
-      - nosetests -w tests --with-doctest --verbosity=2 --nocapture
+      - nosetests openmmtools --with-doctest --verbosity=2 --nocapture
 
 build:
   # Preserve the Python egg directory. This is needed for some packages
