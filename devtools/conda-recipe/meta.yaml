@@ -2,22 +2,33 @@ package:
   name: openmmtools
   version: 0.0.0
 
+#source:
+#  fn: master.zip
+#  url: https://github.com/choderalab/openmmtools/archive/master.zip
+
 requirements:
   build:
     - python
     - cython
     - numpy
-    - nose
     - scipy
+    - nose
     - setuptools
     - openmm
-
 
   run:
     - python
     - scipy
     - openmm
     - nose
+
+  test:
+    requires:
+      - nose
+    imports:
+      - openmmtools
+    commands:
+      - nosetests -w tests --with-doctest --verbosity=2 --nocapture
 
 build:
   # Preserve the Python egg directory. This is needed for some packages
@@ -27,4 +38,3 @@ build:
 about:
   home: https://github.com/choderalab/openmmtools
   license: GNU Lesser General Public License v2 or later (LGPLv2+)
-

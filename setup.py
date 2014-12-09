@@ -155,7 +155,7 @@ def check_dependencies():
 
 extensions = []
 
-write_version_py('OpenMMTools/version.py')
+write_version_py('openmmtools/version.py')
 
 setup(
     name='openmmtools',
@@ -168,9 +168,9 @@ setup(
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
-    packages=['openmmtools'],
-    package_dir={'openmmtools': 'OpenMMTools'},
-    package_data={'openmmtools': find_package_data('OpenMMTools/data', 'OpenMMTools')},
+    packages=['openmmtools', "openmmtools.tests"],
+    package_dir={'openmmtools': 'openmmtools'},
+    package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     install_requires=['numpy', 'nose'],
     zip_safe=False,
     scripts=[],
