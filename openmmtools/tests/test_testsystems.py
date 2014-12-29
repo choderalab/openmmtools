@@ -43,7 +43,7 @@ def test_properties_all_testsystems():
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
         logging.info(class_name)
-        print class_name # DEBUG
+        print(class_name) # DEBUG
         testsystem = testsystem_class()
         property_list = testsystem.analytical_properties
         state = testsystems.ThermodynamicState(temperature=300.0*unit.kelvin, pressure=1.0*unit.atmosphere)
