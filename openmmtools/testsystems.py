@@ -1297,23 +1297,21 @@ class LennardJonesCluster(TestSystem):
 #=============================================================================================
 
 class LennardJonesFluid(TestSystem):
-    """Create a periodic rectilinear grid of Lennard-Jones particles.
-    Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
+    """Create a periodic fluid of Lennard-Jones particles.
+    Initial positions are assigned using a subrandom grid to minimize steric interactions.
 
     Parameters
     ----------
-    nx : int, optional, default=6
-        number of particles in the x direction
-    ny : int, optional, default=6
-        number of particles in the y direction
-    nz : int, optional, default=6
-        number of particles in the z direction
+    nparticles : int, optional, default=500
+        Number of Lennard-Jones particles.
+    reduced_density : float, optional, default=0.86
+        Reduced density (density * sigma**3); default is appropriate for liquid argon.
     mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
-        mass of each particle.
+        mass of each particle; default is appropriate for argon
     sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
-        Lennard-Jones sigma parameter
+        Lennard-Jones sigma parameter; default is appropriate for argon
     epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
-        Lennard-Jones well depth
+        Lennard-Jones well depth; default is appropriate for argon
     cutoff : simtk.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
     switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
@@ -1331,18 +1329,20 @@ class LennardJonesFluid(TestSystem):
     >>> fluid = LennardJonesFluid()
     >>> system, positions = fluid.system, fluid.positions
 
-    Create a larger 10x8x5 box of Lennard-Jones particles.
+    Create a larger box of Lennard-Jones particles with specified reduced density.
 
-    >>> fluid = LennardJonesFluid(nx=10, ny=8, nz=5)
+    >>> fluid = LennardJonesFluid(nparticles=1000, reduced_density=0.50)
     >>> system, positions = fluid.system, fluid.positions
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
-    >>> fluid = LennardJonesFluid(nx=10, ny=10, nz=10, switch=True, switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
+    >>> fluid = LennardJonesFluid(switch=True, switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
     >>> system, positions = fluid.system, fluid.positions
     """
 
-    def __init__(self, nx=6, ny=6, nz=6,
+    def __init__(self,
+        nparticles=500,
+        reduced_density=0.86, # liquid
         mass=39.9 * unit.amu, # argon
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
@@ -1351,20 +1351,24 @@ class LennardJonesFluid(TestSystem):
         switch_width=0.2*unit.angstrom,
         dispersion_correction=True):
 
+        # Determine Lennard-Jones cutoff.
         if cutoff is None:
-            cutoff = 2.5 * sigma
+            cutoff = 3.0 * sigma
 
+        # Charge is zero.
         charge        = 0.0 * unit.elementary_charge
-
-        scaleStepSizeX = 1.0
-        scaleStepSizeY = 1.0
-        scaleStepSizeZ = 1.0
-
-        # Determine total number of atoms.
-        natoms = nx * ny * nz
 
         # Create an empty system object.
         system = openmm.System()
+
+        # Determine volume and periodic box vectors.
+        density = reduced_density / sigma**3
+        volume = density ** -1
+        box_edge = volume ** (1./3.)
+        a = unit.Quantity((box_edge,                0*unit.angstrom, 0*unit.angstrom))
+        b = unit.Quantity((0*unit.angstrom,                box_edge, 0*unit.angstrom))
+        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
+        system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Set up periodic nonbonded interactions with a cutoff.
         nb = openmm.NonbondedForce()
@@ -1374,41 +1378,12 @@ class LennardJonesFluid(TestSystem):
         nb.setUseSwitchingFunction(switch)
         nb.setSwitchingDistance(cutoff-switch_width)
 
-        positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
+        for particle_index in range(nparticles):
+            system.addParticle(mass)
+            nb.addParticle(charge, sigma, epsilon)
 
-        maxX = 0.0 * unit.angstrom
-        maxY = 0.0 * unit.angstrom
-        maxZ = 0.0 * unit.angstrom
-
-        atom_index = 0
-        for ii in range(nx):
-            for jj in range(ny):
-                for kk in range(nz):
-                    system.addParticle(mass)
-                    nb.addParticle(charge, sigma, epsilon)
-                    x = sigma*scaleStepSizeX*ii
-                    y = sigma*scaleStepSizeY*jj
-                    z = sigma*scaleStepSizeZ*kk
-
-                    positions[atom_index,0] = x
-                    positions[atom_index,1] = y
-                    positions[atom_index,2] = z
-                    atom_index += 1
-
-                    # Wrap positions as needed.
-                    if x>maxX: maxX = x
-                    if y>maxY: maxY = y
-                    if z>maxZ: maxZ = z
-
-        # Set periodic box vectors.
-        x = maxX+2*sigma*scaleStepSizeX
-        y = maxY+2*sigma*scaleStepSizeY
-        z = maxZ+2*sigma*scaleStepSizeZ
-
-        a = unit.Quantity((x,                0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom,                y, 0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, z))
-        system.setDefaultPeriodicBoxVectors(a, b, c)
+        # Create initial coordinates using subrandom positions.
+        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
 
         # Add the nonbonded force.
         system.addForce(nb)
@@ -1438,7 +1413,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
     epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
         Lennard-Jones well depth
     cutoff : simtk.unit.Quantity, optional, default=None
-        Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
+        Cutoff for nonbonded interactions.  If None, defaults to 3 * sigma
     switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
         if specified, the switching function will be turned on at this distance (default: None)
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
@@ -1480,7 +1455,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
         dispersion_correction=True):
 
         if cutoff is None:
-            cutoff = 2.5 * sigma
+            cutoff = 3.0 * sigma
 
         charge        = 0.0 * unit.elementary_charge
         scaleStepSizeX = 1.0
