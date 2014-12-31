@@ -157,7 +157,7 @@ def subrandom_particle_positions(nparticles, box_vectors):
     positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.nanometers)
 
     # Fill in each dimension.
-    primes = [2,3,5] # prime bases for Halton sequence
+    primes = [2, 3, 5] # prime bases for Halton sequence
     for dim in range(3):
         x = halton_sequence(primes[dim], nparticles)
         l = box_vectors[dim][dim]
@@ -1363,10 +1363,10 @@ class LennardJonesFluid(TestSystem):
 
         # Determine volume and periodic box vectors.
         density = reduced_density / sigma**3
-        volume = density ** -1
+        volume = nparticles * (density ** -1)
         box_edge = volume ** (1./3.)
-        a = unit.Quantity((box_edge,                0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom,                box_edge, 0*unit.angstrom))
+        a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
+        b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
         c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
