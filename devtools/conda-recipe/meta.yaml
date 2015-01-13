@@ -28,6 +28,7 @@ requirements:
     - nose
     - setuptools
     - jinja2
+    - six
 
 
 test:

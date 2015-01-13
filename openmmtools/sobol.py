@@ -7,6 +7,7 @@ See mit_license.txt for license information.
 """
 
 import math
+from six.moves import xrange
 from numpy import *
 
 def i4_bit_hi1 ( n ):
