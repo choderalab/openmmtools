@@ -177,7 +177,7 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
         import sys
         from openmmtools import sobol
         ivec = sobol.i4_sobol_generate(3, nparticles, 1)
-        x = np.array(ivec, np.float64)
+        x = np.array(ivec, np.float32)
         for dim in range(3):
             l = box_vectors[dim][dim]
             positions[:,dim] = unit.Quantity(x[dim,:] * l/l.unit, l.unit)
@@ -2550,7 +2550,7 @@ class MolecularIdealGas(TestSystem):
         # Set box vectors.
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
-        
+
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -2564,10 +2564,10 @@ class CustomGBForceSystem(TestSystem):
     -----
 
     This example comes from TestReferenceCustomGBForce.cpp from the OpenMM distribution.
-    
+
     Examples
     --------
-    
+
     >>> gb_system = CustomGBForceSystem()
     >>> system, positions = gb_system.system, gb_system.positions
     """
