@@ -30,6 +30,10 @@ def test_subrandom_particle_positions():
     # Test halton sequence.
     x = testsystems.halton_sequence(2,100)
 
+    # Test Sobol.
+    from openmmtools import sobol
+    x = sobol.i4_sobol_generate(3, 100, 1)
+
     # Test subrandom positions.
     nparticles = 216
     box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
@@ -52,7 +56,27 @@ def test_properties_all_testsystems():
                 method = getattr(testsystem, 'get_' + property_name)
                 logging.info("%32s . %32s : %32s" % (class_name, property_name, str(method(state))))
 
-fast_testsystems = ["HarmonicOscillator", "PowerOscillator", "Diatom", "ConstraintCoupledHarmonicOscillator", "HarmonicOscillatorArray", "SodiumChlorideCrystal", "LennardJonesCluster", "LennardJonesFluid", "IdealGas", "AlanineDipeptideVacuum"]
+fast_testsystems = [
+    "HarmonicOscillator",
+    "PowerOscillator",
+    "Diatom", "DiatomicFluid", "UnconstrainedDiatomicFluid", "ConstrainedDiatomicFluid", "DipolarFluid", "UnconstrainedDipolarFluid", "ConstrainedDipolarFluid",
+    "ConstraintCoupledHarmonicOscillator",
+    "HarmonicOscillatorArray",
+    "SodiumChlorideCrystal",
+    "LennardJonesCluster",
+    "LennardJonesFluid",
+    "LennardJonesGrid",
+    "CustomLennardJonesFluidMixture",
+    "WCAFluid",
+    "IdealGas",
+    "WaterBox", "FlexibleWaterBox", "FourSiteWaterBox", "FiveSiteWaterBox", "DischargedWaterBox", "DischargedWaterBoxHsites",
+    "AlanineDipeptideVacuum", "AlanineDipeptideImplicit",
+    "MethanolBox",
+    "MolecularIdealGas",
+    "CustomGBForceSystem",
+    "AlchemicalLennardJonesCluster",
+    "LennardJonesPair",
+    ]
 
 def check_potential_energy(system, positions):
     """

@@ -150,7 +150,7 @@ def halton_sequence(p,n):
             u[j] += b[k]*p**-(k+1)
     return u
 
-def subrandom_particle_positions(nparticles, box_vectors):
+def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
     """Generate a deterministic list of subrandom particle positions.
 
     Parameters
@@ -159,6 +159,8 @@ def subrandom_particle_positions(nparticles, box_vectors):
         The number of particles.
     box_vectors : simtk.unit.Quantity of (3,3) with units compatible with nanometer
         Periodic box vectors in which particles should lie.
+    method : str, optional, default='sobol'
+        Method for creating subrandom sequence (one of 'halton' or 'sobol')
 
     Returns
     -------
@@ -171,16 +173,36 @@ def subrandom_particle_positions(nparticles, box_vectors):
     >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
     >>> positions = subrandom_particle_positions(nparticles, box_vectors)
 
+    Use halton sequence:
+
+    >>> nparticles = 216
+    >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
+    >>> positions = subrandom_particle_positions(nparticles, box_vectors, method='halton')
+
     """
     # Create positions array.
     positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.nanometers)
 
-    # Fill in each dimension.
-    primes = [2, 3, 5] # prime bases for Halton sequence
-    for dim in range(3):
-        x = halton_sequence(primes[dim], nparticles)
-        l = box_vectors[dim][dim]
-        positions[:,dim] = unit.Quantity(x * l/l.unit, l.unit)
+    if method == 'halton':
+        # Fill in each dimension.
+        primes = [2, 3, 5] # prime bases for Halton sequence
+        for dim in range(3):
+            x = halton_sequence(primes[dim], nparticles)
+            l = box_vectors[dim][dim]
+            positions[:,dim] = unit.Quantity(x * l/l.unit, l.unit)
+
+    elif method == 'sobol':
+        # Generate Sobol' sequence.
+        import sys
+        from openmmtools import sobol
+        ivec = sobol.i4_sobol_generate(3, nparticles, 1)
+        x = np.array(ivec, np.float32)
+        for dim in range(3):
+            l = box_vectors[dim][dim]
+            positions[:,dim] = unit.Quantity(x[dim,:] * l/l.unit, l.unit)
+
+    else:
+        raise Exception("method '%s' must be 'halton' or 'sobol'" % method)
 
     return positions
 
@@ -695,18 +717,17 @@ class Diatom(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
+
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (self.ndof/2.) * kB * state.temperature
@@ -868,18 +889,16 @@ class DiatomicFluid(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
+        Parameters
         ---------
-        
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (self.ndof/2.) * kB * state.temperature
@@ -1110,15 +1129,13 @@ class HarmonicOscillatorArray(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
@@ -1129,15 +1146,13 @@ class HarmonicOscillatorArray(TestSystem):
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
-        Arguments
+        Parameters
         ---------
-
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
 
@@ -1417,6 +1432,81 @@ class LennardJonesFluid(TestSystem):
         system.addForce(nb)
 
         self.system, self.positions = system, positions
+
+#=============================================================================================
+# Lennard-Jones grid
+#=============================================================================================
+class LennardJonesGrid(LennardJonesFluid):
+    """Create a periodic fluid of Lennard-Jones particles on a grid.
+    Initial positions are assigned using a subrandom grid to minimize steric interactions.
+
+    Parameters
+    ----------
+    nx, ny, nz : int, optional, default=8
+        Number of particles in x, y, and z dimensions.
+    reduced_density : float, optional, default=0.86
+        Reduced density (density * sigma**3); default is appropriate for liquid argon.
+    mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
+        mass of each particle; default is appropriate for argon
+    sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
+        Lennard-Jones sigma parameter; default is appropriate for argon
+    epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
+        Lennard-Jones well depth; default is appropriate for argon
+    cutoff : simtk.unit.Quantity, optional, default=None
+        Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
+    switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
+        if specified, the switching function will be turned on at this distance (default: None)
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+        switching function is turned on at cutoff - switch_width
+    dispersion_correction : bool, optional, default=True
+        if True, will use analytical dispersion correction (if not using switching function)
+
+    Examples
+    --------
+
+    Create default-size Lennard-Jones fluid with initial positions on a grid.
+
+    >>> fluid = LennardJonesGrid()
+    >>> system, positions = fluid.system, fluid.positions
+
+    Create a box of Lennard-Jones particles with unequal grid spacing.
+
+    >>> fluid = LennardJonesGrid(nx=8, ny=9, nz=10)
+    >>> system, positions = fluid.system, fluid.positions
+
+    """
+
+    def __init__(self,
+        nx=8, ny=8, nz=8, # grid dimensions
+        *args,
+        **kwargs):
+
+        # Create system with quasirandom particle positions.
+        nparticles = nx*ny*nz
+        super(LennardJonesGrid, self).__init__(nparticles, *args, **kwargs)
+
+        # Compute volume per particle.
+        box = self.system.getDefaultPeriodicBoxVectors()
+        volume = box[0][0] * box[1][1] * box[2][2]
+        volume_per_particle = volume / float(nparticles)
+        delta = volume_per_particle**(1.0/3.0)
+
+        # Adjust box vectors.
+        box[0] = openmm.Vec3(nx * delta,  0 * delta,  0 * delta)
+        box[1] = openmm.Vec3( 0 * delta, ny * delta,  0 * delta)
+        box[2] = openmm.Vec3( 0 * delta,  0 * delta, nz * delta)
+        self.system.setDefaultPeriodicBoxVectors(box[0], box[1], box[2])
+
+        # Set positions.
+        particle = 0
+        for x in range(nx):
+            for y in range(ny):
+                for z in range(nz):
+                    self.positions[particle,0] = x * delta
+                    self.positions[particle,1] = y * delta
+                    self.positions[particle,2] = z * delta
+
+        return
 
 #=============================================================================================
 # Custom Lennard-Jones fluid mixture of NonbondedForce and CustomNonbondedForce
@@ -1729,15 +1819,13 @@ class IdealGas(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
@@ -1748,18 +1836,16 @@ class IdealGas(TestSystem):
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
-        
+
         """
 
         return 0.0 * unit.kilojoules_per_mole
@@ -1767,99 +1853,89 @@ class IdealGas(TestSystem):
     def get_kinetic_expectation(self, state):
         """Return the expectation of the kinetic energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
-        return (3./2.) * kB * state.temperature 
-        
+        return (3./2.) * kB * state.temperature
+
     def get_kinetic_standard_deviation(self, state):
         """Return the standard deviation of the kinetic energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
-        
+
         """
 
-        return (3./2.) * kB * state.temperature 
+        return (3./2.) * kB * state.temperature
 
     def get_volume_expectation(self, state):
         """Return the expectation of the volume, computed analytically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature and pressure defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
         volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
             The expectation of the volume at equilibrium.
-        
+
         Notes
         -----
-        
         The true mean volume is used, rather than the large-N limit.
 
         """
-        
+
         if not state.pressure:
             box_vectors = self.system.getDefaultPeriodicBoxVectors()
-            volume = box_vectors[0][0] * box_vectors[1][1] * box_vectors[2][2] 
+            volume = box_vectors[0][0] * box_vectors[1][1] * box_vectors[2][2]
             return volume
 
         N = self._system.getNumParticles()
         return ((N+1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
-        
+
     def get_volume_standard_deviation(self, state):
         """Return the standard deviation of the volume, computed analytically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature and pressure defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
         volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
             The standard deviation of the volume at equilibrium.
-        
+
         Notes
         -----
-        
         The true mean volume is used, rather than the large-N limit.
 
         """
-        
+
         if not state.pressure:
             return 0.0 * unit.nanometers**3
 
         N = self._system.getNumParticles()
         return (numpy.sqrt(N+1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
-    
+
 #=============================================================================================
 # Water box
 #=============================================================================================
@@ -1870,13 +1946,13 @@ class WaterBox(TestSystem):
 
    Examples
    --------
-   
+
    Create a default (TIP3P) waterbox.
 
    >>> waterbox = WaterBox()
 
    Control the cutoff.
-   
+
    >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
    Use a different water model.
