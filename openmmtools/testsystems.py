@@ -2336,7 +2336,7 @@ class AlanineDipeptideExplicit(TestSystem):
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
 
         # Read positions.
-        inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
+        inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
@@ -2488,7 +2488,7 @@ class MethanolBox(TestSystem):
         system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9*unit.nanometer)
 
         # Read positions.
-        inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
+        inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
@@ -2572,7 +2572,7 @@ class MolecularIdealGas(TestSystem):
                 pass
 
         # Read positions.
-        inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
+        inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
