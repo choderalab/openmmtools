@@ -7,6 +7,7 @@ See mit_license.txt for license information.
 """
 
 import math
+from six.moves import xrange
 from numpy import *
 
 def i4_bit_hi1 ( n ):
@@ -330,10 +331,10 @@ def i4_sobol ( dim_num, seed ):
 #	Check parameters.
 #
 		if ( dim_num < 1 or dim_max < dim_num ):
-			print 'I4_SOBOL - Fatal error!' 
-			print '	The spatial dimension DIM_NUM should satisfy:' 
-			print '		1 <= DIM_NUM <= %d'%dim_max
-			print '	But this input value is DIM_NUM = %d'%dim_num
+			print('I4_SOBOL - Fatal error!')
+			print('	The spatial dimension DIM_NUM should satisfy:')
+			print('		1 <= DIM_NUM <= %d'%dim_max)
+			print('	But this input value is DIM_NUM = %d'%dim_num)
 			return
 
 		dim_num_save = dim_num
@@ -427,10 +428,10 @@ def i4_sobol ( dim_num, seed ):
 #	Check that the user is not calling too many times!
 #
 	if ( maxcol < l ):
-		print 'I4_SOBOL - Fatal error!'
-		print '	Too many calls!'
-		print '	MAXCOL = %d\n'%maxcol
-		print '	L =			%d\n'%l
+		print('I4_SOBOL - Fatal error!')
+		print('	Too many calls!')
+		print('	MAXCOL = %d\n'%maxcol)
+		print('	L =			%d\n'%l)
 		return
 #
 #	Calculate the new components of QUASI.
@@ -504,8 +505,8 @@ def i4_uniform ( a, b, seed ):
 #    Output, integer SEED, the updated seed.
 #
 	if ( seed == 0 ):
-		print 'I4_UNIFORM - Fatal error!' 
-		print '	Input SEED = 0!'
+		print('I4_UNIFORM - Fatal error!')
+		print('	Input SEED = 0!')
 
 	seed = math.floor ( seed )
 	a = round ( a )

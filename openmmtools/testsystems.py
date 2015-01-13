@@ -458,7 +458,7 @@ class HarmonicOscillator(TestSystem):
 
     Get a list of the available analytically-computed properties.
 
-    >>> print ho.analytical_properties
+    >>> print(ho.analytical_properties)
     ['potential_expectation', 'potential_standard_deviation']
 
     Compute the potential expectation and standard deviation
