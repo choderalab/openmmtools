@@ -504,8 +504,8 @@ def i4_uniform ( a, b, seed ):
 #    Output, integer SEED, the updated seed.
 #
 	if ( seed == 0 ):
-		print 'I4_UNIFORM - Fatal error!' 
-		print '	Input SEED = 0!'
+		print('I4_UNIFORM - Fatal error!')
+		print('	Input SEED = 0!')
 
 	seed = math.floor ( seed )
 	a = round ( a )
