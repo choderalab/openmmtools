@@ -131,7 +131,7 @@ def halton_sequence(p,n):
             u[j] += b[k]*p**-(k+1)
     return u
 
-def subrandom_particle_positions(nparticles, box_vectors):
+def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
     """Generate a deterministic list of subrandom particle positions.
 
     Parameters
@@ -140,6 +140,8 @@ def subrandom_particle_positions(nparticles, box_vectors):
         The number of particles.
     box_vectors : simtk.unit.Quantity of (3,3) with units compatible with nanometer
         Periodic box vectors in which particles should lie.
+    method : str, optional, default='sobol'
+        Method for creating subrandom sequence (one of 'halton' or 'sobol')
 
     Returns
     -------
@@ -152,16 +154,36 @@ def subrandom_particle_positions(nparticles, box_vectors):
     >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
     >>> positions = subrandom_particle_positions(nparticles, box_vectors)
 
+    Use halton sequence:
+
+    >>> nparticles = 216
+    >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
+    >>> positions = subrandom_particle_positions(nparticles, box_vectors, method='halton')
+
     """
     # Create positions array.
     positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.nanometers)
 
-    # Fill in each dimension.
-    primes = [2, 3, 5] # prime bases for Halton sequence
-    for dim in range(3):
-        x = halton_sequence(primes[dim], nparticles)
-        l = box_vectors[dim][dim]
-        positions[:,dim] = unit.Quantity(x * l/l.unit, l.unit)
+    if method == 'halton':
+        # Fill in each dimension.
+        primes = [2, 3, 5] # prime bases for Halton sequence
+        for dim in range(3):
+            x = halton_sequence(primes[dim], nparticles)
+            l = box_vectors[dim][dim]
+            positions[:,dim] = unit.Quantity(x * l/l.unit, l.unit)
+
+    elif method == 'sobol':
+        # Generate Sobol' sequence.
+        import sys
+        from openmmtools import sobol
+        ivec = sobol.i4_sobol_generate(3, nparticles, 1)
+        x = np.array(ivec, np.float64)
+        for dim in range(3):
+            l = box_vectors[dim][dim]
+            positions[:,dim] = unit.Quantity(x[dim,:] * l/l.unit, l.unit)
+
+    else:
+        raise Exception("method '%s' must be 'halton' or 'sobol'" % method)
 
     return positions
 
@@ -624,9 +646,9 @@ class Diatom(TestSystem):
 
     """
 
-    def __init__(self, 
+    def __init__(self,
         K=290.1 * unit.kilocalories_per_mole / unit.angstrom**2,
-        r0=1.550 * unit.angstroms, 
+        r0=1.550 * unit.angstroms,
         m1=39.948 * unit.amu,
         m2=39.948 * unit.amu,
         constraint=False,
@@ -647,7 +669,7 @@ class Diatom(TestSystem):
         if constraint:
             # Add constraint between particles.
             system.addConstraint(0, 1, r0)
-        
+
         # Set the positions.
         positions = unit.Quantity(np.zeros([2,3], np.float32), unit.angstroms)
         positions[1,0] = r0
@@ -658,30 +680,29 @@ class Diatom(TestSystem):
             force = openmm.CustomExternalForce('(Kcentral/2.0) * (x^2 + y^2 + z^2)')
             force.addGlobalParameter('Kcentral', Kcentral)
             force.addParticle(0, [])
-            force.addParticle(1, [])    
+            force.addParticle(1, [])
             system.addForce(force)
 
         self.system, self.positions = system, positions
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
-        
+
         # Store number of degrees of freedom.
         self.ndof = 6 - 1*constraint
 
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
+
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (self.ndof/2.) * kB * state.temperature
@@ -843,18 +864,16 @@ class DiatomicFluid(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
+        Parameters
         ---------
-        
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (self.ndof/2.) * kB * state.temperature
@@ -1081,15 +1100,13 @@ class HarmonicOscillatorArray(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
@@ -1100,15 +1117,13 @@ class HarmonicOscillatorArray(TestSystem):
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
-        Arguments
+        Parameters
         ---------
-
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
 
@@ -1701,15 +1716,13 @@ class IdealGas(TestSystem):
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
@@ -1720,18 +1733,16 @@ class IdealGas(TestSystem):
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
-        
+
         """
 
         return 0.0 * unit.kilojoules_per_mole
@@ -1739,99 +1750,89 @@ class IdealGas(TestSystem):
     def get_kinetic_expectation(self, state):
         """Return the expectation of the kinetic energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
-        return (3./2.) * kB * state.temperature 
-        
+        return (3./2.) * kB * state.temperature
+
     def get_kinetic_standard_deviation(self, state):
         """Return the standard deviation of the kinetic energy, computed analytically or numerically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
-        
+
         """
 
-        return (3./2.) * kB * state.temperature 
+        return (3./2.) * kB * state.temperature
 
     def get_volume_expectation(self, state):
         """Return the expectation of the volume, computed analytically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature and pressure defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
         volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
             The expectation of the volume at equilibrium.
-        
+
         Notes
         -----
-        
         The true mean volume is used, rather than the large-N limit.
 
         """
-        
+
         if not state.pressure:
             box_vectors = self.system.getDefaultPeriodicBoxVectors()
-            volume = box_vectors[0][0] * box_vectors[1][1] * box_vectors[2][2] 
+            volume = box_vectors[0][0] * box_vectors[1][1] * box_vectors[2][2]
             return volume
 
         N = self._system.getNumParticles()
         return ((N+1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
-        
+
     def get_volume_standard_deviation(self, state):
         """Return the standard deviation of the volume, computed analytically.
 
-        Arguments
-        ---------
-        
+        Parameters
+        ----------
         state : ThermodynamicState with temperature and pressure defined
             The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
-        
         volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
             The standard deviation of the volume at equilibrium.
-        
+
         Notes
         -----
-        
         The true mean volume is used, rather than the large-N limit.
 
         """
-        
+
         if not state.pressure:
             return 0.0 * unit.nanometers**3
 
         N = self._system.getNumParticles()
         return (numpy.sqrt(N+1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
-    
+
 #=============================================================================================
 # Water box
 #=============================================================================================
@@ -1842,13 +1843,13 @@ class WaterBox(TestSystem):
 
    Examples
    --------
-   
+
    Create a default (TIP3P) waterbox.
 
    >>> waterbox = WaterBox()
 
    Control the cutoff.
-   
+
    >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
    Use a different water model.
