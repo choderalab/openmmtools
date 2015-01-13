@@ -6,10 +6,8 @@ Various Python utilities for OpenMM.
 """
 
 # Define global version.
-import version
+from openmmtools import version
 __version__ = version.version
 
 # Import modules.
-import testsystems
-import integrators
-
+from openmmtools import testsystems, integrators
