@@ -65,6 +65,25 @@ pi = np.pi
 # SUBROUTINES
 #=============================================================================================
 
+def in_openmm_units(quantity):
+    """Strip the units from a simtk.unit.Quantity object after converting to natural OpenMM units
+
+    Parameters
+    ----------
+    quantity : simtk.unit.Quantity
+       The quantity to convert
+
+    Returns
+    -------
+    unitless_quantity : float
+       The quantity in natural OpenMM units, stripped of units.
+
+    """
+
+    unitless_quantity = quantity.in_unit_system(unit.md_unit_system)
+    unitless_quantity /= unitless_quantity.unit
+    return unitless_quantity
+
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files in testsystems.
 
@@ -465,8 +484,10 @@ class HarmonicOscillator(TestSystem):
         positions = unit.Quantity(np.zeros([1,3], np.float32), unit.angstroms)
 
         # Add a restrining potential centered at the origin.
-        force = openmm.CustomExternalForce('(K/2.0) * (x^2 + y^2 + z^2)')
-        force.addGlobalParameter('K', K)
+        energy_expression  = '(K/2.0) * (x^2 + y^2 + z^2);'
+        energy_expression += 'K = testsystems_HarmonicOscillator_K;'
+        force = openmm.CustomExternalForce(energy_expression)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_K', K)
         force.addParticle(0, [])
         system.addForce(force)
 
@@ -520,12 +541,12 @@ class PowerOscillator(TestSystem):
     Parameters
     ----------
     K : simtk.unit.Quantity, optional, default=100.0
-        harmonic restraining potential.  The units depend on the power, 
-        so we accept unitless inputs and add units of the form 
+        harmonic restraining potential.  The units depend on the power,
+        so we accept unitless inputs and add units of the form
         unit.kilocalories_per_mole / unit.angstrom ** b
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
-    
+
     Attributes
     ----------
     system : simtk.openmm.System
@@ -536,17 +557,17 @@ class PowerOscillator(TestSystem):
     Notes
     -----
 
-    Here we assume a potential energy of the form U(x) = k * x^b.  
+    Here we assume a potential energy of the form U(x) = k * x^b.
 
-    By the generalized equipartition theorem, the expectation of the 
+    By the generalized equipartition theorem, the expectation of the
     potential energy is 3 kT / b.
-    
+
     """
-    
+
     def __init__(self, K=100.0, b=2.0, mass=39.948 * unit.amu, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
-        
+
         K = K * unit.kilocalories_per_mole / unit.angstroms ** b
 
         # Create an empty system object.
@@ -559,15 +580,17 @@ class PowerOscillator(TestSystem):
         positions = unit.Quantity(np.zeros([1,3], np.float32), unit.angstroms)
 
         # Add a restrining potential centered at the origin.
-        force = openmm.CustomExternalForce('(K) * (x^%d + y^%d + z^%d)' %(b, b, b))
-        force.addGlobalParameter('K', K)
+        energy_expression  = 'K * (x^%d + y^%d + z^%d);' % (b, b, b)
+        energy_expression += 'K = testsystems_PowerOscillator_K;'
+        force = openmm.CustomExternalForce(energy_expression)
+        force.addGlobalParameter('testsystems_PowerOscillator_K', K)
         force.addParticle(0, [])
         system.addForce(force)
-        
+
         self.K, self.mass = K, mass
         self.b = b
         self.system, self.positions = system, positions
-        
+
         # Number of degrees of freedom.
         self.ndof = 3
 
@@ -576,16 +599,16 @@ class PowerOscillator(TestSystem):
 
         Arguments
         ---------
-        
+
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
-        
+
         Returns
         -------
-        
+
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             The expectation of the potential energy.
-        
+
         """
 
         return (3.) * kB * state.temperature / self.b
@@ -623,8 +646,8 @@ class Diatom(TestSystem):
     m2 : simtk.unit.Quantity, optional, default=12.01 * unit.amu
         particle2 mass
     use_central_potential : bool, optional, default=False
-        if True, a soft central potential will also be added to keep the system from drifting away        
-    
+        if True, a soft central potential will also be added to keep the system from drifting away
+
 
     Notes
     -----
@@ -677,8 +700,10 @@ class Diatom(TestSystem):
         if use_central_potential:
             # Add a central restraining potential.
             Kcentral = 1.0 * unit.kilocalories_per_mole / unit.nanometer**2
-            force = openmm.CustomExternalForce('(Kcentral/2.0) * (x^2 + y^2 + z^2)')
-            force.addGlobalParameter('Kcentral', Kcentral)
+            energy_expression  = '(K/2.0) * (x^2 + y^2 + z^2);'
+            energy_expression += 'K = testsystems_Diatom_Kcentral;'
+            force = openmm.CustomExternalForce(energy_expression)
+            force.addGlobalParameter('testsystems_Diatom_Kcentral', Kcentral)
             force.addParticle(0, [])
             force.addParticle(1, [])
             system.addForce(force)
@@ -1006,8 +1031,10 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
         positions[1,0] = d
 
         # Add a restrining potential centered at the origin.
-        force = openmm.CustomExternalForce('(K/2.0) * ((x-d)^2 + y^2 + z^2)')
-        force.addGlobalParameter('K', K)
+        energy_expression  = '(K/2.0) * ((x-d)^2 + y^2 + z^2);'
+        energy_expression += 'K = testsystems_ConstraintCoupledHarmonicOscillator_K;'
+        force = openmm.CustomExternalForce(energy_expression)
+        force.addGlobalParameter('testsystems_ConstraintCoupledHarmonicOscillator_K', K)
         force.addPerParticleParameter('d')
         force.addParticle(0, [0.0])
         force.addParticle(1, [d / unit.nanometers])
@@ -1042,7 +1069,7 @@ class HarmonicOscillatorArray(TestSystem):
         particle mass
     N : int, optional, default=5
         Number of harmonic oscillators
-    
+
     Attributes
     ----------
     system : simtk.openmm.System
@@ -1085,8 +1112,10 @@ class HarmonicOscillatorArray(TestSystem):
             positions[n,0] = n*d
 
         # Add a restrining potential for each oscillator.
-        force = openmm.CustomExternalForce('(K/2.0) * ((x-x0)^2 + y^2 + z^2)')
-        force.addGlobalParameter('K', K)
+        energy_expression  = '(K/2.0) * ((x-x0)^2 + y^2 + z^2);'
+        energy_expression += 'K = testsystems_HarmonicOscillatorArray_K;'
+        force = openmm.CustomExternalForce(energy_expression)
+        force.addGlobalParameter('testsystems_HarmonicOscillatorArray_K', K)
         force.addPerParticleParameter('x0')
         for n in range(N):
             parameters = (d*n / unit.nanometers, )
@@ -1300,7 +1329,6 @@ class LennardJonesCluster(TestSystem):
         energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
         energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers**2)) # in OpenMM units
         force = openmm.CustomExternalForce(energy_expression)
-        #force.addGlobalParameter('K', K)
         for particle_index in range(natoms):
             force.addParticle(particle_index, [])
         system.addForce(force)
@@ -1578,19 +1606,21 @@ class CustomLennardJonesFluidMixture(TestSystem):
             energy_expression += "sigma = 0.5*(sigma1+sigma2);"
             energy_expression += "epsilon = sqrt(epsilon1*epsilon2);"
             energy_expression += "S = (cutoff^2 - r^2)^2 * (cutoff^2 + 2*r^2 - 3*switch^2) / (cutoff^2 - switch^2)^3;"
+            energy_expression += 'switch = testsystems_CustomLennardJonesFluidMixture_switch;'
+            energy_expression += 'cutoff = testsystems_CustomLennardJonesFluidMixture_cutoff;'
             cnb = openmm.CustomNonbondedForce(energy_expression)
-            cnb.addGlobalParameter('switch', switch)
-            cnb.addGlobalParameter('cutoff', cutoff)
-            cnb.addPerParticleParameter('q')
+            cnb.addGlobalParameter('testsystems_CustomLennardJonesFluidMixture_switch', switch)
+            cnb.addGlobalParameter('testsystems_CustomLennardJonesFluidMixture_cutoff', cutoff)
+            cnb.addPerParticleParameter('charge')
             cnb.addPerParticleParameter('sigma')
             cnb.addPerParticleParameter('epsilon')
             cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             cnb.setCutoffDistance(cutoff)
         else:
-            energy_expression = "4*epsilon*((sigma/r)^12 - (sigma/r)^6);"
+            energy_expression  = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
+            energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
+            energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
             cnb = openmm.CustomNonbondedForce(energy_expression)
-            cnb.addGlobalParameter('sigma', sigma)
-            cnb.addGlobalParameter('epsilon', epsilon)
             cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             cnb.setCutoffDistance(cutoff)
         # Only add interactions between first atom and rest.
@@ -1652,7 +1682,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
             density = natoms / volume
             per_particle_dispersion_energy = -(8./3.)*math.pi*epsilon*(sigma**6)/(cutoff**3)*density  # attraction
             per_particle_dispersion_energy += (8./9.)*math.pi*epsilon*(sigma**12)/(cutoff**9)*density  # repulsion
-            energy_expression = "%f" % (per_particle_dispersion_energy / unit.kilojoules_per_mole)
+            energy_expression = "%f;" % (per_particle_dispersion_energy / unit.kilojoules_per_mole)
             force = openmm.CustomExternalForce(energy_expression)
             for i in range(natoms):
                 force.addParticle(i, [])
@@ -1704,14 +1734,12 @@ class WCAFluid(TestSystem):
             system.addParticle(mass)
 
         # Create nonbonded force term implementing Kob-Andersen two-component Lennard-Jones interaction.
-        energy_expression = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon'
+        energy_expression  = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon;'
+        energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
+        energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
 
         # Create force.
         force = openmm.CustomNonbondedForce(energy_expression)
-
-        # Set epsilon and sigma global parameters.
-        force.addGlobalParameter('epsilon', epsilon)
-        force.addGlobalParameter('sigma', sigma)
 
         # Add particles
         for n in range(nparticles):
@@ -2600,12 +2628,13 @@ class CustomGBForceSystem(TestSystem):
         custom.setNonbondedMethod(openmm.CustomGBForce.CutoffPeriodic)
         custom.setCutoffDistance(cutoff)
 
-        custom.addPerParticleParameter("q")
+        custom.addPerParticleParameter("charge")
         custom.addPerParticleParameter("radius")
         custom.addPerParticleParameter("scale")
 
-        custom.addGlobalParameter("solventDielectric", 80.0)
-        custom.addGlobalParameter("soluteDielectric", 1.0)
+        custom.addGlobalParameter("testsystems_CustomGBForceSystem_solventDielectric", 80.0)
+        custom.addGlobalParameter("testsystems_CustomGBForceSystem_soluteDielectric", 1.0)
+
         custom.addComputedValue("I", "step(r+sr2-or1)*0.5*(1/L-1/U+0.25*(1/U^2-1/L^2)*(r-sr2*sr2/r)+0.5*log(L/U)/r+C);"
                                       "U=r+sr2;"
                                       "C=2*(1/or1-1/L)*step(sr2-r-or1);"
@@ -2615,9 +2644,17 @@ class CustomGBForceSystem(TestSystem):
                                       "or1 = radius1-0.009; or2 = radius2-0.009", openmm.CustomGBForce.ParticlePairNoExclusions);
         custom.addComputedValue("B", "1/(1/or-tanh(1*psi-0.8*psi^2+4.85*psi^3)/radius);"
                                       "psi=I*or; or=radius-0.009", openmm.CustomGBForce.SingleParticle);
-        custom.addEnergyTerm("28.3919551*(radius+0.14)^2*(radius/B)^6-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*q^2/B", openmm.CustomGBForce.SingleParticle);
-        custom.addEnergyTerm("-138.935485*(1/soluteDielectric-1/solventDielectric)*q1*q2/f;"
-                              "f=sqrt(r^2+B1*B2*exp(-r^2/(4*B1*B2)))", openmm.CustomGBForce.ParticlePairNoExclusions);
+
+        energy_expression  = '28.3919551*(radius+0.14)^2*(radius/B)^6-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*charge^2/B;'
+        energy_expression += 'solventDielectric = testsystems_CustomGBForceSystem_solventDielectric;'
+        energy_expression += 'soluteDielectric = testsystems_CustomGBForceSystem_soluteDielectric;'
+        custom.addEnergyTerm(energy_expression, openmm.CustomGBForce.SingleParticle);
+
+        energy_expression  = '-138.935485*(1/soluteDielectric-1/solventDielectric)*charge1*charge2/f;'
+        energy_expression += 'f=sqrt(r^2+B1*B2*exp(-r^2/(4*B1*B2)));'
+        energy_expression += 'solventDielectric = testsystems_CustomGBForceSystem_solventDielectric;'
+        energy_expression += 'soluteDielectric = testsystems_CustomGBForceSystem_soluteDielectric;'
+        custom.addEnergyTerm(energy_expression, openmm.CustomGBForce.ParticlePairNoExclusions);
 
         # Add particles.
         for i in range(numMolecules):
@@ -2818,7 +2855,7 @@ class AlchemicalTestSystem(object):
         custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
         custom_nonbonded_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
         custom_nonbonded_force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
-        custom_nonbonded_force.addGlobalParameter("lennard_jones_lambda", alchemical_state.ligandSterics);
+        custom_nonbonded_force.addGlobalParameter("testsystems_AlchemicalTestSystem_lennard_jones_lambda", alchemical_state.ligandSterics);
         custom_nonbonded_force.addPerParticleParameter("sigma") # Lennard-Jones sigma
         custom_nonbonded_force.addPerParticleParameter("epsilon") # Lennard-Jones epsilon
 
@@ -2834,7 +2871,7 @@ class AlchemicalTestSystem(object):
             energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
             energy_expression += "alpha = %f;" % alpha
             energy_expression += "a = %f; b = %f; c = %f;" % (a,b,c)
-            energy_expression += "lambda = lennard_jones_lambda;"
+            energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;"
             custom_bond_force = openmm.CustomBondForce(energy_expression)
             custom_bond_force.addGlobalParameter("lennard_jones_lambda", alchemical_state.ligandSterics);
             custom_bond_force.addPerBondParameter("sigma") # Lennard-Jones sigma
@@ -2931,6 +2968,7 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
 
     >>> cluster = AlchemicalLennardJonesCluster(nx=10, ny=10, nz=10)
     >>> system, positions = cluster.system, cluster.positions
+
     """
     def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2):
 
@@ -2975,8 +3013,10 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
         system.addForce(nb)
 
         # Add a restrining potential centered at the origin.
-        force = openmm.CustomExternalForce('(K/2.0) * (x^2 + y^2 + z^2)')
-        force.addGlobalParameter('K', K)
+        energy_expression  = "(K/2.0) * (x^2 + y^2 + z^2);"
+        energy_expression += "K = testsystems_AlchemicalLennardJonesCluster_K;"
+        force = openmm.CustomExternalForce(energy_expression)
+        force.addGlobalParameter('testsystems_AlchemicalLennardJonesCluster_K', K)
         for particle_index in range(natoms):
             force.addParticle(particle_index, [])
         system.addForce(force)
