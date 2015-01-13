@@ -1406,6 +1406,81 @@ class LennardJonesFluid(TestSystem):
         self.system, self.positions = system, positions
 
 #=============================================================================================
+# Lennard-Jones grid
+#=============================================================================================
+class LennardJonesGrid(LennardJonesFluid):
+    """Create a periodic fluid of Lennard-Jones particles on a grid.
+    Initial positions are assigned using a subrandom grid to minimize steric interactions.
+
+    Parameters
+    ----------
+    nx, ny, nz : int, optional, default=8
+        Number of particles in x, y, and z dimensions.
+    reduced_density : float, optional, default=0.86
+        Reduced density (density * sigma**3); default is appropriate for liquid argon.
+    mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
+        mass of each particle; default is appropriate for argon
+    sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
+        Lennard-Jones sigma parameter; default is appropriate for argon
+    epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
+        Lennard-Jones well depth; default is appropriate for argon
+    cutoff : simtk.unit.Quantity, optional, default=None
+        Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
+    switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
+        if specified, the switching function will be turned on at this distance (default: None)
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+        switching function is turned on at cutoff - switch_width
+    dispersion_correction : bool, optional, default=True
+        if True, will use analytical dispersion correction (if not using switching function)
+
+    Examples
+    --------
+
+    Create default-size Lennard-Jones fluid with initial positions on a grid.
+
+    >>> fluid = LennardJonesGrid()
+    >>> system, positions = fluid.system, fluid.positions
+
+    Create a box of Lennard-Jones particles with unequal grid spacing.
+
+    >>> fluid = LennardJonesGrid(nx=8, ny=9, nz=10)
+    >>> system, positions = fluid.system, fluid.positions
+
+    """
+
+    def __init__(self,
+        nx=8, ny=8, nz=8, # grid dimensions
+        *args,
+        **kwargs):
+
+        # Create system with quasirandom particle positions.
+        nparticles = nx*ny*nz
+        super(LennardJonesGrid, self).__init__(nparticles, *args, **kwargs)
+
+        # Compute volume per particle.
+        box = self.system.getDefaultPeriodicBoxVectors()
+        volume = box[0][0] * box[1][1] * box[2][2]
+        volume_per_particle = volume / float(nparticles)
+        delta = volume_per_particle**(1.0/3.0)
+
+        # Adjust box vectors.
+        box[0] = openmm.Vec3(nx * delta,  0 * delta,  0 * delta)
+        box[1] = openmm.Vec3( 0 * delta, ny * delta,  0 * delta)
+        box[2] = openmm.Vec3( 0 * delta,  0 * delta, nz * delta)
+        self.system.setDefaultPeriodicBoxVectors(box[0], box[1], box[2])
+
+        # Set positions.
+        particle = 0
+        for x in range(nx):
+            for y in range(ny):
+                for z in range(nz):
+                    self.positions[particle,0] = x * delta
+                    self.positions[particle,1] = y * delta
+                    self.positions[particle,2] = z * delta
+
+        return
+
+#=============================================================================================
 # Custom Lennard-Jones fluid mixture of NonbondedForce and CustomNonbondedForce
 #=============================================================================================
 
