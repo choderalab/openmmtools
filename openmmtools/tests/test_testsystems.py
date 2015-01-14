@@ -112,7 +112,7 @@ def test_energy_all_testsystems(skip_slow_tests=False):
     """Testing computation of potential energy for all systems.
     """
     def all_subclasses(cls):
-        """Return list of all subclasses and subsubclasses for a given class."
+        """Return list of all subclasses and subsubclasses for a given class."""
         return cls.__subclasses__() + [g for s in cls.__subclasses__()
 
     testsystem_classes = all_subclasses(TestSystem)

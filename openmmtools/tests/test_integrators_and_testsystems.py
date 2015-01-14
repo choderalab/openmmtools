@@ -67,7 +67,12 @@ def test_integrators_and_testsystems():
 
    # Create lists of integrator and testsystem names.
    integrator_names = [ methodname for methodname in dir(integrators) if re.match('.*Integrator$', methodname) ]
-   testsystem_names = [ testsystem_class.__name__ for testsystem_class in testsystems.TestSystem.__subclasses__() ]
+
+   def all_subclasses(cls):
+       """Return list of all subclasses and subsubclasses for a given class."""
+       return cls.__subclasses__() + [g for s in cls.__subclasses__()
+   testsystem_classes = all_subclasses(TestSystem)
+   testsystem_names = [ cls.__name__ for cls in testsystem_classes ]
 
    # Use Reference platform.
    platform = openmm.Platform.getPlatformByName('Reference')
