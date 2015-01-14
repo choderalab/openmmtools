@@ -70,8 +70,8 @@ def test_integrators_and_testsystems():
 
    def all_subclasses(cls):
        """Return list of all subclasses and subsubclasses for a given class."""
-       return cls.__subclasses__() + [g for s in cls.__subclasses__()
-   testsystem_classes = all_subclasses(TestSystem)
+       return cls.__subclasses__() + [s for s in cls.__subclasses__()]
+   testsystem_classes = all_subclasses(testsystems.TestSystem)
    testsystem_names = [ cls.__name__ for cls in testsystem_classes ]
 
    # Use Reference platform.

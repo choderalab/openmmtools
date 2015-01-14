@@ -113,9 +113,8 @@ def test_energy_all_testsystems(skip_slow_tests=False):
     """
     def all_subclasses(cls):
         """Return list of all subclasses and subsubclasses for a given class."""
-        return cls.__subclasses__() + [g for s in cls.__subclasses__()
-
-    testsystem_classes = all_subclasses(TestSystem)
+        return cls.__subclasses__() + [s for s in cls.__subclasses__()]
+    testsystem_classes = all_subclasses(testsystems.TestSystem)
 
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
