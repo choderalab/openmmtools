@@ -37,7 +37,8 @@ test:
   imports:
     - openmmtools
   commands:
-    - nosetests openmmtools --with-doctest --verbosity=2 --nocapture
+    # run nosetests in parallel using number of available cores
+    - nosetests openmmtools --with-doctest --verbosity=2 --nocapture --processes=-1
 
 about:
   home: https://github.com/choderalab/openmmtools
