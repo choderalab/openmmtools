@@ -10,12 +10,6 @@ from openmmtools import testsystems
 
 from functools import partial
 
-def test_doctest():
-    """Performing testsystems doctests.
-    """
-    import doctest
-    doctest.testmod(testsystems)
-
 def test_get_data_filename():
     """Testing retrieval of data files shipped with distro.
     """
@@ -39,6 +33,16 @@ def test_subrandom_particle_positions():
     box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
     positions = testsystems.subrandom_particle_positions(nparticles, box_vectors)
 
+def check_properties(testsystem):
+    class_name = testsystem.__class__.__name__
+    property_list = testsystem.analytical_properties
+    state = testsystems.ThermodynamicState(temperature=300.0*unit.kelvin, pressure=1.0*unit.atmosphere)
+    if len(property_list) > 0:
+        for property_name in property_list:
+            method = getattr(testsystem, 'get_' + property_name)
+            logging.info("%32s . %32s : %32s" % (class_name, property_name, str(method(state))))
+    return
+
 def test_properties_all_testsystems():
     """Testing computation of analytic properties for all systems.
     """
@@ -46,15 +50,11 @@ def test_properties_all_testsystems():
     logging.info("Testing analytical property computation:")
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
-        logging.info(class_name)
-        print(class_name) # DEBUG
         testsystem = testsystem_class()
-        property_list = testsystem.analytical_properties
-        state = testsystems.ThermodynamicState(temperature=300.0*unit.kelvin, pressure=1.0*unit.atmosphere)
-        if len(property_list) > 0:
-            for property_name in property_list:
-                method = getattr(testsystem, 'get_' + property_name)
-                logging.info("%32s . %32s : %32s" % (class_name, property_name, str(method(state))))
+        f = partial(check_properties, testsystem)
+        f.description = "Testing properties for testsystem %s" % class_name
+        logging.info(f.description)
+        yield f
 
 fast_testsystems = [
     "HarmonicOscillator",
