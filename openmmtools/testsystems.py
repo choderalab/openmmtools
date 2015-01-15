@@ -1343,12 +1343,16 @@ class LennardJonesFluid(TestSystem):
     """Create a periodic fluid of Lennard-Jones particles.
     Initial positions are assigned using a subrandom grid to minimize steric interactions.
 
+    Note
+    ----
+    The default reduced_density is set to 0.05 (gas) so that no minimization is needed to simulate the default system.
+
     Parameters
     ----------
     nparticles : int, optional, default=500
         Number of Lennard-Jones particles.
-    reduced_density : float, optional, default=0.86
-        Reduced density (density * sigma**3); default is appropriate for liquid argon.
+    reduced_density : float, optional, default=0.05
+        Reduced density (density * sigma**3); default is appropriate for gas
     mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
         mass of each particle; default is appropriate for argon
     sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
@@ -1385,7 +1389,7 @@ class LennardJonesFluid(TestSystem):
 
     def __init__(self,
         nparticles=500,
-        reduced_density=0.86, # liquid
+        reduced_density=0.05, # liquid
         mass=39.9 * unit.amu, # argon
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
@@ -1405,8 +1409,8 @@ class LennardJonesFluid(TestSystem):
         system = openmm.System()
 
         # Determine volume and periodic box vectors.
-        density = reduced_density / sigma**3
-        volume = nparticles * (density ** -1)
+        number_density = reduced_density / sigma**3
+        volume = nparticles * (number_density ** -1)
         box_edge = volume ** (1./3.)
         a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
         b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
