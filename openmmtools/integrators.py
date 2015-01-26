@@ -334,52 +334,52 @@ class MetropolisMonteCarloIntegrator(CustomIntegrator):
 
         """
 
-    # Create a new Custom integrator.
-    CustomIntegrator.__init__(self, timestep)
+        # Create a new Custom integrator.
+        CustomIntegrator.__init__(self, timestep)
 
-    # Compute the thermal energy.
-    kT = kB * temperature
+        # Compute the thermal energy.
+        kT = kB * temperature
 
-    #
-    # Integrator initialization.
-    #
-    self.addGlobalVariable("naccept", 0) # number accepted
-    self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
+        #
+        # Integrator initialization.
+        #
+        self.addGlobalVariable("naccept", 0) # number accepted
+        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
 
-    self.addGlobalVariable("kT", kT) # thermal energy
-    self.addPerDofVariable("sigma_x", sigma) # perturbation size
-    self.addPerDofVariable("sigma_v", 0) # velocity distribution stddev for Maxwell-Boltzmann (set later)
-    self.addPerDofVariable("xold", 0) # old positions
-    self.addGlobalVariable("Eold", 0) # old energy
-    self.addGlobalVariable("Enew", 0) # new energy
-    self.addGlobalVariable("accept", 0) # accept or reject
+        self.addGlobalVariable("kT", kT) # thermal energy
+        self.addPerDofVariable("sigma_x", sigma) # perturbation size
+        self.addPerDofVariable("sigma_v", 0) # velocity distribution stddev for Maxwell-Boltzmann (set later)
+        self.addPerDofVariable("xold", 0) # old positions
+        self.addGlobalVariable("Eold", 0) # old energy
+        self.addGlobalVariable("Enew", 0) # new energy
+        self.addGlobalVariable("accept", 0) # accept or reject
 
-    #
-    # Context state update.
-    #
-    self.addUpdateContextState();
+        #
+        # Context state update.
+        #
+        self.addUpdateContextState();
 
-    #
-    # Update velocities from Maxwell-Boltzmann distribution.
-    #
-    self.addComputePerDof("sigma_v", "sqrt(kT/m)")
-    self.addComputePerDof("v", "sigma_v*gaussian")
-    self.addConstrainVelocities();
+        #
+        # Update velocities from Maxwell-Boltzmann distribution.
+        #
+        self.addComputePerDof("sigma_v", "sqrt(kT/m)")
+        self.addComputePerDof("v", "sigma_v*gaussian")
+        self.addConstrainVelocities();
 
-    #
-    # propagation steps
-    #
-    # Store old positions and energy.
-    self.addComputePerDof("xold", "x")
-    self.addComputeGlobal("Eold", "energy")
-    # Gaussian particle displacements.
-    self.addComputePerDof("x", "x + sigma_x*gaussian")
-    # Accept or reject with Metropolis criteria.
-    self.addComputeGlobal("accept", "step(exp(-(energy-Eold)/kT) - uniform)")
-    self.addComputePerDof("x", "(1-accept)*xold + x*accept")
-    # Accumulate acceptance statistics.
-    self.addComputeGlobal("naccept", "naccept + accept")
-    self.addComputeGlobal("ntrials", "ntrials + 1")
+        #
+        # propagation steps
+        #
+        # Store old positions and energy.
+        self.addComputePerDof("xold", "x")
+        self.addComputeGlobal("Eold", "energy")
+        # Gaussian particle displacements.
+        self.addComputePerDof("x", "x + sigma_x*gaussian")
+        # Accept or reject with Metropolis criteria.
+        self.addComputeGlobal("accept", "step(exp(-(energy-Eold)/kT) - uniform)")
+        self.addComputePerDof("x", "(1-accept)*xold + x*accept")
+        # Accumulate acceptance statistics.
+        self.addComputeGlobal("naccept", "naccept + accept")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
 
 class HMCIntegrator(CustomIntegrator):
     """
