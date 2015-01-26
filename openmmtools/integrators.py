@@ -14,10 +14,6 @@ EXAMPLES
 COPYRIGHT
 
 @author John D. Chodera <john.chodera@choderalab.org>
-@author Peter Eastman
-
-Portions copyright (c) 2013 Stanford University, Memorial Sloan Kettering Cancer Center,
-and the Authors.
 
 All code in this repository is released under the GNU General Public License.
 
@@ -58,8 +54,10 @@ kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 # INTEGRATORS
 #=============================================================================================
 
-class MTSIntegrator(CustomIntegrator):
-    """MTSIntegrator implements the rRESPA multiple time step integration algorithm.
+import respa
+class MTSIntegrator(respa.MTSIntegrator):
+    """
+    MTSIntegrator implements the rRESPA multiple time step integration algorithm.
 
     This integrator allows different forces to be evaluated at different frequencies,
     for example to evaluate the expensive, slowly changing forces less frequently than
@@ -81,7 +79,6 @@ class MTSIntegrator(CustomIntegrator):
     For details, see Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992).
 
     """
-
     def __init__(self, timestep=1.0*simtk.unit.femtoseconds, groups=(0,1)):
         """Create an MTSIntegrator.
 
@@ -93,33 +90,7 @@ class MTSIntegrator(CustomIntegrator):
            A list of tuples defining the force groups.  The first element of each tuple is the force group index, and the second element is the number of times that force group should be evaluated in one time step.
 
         """
-
-        if len(groups) == 0:
-            raise ValueError("No force groups specified")
-        groups = sorted(groups, key=lambda x: x[1])
-        CustomIntegrator.__init__(self, timestep)
-        self.addPerDofVariable("x1", 0)
-        self.addUpdateContextState();
-        self._createSubsteps(1, groups)
-        self.addConstrainVelocities();
-
-    def _createSubsteps(self, parentSubsteps, groups):
-        group, substeps = groups[0]
-        stepsPerParentStep = substeps/parentSubsteps
-        if stepsPerParentStep < 1 or stepsPerParentStep != int(stepsPerParentStep):
-            raise ValueError("The number for substeps for each group must be a multiple of the number for the previous group")
-        if group < 0 or group > 31:
-            raise ValueError("Force group must be between 0 and 31")
-        for i in range(stepsPerParentStep):
-            self.addComputePerDof("v", "v+0.5*(dt/"+str(substeps)+")*f"+str(group)+"/m")
-            if len(groups) == 1:
-                self.addComputePerDof("x1", "x")
-                self.addComputePerDof("x", "x+(dt/"+str(substeps)+")*v")
-                self.addConstrainPositions();
-                self.addComputePerDof("v", "(x-x1)/(dt/"+str(substeps)+")");
-            else:
-                self._createSubsteps(substeps, groups[1:])
-            self.addComputePerDof("v", "v+0.5*(dt/"+str(substeps)+")*f"+str(group)+"/m")
+        respa.MTSCustomIntegrator.__init__(self, timestep, groups)
 
 class DummyIntegrator(CustomIntegrator):
     """
