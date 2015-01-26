@@ -14,6 +14,10 @@ EXAMPLES
 COPYRIGHT
 
 @author John D. Chodera <john.chodera@choderalab.org>
+@author Peter Eastman
+
+Portions copyright (c) 2013 Stanford University, Memorial Sloan Kettering Cancer Center,
+and the Authors.
 
 All code in this repository is released under the GNU General Public License.
 
@@ -42,6 +46,8 @@ import simtk.unit
 import simtk.unit as units
 import simtk.openmm as mm
 
+from simtk.openmm import CustomIntegrator
+
 #=============================================================================================
 # CONSTANTS
 #=============================================================================================
@@ -52,7 +58,70 @@ kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 # INTEGRATORS
 #=============================================================================================
 
-def DummyIntegrator():
+class MTSIntegrator(CustomIntegrator):
+    """MTSIntegrator implements the rRESPA multiple time step integration algorithm.
+
+    This integrator allows different forces to be evaluated at different frequencies,
+    for example to evaluate the expensive, slowly changing forces less frequently than
+    the inexpensive, quickly changing forces.
+
+    To use it, you must first divide your forces into two or more groups (by calling
+    setForceGroup() on them) that should be evaluated at different frequencies.  When
+    you create the integrator, you provide a tuple for each group specifying the index
+    of the force group and the frequency (as a fraction of the outermost time step) at
+    which to evaluate it.  For example:
+
+    >>> integrator = MTSIntegrator(4*femtoseconds, [(0,1), (1,2), (2,8)])
+
+    This specifies that the outermost time step is 4 fs, so each step of the integrator
+    will advance time by that much.  It also says that force group 0 should be evaluated
+    once per time step, force group 1 should be evaluated twice per time step (every 2 fs),
+    and force group 2 should be evaluated eight times per time step (every 0.5 fs).
+
+    For details, see Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992).
+
+    """
+
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, groups=(0,1)):
+        """Create an MTSIntegrator.
+
+        Parameters
+        ----------
+        timestep : simtk.unit.Quantity with units compatible with femtoseconds, optional default=1*femtoseconds
+           The largest (outermost) integration time step to use.
+        groups : list of tuples, optional, default=(0,1)
+           A list of tuples defining the force groups.  The first element of each tuple is the force group index, and the second element is the number of times that force group should be evaluated in one time step.
+
+        """
+
+        if len(groups) == 0:
+            raise ValueError("No force groups specified")
+        groups = sorted(groups, key=lambda x: x[1])
+        CustomIntegrator.__init__(self, timestep)
+        self.addPerDofVariable("x1", 0)
+        self.addUpdateContextState();
+        self._createSubsteps(1, groups)
+        self.addConstrainVelocities();
+
+    def _createSubsteps(self, parentSubsteps, groups):
+        group, substeps = groups[0]
+        stepsPerParentStep = substeps/parentSubsteps
+        if stepsPerParentStep < 1 or stepsPerParentStep != int(stepsPerParentStep):
+            raise ValueError("The number for substeps for each group must be a multiple of the number for the previous group")
+        if group < 0 or group > 31:
+            raise ValueError("Force group must be between 0 and 31")
+        for i in range(stepsPerParentStep):
+            self.addComputePerDof("v", "v+0.5*(dt/"+str(substeps)+")*f"+str(group)+"/m")
+            if len(groups) == 1:
+                self.addComputePerDof("x1", "x")
+                self.addComputePerDof("x", "x+(dt/"+str(substeps)+")*v")
+                self.addConstrainPositions();
+                self.addComputePerDof("v", "(x-x1)/(dt/"+str(substeps)+")");
+            else:
+                self._createSubsteps(substeps, groups[1:])
+            self.addComputePerDof("v", "v+0.5*(dt/"+str(substeps)+")*f"+str(group)+"/m")
+
+class DummyIntegrator(CustomIntegrator):
     """
     Construct a dummy integrator that does nothing except update call the force updates.
 
@@ -69,35 +138,15 @@ def DummyIntegrator():
     >>> integrator = DummyIntegrator()
 
     """
+    def __init__(self):
+        timestep = 0.0 * units.femtoseconds
+        CustomIntegrator.__init__(self, timestep)
+        self.addUpdateContextState()
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
 
-    timestep = 0.0 * units.femtoseconds
-    integrator = mm.CustomIntegrator(timestep)
-    integrator.addUpdateContextState()
-    integrator.addConstrainPositions()
-    integrator.addConstrainVelocities()
-
-    return integrator
-
-def GradientDescentMinimizationIntegrator(initial_step_size=0.01*units.angstroms):
-    """
-    Construct a simple gradient descent minimization integrator.
-
-    Parameters
-    ----------
-    initial_step_size : numpy.unit.Quantity compatible with nanometers, default: 0.01*simtk.unit.angstroms
-        The norm of the initial step size guess.
-
-    Returns
-    -------
-    integrator : simtk.openmm.CustomIntegrator
-        A velocity Verlet integrator.
-
-    Notes
-    -----
-    An adaptive step size is used.
-
-    References
-    ----------
+class GradientDescentMinimizationIntegrator(CustomIntegrator):
+    """Simple gradient descent minimizer implemented as an integrator.
 
     Examples
     --------
@@ -108,60 +157,62 @@ def GradientDescentMinimizationIntegrator(initial_step_size=0.01*units.angstroms
 
     """
 
-    timestep = 1.0 * units.femtoseconds
-    integrator = mm.CustomIntegrator(timestep)
+    def __init__(self, initial_step_size=0.01*units.angstroms):
+        """
+        Construct a simple gradient descent minimization integrator.
 
-    integrator.addGlobalVariable("step_size", initial_step_size/units.nanometers)
-    integrator.addGlobalVariable("energy_old", 0)
-    integrator.addGlobalVariable("energy_new", 0)
-    integrator.addGlobalVariable("delta_energy", 0)
-    integrator.addGlobalVariable("accept", 0)
-    integrator.addGlobalVariable("fnorm2", 0)
-    integrator.addPerDofVariable("x_old", 0)
+        Parameters
+        ----------
+        initial_step_size : numpy.unit.Quantity compatible with nanometers, default: 0.01*simtk.unit.angstroms
+           The norm of the initial step size guess.
 
-    # Update context state.
-    integrator.addUpdateContextState()
+        Notes
+        -----
+        An adaptive step size is used.
 
-    # Constrain positions.
-    integrator.addConstrainPositions()
+        """
 
-    # Store old energy and positions.
-    integrator.addComputeGlobal("energy_old", "energy")
-    integrator.addComputePerDof("x_old", "x")
+        timestep = 1.0 * units.femtoseconds
+        CustomIntegrator.__init__(self, timestep)
 
-    # Compute sum of squared norm.
-    integrator.addComputeSum("fnorm2", "f^2")
+        self.addGlobalVariable("step_size", initial_step_size/units.nanometers)
+        self.addGlobalVariable("energy_old", 0)
+        self.addGlobalVariable("energy_new", 0)
+        self.addGlobalVariable("delta_energy", 0)
+        self.addGlobalVariable("accept", 0)
+        self.addGlobalVariable("fnorm2", 0)
+        self.addPerDofVariable("x_old", 0)
 
-    # Take step.
-    integrator.addComputePerDof("x", "x+step_size*f/sqrt(fnorm2 + delta(fnorm2))")
-    integrator.addConstrainPositions()
+        # Update context state.
+        self.addUpdateContextState()
 
-    # Ensure we only keep steps that go downhill in energy.
-    integrator.addComputeGlobal("energy_new", "energy")
-    integrator.addComputeGlobal("delta_energy", "energy_new-energy_old")
-    # Accept also checks for NaN
-    integrator.addComputeGlobal("accept", "step(-delta_energy) * delta(energy - energy_new)")
+        # Constrain positions.
+        self.addConstrainPositions()
 
-    integrator.addComputePerDof("x", "accept*x + (1-accept)*x_old")
+        # Store old energy and positions.
+        self.addComputeGlobal("energy_old", "energy")
+        self.addComputePerDof("x_old", "x")
 
-    # Update step size.
-    integrator.addComputeGlobal("step_size", "step_size * (2.0*accept + 0.5*(1-accept))")
+        # Compute sum of squared norm.
+        self.addComputeSum("fnorm2", "f^2")
 
-    return integrator
+        # Take step.
+        self.addComputePerDof("x", "x+step_size*f/sqrt(fnorm2 + delta(fnorm2))")
+        self.addConstrainPositions()
 
-def VelocityVerletIntegrator(timestep=1.0*simtk.unit.femtoseconds):
-    """
-    Construct a velocity Verlet integrator.
+        # Ensure we only keep steps that go downhill in energy.
+        self.addComputeGlobal("energy_new", "energy")
+        self.addComputeGlobal("delta_energy", "energy_new-energy_old")
+        # Accept also checks for NaN
+        self.addComputeGlobal("accept", "step(-delta_energy) * delta(energy - energy_new)")
 
-    Parameters
-    ----------
-    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-        The integration timestep.
+        self.addComputePerDof("x", "accept*x + (1-accept)*x_old")
 
-    Returns
-    -------
-    integrator : simtk.openmm.CustomIntegrator
-        A velocity Verlet integrator.
+        # Update step size.
+        self.addComputeGlobal("step_size", "step_size * (2.0*accept + 0.5*(1-accept))")
+
+class VelocityVerletIntegrator(CustomIntegrator):
+    """Verlocity Verlet integrator.
 
     Notes
     -----
@@ -181,37 +232,30 @@ def VelocityVerletIntegrator(timestep=1.0*simtk.unit.femtoseconds):
 
     """
 
-    integrator = mm.CustomIntegrator(timestep)
+    def __init__(timestep=1.0*simtk.unit.femtoseconds):
+        """Construct a velocity Verlet integrator.
 
-    integrator.addPerDofVariable("x1", 0)
+        Parameters
+        ----------
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+           The integration timestep.
 
-    integrator.addUpdateContextState()
-    integrator.addComputePerDof("v", "v+0.5*dt*f/m")
-    integrator.addComputePerDof("x", "x+dt*v")
-    integrator.addComputePerDof("x1", "x")
-    integrator.addConstrainPositions()
-    integrator.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-    integrator.addConstrainVelocities()
+        """
 
-    return integrator
+        CustomIntegrator.__init__(self, timestep)
 
-def AndersenVelocityVerletIntegrator(temperature=298*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
-    """
-    Construct a velocity Verlet integrator with Andersen thermostat, implemented as per-particle collisions (rather than massive collisions).
+        self.addPerDofVariable("x1", 0)
 
-    Parameters
-    ----------
-    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
-        The temperature of the fictitious bath.
-    collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91/simtk.unit.picoseconds
-        The collision rate with fictitious bath particles.
-    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-        The integration timestep.
+        self.addUpdateContextState()
+        self.addComputePerDof("v", "v+0.5*dt*f/m")
+        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+        self.addConstrainVelocities()
 
-    Returns
-    -------
-    integrator : simtk.openmm.CustomIntegrator
-        A velocity Verlet integrator with periodic Andersen thermostat.
+class AndersenVelocityVerletIntegrator(CustomIntegrator):
+    """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
     References
     ----------
@@ -235,37 +279,50 @@ def AndersenVelocityVerletIntegrator(temperature=298*simtk.unit.kelvin, collisio
 
     """
 
-    integrator = mm.CustomIntegrator(timestep)
+    def __init__(temperature=298*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+        """Construct a velocity Verlet integrator with Andersen thermostat, implemented as per-particle collisions (rather than massive collisions).
 
-    #
-    # Integrator initialization.
-    #
-    kT = kB * temperature
-    integrator.addGlobalVariable("kT", kT) # thermal energy
-    integrator.addGlobalVariable("p_collision", timestep * collision_rate) # per-particle collision probability per timestep
-    integrator.addPerDofVariable("sigma_v", 0) # velocity distribution stddev for Maxwell-Boltzmann (computed later)
-    integrator.addPerDofVariable("collision", 0) # 1 if collision has occured this timestep, 0 otherwise
-    integrator.addPerDofVariable("x1", 0) # for constraints
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default=298*simtk.unit.kelvin
+           The temperature of the fictitious bath.
+        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default=91/simtk.unit.picoseconds
+           The collision rate with fictitious bath particles.
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default=1*simtk.unit.femtoseconds
+           The integration timestep.
 
-    #
-    # Update velocities from Maxwell-Boltzmann distribution for particles that collide.
-    #
-    integrator.addComputePerDof("sigma_v", "sqrt(kT/m)")
-    integrator.addComputePerDof("collision", "step(p_collision-uniform)") # if collision has occured this timestep, 0 otherwise
-    integrator.addComputePerDof("v", "(1-collision)*v + collision*sigma_v*gaussian") # randomize velocities of particles that have collided
+        """
+        CustomIntegrator.__init__(self, timestep)
 
-    #
-    # Velocity Verlet step
-    #
-    integrator.addUpdateContextState()
-    integrator.addComputePerDof("v", "v+0.5*dt*f/m")
-    integrator.addComputePerDof("x", "x+dt*v")
-    integrator.addComputePerDof("x1", "x")
-    integrator.addConstrainPositions()
-    integrator.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-    integrator.addConstrainVelocities()
+        #
+        # Integrator initialization.
+        #
+        kT = kB * temperature
+        self.addGlobalVariable("kT", kT) # thermal energy
+        self.addGlobalVariable("p_collision", timestep * collision_rate) # per-particle collision probability per timestep
+        self.addPerDofVariable("sigma_v", 0) # velocity distribution stddev for Maxwell-Boltzmann (computed later)
+        self.addPerDofVariable("collision", 0) # 1 if collision has occured this timestep, 0 otherwise
+        self.addPerDofVariable("x1", 0) # for constraints
 
-    return integrator
+        #
+        # Update velocities from Maxwell-Boltzmann distribution for particles that collide.
+        #
+        self.addComputePerDof("sigma_v", "sqrt(kT/m)")
+        self.addComputePerDof("collision", "step(p_collision-uniform)") # if collision has occured this timestep, 0 otherwise
+        self.addComputePerDof("v", "(1-collision)*v + collision*sigma_v*gaussian") # randomize velocities of particles that have collided
+
+        #
+        # Velocity Verlet step
+        #
+        self.addUpdateContextState()
+        self.addComputePerDof("v", "v+0.5*dt*f/m")
+        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+        self.addConstrainVelocities()
+
+        return integrator
 
 def MetropolisMonteCarloIntegrator(temperature=298.0*simtk.unit.kelvin, sigma=0.1*simtk.unit.angstroms, timestep=1*simtk.unit.femtoseconds):
     """
