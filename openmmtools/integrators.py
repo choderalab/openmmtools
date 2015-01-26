@@ -232,7 +232,7 @@ class VelocityVerletIntegrator(CustomIntegrator):
 
     """
 
-    def __init__(timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds):
         """Construct a velocity Verlet integrator.
 
         Parameters
@@ -279,7 +279,7 @@ class AndersenVelocityVerletIntegrator(CustomIntegrator):
 
     """
 
-    def __init__(temperature=298*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
         """Construct a velocity Verlet integrator with Andersen thermostat, implemented as per-particle collisions (rather than massive collisions).
 
         Parameters
@@ -322,15 +322,13 @@ class AndersenVelocityVerletIntegrator(CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
-        return integrator
-
 class MetropolisMonteCarloIntegrator(CustomIntegrator):
     """
     Metropolis Monte Carlo with Gaussian displacement trials.
 
     """
 
-    def __init__(temperature=298.0*simtk.unit.kelvin, sigma=0.1*simtk.unit.angstroms, timestep=1*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0*simtk.unit.kelvin, sigma=0.1*simtk.unit.angstroms, timestep=1*simtk.unit.femtoseconds):
         """
         Create a simple Metropolis Monte Carlo integrator that uses Gaussian displacement trials.
 
@@ -412,15 +410,13 @@ class MetropolisMonteCarloIntegrator(CustomIntegrator):
     self.addComputeGlobal("naccept", "naccept + accept")
     self.addComputeGlobal("ntrials", "ntrials + 1")
 
-    return integrator
-
 class HMCIntegrator(CustomIntegrator):
     """
     Hybrid Monte Carlo (HMC) integrator.
 
     """
 
-    def __init__temperature=298.0*simtk.unit.kelvin, nsteps=10, timestep=1*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0*simtk.unit.kelvin, nsteps=10, timestep=1*simtk.unit.femtoseconds):
         """
         Create a hybrid Monte Carlo (HMC) integrator.
 
@@ -537,7 +533,7 @@ class GHMCIntegrator(CustomIntegrator):
 
     """
 
-    def __init__(temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
         """
         Create a generalized hybrid Monte Carlo (GHMC) integrator.
 
@@ -662,7 +658,7 @@ class VVVRIntegrator(CustomIntegrator):
 
     """
 
-    def __init__(temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
         """
         Create a velocity verlet with velocity randomization (VVVR) integrator.
 
