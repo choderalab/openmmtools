@@ -474,11 +474,11 @@ class HMCIntegrator(mm.CustomIntegrator):
 
     @property
     def n_accept(self):
-        return integrator.getGlobalVariableByName("naccept")
+        return self.getGlobalVariableByName("naccept")
 
     @property
     def n_trials(self):
-        return integrator.getGlobalVariableByName("ntrials")
+        return self.getGlobalVariableByName("ntrials")
 
     @property
     def acceptance_rate(self):
