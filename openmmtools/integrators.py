@@ -42,6 +42,8 @@ import simtk.unit
 import simtk.unit as units
 import simtk.openmm as mm
 
+from .respa import MTSIntegrator
+
 #=============================================================================================
 # CONSTANTS
 #=============================================================================================
