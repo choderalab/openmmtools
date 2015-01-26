@@ -42,6 +42,8 @@ import simtk.unit
 import simtk.unit as units
 import simtk.openmm as mm
 
+from .respa import MTSIntegrator
+
 #=============================================================================================
 # CONSTANTS
 #=============================================================================================
@@ -356,124 +358,134 @@ def MetropolisMonteCarloIntegrator(temperature=298.0*simtk.unit.kelvin, sigma=0.
 
     return integrator
 
-def HMCIntegrator(temperature=298.0*simtk.unit.kelvin, nsteps=10, timestep=1*simtk.unit.femtoseconds):
-    """
-    Create a hybrid Monte Carlo (HMC) integrator.
+class HMCIntegrator(mm.CustomIntegrator):
+    def __init__(self, temperature=298.0*simtk.unit.kelvin, nsteps=10, timestep=1*simtk.unit.femtoseconds):
+        """
+        Create a hybrid Monte Carlo (HMC) integrator.
 
-    Parameters
-    ----------
-    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
-        The temperature.
-    nsteps : int, default: 10
-        The number of velocity Verlet steps to take per HMC trial.
-    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-        The integration timestep.
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+            The temperature.
+        nsteps : int, default: 10
+            The number of velocity Verlet steps to take per HMC trial.
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+            The integration timestep.
 
-    Returns
-    -------
-    integrator : simtk.openmm.CustomIntegrator
-        A hybrid Monte Carlo integrator.
+        Returns
+        -------
+        integrator : simtk.openmm.CustomIntegrator
+            A hybrid Monte Carlo integrator.
 
-    Warning
-    -------
-    Because 'nsteps' sets the number of steps taken, a call to integrator.step(1) actually takes 'nsteps' steps.
+        Warning
+        -------
+        Because 'nsteps' sets the number of steps taken, a call to integrator.step(1) actually takes 'nsteps' steps.
 
-    Notes
-    -----
-    The velocity is drawn from a Maxwell-Boltzmann distribution, then 'nsteps' steps are taken,
-    and the new configuration is either accepted or rejected.
+        Notes
+        -----
+        The velocity is drawn from a Maxwell-Boltzmann distribution, then 'nsteps' steps are taken,
+        and the new configuration is either accepted or rejected.
 
-    Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and
-    accepted, respectively.
+        Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and
+        accepted, respectively.
 
-    TODO
-    ----
-    Currently, the simulation timestep is only advanced by 'timestep' each step, rather than timestep*nsteps.  Fix this.
+        TODO
+        ----
+        Currently, the simulation timestep is only advanced by 'timestep' each step, rather than timestep*nsteps.  Fix this.
 
-    Examples
-    --------
+        Examples
+        --------
 
-    Create an HMC integrator.
+        Create an HMC integrator.
 
-    >>> timestep = 1.0 * simtk.unit.femtoseconds # fictitious timestep
-    >>> temperature = 298.0 * simtk.unit.kelvin
-    >>> nsteps = 10 # number of steps per call
-    >>> integrator = HMCIntegrator(temperature, nsteps, timestep)
+        >>> timestep = 1.0 * simtk.unit.femtoseconds # fictitious timestep
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> nsteps = 10 # number of steps per call
+        >>> integrator = HMCIntegrator(temperature, nsteps, timestep)
 
-    """
+        """
+        mm.CustomIntegrator.__init__(self, timestep)
 
-    # Create a new custom integrator.
-    integrator = mm.CustomIntegrator(timestep)
+        # Compute the thermal energy.
+        kT = kB * temperature
 
-    # Compute the thermal energy.
-    kT = kB * temperature
+        #
+        # Integrator initialization.
+        #
+        self.addGlobalVariable("naccept", 0) # number accepted
+        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
 
-    #
-    # Integrator initialization.
-    #
-    integrator.addGlobalVariable("naccept", 0) # number accepted
-    integrator.addGlobalVariable("ntrials", 0) # number of Metropolization trials
+        self.addGlobalVariable("kT", kT) # thermal energy
+        self.addPerDofVariable("sigma", 0)
+        self.addGlobalVariable("ke", 0) # kinetic energy
+        self.addPerDofVariable("xold", 0) # old positions
+        self.addGlobalVariable("Eold", 0) # old energy
+        self.addGlobalVariable("Enew", 0) # new energy
+        self.addGlobalVariable("accept", 0) # accept or reject
+        self.addPerDofVariable("x1", 0) # for constraints
 
-    integrator.addGlobalVariable("kT", kT) # thermal energy
-    integrator.addPerDofVariable("sigma", 0)
-    integrator.addGlobalVariable("ke", 0) # kinetic energy
-    integrator.addPerDofVariable("xold", 0) # old positions
-    integrator.addGlobalVariable("Eold", 0) # old energy
-    integrator.addGlobalVariable("Enew", 0) # new energy
-    integrator.addGlobalVariable("accept", 0) # accept or reject
-    integrator.addPerDofVariable("x1", 0) # for constraints
+        #
+        # Pre-computation.
+        # This only needs to be done once, but it needs to be done for each degree of freedom.
+        # Could move this to initialization?
+        #
+        self.addComputePerDof("sigma", "sqrt(kT/m)")
 
-    #
-    # Pre-computation.
-    # This only needs to be done once, but it needs to be done for each degree of freedom.
-    # Could move this to initialization?
-    #
-    integrator.addComputePerDof("sigma", "sqrt(kT/m)")
+        #
+        # Allow Context updating here, outside of inner loop only.
+        #
+        self.addUpdateContextState();
 
-    #
-    # Allow Context updating here, outside of inner loop only.
-    #
-    integrator.addUpdateContextState();
+        #
+        # Draw new velocity.
+        #
+        self.addComputePerDof("v", "sigma*gaussian")
+        self.addConstrainVelocities();
 
-    #
-    # Draw new velocity.
-    #
-    integrator.addComputePerDof("v", "sigma*gaussian")
-    integrator.addConstrainVelocities();
+        #
+        # Store old position and energy.
+        #
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputePerDof("xold", "x")
 
-    #
-    # Store old position and energy.
-    #
-    integrator.addComputeSum("ke", "0.5*m*v*v")
-    integrator.addComputeGlobal("Eold", "ke + energy")
-    integrator.addComputePerDof("xold", "x")
+        #
+        # Inner symplectic steps using velocity Verlet.
+        #
+        for step in range(nsteps):
+            self.addComputePerDof("v", "v+0.5*dt*f/m")
+            self.addComputePerDof("x", "x+dt*v")
+            self.addComputePerDof("x1", "x")
+            self.addConstrainPositions()
+            self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+            self.addConstrainVelocities()
 
-    #
-    # Inner symplectic steps using velocity Verlet.
-    #
-    for step in range(nsteps):
-        integrator.addComputePerDof("v", "v+0.5*dt*f/m")
-        integrator.addComputePerDof("x", "x+dt*v")
-        integrator.addComputePerDof("x1", "x")
-        integrator.addConstrainPositions()
-        integrator.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
-        integrator.addConstrainVelocities()
+        #
+        # Accept/reject step.
+        #
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Enew", "ke + energy")
+        self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
+        self.addComputePerDof("x", "x*accept + xold*(1-accept)")
 
-    #
-    # Accept/reject step.
-    #
-    integrator.addComputeSum("ke", "0.5*m*v*v")
-    integrator.addComputeGlobal("Enew", "ke + energy")
-    integrator.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-    integrator.addComputePerDof("x", "x*accept + xold*(1-accept)")
+        #
+        # Accumulate statistics.
+        #
+        self.addComputeGlobal("naccept", "naccept + accept")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
 
-    #
-    # Accumulate statistics.
-    #
-    integrator.addComputeGlobal("naccept", "naccept + accept")
-    integrator.addComputeGlobal("ntrials", "ntrials + 1")
+    @property
+    def n_accept(self):
+        return self.getGlobalVariableByName("naccept")
 
-    return integrator
+    @property
+    def n_trials(self):
+        return self.getGlobalVariableByName("ntrials")
+
+    @property
+    def acceptance_rate(self):
+        return self.n_accept / float(self.n_trials)
+
 
 def GHMCIntegrator(temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
     """
