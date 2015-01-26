@@ -402,7 +402,7 @@ class HMCIntegrator(mm.CustomIntegrator):
         >>> integrator = HMCIntegrator(temperature, nsteps, timestep)
 
         """
-        mm.CustomIntegrator.__init__(self, dt)
+        mm.CustomIntegrator.__init__(self, timestep)
 
         # Compute the thermal energy.
         kT = kB * temperature
