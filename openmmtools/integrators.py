@@ -42,8 +42,6 @@ import simtk.unit
 import simtk.unit as units
 import simtk.openmm as mm
 
-from simtk.openmm import CustomIntegrator
-
 #=============================================================================================
 # CONSTANTS
 #=============================================================================================
@@ -92,7 +90,7 @@ class MTSIntegrator(respa.MTSIntegrator):
         """
         super(MTSIntegrator, self).__init__(timestep, groups)
 
-class DummyIntegrator(CustomIntegrator):
+class DummyIntegrator(simtk.openmm.CustomIntegrator):
     """
     Construct a dummy integrator that does nothing except update call the force updates.
 
@@ -116,7 +114,7 @@ class DummyIntegrator(CustomIntegrator):
         self.addConstrainPositions()
         self.addConstrainVelocities()
 
-class GradientDescentMinimizationIntegrator(CustomIntegrator):
+class GradientDescentMinimizationIntegrator(simtk.openmm.CustomIntegrator):
     """Simple gradient descent minimizer implemented as an integrator.
 
     Examples
@@ -182,7 +180,7 @@ class GradientDescentMinimizationIntegrator(CustomIntegrator):
         # Update step size.
         self.addComputeGlobal("step_size", "step_size * (2.0*accept + 0.5*(1-accept))")
 
-class VelocityVerletIntegrator(CustomIntegrator):
+class VelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
     """Verlocity Verlet integrator.
 
     Notes
@@ -225,7 +223,7 @@ class VelocityVerletIntegrator(CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
-class AndersenVelocityVerletIntegrator(CustomIntegrator):
+class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
     References
@@ -293,7 +291,7 @@ class AndersenVelocityVerletIntegrator(CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
-class MetropolisMonteCarloIntegrator(CustomIntegrator):
+class MetropolisMonteCarloIntegrator(simtk.openmm.CustomIntegrator):
     """
     Metropolis Monte Carlo with Gaussian displacement trials.
 
@@ -381,7 +379,7 @@ class MetropolisMonteCarloIntegrator(CustomIntegrator):
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
-class HMCIntegrator(CustomIntegrator):
+class HMCIntegrator(simtk.openmm.CustomIntegrator):
     """
     Hybrid Monte Carlo (HMC) integrator.
 
@@ -498,7 +496,7 @@ class HMCIntegrator(CustomIntegrator):
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
-class GHMCIntegrator(CustomIntegrator):
+class GHMCIntegrator(simtk.openmm.CustomIntegrator):
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.
 
@@ -623,7 +621,7 @@ class GHMCIntegrator(CustomIntegrator):
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
-class VVVRIntegrator(CustomIntegrator):
+class VVVRIntegrator(simtk.openmm.CustomIntegrator):
     """
     Create a velocity Verlet with velocity randomization (VVVR) integrator.
 
