@@ -79,6 +79,7 @@ class MTSIntegrator(CustomIntegrator):
         stepsPerParentStep = substeps/parentSubsteps
         if stepsPerParentStep < 1 or stepsPerParentStep != int(stepsPerParentStep):
             raise ValueError("The number for substeps for each group must be a multiple of the number for the previous group")
+        stepsPerParentStep = int(stepsPerParentStep) # needed for Python 3.x
         if group < 0 or group > 31:
             raise ValueError("Force group must be between 0 and 31")
         for i in range(stepsPerParentStep):
