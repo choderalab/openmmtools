@@ -69,7 +69,7 @@ class MTSIntegrator(respa.MTSIntegrator):
     of the force group and the frequency (as a fraction of the outermost time step) at
     which to evaluate it.  For example:
 
-    >>> integrator = MTSIntegrator(4*femtoseconds, [(0,1), (1,2), (2,8)])
+    >>> integrator = MTSIntegrator(4*simtk.unit.femtoseconds, [(0,1), (1,2), (2,8)])
 
     This specifies that the outermost time step is 4 fs, so each step of the integrator
     will advance time by that much.  It also says that force group 0 should be evaluated
