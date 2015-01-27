@@ -90,7 +90,7 @@ class MTSIntegrator(respa.MTSIntegrator):
            A list of tuples defining the force groups.  The first element of each tuple is the force group index, and the second element is the number of times that force group should be evaluated in one time step.
 
         """
-        respa.MTSCustomIntegrator.__init__(self, timestep, groups)
+        super(MTSIntegrator, self).__init__(timestep, groups)
 
 class DummyIntegrator(CustomIntegrator):
     """
@@ -111,7 +111,7 @@ class DummyIntegrator(CustomIntegrator):
     """
     def __init__(self):
         timestep = 0.0 * units.femtoseconds
-        CustomIntegrator.__init__(self, timestep)
+        super(DummyIntegrator, self).__init__(self, timestep)
         self.addUpdateContextState()
         self.addConstrainPositions()
         self.addConstrainVelocities()
@@ -144,7 +144,7 @@ class GradientDescentMinimizationIntegrator(CustomIntegrator):
         """
 
         timestep = 1.0 * units.femtoseconds
-        CustomIntegrator.__init__(self, timestep)
+        super(GradientDescentMinimizationIntegrator, self).__init__(timestep)
 
         self.addGlobalVariable("step_size", initial_step_size/units.nanometers)
         self.addGlobalVariable("energy_old", 0)
@@ -213,7 +213,7 @@ class VelocityVerletIntegrator(CustomIntegrator):
 
         """
 
-        CustomIntegrator.__init__(self, timestep)
+        super(VelocityVerletIntegrator, self).__init__(timestep)
 
         self.addPerDofVariable("x1", 0)
 
@@ -263,7 +263,7 @@ class AndersenVelocityVerletIntegrator(CustomIntegrator):
            The integration timestep.
 
         """
-        CustomIntegrator.__init__(self, timestep)
+        super(AndersenVelocityVerletIntegrator, self).__init__(timestep)
 
         #
         # Integrator initialization.
@@ -335,7 +335,7 @@ class MetropolisMonteCarloIntegrator(CustomIntegrator):
         """
 
         # Create a new Custom integrator.
-        CustomIntegrator.__init__(self, timestep)
+        super(MetropolisMonteCarloIntegrator, self).__init__(timestep)
 
         # Compute the thermal energy.
         kT = kB * temperature
@@ -428,7 +428,7 @@ class HMCIntegrator(CustomIntegrator):
 
         """
 
-        CustomIntegrator.__init__(self, timestep)
+        super(HMCIntegrator, self).__init__(timestep)
 
         # Compute the thermal energy.
         kT = kB * temperature
@@ -551,7 +551,7 @@ class GHMCIntegrator(CustomIntegrator):
         gamma = collision_rate
 
         # Create a new custom integrator.
-        CustomIntegrator.__init__(self, timestep)
+        super(GHMCIntegrator, self).__init__(timestep)
 
         #
         # Integrator initialization.
@@ -678,7 +678,7 @@ class VVVRIntegrator(CustomIntegrator):
         gamma = collision_rate
 
         # Create a new custom integrator.
-        CustomIntegrator.__init__(self, timestep)
+        super(VVVRIntegrator, self).__init__(timestep)
 
         #
         # Integrator initialization.
