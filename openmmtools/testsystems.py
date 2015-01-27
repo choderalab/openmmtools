@@ -2358,7 +2358,6 @@ class LysozymeImplicit(TestSystem):
 
     Parameters
     ----------
-    flexibleConstraints : bool, optional, default=True
     constraints : simtk.openmm.app constraints (None, HBonds, HAngles, AllBonds)
        constraints to be imposed
 
@@ -2369,7 +2368,7 @@ class LysozymeImplicit(TestSystem):
     >>> (system, positions) = lysozyme.system, lysozyme.positions
     """
 
-    def __init__(self, flexibleConstraints=True, constraints=app.HBonds, implicitSolvent=app.OBC1):
+    def __init__(self, constraints=app.HBonds, implicitSolvent=app.OBC1):
 
         prmtop_filename = get_data_filename("data/T4-lysozyme-L99A-implicit/complex.prmtop")
         crd_filename = get_data_filename("data/T4-lysozyme-L99A-implicit/complex.crd")
@@ -2468,7 +2467,6 @@ class MethanolBox(TestSystem):
 
     Parameters
     ----------
-    flexibleConstraints : bool, optional, default=True
     shake : string, optional, default="h-bonds"
     nonbondedCutoff : Quantity, optional, default=7.0 * unit.angstroms
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
@@ -2481,7 +2479,7 @@ class MethanolBox(TestSystem):
     >>> system, positions = methanol_box.system, methanol_box.positions
     """
 
-    def __init__(self, flexibleConstraints=True, constraints=app.HBonds, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic):
+    def __init__(self, constraints=app.HBonds, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic):
 
         system_name = 'methanol-box'
         prmtop_filename = get_data_filename("data/%s/%s.prmtop" % (system_name, system_name))
@@ -2510,7 +2508,6 @@ class MolecularIdealGas(TestSystem):
 
     Parameters
     ----------
-    flexibleConstraints : bool, optional, default=True
     shake : string, optional, default=None
     nonbondedCutoff : Quantity, optional, default=7.0 * unit.angstroms
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
@@ -2523,7 +2520,7 @@ class MolecularIdealGas(TestSystem):
     >>> system, positions = methanol_box.system, methanol_box.positions
     """
 
-    def __init__(self, flexibleConstraints=True, shake=None, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic):
+    def __init__(self, shake=None, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic):
 
         system_name = 'methanol-box'
         prmtop_filename = get_data_filename("data/%s/%s.prmtop" % (system_name, system_name))
