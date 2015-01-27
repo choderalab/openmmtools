@@ -77,7 +77,7 @@ class MTSIntegrator(respa.MTSIntegrator):
     For details, see Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992).
 
     """
-    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, groups=(0,1)):
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, groups=[(0,1)]):
         """Create an MTSIntegrator.
 
         Parameters
