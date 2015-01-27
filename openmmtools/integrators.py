@@ -496,6 +496,22 @@ class HMCIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
+    @property
+    def n_accept(self):
+        """The number of accepted HMC moves."""
+        return self.getGlobalVariableByName("naccept")
+
+    @property
+    def n_trials(self):
+        """The total number of attempted HMC moves."""
+        return self.getGlobalVariableByName("ntrials")
+
+    @property
+    def acceptance_rate(self):
+        """The acceptance rate: n_accept  / n_trials."""
+        return self.n_accept / float(self.n_trials)
+
+
 class GHMCIntegrator(simtk.openmm.CustomIntegrator):
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.

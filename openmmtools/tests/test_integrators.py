@@ -18,6 +18,7 @@ import numpy
 
 from simtk import unit
 from simtk import openmm
+from openmmtools import integrators, testsystems
 
 #=============================================================================================
 # CONSTANTS
@@ -73,8 +74,6 @@ def test_stabilities_harmonic_oscillator():
    Test integrators for stability over a short number of steps of a harmonic oscillator.
 
    """
-   from openmmtools import integrators, testsystems
-
    test = testsystems.HarmonicOscillator()
 
    for methodname in dir(integrators):
@@ -89,8 +88,6 @@ def test_stabilities_alanine_dipeptide():
    Test integrators for stability over a short number of steps of a harmonic oscillator.
 
    """
-   from openmmtools import integrators, testsystems
-
    test = testsystems.AlanineDipeptideImplicit()
 
    for methodname in dir(integrators):
@@ -100,3 +97,17 @@ def test_stabilities_alanine_dipeptide():
          check_stability.description = "Testing %s for stability over a short number of integration steps of alanine dipeptide in implicit solvent." % methodname
          yield check_stability, integrator, test
 
+def test_integrator_decorators():
+    integrator = integrators.HMCIntegrator(timestep=0.05 * unit.femtoseconds)
+    testsystem = testsystems.IdealGas()
+    nsteps = 25
+    
+    context = openmm.Context(testsystem.system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(300 * unit.kelvin)
+
+    integrator.step(nsteps)
+
+    assert integrator.n_accept == nsteps
+    assert integrator.n_trials == nsteps
+    assert integrator.acceptance_rate == 1.0
