@@ -52,7 +52,7 @@ kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA
 # INTEGRATORS
 #=============================================================================================
 
-import respa
+from openmmtools import respa
 class MTSIntegrator(respa.MTSIntegrator):
     """
     MTSIntegrator implements the rRESPA multiple time step integration algorithm.
