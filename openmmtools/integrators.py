@@ -109,7 +109,7 @@ class DummyIntegrator(simtk.openmm.CustomIntegrator):
     """
     def __init__(self):
         timestep = 0.0 * units.femtoseconds
-        super(DummyIntegrator, self).__init__(self, timestep)
+        super(DummyIntegrator, self).__init__(timestep)
         self.addUpdateContextState()
         self.addConstrainPositions()
         self.addConstrainVelocities()
