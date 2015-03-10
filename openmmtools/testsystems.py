@@ -2620,35 +2620,19 @@ class SrcExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        system_xml_filename = get_data_filename("data/src-explicit/system.xml")
-        state_xml_filename = get_data_filename("data/src-explicit/state.xml")
+        pdb_filename = get_data_filename("data/src-explicit/src-explicit.pdb")
+        pdbfile = app.PDBFile(pdb_filename)
 
-        # TODO: Read topology.
+        # Construct system.
+        forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml'] # list of forcefields to use in parameterization
+        forcefield = app.ForceField(*forcefields_to_use)
+        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds)
 
-        # Read system.
-        infile = open(system_xml_filename, 'r')
-        system = openmm.XmlSerializer.deserialize(infile.read())
-        infile.close()
+        # Extract topology
+        self.topology = pdbfile.topology
 
-        # Read state.
-        infile = open(state_xml_filename, 'r')
-        serialized_state = openmm.XmlSerializer.deserialize(infile.read())
-        infile.close()
-
-        # Select nonbonded method.
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-        from simtk.openmm import NonbondedForce
-        methodMap = {app.NoCutoff:NonbondedForce.NoCutoff,
-                     app.CutoffNonPeriodic:NonbondedForce.CutoffNonPeriodic,
-                     app.CutoffPeriodic:NonbondedForce.CutoffPeriodic,
-                     app.Ewald:NonbondedForce.Ewald,
-                     app.PME:NonbondedForce.PME}
-        forces['NonbondedForce'].setNonbondedMethod(methodMap[nonbondedMethod])
-
-        # Get positions and set periodic box vectors.
-        positions = serialized_state.getPositions()
-        box_vectors = serialized_state.getPeriodicBoxVectors()
-        system.setDefaultPeriodicBoxVectors(*box_vectors)
+        # Get positions.
+        positions = pdbfile.getPositions()
 
         self.system, self.positions = system, positions
 
