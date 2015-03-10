@@ -363,7 +363,7 @@ class TestSystem(object):
 
     @system.setter
     def topology(self, value):
-        self._topology = value
+        self._topology = copy.deepcopy(value)
 
     @system.deleter
     def topology(self):
@@ -2417,7 +2417,7 @@ class AlanineDipeptideVacuum(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds):
+    def __init__(self, constraints=app.HBonds, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2511,7 +2511,7 @@ class AlanineDipeptideExplicit(TestSystem):
         system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=0.9*unit.nanometer)
 
         # Extract topology
-        topology = prmtop.topology
+        self.topology = prmtop.topology
 
         # Set dispersion correction use.
         forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
@@ -2525,7 +2525,7 @@ class AlanineDipeptideExplicit(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # T4 lysozyme L99A mutant with p-xylene ligand.
@@ -2589,7 +2589,7 @@ class SrcImplicit(TestSystem):
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=app.NoCutoff, constraints=app.HBonds)
 
         # Extract topology
-        topology = prmtop.topology
+        topology = pdbfile.topology
 
         # Get positions.
         positions = pdbfile.getPositions()
@@ -2615,6 +2615,8 @@ class SrcExplicit(TestSystem):
 
     """
     def __init__(self, nonbondedMethod=app.PME, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         system_xml_filename = get_data_filename("data/src-explicit/system.xml")
         state_xml_filename = get_data_filename("data/src-explicit/state.xml")
@@ -2801,7 +2803,7 @@ class CustomGBForceSystem(TestSystem):
     >>> system, positions = gb_system.system, gb_system.positions
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2913,7 +2915,7 @@ class AMOEBAIonBox(TestSystem):
     >>> system, positions = testsystem.system, testsystem.positions
 
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         TestSystem.__init__(self, **kwargs)
 
         pdb_filename = get_data_filename("data/amoeba/ion-in-water.pdb")
@@ -2934,7 +2936,7 @@ class AMOEBAProteinBox(TestSystem):
     >>> system, positions = testsystem.system, testsystem.positions
 
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
         TestSystem.__init__(self, **kwargs)
 
         pdb_filename = get_data_filename("data/amoeba/1AP4_14_wat.pdb")
