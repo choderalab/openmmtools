@@ -361,11 +361,11 @@ class TestSystem(object):
         """The simtk.openmm.app.Topology object corresponding to the test system."""
         return copy.deepcopy(self._topology)
 
-    @system.setter
+    @topology.setter
     def topology(self, value):
-        self._topology = copy.deepcopy(value)
+        self._topology = value
 
-    @system.deleter
+    @topology.deleter
     def topology(self):
         del self._topology
 
@@ -1346,7 +1346,8 @@ class SodiumChlorideCrystal(TestSystem):
         # Add nonbonded force term to the system.
         system.addForce(force)
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.topology = topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Lennard-Jones cluster
@@ -2195,22 +2196,20 @@ class WaterBox(TestSystem):
 
        TestSystem.__init__(self, **kwargs)
 
-       import simtk.openmm.app as app
-       
        supported_models = ['tip3p', 'tip4pew', 'tip5p', 'spce']
        if model not in supported_models:
            raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
 
        # Load forcefield for solvent model.
        ff =  app.ForceField(model + '.xml')
-       
+
        # Create empty topology and coordinates.
        top = app.Topology()
        pos = unit.Quantity((), unit.angstroms)
-       
+
        # Create new Modeller instance.
        m = app.Modeller(top, pos)
-       
+
        # Add solvent to specified box dimensions.
        boxSize = unit.Quantity(numpy.ones([3]) * box_edge/box_edge.unit, box_edge.unit)
        m.addSolvent(ff, boxSize=boxSize, model=model)
@@ -2218,10 +2217,10 @@ class WaterBox(TestSystem):
        # Get new topology and coordinates.
        newtop = m.getTopology()
        newpos = m.getPositions()
-   
+
        # Convert positions to numpy.
        positions = unit.Quantity(numpy.array(newpos / newpos.unit), newpos.unit)
-   
+
        # Create OpenMM System.
        system = ff.createSystem(newtop, nonbondedMethod=nonbondedMethod, nonbondedCutoff=cutoff, constraints=None, rigidWater=constrained, removeCMMotion=False)
 
@@ -2232,7 +2231,10 @@ class WaterBox(TestSystem):
        forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
 
        self.ndof = 3*system.getNumParticles() - 3*constrained
-       self.system, self.positions, self.topology = system, positions, newtop
+
+       self.topology = m.getTopology()
+       self.system = system
+       self.positions = positions
 
 class FlexibleWaterBox(WaterBox):
    """
@@ -2428,13 +2430,13 @@ class AlanineDipeptideVacuum(TestSystem):
         system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None)
 
         # Extract topology
-        topology = prmtop.topology
+        self.topology = prmtop.topology
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Alanine dipeptide in implicit solvent.
@@ -2467,13 +2469,13 @@ class AlanineDipeptideImplicit(TestSystem):
         system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None)
 
         # Extract topology
-        topology = prmtop.topology
+        self.topology = prmtop.topology
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Alanine dipeptide in explicit solvent
@@ -2558,13 +2560,13 @@ class LysozymeImplicit(TestSystem):
         system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=app.HBonds, nonbondedCutoff=None)
 
         # Extract topology
-        topology = prmtop.topology
+        self.topology = prmtop.topology
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 
 class SrcImplicit(TestSystem):
@@ -2589,12 +2591,12 @@ class SrcImplicit(TestSystem):
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=app.NoCutoff, constraints=app.HBonds)
 
         # Extract topology
-        topology = pdbfile.topology
+        self.topology = pdbfile.topology
 
         # Get positions.
         positions = pdbfile.getPositions()
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Src kinase in explicit solvent.
@@ -2694,7 +2696,7 @@ class MethanolBox(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Molecular ideal gas (methanol box).
@@ -2782,7 +2784,7 @@ class MolecularIdealGas(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
-        self.system, self.positions, self.topology = system, positions, topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # System of particles with CustomGBForce
@@ -2926,8 +2928,8 @@ class AMOEBAIonBox(TestSystem):
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True, nonbondedCutoff=7.0*unit.angstroms)
 
         positions = pdbfile.getPositions()
-
-        self.system, self.positions, self.topology = system, positions, pdbfile.topology
+        self.topology = pdbfile.topology
+        self.system, self.positions = system, positions
 
 class AMOEBAProteinBox(TestSystem):
     """PDB 1AP4 in water box.
@@ -2946,8 +2948,8 @@ class AMOEBAProteinBox(TestSystem):
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True)
 
         positions = pdbfile.getPositions()
-
-        self.system, self.positions, self.topology = system, positions, pdbfile.topology
+        self.topology = pdbfile.topology
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # ALCHEMICALLY MODIFIED SYSTEMS

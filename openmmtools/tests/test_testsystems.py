@@ -125,7 +125,7 @@ def test_energy_all_testsystems(skip_slow_tests=False):
         # Create test.
         testsystem = testsystem_class()
         f = partial(check_potential_energy, testsystem.system, testsystem.positions)
-        f.description = "Testing potential energy test for testsystem %s" % class_name
+        f.description = "Testing potential energy for testsystem %s" % class_name
         yield f
 
 def check_topology(system, topology):
