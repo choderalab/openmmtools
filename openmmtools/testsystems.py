@@ -278,9 +278,14 @@ class TestSystem(object):
     Attributes
     ----------
     system : simtk.openmm.System
-        Openmm system with the harmonic oscillator
+        System object for the test system
+        A deep copy is returned; use _system property to change underlying system.
     positions : list
-        positions of harmonic oscillator
+        positions of test system
+        A deep copy is returned; use _positions property to change underlying positions.
+    topology : list
+        topology of the test system
+        A deep copy is returned; use _topology property to change underlying topology.
 
     Notes
     -----
@@ -294,15 +299,15 @@ class TestSystem(object):
 
     >>> testsystem = TestSystem()
 
-    Retrieve System object.
+    Retrieve a deep copy of the System object.
 
     >>> system = testsystem.system
 
-    Retrieve the positions.
+    Retrieve a deep copy of the positions.
 
     >>> positions = testsystem.positions
 
-    Retrieve the topology.
+    Retrieve a deep copy of the topology.
 
     >>> topology = testsystem.topology
 
@@ -3329,7 +3334,6 @@ class LennardJonesPair(TestSystem):
         residue = topology.addResidue('Ar', chain)
         topology.addAtom('Ar', element, residue)
         self.topology = topology
-
 
     def get_binding_free_energy(self, thermodynamic_state):
         """
