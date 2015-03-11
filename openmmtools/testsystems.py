@@ -278,9 +278,14 @@ class TestSystem(object):
     Attributes
     ----------
     system : simtk.openmm.System
-        Openmm system with the harmonic oscillator
+        System object for the test system
+        A deep copy is returned; use _system property to change underlying system.
     positions : list
-        positions of harmonic oscillator
+        positions of test system
+        A deep copy is returned; use _positions property to change underlying positions.
+    topology : list
+        topology of the test system
+        A deep copy is returned; use _topology property to change underlying topology.
 
     Notes
     -----
@@ -294,13 +299,17 @@ class TestSystem(object):
 
     >>> testsystem = TestSystem()
 
-    Retrieve System object.
+    Retrieve a deep copy of the System object.
 
     >>> system = testsystem.system
 
-    Retrieve the positions.
+    Retrieve a deep copy of the positions.
 
     >>> positions = testsystem.positions
+
+    Retrieve a deep copy of the topology.
+
+    >>> topology = testsystem.topology
 
     Serialize system and positions to XML (to aid in debugging).
 
@@ -320,6 +329,9 @@ class TestSystem(object):
 
         # Store positions.
         self._positions = unit.Quantity(np.zeros([0,3], np.float), unit.nanometers)
+
+        # Empty topology.
+        self._topology = app.Topology()
 
         return
 
@@ -348,6 +360,19 @@ class TestSystem(object):
     @positions.deleter
     def positions(self):
         del self._positions
+
+    @property
+    def topology(self):
+        """The simtk.openmm.app.Topology object corresponding to the test system."""
+        return copy.deepcopy(self._topology)
+
+    @topology.setter
+    def topology(self, value):
+        self._topology = value
+
+    @topology.deleter
+    def topology(self):
+        del self._topology
 
     @property
     def analytical_properties(self):
@@ -491,6 +516,14 @@ class HarmonicOscillator(TestSystem):
         force.addParticle(0, [])
         system.addForce(force)
 
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        residue = topology.addResidue('OSC', chain)
+        topology.addAtom('Ar', element, residue)
+        self.topology = topology
+
         self.K, self.mass = K, mass
         self.system, self.positions = system, positions
 
@@ -587,6 +620,14 @@ class PowerOscillator(TestSystem):
         force.addParticle(0, [])
         system.addForce(force)
 
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        residue = topology.addResidue('OSC', chain)
+        topology.addAtom('Ar', element, residue)
+        self.topology = topology
+
         self.K, self.mass = K, mass
         self.b = b
         self.system, self.positions = system, positions
@@ -675,7 +716,9 @@ class Diatom(TestSystem):
         m1=39.948 * unit.amu,
         m2=39.948 * unit.amu,
         constraint=False,
-        use_central_potential=False):
+        use_central_potential=False, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Create an empty system object.
         system = openmm.System()
@@ -707,6 +750,15 @@ class Diatom(TestSystem):
             force.addParticle(0, [])
             force.addParticle(1, [])
             system.addForce(force)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('N')
+        chain = topology.addChain()
+        residue = topology.addResidue('N2', chain)
+        topology.addAtom('N', element, residue)
+        topology.addAtom('N', element, residue)
+        self.topology = topology
 
         self.system, self.positions = system, positions
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
@@ -813,7 +865,9 @@ class DiatomicFluid(TestSystem):
         cutoff=None,
         constraint=False,
         dispersion_correction=True,
-        nx=7, ny=7, nz=7):
+        nx=7, ny=7, nz=7, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         nmolecules = nx * ny * nz
         nparticles = 2 * nmolecules
@@ -881,6 +935,16 @@ class DiatomicFluid(TestSystem):
 
         # Store number of degrees of freedom.
         self.ndof = 3*nparticles - nmolecules*constraint
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('N')
+        chain = topology.addChain()
+        for molecule_index in range(nmolecules):
+            residue = topology.addResidue('N2', chain)
+            topology.addAtom('N', element, residue)
+            topology.addAtom('N', element, residue)
+        self.topology = topology
 
         # Store system and positions.
         self._system = system
@@ -1017,7 +1081,9 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
     def __init__(self,
         K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2,
         d=1.0 * unit.nanometer,
-        mass=39.948 * unit.amu):
+        mass=39.948 * unit.amu, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Create an empty system object.
         system = openmm.System()
@@ -1048,6 +1114,15 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
         K = 10.0 * unit.kilocalories_per_mole / unit.angstrom**2 # force constant
         force.addBond(0, 1, d, K)
         system.addForce(force)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('N')
+        chain = topology.addChain()
+        residue = topology.addResidue('N2', chain)
+        topology.addAtom('N', element, residue)
+        topology.addAtom('N', element, residue)
+        self.topology = topology
 
         self.system, self.positions = system, positions
         self.K, self.d, self.mass = K, d, mass
@@ -1097,7 +1172,9 @@ class HarmonicOscillatorArray(TestSystem):
     def __init__(self, K=90.0 * unit.kilocalories_per_mole/unit.angstroms**2,
         d=1.0 * unit.nanometer,
         mass=39.948 * unit.amu ,
-        N=5):
+        N=5, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Create an empty system object.
         system = openmm.System()
@@ -1121,6 +1198,15 @@ class HarmonicOscillatorArray(TestSystem):
             parameters = (d*n / unit.nanometers, )
             force.addParticle(n, parameters)
         system.addForce(force)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(N):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
 
         self.system, self.positions = system, positions
         self.K, self.d, self.mass, self.N = K, d, mass, N
@@ -1193,7 +1279,10 @@ class SodiumChlorideCrystal(TestSystem):
     >>> crystal = SodiumChlorideCrystal()
     >>> system, positions = crystal.system, crystal.positions
     """
-    def __init__(self, switch=True, switch_width=0.2*unit.angstroms, dispersion_correction=True):
+    def __init__(self, switch=True, switch_width=0.2*unit.angstroms, dispersion_correction=True, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
         # Set default parameters (from Tinker).
         mass_Na     = 22.990 * unit.amu
         mass_Cl     = 35.453 * unit.amu
@@ -1206,6 +1295,10 @@ class SodiumChlorideCrystal(TestSystem):
 
         # Create system
         system = openmm.System()
+
+        # Create topology.
+        topology = app.Topology()
+        chain = topology.addChain()
 
         # Set box vectors.
         box_size = 5.628 * unit.angstroms # box width
@@ -1240,6 +1333,10 @@ class SodiumChlorideCrystal(TestSystem):
         positions[0,1] = 0.0 * unit.angstrom
         positions[0,2] = 0.0 * unit.angstrom
 
+        element = app.Element.getBySymbol('Na')
+        residue = topology.addResidue('Na+', chain)
+        topology.addAtom('Na+', element, residue)
+
         # Add chloride atom.
         system.addParticle(mass_Cl)
         force.addParticle(q_Cl, sigma_Cl, epsilon_Cl)
@@ -1247,9 +1344,14 @@ class SodiumChlorideCrystal(TestSystem):
         positions[1,1] = 2.814 * unit.angstrom
         positions[1,2] = 2.814 * unit.angstrom
 
+        element = app.Element.getBySymbol('Cl')
+        residue = topology.addResidue('Cl-', chain)
+        topology.addAtom('Cl-', element, residue)
+
         # Add nonbonded force term to the system.
         system.addForce(force)
 
+        self.topology = topology
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -1283,7 +1385,9 @@ class LennardJonesCluster(TestSystem):
     >>> cluster = LennardJonesCluster(nx=10, ny=10, nz=10)
     >>> system, positions = cluster.system, cluster.positions
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2):
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Default parameters
         mass_Ar     = 39.9 * unit.amu
@@ -1324,6 +1428,15 @@ class LennardJonesCluster(TestSystem):
 
         # Add the nonbonded force.
         system.addForce(nb)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
 
         # Add a restrining potential centered at the origin.
         energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
@@ -1396,7 +1509,9 @@ class LennardJonesFluid(TestSystem):
         cutoff=None,
         switch=False,
         switch_width=0.2*unit.angstrom,
-        dispersion_correction=True):
+        dispersion_correction=True, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Determine Lennard-Jones cutoff.
         if cutoff is None:
@@ -1434,6 +1549,15 @@ class LennardJonesFluid(TestSystem):
 
         # Add the nonbonded force.
         system.addForce(nb)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
 
         self.system, self.positions = system, positions
 
@@ -1490,7 +1614,7 @@ class LennardJonesGrid(LennardJonesFluid):
         super(LennardJonesGrid, self).__init__(nparticles, *args, **kwargs)
 
         # Compute volume per particle.
-        box = self.system.getDefaultPeriodicBoxVectors()
+        box = self._system.getDefaultPeriodicBoxVectors()
         volume = box[0][0] * box[1][1] * box[2][2]
         volume_per_particle = volume / float(nparticles)
         delta = volume_per_particle**(1.0/3.0)
@@ -1499,16 +1623,26 @@ class LennardJonesGrid(LennardJonesFluid):
         box[0] = openmm.Vec3(nx * delta,  0 * delta,  0 * delta)
         box[1] = openmm.Vec3( 0 * delta, ny * delta,  0 * delta)
         box[2] = openmm.Vec3( 0 * delta,  0 * delta, nz * delta)
-        self.system.setDefaultPeriodicBoxVectors(box[0], box[1], box[2])
+        self._system.setDefaultPeriodicBoxVectors(box[0], box[1], box[2])
 
         # Set positions.
         particle = 0
         for x in range(nx):
             for y in range(ny):
                 for z in range(nz):
-                    self.positions[particle,0] = x * delta
-                    self.positions[particle,1] = y * delta
-                    self.positions[particle,2] = z * delta
+                    self._positions[particle,0] = x * delta
+                    self._positions[particle,1] = y * delta
+                    self._positions[particle,2] = z * delta
+
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(nparticles):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
 
         return
 
@@ -1574,7 +1708,9 @@ class CustomLennardJonesFluidMixture(TestSystem):
         cutoff=None,
         switch=False,
         switch_width=0.2*unit.angstroms,
-        dispersion_correction=True):
+        dispersion_correction=True, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         if cutoff is None:
             cutoff = 3.0 * sigma
@@ -1692,6 +1828,15 @@ class CustomLennardJonesFluidMixture(TestSystem):
                 force.addParticle(i, [])
             system.addForce(force)
 
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
+
         self.system, self.positions = system, positions
 
 
@@ -1701,7 +1846,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
 
 class WCAFluid(TestSystem):
 
-    def __init__(self, nparticles=216, density=0.96, mass=39.9*unit.amu, epsilon=120.0*unit.kelvin*kB, sigma=3.4*unit.angstrom):
+    def __init__(self, nparticles=216, density=0.96, mass=39.9*unit.amu, epsilon=120.0*unit.kelvin*kB, sigma=3.4*unit.angstrom, **kwargs):
         """
         Create a Weeks-Chandler-Andersen system.
 
@@ -1719,6 +1864,9 @@ class WCAFluid(TestSystem):
             WCA sigma.
 
         """
+
+        TestSystem.__init__(self, **kwargs)
+
         # Create system
         system = openmm.System()
 
@@ -1760,6 +1908,15 @@ class WCAFluid(TestSystem):
         # Create initial coordinates using subrandom positions.
         positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
 
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
+
         # Store system.
         self.system, self.positions = system, positions
 
@@ -1795,7 +1952,9 @@ class IdealGas(TestSystem):
 
     """
 
-    def __init__(self, nparticles=216, mass=39.9 * unit.amu, temperature=298.0 * unit.kelvin, pressure=1.0 * unit.atmosphere, volume=None):
+    def __init__(self, nparticles=216, mass=39.9 * unit.amu, temperature=298.0 * unit.kelvin, pressure=1.0 * unit.atmosphere, volume=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         if volume is None:
             volume = (nparticles * temperature * unit.BOLTZMANN_CONSTANT_kB / pressure).in_units_of(unit.nanometers**3)
@@ -1816,6 +1975,15 @@ class IdealGas(TestSystem):
 
         # Create initial coordinates using subrandom positions.
         positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
 
         self.system, self.positions = system, positions
         self.ndof = 3 * nparticles
@@ -1969,7 +2137,7 @@ class WaterBox(TestSystem):
 
    """
 
-   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch=True, switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME):
+   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch=True, switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
        """
        Create a water box test system.
        
@@ -2031,22 +2199,22 @@ class WaterBox(TestSystem):
 
        """
 
-       import simtk.openmm.app as app
-       
+       TestSystem.__init__(self, **kwargs)
+
        supported_models = ['tip3p', 'tip4pew', 'tip5p', 'spce']
        if model not in supported_models:
            raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
 
        # Load forcefield for solvent model.
        ff =  app.ForceField(model + '.xml')
-       
+
        # Create empty topology and coordinates.
        top = app.Topology()
        pos = unit.Quantity((), unit.angstroms)
-       
+
        # Create new Modeller instance.
        m = app.Modeller(top, pos)
-       
+
        # Add solvent to specified box dimensions.
        boxSize = unit.Quantity(numpy.ones([3]) * box_edge/box_edge.unit, box_edge.unit)
        m.addSolvent(ff, boxSize=boxSize, model=model)
@@ -2054,10 +2222,10 @@ class WaterBox(TestSystem):
        # Get new topology and coordinates.
        newtop = m.getTopology()
        newpos = m.getPositions()
-   
+
        # Convert positions to numpy.
        positions = unit.Quantity(numpy.array(newpos / newpos.unit), newpos.unit)
-   
+
        # Create OpenMM System.
        system = ff.createSystem(newtop, nonbondedMethod=nonbondedMethod, nonbondedCutoff=cutoff, constraints=None, rigidWater=constrained, removeCMMotion=False)
 
@@ -2068,7 +2236,10 @@ class WaterBox(TestSystem):
        forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
 
        self.ndof = 3*system.getNumParticles() - 3*constrained
-       self.system, self.positions = system, positions
+
+       self.topology = m.getTopology()
+       self.system = system
+       self.positions = positions
 
 class FlexibleWaterBox(WaterBox):
    """
@@ -2253,13 +2424,18 @@ class AlanineDipeptideVacuum(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds):
+    def __init__(self, constraints=app.HBonds, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         prmtop_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.prmtop")
         crd_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.crd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None)
+
+        # Extract topology
+        self.topology = prmtop.topology
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
@@ -2286,15 +2462,19 @@ class AlanineDipeptideImplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds):
+    def __init__(self, constraints=app.HBonds, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         prmtop_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.prmtop")
-        crd_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.crd")        
+        crd_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.crd")
 
         # Initialize system.
-        
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None)
+
+        # Extract topology
+        self.topology = prmtop.topology
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
@@ -2326,7 +2506,9 @@ class AlanineDipeptideExplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         prmtop_filename = get_data_filename("data/alanine-dipeptide-explicit/alanine-dipeptide.prmtop")
         crd_filename = get_data_filename("data/alanine-dipeptide-explicit/alanine-dipeptide.crd")
@@ -2334,6 +2516,9 @@ class AlanineDipeptideExplicit(TestSystem):
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=0.9*unit.nanometer)
+
+        # Extract topology
+        self.topology = prmtop.topology
 
         # Set dispersion correction use.
         forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
@@ -2368,7 +2553,9 @@ class LysozymeImplicit(TestSystem):
     >>> (system, positions) = lysozyme.system, lysozyme.positions
     """
 
-    def __init__(self, constraints=app.HBonds, implicitSolvent=app.OBC1):
+    def __init__(self, constraints=app.HBonds, implicitSolvent=app.OBC1, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         prmtop_filename = get_data_filename("data/T4-lysozyme-L99A-implicit/complex.prmtop")
         crd_filename = get_data_filename("data/T4-lysozyme-L99A-implicit/complex.crd")
@@ -2376,6 +2563,9 @@ class LysozymeImplicit(TestSystem):
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=app.HBonds, nonbondedCutoff=None)
+
+        # Extract topology
+        self.topology = prmtop.topology
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
@@ -2393,7 +2583,9 @@ class SrcImplicit(TestSystem):
     >>> system, positions = src.system, src.positions
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         pdb_filename = get_data_filename("data/src-implicit/implicit-refined.pdb")
         pdbfile = app.PDBFile(pdb_filename)
@@ -2406,7 +2598,7 @@ class SrcImplicit(TestSystem):
         # Get positions.
         positions = pdbfile.getPositions()
 
-        self.system, self.positions = system, positions
+        self.system, self.positions, self.topology = system, positions, pdbfile.topology
 
 #=============================================================================================
 # Src kinase in explicit solvent.
@@ -2426,37 +2618,22 @@ class SrcExplicit(TestSystem):
     >>> system, positions = src.system, src.positions
 
     """
-    def __init__(self, nonbondedMethod=app.PME):
+    def __init__(self, nonbondedMethod=app.PME, **kwargs):
 
-        system_xml_filename = get_data_filename("data/src-explicit/system.xml")
-        state_xml_filename = get_data_filename("data/src-explicit/state.xml")
+        TestSystem.__init__(self, **kwargs)
 
-        # Read system.
-        infile = open(system_xml_filename, 'r')
-        system = openmm.XmlSerializer.deserialize(infile.read())
-        infile.close()
+        pdb_filename = get_data_filename("data/src-explicit/src-explicit.pdb")
+        pdbfile = app.PDBFile(pdb_filename)
 
-        # Read state.
-        infile = open(state_xml_filename, 'r')
-        serialized_state = openmm.XmlSerializer.deserialize(infile.read())
-        infile.close()
+        # Construct system.
+        forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml'] # list of forcefields to use in parameterization
+        forcefield = app.ForceField(*forcefields_to_use)
+        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds)
 
-        # Select nonbonded method.
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-        from simtk.openmm import NonbondedForce
-        methodMap = {app.NoCutoff:NonbondedForce.NoCutoff,
-                     app.CutoffNonPeriodic:NonbondedForce.CutoffNonPeriodic,
-                     app.CutoffPeriodic:NonbondedForce.CutoffPeriodic,
-                     app.Ewald:NonbondedForce.Ewald,
-                     app.PME:NonbondedForce.PME}
-        forces['NonbondedForce'].setNonbondedMethod(methodMap[nonbondedMethod])
+        # Get positions.
+        positions = pdbfile.getPositions()
 
-        # Get positions and set periodic box vectors.
-        positions = serialized_state.getPositions()
-        box_vectors = serialized_state.getPeriodicBoxVectors()
-        system.setDefaultPeriodicBoxVectors(*box_vectors)
-
-        self.system, self.positions = system, positions
+        self.system, self.positions, self.topology = system, positions, pdbfile.topology
 
 #=============================================================================================
 # Methanol box.
@@ -2479,7 +2656,9 @@ class MethanolBox(TestSystem):
     >>> system, positions = methanol_box.system, methanol_box.positions
     """
 
-    def __init__(self, constraints=app.HBonds, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic):
+    def __init__(self, constraints=app.HBonds, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         system_name = 'methanol-box'
         prmtop_filename = get_data_filename("data/%s/%s.prmtop" % (system_name, system_name))
@@ -2497,7 +2676,7 @@ class MethanolBox(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
-        self.system, self.positions = system, positions
+        self.system, self.positions, self.topology = system, positions, prmtop.topology
 
 #=============================================================================================
 # Molecular ideal gas (methanol box).
@@ -2520,7 +2699,9 @@ class MolecularIdealGas(TestSystem):
     >>> system, positions = methanol_box.system, methanol_box.positions
     """
 
-    def __init__(self, shake=None, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic):
+    def __init__(self, shake=None, nonbondedCutoff=7.0 * unit.angstroms, nonbondedMethod=app.CutoffPeriodic, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         system_name = 'methanol-box'
         prmtop_filename = get_data_filename("data/%s/%s.prmtop" % (system_name, system_name))
@@ -2580,6 +2761,7 @@ class MolecularIdealGas(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
+        self.topology = prmtop.topology
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -2601,7 +2783,9 @@ class CustomGBForceSystem(TestSystem):
     >>> system, positions = gb_system.system, gb_system.positions
     """
 
-    def __init__(self):
+    def __init__(self, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         numMolecules = 70
         numParticles = numMolecules*2
@@ -2690,6 +2874,15 @@ class CustomGBForceSystem(TestSystem):
         # Create initial coordinates using subrandom positions.
         positions = subrandom_particle_positions(numParticles, system.getDefaultPeriodicBoxVectors())
 
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for index in range(numParticles):
+            residue = topology.addResidue('OSC', chain)
+            topology.addAtom('Ar', element, residue)
+        self.topology = topology
+
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -2703,7 +2896,9 @@ class AMOEBAIonBox(TestSystem):
     >>> system, positions = testsystem.system, testsystem.positions
 
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
+        TestSystem.__init__(self, **kwargs)
+
         pdb_filename = get_data_filename("data/amoeba/ion-in-water.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
@@ -2712,7 +2907,7 @@ class AMOEBAIonBox(TestSystem):
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True, nonbondedCutoff=7.0*unit.angstroms)
 
         positions = pdbfile.getPositions()
-
+        self.topology = pdbfile.topology
         self.system, self.positions = system, positions
 
 class AMOEBAProteinBox(TestSystem):
@@ -2722,7 +2917,9 @@ class AMOEBAProteinBox(TestSystem):
     >>> system, positions = testsystem.system, testsystem.positions
 
     """
-    def __init__(self):
+    def __init__(self, **kwargs):
+        TestSystem.__init__(self, **kwargs)
+
         pdb_filename = get_data_filename("data/amoeba/1AP4_14_wat.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
@@ -2730,7 +2927,7 @@ class AMOEBAProteinBox(TestSystem):
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True)
 
         positions = pdbfile.getPositions()
-
+        self.topology = pdbfile.topology
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -2971,7 +3168,9 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
     >>> system, positions = cluster.system, cluster.positions
 
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2):
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Default parameters
         mass_Ar     = 39.9 * unit.amu
@@ -3028,7 +3227,15 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
         alchemical_state = AlchemicalState(0, 0, 1-delta, 1, annihilateElectrostatics=True, annihilateSterics=False)
         self._alchemicallyModifyLennardJones(system, nb, alchemical_atom_indices, alchemical_state)
 
-        self.system, self.positions = system, positions
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+
+        self.system, self.positions, self.topology = system, positions, topology
 
 
 #=============================================================================================
@@ -3076,7 +3283,10 @@ class LennardJonesPair(TestSystem):
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
 
     """
-    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole):
+    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
         # Store parameters
         self.mass = mass
         self.sigma = sigma
@@ -3114,6 +3324,16 @@ class LennardJonesPair(TestSystem):
         # Store ligand and receptor particle indices.
         self.ligand_indices = [0]
         self.receptor_indices = [1]
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        residue = topology.addResidue('Ar', chain)
+        topology.addAtom('Ar', element, residue)
+        residue = topology.addResidue('Ar', chain)
+        topology.addAtom('Ar', element, residue)
+        self.topology = topology
 
     def get_binding_free_energy(self, thermodynamic_state):
         """

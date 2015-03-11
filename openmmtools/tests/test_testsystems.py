@@ -125,6 +125,37 @@ def test_energy_all_testsystems(skip_slow_tests=False):
         # Create test.
         testsystem = testsystem_class()
         f = partial(check_potential_energy, testsystem.system, testsystem.positions)
-        f.description = "Testing potential energy test for testsystem %s" % class_name
+        f.description = "Testing potential energy for testsystem %s" % class_name
+        yield f
+
+def check_topology(system, topology):
+    """Check the topology object contains the correct number of atoms.
+    """
+
+    # Get number of particles from topology.
+    nparticles_topology = 0
+    for atom in topology.atoms():
+        nparticles_topology += 1
+
+    # Get number of particles from system.
+    nparticles_system = system.getNumParticles()
+
+    assert (nparticles_topology==nparticles_system)
+
+def test_topology_all_testsystems():
+    """Testing topology contains correct number of atoms for all systems.
+    """
+    def all_subclasses(cls):
+        """Return list of all subclasses and subsubclasses for a given class."""
+        return cls.__subclasses__() + [s for s in cls.__subclasses__()]
+    testsystem_classes = all_subclasses(testsystems.TestSystem)
+
+    for testsystem_class in testsystem_classes:
+        class_name = testsystem_class.__name__
+
+        # Create test.
+        testsystem = testsystem_class()
+        f = partial(check_topology, testsystem.system, testsystem.topology)
+        f.description = "Testing topology for testsystem %s" % class_name
         yield f
 
