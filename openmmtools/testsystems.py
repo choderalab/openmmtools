@@ -3320,6 +3320,17 @@ class LennardJonesPair(TestSystem):
         self.ligand_indices = [0]
         self.receptor_indices = [1]
 
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        residue = topology.addResidue('Ar', chain)
+        topology.addAtom('Ar', element, residue)
+        residue = topology.addResidue('Ar', chain)
+        topology.addAtom('Ar', element, residue)
+        self.topology = topology
+
+
     def get_binding_free_energy(self, thermodynamic_state):
         """
         Compute the binding free energy of the two particles at the given thermodynamic state.
