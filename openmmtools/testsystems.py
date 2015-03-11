@@ -3222,7 +3222,15 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
         alchemical_state = AlchemicalState(0, 0, 1-delta, 1, annihilateElectrostatics=True, annihilateSterics=False)
         self._alchemicallyModifyLennardJones(system, nb, alchemical_atom_indices, alchemical_state)
 
-        self.system, self.positions = system, positions
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(system.getNumParticles()):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+
+        self.system, self.positions, self.topology = system, positions, topology
 
 
 #=============================================================================================
