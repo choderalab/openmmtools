@@ -2590,13 +2590,10 @@ class SrcImplicit(TestSystem):
         forcefield = app.ForceField(*forcefields_to_use)
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=app.NoCutoff, constraints=app.HBonds)
 
-        # Extract topology
-        self.topology = pdbfile.topology
-
         # Get positions.
         positions = pdbfile.getPositions()
 
-        self.system, self.positions = system, positions
+        self.system, self.positions, self.topology = system, positions, pdbfile.topology
 
 #=============================================================================================
 # Src kinase in explicit solvent.
@@ -2628,13 +2625,10 @@ class SrcExplicit(TestSystem):
         forcefield = app.ForceField(*forcefields_to_use)
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds)
 
-        # Extract topology
-        self.topology = pdbfile.topology
-
         # Get positions.
         positions = pdbfile.getPositions()
 
-        self.system, self.positions = system, positions
+        self.system, self.positions, self.topology = system, positions, pdbfile.topology
 
 #=============================================================================================
 # Methanol box.
@@ -2669,9 +2663,6 @@ class MethanolBox(TestSystem):
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9*unit.nanometer)
 
-        # Extract topology
-        topology = prmtop.topology
-
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
@@ -2680,7 +2671,7 @@ class MethanolBox(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
-        self.system, self.positions = system, positions
+        self.system, self.positions, self.topology = system, positions, prmtop.topology
 
 #=============================================================================================
 # Molecular ideal gas (methanol box).
@@ -2714,9 +2705,6 @@ class MolecularIdealGas(TestSystem):
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         reference_system = prmtop.createSystem(constraints=app.HBonds, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9*unit.nanometer)
-
-        # Extract topology
-        topology = prmtop.topology
 
         # Make a new system that contains no intermolecular interactions.
         system = openmm.System()
@@ -2768,6 +2756,7 @@ class MolecularIdealGas(TestSystem):
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
+        self.topology = prmtop.topology
         self.system, self.positions = system, positions
 
 #=============================================================================================
@@ -2884,8 +2873,9 @@ class CustomGBForceSystem(TestSystem):
         topology = app.Topology()
         element = app.Element.getBySymbol('Ar')
         chain = topology.addChain()
-        residue = topology.addResidue('OSC', chain)
-        topology.addAtom('Ar', element, residue)
+        for index in range(numParticles):
+            residue = topology.addResidue('OSC', chain)
+            topology.addAtom('Ar', element, residue)
         self.topology = topology
 
         self.system, self.positions = system, positions
@@ -3173,7 +3163,9 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
     >>> system, positions = cluster.system, cluster.positions
 
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2):
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
 
         # Default parameters
         mass_Ar     = 39.9 * unit.amu
@@ -3278,7 +3270,10 @@ class LennardJonesPair(TestSystem):
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
 
     """
-    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole):
+    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
         # Store parameters
         self.mass = mass
         self.sigma = sigma
