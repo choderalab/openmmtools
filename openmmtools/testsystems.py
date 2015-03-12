@@ -279,13 +279,10 @@ class TestSystem(object):
     ----------
     system : simtk.openmm.System
         System object for the test system
-        A deep copy is returned; use _system property to change underlying system.
     positions : list
         positions of test system
-        A deep copy is returned; use _positions property to change underlying positions.
     topology : list
         topology of the test system
-        A deep copy is returned; use _topology property to change underlying topology.
 
     Notes
     -----
@@ -338,7 +335,7 @@ class TestSystem(object):
     @property
     def system(self):
         """The simtk.openmm.System object corresponding to the test system."""
-        return copy.deepcopy(self._system)
+        return self._system
 
     @system.setter
     def system(self, value):
@@ -351,7 +348,7 @@ class TestSystem(object):
     @property
     def positions(self):
         """The simtk.unit.Quantity object containing the particle positions, with units compatible with simtk.unit.nanometers."""
-        return copy.deepcopy(self._positions)
+        return self._positions
 
     @positions.setter
     def positions(self, value):
@@ -364,7 +361,7 @@ class TestSystem(object):
     @property
     def topology(self):
         """The simtk.openmm.app.Topology object corresponding to the test system."""
-        return copy.deepcopy(self._topology)
+        return self._topology
 
     @topology.setter
     def topology(self, value):
