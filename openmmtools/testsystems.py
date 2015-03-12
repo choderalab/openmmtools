@@ -1648,7 +1648,7 @@ class LennardJonesGrid(LennardJonesFluid):
 #=============================================================================================
 
 class CustomLennardJonesFluidMixture(TestSystem):
-    """Create a periodic rectilinear grid of Lennard-Jones particled, but implemented via CustomBondForce and NonbondedForce.
+    """Create a periodic rectilinear grid of Lennard-Jones particles, but implemented via CustomBondForce and NonbondedForce.
     Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
 
     Parameters
@@ -1758,12 +1758,11 @@ class CustomLennardJonesFluidMixture(TestSystem):
             energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
             energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
             cnb = openmm.CustomNonbondedForce(energy_expression)
+            cnb.addPerParticleParameter('charge')
+            cnb.addPerParticleParameter('sigma')
+            cnb.addPerParticleParameter('epsilon')
             cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             cnb.setCutoffDistance(cutoff)
-        # Only add interactions between first atom and rest.
-        #atomset1 = range(0, 1)
-        #atomset2 = range(1, natoms)
-        #cnb.addInteractionGroup(atomset1, atomset2)
 
         positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
 
