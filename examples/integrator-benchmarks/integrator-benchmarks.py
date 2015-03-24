@@ -17,14 +17,14 @@ import time
 testsystems_to_benchmark = ['LennardJonesFluid']
 
 # Integrators to benchmark
-integrators_to_benchmark = ['VerletIntegrator', 'VelocityVerletIntegrator', 'GHMCIntegrator']
+integrators_to_benchmark = ['VerletIntegrator', 'VelocityVerletIntegrator', 'VVVRIntegrator', 'GHMCIntegrator']
 
 # Parameters
 timestep = 1.0 * unit.femtoseconds
-collision_rate = 90.0 / unit.picoseconds
+collision_rate = 91.0 / unit.picoseconds
 temperature = 300.0 * unit.kelvin
 ntrials = 10 # number of timing trials
-nsteps = 100 # number of steps per timing trial
+nsteps = 200 # number of steps per timing trial
 
 # Cycle through test systems.
 for testsystem_name in testsystems_to_benchmark:
@@ -47,6 +47,8 @@ for testsystem_name in testsystems_to_benchmark:
             integrator = openmm.VerletIntegrator(timestep)
         elif integrator_name == 'VelocityVerletIntegrator':
             integrator = integrators.VelocityVerletIntegrator(timestep)
+        elif integrator_name == 'VVVRIntegrator':
+            integrator = integrators.VVVRIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         elif integrator_name == 'GHMCIntegrator':
             integrator = integrators.GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
 
