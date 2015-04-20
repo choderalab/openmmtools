@@ -13,7 +13,9 @@ fi
 if [[ "2.7 3.3 3.4" =~ "$python" ]]; then
     conda install --yes --quiet binstar
     BINSTAR_VERSION=`git describe 2> /dev/null || git rev-parse --short HEAD` # From http://wygoda.net/blog/getting-useful-git-revision-information/
-    binstar -t $BINSTAR_TOKEN upload -v $BINSTAR_VERSION -u omnia -p openmmtools-dev $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
+    echo "Attempting to upload to binstar:"
+    echo "binstar -t [BINSTAR_TOKEN] upload -v $BINSTAR_VERSION -u omnia -p ${PACKAGENAME}-dev $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*"
+    binstar -t $BINSTAR_TOKEN upload -v $BINSTAR_VERSION -u omnia -p ${PACKAGENAME}-dev $HOME/miniconda/conda-bld/linux-64/${PACKAGENAME}-*
 fi
 
 if [[ "$python" != "2.7" ]]; then
