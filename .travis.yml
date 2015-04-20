@@ -9,6 +9,8 @@ install:
   - export PYTHONUNBUFFERED=true
 
 script:
+  # Set package name for downstream devtools.
+  - export PACKAGENAME="openmmtools"
   # this builds the binary, unpacks it, and runs the tests
   - conda build devtools/conda-recipe
 
