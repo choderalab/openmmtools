@@ -79,7 +79,12 @@ def test_integrators_and_testsystems():
 
    for testsystem_name in testsystem_names:
       # Create testsystem.
-      testsystem = getattr(testsystems, testsystem_name)()
+      try:
+          testsystem = getattr(testsystems, testsystem_name)()
+      except ImportError as e:
+          print(e)
+          print("Skipping %s due to missing dependency" % testsystem_name)
+
       for integrator_name in integrator_names:
          # Create integrator.
          integrator = getattr(integrators, integrator_name)()
