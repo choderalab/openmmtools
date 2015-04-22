@@ -2558,7 +2558,7 @@ class DHFRExplicit(TestSystem):
         try:
             import chemistry
             from chemistry.amber.openmmloader import AmberParm
-        except IOError as e:
+        except ImportError as e:
             print("DHFR test system requires Parmed (`import chemistry`).")
             raise(e)
 
