@@ -158,7 +158,7 @@ def test_topology_all_testsystems():
             testsystem = testsystem_class()
         except ImportError as e:
             print(e)
-            print("Skipping %s due to missing dependency" % testsystem_name)            
+            print("Skipping %s due to missing dependency" % class_name)            
         f = partial(check_topology, testsystem.system, testsystem.topology)
         f.description = "Testing topology for testsystem %s" % class_name
         yield f
