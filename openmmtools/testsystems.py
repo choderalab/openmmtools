@@ -2549,11 +2549,6 @@ class DHFRExplicit(TestSystem):
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
 
-    Examples
-    --------
-
-    >>> dhfr = DHFRExplicit()
-    >>> (system, positions) = dhfr.system, dhfr.positions
     """
 
     def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
