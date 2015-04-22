@@ -58,7 +58,8 @@ from simtk import openmm
 from simtk import unit
 from simtk.openmm import app
 
-kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
+from .constants import kB
+
 pi = np.pi
 
 #=============================================================================================
@@ -2502,7 +2503,7 @@ class AlanineDipeptideExplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2511,7 +2512,7 @@ class AlanineDipeptideExplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=0.9*unit.nanometer)
+        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -2529,6 +2530,66 @@ class AlanineDipeptideExplicit(TestSystem):
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
         self.system, self.positions = system, positions
+
+
+#=============================================================================================
+# Alanine dipeptide in explicit solvent
+#=============================================================================================
+
+class DHFRExplicit(TestSystem):
+    """Joint Amber CHARMM (JAC) DHFR / TIP3P benchmark system with 23558 atoms.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    rigid_water : bool, optional, default=True
+    nonbondedCutoff : Quantity, optional, default=8.0 * unit.angstroms
+    use_dispersion_correction : bool, optional, default=True
+        If True, the long-range disperson correction will be used.
+    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+       Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+
+    Examples
+    --------
+
+    >>> alanine = AlanineDipeptideExplicit()
+    >>> (system, positions) = alanine.system, alanine.positions
+    """
+
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+        
+        try:
+            import chemistry
+            from chemistry.amber.openmmloader import AmberParm
+        except IOError as e:
+            print("DHFR test system requires Parmed (`import chemistry`).")
+            raise(e)
+
+        prmtop_filename = get_data_filename("data/dhfr/prmtop")
+        crd_filename = get_data_filename("data/dhfr/inpcrd")
+
+        # Initialize system.
+        self.prmtop = AmberParm(prmtop_filename, crd_filename)
+        system = self.prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = self.prmtop.topology
+
+        # Set dispersion correction use.
+        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+
+        positions = self.prmtop.positions
+
+        # Set box vectors.
+        box_vectors = self.prmtop.box_vectors
+        system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
+
+        self.system, self.positions = system, positions
+
+
 
 #=============================================================================================
 # T4 lysozyme L99A mutant with p-xylene ligand.
