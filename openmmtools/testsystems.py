@@ -2552,8 +2552,8 @@ class DHFRExplicit(TestSystem):
     Examples
     --------
 
-    >>> alanine = AlanineDipeptideExplicit()
-    >>> (system, positions) = alanine.system, alanine.positions
+    >>> dhfr = DHFRExplicit()
+    >>> (system, positions) = dhfr.system, dhfr.positions
     """
 
     def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
