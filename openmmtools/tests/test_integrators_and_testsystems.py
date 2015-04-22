@@ -84,6 +84,7 @@ def test_integrators_and_testsystems():
       except ImportError as e:
           print(e)
           print("Skipping %s due to missing dependency" % testsystem_name)
+          continue
 
       for integrator_name in integrator_names:
          # Create integrator.
