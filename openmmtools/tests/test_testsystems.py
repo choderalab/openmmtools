@@ -50,7 +50,11 @@ def test_properties_all_testsystems():
     logging.info("Testing analytical property computation:")
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
-        testsystem = testsystem_class()
+        try:
+            testsystem = testsystem_class()
+        except ImportError as e:
+            print(e)
+            print("Skipping %s due to missing dependency" % class_name)            
         f = partial(check_properties, testsystem)
         f.description = "Testing properties for testsystem %s" % class_name
         logging.info(f.description)
@@ -123,7 +127,11 @@ def test_energy_all_testsystems(skip_slow_tests=False):
             continue
 
         # Create test.
-        testsystem = testsystem_class()
+        try:
+            testsystem = testsystem_class()
+        except ImportError as e:
+            print(e)
+            print("Skipping %s due to missing dependency" % class_name)            
         f = partial(check_potential_energy, testsystem.system, testsystem.positions)
         f.description = "Testing potential energy for testsystem %s" % class_name
         yield f

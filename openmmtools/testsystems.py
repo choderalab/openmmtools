@@ -2495,6 +2495,9 @@ class AlanineDipeptideExplicit(TestSystem):
         If True, the long-range disperson correction will be used.
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to 
+        use mass repartitioning.
 
     Examples
     --------
@@ -2548,6 +2551,9 @@ class DHFRExplicit(TestSystem):
         If True, the long-range disperson correction will be used.
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to 
+        use mass repartitioning.       
 
     """
 
