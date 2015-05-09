@@ -62,7 +62,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
 
     computed_potential (simtk.unit.Quantity in units of energy) - computed potential energy
     expected_potential (simtk.unit.Quantity in units of energy) - expected
-    
+
     OPTIONAL ARGUMENTS
 
     tolerance (simtk.unit.Quantity in units of energy) - acceptable tolerance
@@ -70,7 +70,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
     EXAMPLES
 
     >>> assert_approximately_equal(0.0000 * units.kilocalories_per_mole, 0.0001 * units.kilocalories_per_mole, tolerance=0.06*units.kilocalories_per_mole)
-        
+
     """
 
     # Compute error.
@@ -79,7 +79,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
     # Raise an exception if the error is larger than the tolerance.
     if abs(error) > tolerance:
         raise Exception("Computed potential %s, expected %s.  Error %s is larger than acceptable tolerance of %s." % (computed_potential, expected_potential, error, tolerance))
-    
+
     return
 
 def compute_potential_and_force(system, positions, platform):
@@ -105,7 +105,7 @@ def compute_potential_and_force(system, positions, platform):
     kT = kB * temperature
     beta = 1.0 / kT
     collision_rate = 90.0 / units.picosecond
-    timestep = 1.0 * units.femtosecond    
+    timestep = 1.0 * units.femtosecond
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(system, integrator, platform)
     # Set positions
@@ -136,10 +136,10 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
     """
 
     forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
-    
+
     # Get original force groups.
     groups = [ force.getForceGroup() for force in forces ]
-    
+
     # Set force groups so only specified force_index contributes.
     for force in forces:
         force.setForceGroup(1)
@@ -151,7 +151,7 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
     kT = kB * temperature
     beta = 1.0 / kT
     collision_rate = 90.0 / units.picosecond
-    timestep = 1.0 * units.femtosecond    
+    timestep = 1.0 * units.femtosecond
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(system, integrator, platform)
     # Set positions
@@ -160,11 +160,11 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
     state = context.getState(getEnergy=True, getForces=True, groups=1)
     potential = state.getPotentialEnergy()
     force = state.getForces(asNumpy=True)
-    
+
     # Restore original force groups.
     for index in range(system.getNumForces()):
         forces[index].setForceGroup(groups[index])
-        
+
     return [potential, force]
 
 #=============================================================================================
@@ -250,7 +250,6 @@ if __name__ == "__main__":
         else:
             tests_failed += 1
 
-
         if (test_success is False):
             # Write XML files of failed tests to aid in debugging.
             print "Writing failed test system to '%s'.{system,state}.xml ..." % testsystem.name
@@ -261,7 +260,7 @@ if __name__ == "__main__":
             xml_file = open(testsystem.name + '.state.xml', 'w')
             xml_file.write(state_xml)
             xml_file.close()
-                
+
             # Test by force group.
             print "Breakdown of discrepancies by Force component:"
             nforces = system.getNumForces()
@@ -269,9 +268,9 @@ if __name__ == "__main__":
                 force_name = system.getForce(force_index).__class__.__name__
                 print force_name
                 [reference_potential, reference_force] = compute_potential_and_force_by_force_index(system, positions, reference_platform, force_index)
-                print "%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error")                        
-                
-                for platform_index in range(openmm.Platform.getNumPlatforms()):                            
+                print "%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error")
+
+                for platform_index in range(openmm.Platform.getNumPlatforms()):
                     try:
                         platform = openmm.Platform.getPlatform(platform_index)
                         platform_name = platform.getName()
@@ -285,19 +284,19 @@ if __name__ == "__main__":
                         natoms = system.getNumParticles()
                         force_mse = (((reference_force - platform_force) / force_unit)**2).sum() / natoms * force_unit**2
                         force_rmse = units.sqrt(force_mse)
-                        
+
                         force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
                         force_rms = units.sqrt(force_ms)
-                                
+
                         print "%32s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit)
-                            
+
                     except Exception as e:
                         pass
         print ""
 
     print "%d tests failed" % tests_failed
     print "%d tests passed" % tests_passed
-            
+
     if (tests_failed > 0):
         # Signal failure of test.
         sys.exit(1)
