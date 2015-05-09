@@ -171,7 +171,7 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
 # MAIN AND TESTS
 #=============================================================================================
 
-if __name__ == "__main__":
+def main():
     import doctest
 
     debug = False # Don't display extra debug information.
@@ -302,3 +302,6 @@ if __name__ == "__main__":
         sys.exit(1)
     else:
         sys.exit(0)
+
+if __name__ == "__main__":
+    main()
