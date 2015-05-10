@@ -21,9 +21,9 @@ from pdbfixer import PDBFixer
 pdbid = '2src' # PDB ID to retrieve
 chain_ids_to_keep = ['A'] # chains to keep
 pH = 7.0 # pH
-forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml'] # list of forcefields to use in parameterization
-padding = 10.0 * unit.angstroms # padding to use for adding solvent
-nonbondedMethod = app.PME # nonbonded method
+forcefields_to_use = ['amber99sbildn.xml', 'amber99_obc.xml'] # list of forcefields to use in parameterization
+padding = None # padding to use for adding solvent
+nonbondedMethod = app.NoCutoff # nonbonded method
 constraints = app.HBonds # bonds to be constrained
 keepWater = False # keep crystal water
 
