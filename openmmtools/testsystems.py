@@ -2639,7 +2639,7 @@ class SrcExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-explicit/src-explicit.pdb")
+        pdb_filename = get_data_filename("data/src-explicit/2src-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
