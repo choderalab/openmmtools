@@ -1471,7 +1471,7 @@ class LennardJonesFluid(TestSystem):
 
     Parameters
     ----------
-    nparticles : int, optional, default=500
+    nparticles : int, optional, default=1000
         Number of Lennard-Jones particles.
     reduced_density : float, optional, default=0.05
         Reduced density (density * sigma**3); default is appropriate for gas
@@ -1665,12 +1665,10 @@ class CustomLennardJonesFluidMixture(TestSystem):
 
     Parameters
     ----------
-    nx : int, optional, default=6
-        number of particles in the x direction
-    ny : int, optional, default=6
-        number of particles in the y direction
-    nz : int, optional, default=6
-        number of particles in the z direction
+    nparticles : int, optional, default=1000
+        Number of Lennard-Jones particles.
+    reduced_density : float, optional, default=0.05
+        Reduced density (density * sigma**3); default is appropriate for gas
     mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
         mass of each particle.
     sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
@@ -1699,18 +1697,20 @@ class CustomLennardJonesFluidMixture(TestSystem):
     >>> fluid = CustomLennardJonesFluidMixture()
     >>> system, positions = fluid.system, fluid.positions
 
-    Create a larger 10x8x5 box of Lennard-Jones particles.
+    Create a larger box of Lennard-Jones particles.
 
-    >>> fluid = CustomLennardJonesFluidMixture(nx=10, ny=8, nz=5)
+    >>> fluid = CustomLennardJonesFluidMixture(nparticles=400)
     >>> system, positions = fluid.system, fluid.positions
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
-    >>> fluid = CustomLennardJonesFluidMixture(nx=10, ny=10, nz=10, switch=True, switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
+    >>> fluid = CustomLennardJonesFluidMixture(nparticles=1000, switch=True, switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
     >>> system, positions = fluid.system, fluid.positions
     """
 
-    def __init__(self, nx=6, ny=6, nz=6,
+    def __init__(self,
+        nparticles = 1000,
+        reduced_density = 0.05, # gas
         mass=39.9 * unit.amu, # argon
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
@@ -1721,9 +1721,6 @@ class CustomLennardJonesFluidMixture(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        if cutoff is None:
-            cutoff = 3.0 * sigma
-
         charge        = 0.0 * unit.elementary_charge
         scaleStepSizeX = 1.0
         scaleStepSizeY = 1.0
@@ -1731,14 +1728,24 @@ class CustomLennardJonesFluidMixture(TestSystem):
 
         charge = 0.0 * unit.elementary_charge
 
-        # Determine total number of atoms.
-        natoms = nx * ny * nz
+        # Determine Lennard-Jones cutoff.
+        if cutoff is None:
+            cutoff = 3.0 * sigma
 
-        # determine number of atoms that will be treated by CustomNonbondedForce
-        ncustom = int(natoms/2)
+        # Determine number of atoms that will be treated by CustomNonbondedForce
+        ncustom = int(nparticles/2)
 
         # Create an empty system object.
         system = openmm.System()
+
+        # Determine volume and periodic box vectors.
+        number_density = reduced_density / sigma**3
+        volume = nparticles * (number_density ** -1)
+        box_edge = volume ** (1./3.)
+        a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
+        b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
+        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
+        system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Set up periodic nonbonded interactions with a cutoff.
         nb = openmm.NonbondedForce()
@@ -1747,94 +1754,35 @@ class CustomLennardJonesFluidMixture(TestSystem):
         nb.setUseDispersionCorrection(dispersion_correction)
         nb.setUseSwitchingFunction(switch)
         nb.setSwitchingDistance(cutoff-switch_width)
+        system.addForce(nb)
 
         # Set up periodic nonbonded interactions with a cutoff.
-        if switch:
-            energy_expression = "LJ * S;"
-            energy_expression += "LJ = 4*epsilon*((sigma/r)^12 - (sigma/r)^6);"
-            energy_expression += "sigma = 0.5*(sigma1+sigma2);"
-            energy_expression += "epsilon = sqrt(epsilon1*epsilon2);"
-            energy_expression += "S = (cutoff^2 - r^2)^2 * (cutoff^2 + 2*r^2 - 3*switch^2) / (cutoff^2 - switch^2)^3;"
-            energy_expression += 'switch = testsystems_CustomLennardJonesFluidMixture_switch;'
-            energy_expression += 'cutoff = testsystems_CustomLennardJonesFluidMixture_cutoff;'
-            cnb = openmm.CustomNonbondedForce(energy_expression)
-            cnb.addGlobalParameter('testsystems_CustomLennardJonesFluidMixture_switch', switch)
-            cnb.addGlobalParameter('testsystems_CustomLennardJonesFluidMixture_cutoff', cutoff)
-            cnb.addPerParticleParameter('charge')
-            cnb.addPerParticleParameter('sigma')
-            cnb.addPerParticleParameter('epsilon')
-            cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-            cnb.setCutoffDistance(cutoff)
-        else:
-            energy_expression  = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
-            energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
-            energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
-            cnb = openmm.CustomNonbondedForce(energy_expression)
-            cnb.addPerParticleParameter('charge')
-            cnb.addPerParticleParameter('sigma')
-            cnb.addPerParticleParameter('epsilon')
-            cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-            cnb.setCutoffDistance(cutoff)
-
-        positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
-
-        maxX = 0.0 * unit.angstrom
-        maxY = 0.0 * unit.angstrom
-        maxZ = 0.0 * unit.angstrom
-
-        atom_index = 0
-        for ii in range(nx):
-            for jj in range(ny):
-                for kk in range(nz):
-                    system.addParticle(mass)
-                    if (atom_index < ncustom):
-                        cnb.addParticle([charge, sigma, epsilon])
-                        nb.addParticle(0.0*charge, sigma, 0.0*epsilon)
-                    else:
-                        cnb.addParticle([0.0*charge, sigma, 0.0*epsilon])
-                        nb.addParticle(charge, sigma, epsilon)
-                    x = sigma*scaleStepSizeX*ii
-                    y = sigma*scaleStepSizeY*jj
-                    z = sigma*scaleStepSizeZ*kk
-
-                    positions[atom_index,0] = x
-                    positions[atom_index,1] = y
-                    positions[atom_index,2] = z
-                    atom_index += 1
-
-                    # Wrap positions as needed.
-                    if x>maxX: maxX = x
-                    if y>maxY: maxY = y
-                    if z>maxZ: maxZ = z
-
-        # Set periodic box vectors.
-        x = maxX+2*sigma*scaleStepSizeX
-        y = maxY+2*sigma*scaleStepSizeY
-        z = maxZ+2*sigma*scaleStepSizeZ
-
-        a = unit.Quantity((x,                0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom,                y, 0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, z))
-        system.setDefaultPeriodicBoxVectors(a, b, c)
-
-        # Add the nonbonded forces.
-        system.addForce(nb)
+        energy_expression  = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
+        energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
+        energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
+        cnb = openmm.CustomNonbondedForce(energy_expression)
+        cnb.addPerParticleParameter('charge')
+        cnb.addPerParticleParameter('sigma')
+        cnb.addPerParticleParameter('epsilon')
+        cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+        cnb.setUseLongRangeCorrection(dispersion_correction)
+        cnb.setCutoffDistance(cutoff)
+        cnb.setUseSwitchingFunction(switch)
+        cnb.setSwitchingDistance(cutoff-switch_width)
         system.addForce(cnb)
 
-        # Add long-range correction.
-        if switch:
-            # TODO
-            pass
-        else:
-            volume = x*y*z
-            density = natoms / volume
-            per_particle_dispersion_energy = -(8./3.)*math.pi*epsilon*(sigma**6)/(cutoff**3)*density  # attraction
-            per_particle_dispersion_energy += (8./9.)*math.pi*epsilon*(sigma**12)/(cutoff**9)*density  # repulsion
-            energy_expression = "%f;" % (per_particle_dispersion_energy / unit.kilojoules_per_mole)
-            force = openmm.CustomExternalForce(energy_expression)
-            for i in range(natoms):
-                force.addParticle(i, [])
-            system.addForce(force)
+        # Add particles to system.
+        for atom_index in range(nparticles):
+            system.addParticle(mass)
+            if (atom_index < ncustom):
+                cnb.addParticle([charge, sigma, epsilon])
+                nb.addParticle(0.0*charge, sigma, 0.0*epsilon)
+            else:
+                cnb.addParticle([0.0*charge, sigma, 0.0*epsilon])
+                nb.addParticle(charge, sigma, epsilon)
+
+        # Create initial coordinates using subrandom positions.
+        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
 
         # Create topology.
         topology = app.Topology()
