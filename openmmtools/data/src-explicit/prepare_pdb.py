@@ -75,9 +75,10 @@ fixer.removeHeterogens(True)
 print('Adding missing hydrogens appropriate for pH %s' % pH)
 fixer.addMissingHydrogens(pH)
 
-# Add solvent.
-print('Adding solvent...')
-fixer.addSolvent(padding=padding)
+if nonbondedMethod in [app.PME, app.CutoffPeriodic, app.Ewald]:
+    # Add solvent.
+    print('Adding solvent...')
+    fixer.addSolvent(padding=padding)
 
 # Write PDB file.
 output_filename = '%s-pdbfixer.pdb' % pdbid
