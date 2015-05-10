@@ -435,16 +435,18 @@ class TestSystem(object):
 
 
 class CustomExternalForcesTestSystem(TestSystem):
-    """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
+    """Create a system with an arbitrary number of CustomExternalForces.
 
     Parameters
     ----------
     energy_expressions : tuple(string)
         Each string in the tuple will add a CustomExternalForce to the
         OpenMM system.  Each force will be assigned a different force
-        group, starting with 0.  
+        group, starting with 0.  By default this will be a 3D harmonic oscillator.
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass.  Default corresponds to argon.
+    n_particles : int, optional, default=500
+        Number of (identical) particles to add.
     
     Notes
     -----
