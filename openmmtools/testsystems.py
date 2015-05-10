@@ -789,8 +789,14 @@ class Diatom(TestSystem):
 class DiatomicFluid(TestSystem):
     """Create a diatomic fluid.
 
+    Note
+    ----
+    The default reduced_density is set to 0.05 (gas) so that no minimization is needed to simulate the default system.
+
     Parameters
     ----------
+    nmolecules : int, optional, default=250
+        Number of molecules.
     K : simtk.unit.Quantity, optional, default=290.1 * unit.kilocalories_per_mole / unit.angstrom**2
         harmonic bond potential.  default is GAFF c-c bond
     r0 : simtk.unit.Quantity, optional, default=1.550 * unit.amu
@@ -807,16 +813,16 @@ class DiatomicFluid(TestSystem):
         particle Lennard-Jones sigma
     charge : simtk.unit.Quantity, optional, default=0.0 * unit.elementary_charge
         charge to place on atomic centers to create a dipole
+    reduced_density : float, optional, default=0.05
+        Reduced density (density * sigma**3); default is appropriate for gas
     cutoff : simtk.unit.Quantity, optional, default=None
-        if specified, the specified cutoff will be used; otherwise, half the box width will be used
+        if specified, the specified cutoff will be used; otherwise, 3.0 * sigma will be used
     switch : bool, optional, default=True
         flag to use nonbonded switching function
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
-    nx, ny, nz : int, optional, default=6
-        number of molecules in x, y, and z dimension
 
 
     Notes
@@ -845,12 +851,13 @@ class DiatomicFluid(TestSystem):
 
     Specify a different system size.
 
-    >>> diatom = DiatomicFluid(constraint=True, nx=8, ny=8, nz=8)
+    >>> diatom = DiatomicFluid(constraint=True, nmolecules=200)
     >>> system, positions = diatom.system, diatom.positions
 
     """
 
     def __init__(self,
+        nmolecules = 250,
         K=424.0* unit.kilocalories_per_mole / unit.angstrom**2,
         r0=1.383 * unit.angstroms,
         m1=14.01 * unit.amu,
@@ -858,16 +865,16 @@ class DiatomicFluid(TestSystem):
         epsilon=0.1700 * unit.kilocalories_per_mole,
         sigma=1.8240 * unit.angstroms,
         charge=0.0 * unit.elementary_charge,
+        reduced_density=0.05,
         switch=True,
         switch_width=0.5*unit.angstroms,
         cutoff=None,
         constraint=False,
         dispersion_correction=True,
-        nx=7, ny=7, nz=7, **kwargs):
+        **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
-        nmolecules = nx * ny * nz
         nparticles = 2 * nmolecules
 
         # Create an empty system object.
@@ -897,35 +904,39 @@ class DiatomicFluid(TestSystem):
             nb.addParticle(+charge, sigma, epsilon)
             nb.addParticle(-charge, sigma, epsilon)
 
-        # Set box size.
-        maxX = 2.0 * sigma * nx
-        maxY = 2.0 * sigma * ny
-        maxZ = 2.0 * sigma * nz
+        # Determine Lennard-Jones cutoff.
+        if cutoff is None:
+            cutoff = 3.0 * sigma
 
-        a = unit.Quantity((maxX,                0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom,                maxY, 0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, maxZ))
+        # Determine volume and periodic box vectors.
+        number_density = reduced_density / sigma**3
+        volume = nparticles * (number_density ** -1)
+        box_edge = volume ** (1./3.)
+        a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
+        b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
+        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
-        # Create initial coordinates using subrandom positions.
-        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
-        # Set positions of second particles based on first particle.
-        for atom_index in range(0, nparticles, 2):
-            vector = positions[atom_index+1,:] - positions[atom_index+0,:]
-            unit_vector = vector / unit.norm(vector)
-            positions[atom_index+1,:] = positions[atom_index+0,:] + r0 * unit_vector
+        # Create initial molecule centers of geometry using subrandom positions.
+        molecule_positions = subrandom_particle_positions(nmolecules, system.getDefaultPeriodicBoxVectors()) # for molecule centers
+        molecule_directions = subrandom_particle_positions(nmolecules, system.getDefaultPeriodicBoxVectors()) # for molecule orientations
 
-        # Add exceptions.
+        # Compute particle positions.
+        positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
+        unit_vector = np.array([1, 0, 0], np.float32)
+        for molecule_index in range(0, nmolecules):
+            vector = molecule_directions[molecule_index,:] - molecule_directions.mean(0)
+            unit_vector = vector / unit.norm(vector)
+            positions[2*molecule_index+0,:] = molecule_positions[molecule_index,:] + 0.5 * r0 * unit_vector
+            positions[2*molecule_index+1,:] = molecule_positions[molecule_index,:] - 0.5 * r0 * unit_vector
+
+        # Add exceptions for intramolecular forces.
         for molecule_index in range(nmolecules):
             nb.addException(2*molecule_index+0, 2*molecule_index+1, 0.0*charge*charge, sigma, 0.0*epsilon)
 
         system.addForce(nb)
 
-        if not cutoff:
-            min_width = min(maxX, maxY, maxZ)
-            cutoff = min_width / 2.0 - 0.01 * unit.angstroms
-
-        nb.setNonbondedMethod(openmm.NonbondedForce.PME)
+        nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nb.setUseDispersionCorrection(dispersion_correction)
         nb.setUseSwitchingFunction(switch)
         nb.setCutoffDistance(cutoff)
@@ -1500,7 +1511,7 @@ class LennardJonesFluid(TestSystem):
 
     def __init__(self,
         nparticles=500,
-        reduced_density=0.05, # liquid
+        reduced_density=0.05,
         mass=39.9 * unit.amu, # argon
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
