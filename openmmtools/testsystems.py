@@ -1510,7 +1510,7 @@ class LennardJonesFluid(TestSystem):
     """
 
     def __init__(self,
-        nparticles=500,
+        nparticles=1000,
         reduced_density=0.05,
         mass=39.9 * unit.amu, # argon
         sigma=3.4 * unit.angstrom, # argon,
