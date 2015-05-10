@@ -70,7 +70,7 @@ fixer.addMissingAtoms()
 
 # Remove heterogens.
 print('Removing heterogens...')
-fixer.removeHeterogens(True, keepWater=keepWater)
+fixer.removeHeterogens(keepWater=keepWater)
 
 # Add missing hydrogens.
 print('Adding missing hydrogens appropriate for pH %s' % pH)

@@ -25,7 +25,7 @@ forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml'] # list of forcefields to
 padding = 10.0 * unit.angstroms # padding to use for adding solvent
 nonbondedMethod = app.PME # nonbonded method
 constraints = app.HBonds # bonds to be constrained
-keepWater = False # keep crystal water
+keepWater = True # keep crystal water
 
 ################################################################################
 # SUBROUTINES
@@ -70,7 +70,7 @@ fixer.addMissingAtoms()
 
 # Remove heterogens.
 print('Removing heterogens...')
-fixer.removeHeterogens(True, keepWater=keepWater)
+fixer.removeHeterogens(keepWater=keepWater)
 
 # Add missing hydrogens.
 print('Adding missing hydrogens appropriate for pH %s' % pH)
