@@ -194,21 +194,25 @@ def main():
     print('Testing Reference platform...')
     doctest.testmod()
 
-    # Make a list of all test system classes.
-    testsystem_classes = testsystems.TestSystem.__subclasses__()
-    systems = [ (cls.__name__, cls) for cls in testsystem_classes ]
-    print(systems)
-
     # Compute energy error made on all test systems for other platforms.
     # Make a count of how often set tolerance is exceeded.
     tests_failed = 0 # number of times tolerance is exceeded
     tests_passed = 0 # number of times tolerance is not exceeded
     print("%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error"))
     reference_platform = openmm.Platform.getPlatformByName("Reference")
-    for (name, constructor) in systems:
-        print("%s" % name)
+    testsystem_classes = testsystems.TestSystem.__subclasses__()
+    for testsystem_class in testsystem_classes:
+        class_name = testsystem_class.__name__
+        try:
+            testsystem = testsystem_class()
+        except ImportError as e:
+            print(e)
+            print("Skipping %s due to missing dependency" % class_name)
+            continue
 
-        testsystem = constructor()
+        print("%s" % class_name)
+
+        testsystem = testsystem_class()
         [system, positions] = [testsystem.system, testsystem.positions]
         [reference_potential, reference_force] = compute_potential_and_force(system, positions, reference_platform)
 
