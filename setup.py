@@ -14,7 +14,7 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.9.0"
+VERSION = "0.6.2"
 ISRELEASED = False
 __version__ = VERSION
 ########################
@@ -168,12 +168,13 @@ setup(
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
-    packages=['openmmtools', "openmmtools.tests"],
+    packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts'],
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     install_requires=['numpy', 'scipy', 'nose'],
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,
+    entry_points={'console_scripts': ['test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main']},
     )
 check_dependencies()

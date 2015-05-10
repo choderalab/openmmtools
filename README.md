@@ -16,3 +16,9 @@ OpenMM objects for simulating the desired systems.
 These classes will also contain the member functions that calculate known
 analytical properties of these systems, enabling the proper testing.
 
+## `scripts`
+
+A script that may be useful in testing your OpenMM installation is installed:
+
+* `test-openmm-platforms` will test the various platforms available to OpenMM to ensure that all systems in `openmmtools.testsystems` give consistent potential energies.
+If differences in energies in excess of `ENERGY_TOLERANCE` (default: 0.06 kcal/mol) are detected, these systems will be serialized to XML for further debugging.

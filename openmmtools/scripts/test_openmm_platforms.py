@@ -24,13 +24,19 @@ version.
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
 
 TODO
 
 """
+
+#=============================================================================================
+# PYTHON 3 COMPATIBILITY CRAP
+#=============================================================================================
+
+from __future__ import print_function
 
 #=============================================================================================
 # GLOBAL IMPORTS
@@ -62,7 +68,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
 
     computed_potential (simtk.unit.Quantity in units of energy) - computed potential energy
     expected_potential (simtk.unit.Quantity in units of energy) - expected
-    
+
     OPTIONAL ARGUMENTS
 
     tolerance (simtk.unit.Quantity in units of energy) - acceptable tolerance
@@ -70,7 +76,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
     EXAMPLES
 
     >>> assert_approximately_equal(0.0000 * units.kilocalories_per_mole, 0.0001 * units.kilocalories_per_mole, tolerance=0.06*units.kilocalories_per_mole)
-        
+
     """
 
     # Compute error.
@@ -79,7 +85,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
     # Raise an exception if the error is larger than the tolerance.
     if abs(error) > tolerance:
         raise Exception("Computed potential %s, expected %s.  Error %s is larger than acceptable tolerance of %s." % (computed_potential, expected_potential, error, tolerance))
-    
+
     return
 
 def compute_potential_and_force(system, positions, platform):
@@ -105,7 +111,7 @@ def compute_potential_and_force(system, positions, platform):
     kT = kB * temperature
     beta = 1.0 / kT
     collision_rate = 90.0 / units.picosecond
-    timestep = 1.0 * units.femtosecond    
+    timestep = 1.0 * units.femtosecond
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(system, integrator, platform)
     # Set positions
@@ -136,10 +142,10 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
     """
 
     forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
-    
+
     # Get original force groups.
     groups = [ force.getForceGroup() for force in forces ]
-    
+
     # Set force groups so only specified force_index contributes.
     for force in forces:
         force.setForceGroup(1)
@@ -151,7 +157,7 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
     kT = kB * temperature
     beta = 1.0 / kT
     collision_rate = 90.0 / units.picosecond
-    timestep = 1.0 * units.femtosecond    
+    timestep = 1.0 * units.femtosecond
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
     context = openmm.Context(system, integrator, platform)
     # Set positions
@@ -160,49 +166,53 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
     state = context.getState(getEnergy=True, getForces=True, groups=1)
     potential = state.getPotentialEnergy()
     force = state.getForces(asNumpy=True)
-    
+
     # Restore original force groups.
     for index in range(system.getNumForces()):
         forces[index].setForceGroup(groups[index])
-        
+
     return [potential, force]
 
 #=============================================================================================
 # MAIN AND TESTS
 #=============================================================================================
 
-if __name__ == "__main__":
+def main():
     import doctest
 
     debug = False # Don't display extra debug information.
 
     # List all available platforms
-    print "Available platforms:"
+    print("Available platforms:")
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
-        print "%5d %s" % (platform_index, platform.getName())
-    print ""
+        print("%5d %s" % (platform_index, platform.getName()))
+    print("")
 
     # Test all systems on Reference platform.
     platform = openmm.Platform.getPlatformByName("Reference")
-    print 'Testing Reference platform...'
+    print('Testing Reference platform...')
     doctest.testmod()
-
-    # Make a list of all test system classes.
-    testsystem_classes = testsystems.TestSystem.__subclasses__()
-    systems = [ (cls.__name__, cls) for cls in testsystem_classes ]
-    print systems
 
     # Compute energy error made on all test systems for other platforms.
     # Make a count of how often set tolerance is exceeded.
     tests_failed = 0 # number of times tolerance is exceeded
     tests_passed = 0 # number of times tolerance is not exceeded
-    print "%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error")
+    print("%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error"))
     reference_platform = openmm.Platform.getPlatformByName("Reference")
-    for (name, constructor) in systems:
-        print "%s" % name
+    testsystem_classes = testsystems.TestSystem.__subclasses__()
+    for testsystem_class in testsystem_classes:
+        class_name = testsystem_class.__name__
+        try:
+            testsystem = testsystem_class()
+        except ImportError as e:
+            print(e)
+            print("Skipping %s due to missing dependency" % class_name)
+            continue
 
-        testsystem = constructor()
+        print("%s" % class_name)
+
+        testsystem = testsystem_class()
         [system, positions] = [testsystem.system, testsystem.positions]
         [reference_potential, reference_force] = compute_potential_and_force(system, positions, reference_platform)
 
@@ -226,34 +236,33 @@ if __name__ == "__main__":
                 force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
                 force_rms = units.sqrt(force_ms)
 
-                print "%32s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit)
+                print("%32s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
 
                 # Mark whether tolerance is exceeded or not.
                 if abs(potential_error) > ENERGY_TOLERANCE:
                     test_success = False
-                    print "%32s WARNING: Potential energy error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", potential_error/units.kilocalories_per_mole, ENERGY_TOLERANCE/units.kilocalories_per_mole)
+                    print("%32s WARNING: Potential energy error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", potential_error/units.kilocalories_per_mole, ENERGY_TOLERANCE/units.kilocalories_per_mole))
                 if abs(force_rmse) > FORCE_RMSE_TOLERANCE:
                     test_success = False
-                    print "%32s WARNING: Force RMS error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit)
+                    print("%32s WARNING: Force RMS error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit))
                     if debug:
                         for atom_index in range(natoms):
                             for k in range(3):
-                                print "%12.6f" % (reference_force[atom_index,k]/force_unit),
-                            print " : ",
+                                print("%12.6f" % (reference_force[atom_index,k]/force_unit), end="")
+                            print(" : ", end="")
                             for k in range(3):
-                                print "%12.6f" % (platform_force[atom_index,k]/force_unit),
+                                print("%12.6f" % (platform_force[atom_index,k]/force_unit), end="")
             except Exception as e:
-                print e
+                print(e)
 
         if test_success:
             tests_passed += 1
         else:
             tests_failed += 1
 
-
         if (test_success is False):
             # Write XML files of failed tests to aid in debugging.
-            print "Writing failed test system to '%s'.{system,state}.xml ..." % testsystem.name
+            print("Writing failed test system to '%s'.{system,state}.xml ..." % testsystem.name)
             [system_xml, state_xml] = testsystem.serialize()
             xml_file = open(testsystem.name + '.system.xml', 'w')
             xml_file.write(system_xml)
@@ -261,17 +270,17 @@ if __name__ == "__main__":
             xml_file = open(testsystem.name + '.state.xml', 'w')
             xml_file.write(state_xml)
             xml_file.close()
-                
+
             # Test by force group.
-            print "Breakdown of discrepancies by Force component:"
+            print("Breakdown of discrepancies by Force component:")
             nforces = system.getNumForces()
             for force_index in range(nforces):
                 force_name = system.getForce(force_index).__class__.__name__
-                print force_name
+                print(force_name)
                 [reference_potential, reference_force] = compute_potential_and_force_by_force_index(system, positions, reference_platform, force_index)
-                print "%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error")                        
-                
-                for platform_index in range(openmm.Platform.getNumPlatforms()):                            
+                print("%32s %16s          %16s          %16s          %16s" % ("platform", "potential", "error", "force mag", "rms error"))
+
+                for platform_index in range(openmm.Platform.getNumPlatforms()):
                     try:
                         platform = openmm.Platform.getPlatform(platform_index)
                         platform_name = platform.getName()
@@ -285,21 +294,24 @@ if __name__ == "__main__":
                         natoms = system.getNumParticles()
                         force_mse = (((reference_force - platform_force) / force_unit)**2).sum() / natoms * force_unit**2
                         force_rmse = units.sqrt(force_mse)
-                        
+
                         force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
                         force_rms = units.sqrt(force_ms)
-                                
-                        print "%32s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit)
-                            
+
+                        print("%32s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
+
                     except Exception as e:
                         pass
-        print ""
+        print("")
 
-    print "%d tests failed" % tests_failed
-    print "%d tests passed" % tests_passed
-            
+    print("%d tests failed" % tests_failed)
+    print("%d tests passed" % tests_passed)
+
     if (tests_failed > 0):
         # Signal failure of test.
         sys.exit(1)
     else:
         sys.exit(0)
+
+if __name__ == "__main__":
+    main()
