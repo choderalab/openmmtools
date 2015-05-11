@@ -212,6 +212,30 @@ def compute_potential_and_force_by_force_group(system, positions, platform, forc
 
     return [potential, force]
 
+def get_all_subclasses(cls):
+    """
+    Return all subclasses of a specified class.
+
+    Parameters
+    ----------
+    cls : class
+       The class for which all subclasses are to be returned.
+
+    Returns
+    -------
+    all_subclasses : list of class
+       List of all subclasses of `cls`.
+
+    """
+       
+    all_subclasses = []
+
+    for subclass in cls.__subclasses__():
+        all_subclasses.append(subclass)
+        all_subclasses.extend(get_all_subclasses(subclass))
+
+    return all_subclasses
+
 #=============================================================================================
 # MAIN AND TESTS
 #=============================================================================================
@@ -239,7 +263,7 @@ def main():
     tests_passed = 0 # number of times tolerance is not exceeded
     print("%16s%16s %16s          %16s          %16s          %16s" % ("platform", "precision", "potential", "error", "force mag", "rms error"))
     reference_platform = openmm.Platform.getPlatformByName("Reference")
-    testsystem_classes = testsystems.TestSystem.__subclasses__()
+    testsystem_classes = get_all_subclasses(testsystems.TestSystem)
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
         try:
