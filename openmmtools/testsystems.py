@@ -3055,7 +3055,7 @@ class AlchemicalTestSystem(object):
         energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
         energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
         energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-        energy_expression += "lambda = lennard_jones_lambda;" # lambda
+        energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;" # lambda
 
         # Create atom groups.
         atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
