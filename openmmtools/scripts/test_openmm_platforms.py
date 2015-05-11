@@ -255,25 +255,6 @@ def main():
         [system, positions] = [testsystem.system, testsystem.positions]
         [reference_potential, reference_force] = compute_potential_and_force(system, positions, reference_platform)
 
-        # Place forces into different force groups.
-        forces = [ system.getForce(force_index) for force_index in range(system.getNumForces()) ]
-        force_group_names = dict()
-        group_index = 0
-        for force_index in range(system.getNumForces()):
-            force_name = forces[force_index].__class__.__name__
-            if force_name == 'NonbondedForce':
-                forces[force_index].setForceGroup(group_index+1)
-                force_group_names[group_index] = 'NonbondedForce (direct)'
-                group_index += 1
-                forces[force_index].setReciprocalSpaceForceGroup(group_index+1)
-                force_group_names[group_index] = 'NonbondedForce (reciprocal)'
-                group_index += 1
-            else:
-                forces[force_index].setForceGroup(group_index+1)
-                force_group_names[group_index] = force_name
-                group_index += 1
-        ngroups = len(force_group_names)
-
         # Test all platforms.
         test_success = True
         for platform_index in range(openmm.Platform.getNumPlatforms()):
@@ -345,6 +326,26 @@ def main():
             xml_file = open(testsystem.name + '.state.xml', 'w')
             xml_file.write(state_xml)
             xml_file.close()
+
+            
+            # Place forces into different force groups.
+            forces = [ system.getForce(force_index) for force_index in range(system.getNumForces()) ]
+            force_group_names = dict()
+            group_index = 0
+            for force_index in range(system.getNumForces()):
+                force_name = forces[force_index].__class__.__name__
+                if force_name == 'NonbondedForce':
+                    forces[force_index].setForceGroup(group_index+1)
+                    force_group_names[group_index] = 'NonbondedForce (direct)'
+                    group_index += 1
+                    forces[force_index].setReciprocalSpaceForceGroup(group_index+1)
+                    force_group_names[group_index] = 'NonbondedForce (reciprocal)'
+                    group_index += 1
+                else:
+                    forces[force_index].setForceGroup(group_index+1)
+                    force_group_names[group_index] = force_name
+                    group_index += 1
+            ngroups = len(force_group_names)
 
             # Test by force group.
             print("Breakdown of discrepancies by Force component:")
