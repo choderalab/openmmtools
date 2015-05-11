@@ -433,6 +433,58 @@ class TestSystem(object):
         """The name of the test system."""
         return self.__class__.__name__
 
+
+class CustomExternalForcesTestSystem(TestSystem):
+    """Create a system with an arbitrary number of CustomExternalForces.
+
+    Parameters
+    ----------
+    energy_expressions : tuple(string)
+        Each string in the tuple will add a CustomExternalForce to the
+        OpenMM system.  Each force will be assigned a different force
+        group, starting with 0.  By default this will be a 3D harmonic oscillator.
+    mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
+        particle mass.  Default corresponds to argon.
+    n_particles : int, optional, default=500
+        Number of (identical) particles to add.
+    
+    Notes
+    -----
+    This may be useful for testing multiple timestep integrators.
+    """
+    def __init__(self, energy_expressions=("x^2 + y^2 + z^2",), mass=39.948 * unit.amu, n_particles=500, **kwargs):
+        TestSystem.__init__(self, **kwargs)
+
+        system = openmm.System()
+
+        for n in range(n_particles):
+            system.addParticle(mass)
+
+        positions = unit.Quantity(np.zeros([n_particles, 3], np.float32), unit.angstroms)
+
+        forces = [openmm.CustomExternalForce(energy_expression) for energy_expression in energy_expressions]
+        
+        for i, force in enumerate(forces):
+            for n in range(n_particles):
+                parameters = ()
+                force.addParticle(n, parameters)
+            force.setForceGroup(i)
+            system.addForce(force)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(n_particles):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+
+        self.topology = topology
+        self.system, self.positions = system, positions
+        self.n_particles = n_particles
+        self.mass = mass
+        self.ndof = 3 * n_particles   
+
 #=============================================================================================
 # 3D harmonic oscillator
 #=============================================================================================
@@ -817,10 +869,9 @@ class DiatomicFluid(TestSystem):
         Reduced density (density * sigma**3); default is appropriate for gas
     cutoff : simtk.unit.Quantity, optional, default=None
         if specified, the specified cutoff will be used; otherwise, 3.0 * sigma will be used
-    switch : bool, optional, default=True
-        flag to use nonbonded switching function
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).  
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -866,7 +917,6 @@ class DiatomicFluid(TestSystem):
         sigma=1.8240 * unit.angstroms,
         charge=0.0 * unit.elementary_charge,
         reduced_density=0.05,
-        switch=True,
         switch_width=0.5*unit.angstroms,
         cutoff=None,
         constraint=False,
@@ -938,9 +988,12 @@ class DiatomicFluid(TestSystem):
 
         nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nb.setUseDispersionCorrection(dispersion_correction)
-        nb.setUseSwitchingFunction(switch)
         nb.setCutoffDistance(cutoff)
-        nb.setSwitchingDistance(cutoff-switch_width)
+        
+        nb.setUseSwitchingFunction(False)        
+        if switch_width is not None:
+            nb.setUseSwitchingFunction(True)
+            nb.setSwitchingDistance(cutoff - switch_width)
 
         # Store number of degrees of freedom.
         self.ndof = 3*nparticles - nmolecules*constraint
@@ -1264,10 +1317,9 @@ class SodiumChlorideCrystal(TestSystem):
 
     Each atom is represented by a charged Lennard-Jones sphere in an Ewald lattice.
 
-    switch : bool, optional, default=True
-        flag to use nonbonded switching function
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).  
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1288,7 +1340,7 @@ class SodiumChlorideCrystal(TestSystem):
     >>> crystal = SodiumChlorideCrystal()
     >>> system, positions = crystal.system, crystal.positions
     """
-    def __init__(self, switch=True, switch_width=0.2*unit.angstroms, dispersion_correction=True, **kwargs):
+    def __init__(self, switch_width=0.2*unit.angstroms, dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1328,8 +1380,10 @@ class SodiumChlorideCrystal(TestSystem):
 
         # Set treatment.
         force.setUseDispersionCorrection(dispersion_correction)
-        force.setUseSwitchingFunction(switch)
-        force.setSwitchingDistance(cutoff-switch_width)
+        force.setUseSwitchingFunction(False)
+        if switch_width is not None:
+            force.setUseSwitchingFunction(True)
+            force.setSwitchingDistance(cutoff - switch_width)
 
         # Allocate storage for positions.
         natoms = 2
@@ -1380,6 +1434,12 @@ class LennardJonesCluster(TestSystem):
         number of particles in the z direction
     K : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
         harmonic restraining potential
+    cutoff : simtk.unit.Quantity, optional, default=None
+        If None, will use NoCutoff for the NonbondedForce.  Otherwise,
+        use CutoffNonPeriodic with the specified cutoff.  
+    switch_width : simtk.unit.Quantity, optional, default=None
+        If None, the cutoff is a hard cutoff.  If switch_width is specified,
+        use a switching function with this width.  
 
     Examples
     --------
@@ -1394,7 +1454,7 @@ class LennardJonesCluster(TestSystem):
     >>> cluster = LennardJonesCluster(nx=10, ny=10, nz=10)
     >>> system, positions = cluster.system, cluster.positions
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, **kwargs):
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, cutoff=None, switch_width=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1414,9 +1474,19 @@ class LennardJonesCluster(TestSystem):
         # Create an empty system object.
         system = openmm.System()
 
-        # Create a NonbondedForce object with no cutoff.
+        # Create a nonperiodic NonbondedForce object.
         nb = openmm.NonbondedForce()
-        nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
+        
+        if cutoff is None:
+            nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
+        else:
+            nb.setNonbondedMethod(openmm.NonbondedForce.CutoffNonPeriodic)
+            nb.setCutoffDistance(cutoff)
+            nb.setUseDispersionCorrection(False)
+            nb.setUseSwitchingFunction(False)
+            if switch_width is not None:
+                nb.setUseSwitchingFunction(True)
+                nb.setSwitchingDistance(cutoff - switch_width)             
 
         positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
 
@@ -1483,10 +1553,9 @@ class LennardJonesFluid(TestSystem):
         Lennard-Jones well depth; default is appropriate for argon
     cutoff : simtk.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
-    switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
-        if specified, the switching function will be turned on at this distance (default: None)
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).  
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1505,7 +1574,7 @@ class LennardJonesFluid(TestSystem):
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
-    >>> fluid = LennardJonesFluid(switch=True, switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
+    >>> fluid = LennardJonesFluid(switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
     >>> system, positions = fluid.system, fluid.positions
     """
 
@@ -1516,7 +1585,6 @@ class LennardJonesFluid(TestSystem):
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
         cutoff=None,
-        switch=False,
         switch_width=0.2*unit.angstrom,
         dispersion_correction=True, **kwargs):
 
@@ -1546,8 +1614,11 @@ class LennardJonesFluid(TestSystem):
         nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nb.setCutoffDistance(cutoff)
         nb.setUseDispersionCorrection(dispersion_correction)
-        nb.setUseSwitchingFunction(switch)
-        nb.setSwitchingDistance(cutoff-switch_width)
+
+        nb.setUseSwitchingFunction(False)
+        if switch_width is not None:
+            nb.setUseSwitchingFunction(True)
+            nb.setSwitchingDistance(cutoff - switch_width)
 
         for particle_index in range(nparticles):
             system.addParticle(mass)
@@ -1591,10 +1662,9 @@ class LennardJonesGrid(LennardJonesFluid):
         Lennard-Jones well depth; default is appropriate for argon
     cutoff : simtk.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
-    switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
-        if specified, the switching function will be turned on at this distance (default: None)
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).  
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1677,10 +1747,9 @@ class CustomLennardJonesFluidMixture(TestSystem):
         Lennard-Jones well depth
     cutoff : simtk.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 3 * sigma
-    switch : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
-        if specified, the switching function will be turned on at this distance (default: None)
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
         switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).  
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1715,8 +1784,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
         cutoff=None,
-        switch=False,
-        switch_width=0.2*unit.angstroms,
+        switch_width=None,
         dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1752,8 +1820,12 @@ class CustomLennardJonesFluidMixture(TestSystem):
         nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nb.setCutoffDistance(cutoff)
         nb.setUseDispersionCorrection(dispersion_correction)
-        nb.setUseSwitchingFunction(switch)
-        nb.setSwitchingDistance(cutoff-switch_width)
+
+        nb.setUseSwitchingFunction(False)
+        if switch_width is not None:
+            nb.setUseSwitchingFunction(True)
+            nb.setSwitchingDistance(cutoff - switch_width)
+        
         system.addForce(nb)
 
         # Set up periodic nonbonded interactions with a cutoff.
@@ -1767,8 +1839,12 @@ class CustomLennardJonesFluidMixture(TestSystem):
         cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
         cnb.setUseLongRangeCorrection(dispersion_correction)
         cnb.setCutoffDistance(cutoff)
-        cnb.setUseSwitchingFunction(switch)
-        cnb.setSwitchingDistance(cutoff-switch_width)
+        
+        cnb.setUseSwitchingFunction(False)
+        if switch_width is not None:
+            cnb.setUseSwitchingFunction(True)
+            cnb.setSwitchingDistance(cutoff - switch_width)
+        
         system.addForce(cnb)
 
         # Add particles to system.
@@ -2093,7 +2169,7 @@ class WaterBox(TestSystem):
 
    """
 
-   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch=True, switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
+   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
        """
        Create a water box test system.
        
@@ -2106,8 +2182,6 @@ class WaterBox(TestSystem):
           Nonbonded cutoff
        model : str, optional, default = 'tip3p'
           The name of the water model to use ['tip3p', 'tip4p', 'tip4pew', 'tip5p', 'spce']
-       switch : bool, optional, default = True
-          Turns the Lennard-Jones switching function on or off.
        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.5 A
           Sets the width of the switch function for Lennard-Jones.
        constrained : bool, optional, default=True
@@ -2143,11 +2217,11 @@ class WaterBox(TestSystem):
 
        Turn off the switch function.
 
-       >>> waterbox = WaterBox(switch=False)
+       >>> waterbox = WaterBox(switch_width=None)
 
        Set the switch width.
 
-       >>> waterbox = WaterBox(switch=True, switch_width=0.8*unit.angstroms)
+       >>> waterbox = WaterBox(switch_width=0.8*unit.angstroms)
 
        Turn of long-range dispersion correction.
 
@@ -2187,8 +2261,12 @@ class WaterBox(TestSystem):
 
        # Set switching function and dispersion correction.
        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-       forces['NonbondedForce'].setUseSwitchingFunction(switch)
-       forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
+       
+       forces['NonbondedForce'].setUseSwitchingFunction(False)
+       if switch_width is not None:
+           forces['NonbondedForce'].setUseSwitchingFunction(True)
+           forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
+       
        forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
 
        self.ndof = 3*system.getNumParticles() - 3*constrained
