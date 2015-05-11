@@ -386,6 +386,14 @@ def main():
                         platform = openmm.Platform.getPlatform(platform_index)
                         platform_name = platform.getName()
                         
+                        # Define precision models to test.
+                        if platform_name == 'Reference':
+                            precision_models = ['double']
+                        else:
+                            precision_models = ['single']
+                            if platform.supportsDoublePrecision():
+                                precision_models.append('double')
+
                         for precision_model in precision_models:
                             # Set precision.
                             if platform_name == 'CUDA':
