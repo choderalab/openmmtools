@@ -271,63 +271,63 @@ def main():
             except Exception as e:
                 print(e)
 
-            if test_success:
-                tests_passed += 1
-            else:
-                tests_failed += 1
+        if test_success:
+            tests_passed += 1
+        else:
+            tests_failed += 1
 
-            if (test_success is False):
-                # Write XML files of failed tests to aid in debugging.
-                print("Writing failed test system to '%s'.{system,state}.xml ..." % testsystem.name)
-                [system_xml, state_xml] = testsystem.serialize()
-                xml_file = open(testsystem.name + '.system.xml', 'w')
-                xml_file.write(system_xml)
-                xml_file.close()
-                xml_file = open(testsystem.name + '.state.xml', 'w')
-                xml_file.write(state_xml)
-                xml_file.close()
+        if (test_success is False):
+            # Write XML files of failed tests to aid in debugging.
+            print("Writing failed test system to '%s'.{system,state}.xml ..." % testsystem.name)
+            [system_xml, state_xml] = testsystem.serialize()
+            xml_file = open(testsystem.name + '.system.xml', 'w')
+            xml_file.write(system_xml)
+            xml_file.close()
+            xml_file = open(testsystem.name + '.state.xml', 'w')
+            xml_file.write(state_xml)
+            xml_file.close()
 
-                # Test by force group.
-                print("Breakdown of discrepancies by Force component:")
-                nforces = system.getNumForces()
-                for force_index in range(nforces):
-                    force_name = system.getForce(force_index).__class__.__name__
-                    print(force_name)
-                    [reference_potential, reference_force] = compute_potential_and_force_by_force_index(system, positions, reference_platform, force_index)
-                    print("%16s%16s %16s          %16s          %16s          %16s" % ("platform", "precision", "potential", "error", "force mag", "rms error"))
+            # Test by force group.
+            print("Breakdown of discrepancies by Force component:")
+            nforces = system.getNumForces()
+            for force_index in range(nforces):
+                force_name = system.getForce(force_index).__class__.__name__
+                print(force_name)
+                [reference_potential, reference_force] = compute_potential_and_force_by_force_index(system, positions, reference_platform, force_index)
+                print("%16s%16s %16s          %16s          %16s          %16s" % ("platform", "precision", "potential", "error", "force mag", "rms error"))
 
-                    for platform_index in range(openmm.Platform.getNumPlatforms()):
-                        try:
-                            platform = openmm.Platform.getPlatform(platform_index)
-                            platform_name = platform.getName()
-
-                            for precision_model in precision_models:
-                                # Set precision.
-                                if platform_name == 'CUDA':
-                                    platform.setPropertyDefaultValue('CudaPrecision', precision_model)
-                                if platform_name == 'OpenCL':
-                                    platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
+                for platform_index in range(openmm.Platform.getNumPlatforms()):
+                    try:
+                        platform = openmm.Platform.getPlatform(platform_index)
+                        platform_name = platform.getName()
+                        
+                        for precision_model in precision_models:
+                            # Set precision.
+                            if platform_name == 'CUDA':
+                                platform.setPropertyDefaultValue('CudaPrecision', precision_model)
+                            if platform_name == 'OpenCL':
+                                platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
                                 
-                                # Compute potential and force.
-                                [platform_potential, platform_force] = compute_potential_and_force_by_force_index(system, positions, platform, force_index)
+                            # Compute potential and force.
+                            [platform_potential, platform_force] = compute_potential_and_force_by_force_index(system, positions, platform, force_index)
 
-                                # Compute error in potential.
-                                potential_error = platform_potential - reference_potential
+                            # Compute error in potential.
+                            potential_error = platform_potential - reference_potential
 
-                                # Compute per-atom RMS (magnitude) and RMS error in force.
-                                force_unit = units.kilocalories_per_mole / units.nanometers
-                                natoms = system.getNumParticles()
-                                force_mse = (((reference_force - platform_force) / force_unit)**2).sum() / natoms * force_unit**2
-                                force_rmse = units.sqrt(force_mse)
+                            # Compute per-atom RMS (magnitude) and RMS error in force.
+                            force_unit = units.kilocalories_per_mole / units.nanometers
+                            natoms = system.getNumParticles()
+                            force_mse = (((reference_force - platform_force) / force_unit)**2).sum() / natoms * force_unit**2
+                            force_rmse = units.sqrt(force_mse)
 
-                                force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
-                                force_rms = units.sqrt(force_ms)
+                            force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
+                            force_rms = units.sqrt(force_ms)
 
-                                print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
+                            print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
 
-                        except Exception as e:
-                            print(e)
-                            pass
+                    except Exception as e:
+                        print(e)
+                        pass
         print("")
 
     print("%d tests failed" % tests_failed)
