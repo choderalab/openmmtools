@@ -301,6 +301,7 @@ def main():
                         print("%32s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
 
                     except Exception as e:
+                        print(e)
                         pass
         print("")
 
