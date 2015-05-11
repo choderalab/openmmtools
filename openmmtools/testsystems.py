@@ -2682,7 +2682,7 @@ class SrcImplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-implicit/implicit-refined.pdb")
+        pdb_filename = get_data_filename("data/src-implicit/2src-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
@@ -2700,7 +2700,7 @@ class SrcImplicit(TestSystem):
 #=============================================================================================
 
 class SrcExplicit(TestSystem):
-    """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent.
+    """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using PME electrostatics.
 
     Parameters
     ----------
@@ -2717,7 +2717,7 @@ class SrcExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-explicit/src-explicit.pdb")
+        pdb_filename = get_data_filename("data/src-explicit/2src-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
@@ -2729,6 +2729,26 @@ class SrcExplicit(TestSystem):
         positions = pdbfile.getPositions()
 
         self.system, self.positions, self.topology = system, positions, pdbfile.topology
+
+class SrcExplicitReactionField(SrcExplicit):
+   """
+   Flexible water box.
+
+   """
+
+   def __init__(self, *args, **kwargs):
+       """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using reaction field electrostatics.
+       
+       Parameters are inherited from SrcExplicit (except for 'nonbondedMethod').
+              
+       Examples
+       --------
+       
+       >>> src = SrcExplicitReactionField()
+       >>> system, positions = src.system, src.positions
+       
+       """
+       super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 #=============================================================================================
 # Methanol box.
@@ -3133,7 +3153,7 @@ class AlchemicalTestSystem(object):
         energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
         energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
         energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-        energy_expression += "lambda = lennard_jones_lambda;" # lambda
+        energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;" # lambda
 
         # Create atom groups.
         atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
