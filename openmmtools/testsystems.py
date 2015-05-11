@@ -2622,7 +2622,7 @@ class SrcImplicit(TestSystem):
 #=============================================================================================
 
 class SrcExplicit(TestSystem):
-    """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent.
+    """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using PME electrostatics.
 
     Parameters
     ----------
@@ -2651,6 +2651,26 @@ class SrcExplicit(TestSystem):
         positions = pdbfile.getPositions()
 
         self.system, self.positions, self.topology = system, positions, pdbfile.topology
+
+class SrcExplicitReactionField(SrcExplicit):
+   """
+   Flexible water box.
+
+   """
+
+   def __init__(self, *args, **kwargs):
+       """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using reaction field electrostatics.
+       
+       Parameters are inherited from SrcExplicit (except for 'nonbondedMethod').
+              
+       Examples
+       --------
+       
+       >>> src = SrcExplicitReactionField()
+       >>> system, positions = src.system, src.positions
+       
+       """
+       super(SrcExplicit, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 #=============================================================================================
 # Methanol box.
