@@ -2670,7 +2670,7 @@ class SrcExplicitReactionField(SrcExplicit):
        >>> system, positions = src.system, src.positions
        
        """
-       super(SrcExplicit, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
+       super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 #=============================================================================================
 # Methanol box.

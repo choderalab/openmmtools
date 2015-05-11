@@ -266,6 +266,7 @@ def main():
     testsystem_classes = get_all_subclasses(testsystems.TestSystem)
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
+
         try:
             testsystem = testsystem_class()
         except ImportError as e:
