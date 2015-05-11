@@ -173,6 +173,45 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
 
     return [potential, force]
 
+def compute_potential_and_force_by_force_group(system, positions, platform, force_group):
+    """
+    Compute the energy and force for the given system and positions in the designated platform for the given force group.
+
+    ARGUMENTS
+
+    system (simtk.openmm.System) - the system for which the energy is to be computed
+    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    force_group (int) - index of force group to be computed (all others ignored)
+
+    RETURNS
+
+    potential (simtk.unit.Quantity in energy/mole) - the potential
+    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+
+    """
+
+    forces = [ system.getForce(index) for index in range(system.getNumForces()) ]
+
+    # Create a Context.
+    kB = units.BOLTZMANN_CONSTANT_kB
+    temperature = 298.0 * units.kelvin
+    kT = kB * temperature
+    beta = 1.0 / kT
+    collision_rate = 90.0 / units.picosecond
+    timestep = 1.0 * units.femtosecond
+    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
+    context = openmm.Context(system, integrator, platform)
+    # Set positions
+    context.setPositions(positions)
+    # Evaluate the potential energy.
+    groupmask = 1 << (force_group + 1)
+    state = context.getState(getEnergy=True, getForces=True, groups=groupmask)
+    potential = state.getPotentialEnergy()
+    force = state.getForces(asNumpy=True)
+
+    return [potential, force]
+
 #=============================================================================================
 # MAIN AND TESTS
 #=============================================================================================
@@ -216,6 +255,26 @@ def main():
         [system, positions] = [testsystem.system, testsystem.positions]
         [reference_potential, reference_force] = compute_potential_and_force(system, positions, reference_platform)
 
+        # Place forces into different force groups.
+        forces = [ system.getForce(force_index) for force_index in range(system.getNumForces()) ]
+        force_group_names = dict()
+        group_index = 0
+        for force_index in range(system.getNumForces()):
+            force_name = forces[force_index].__class__.__name__
+            if force_name == 'NonbondedForce':
+                forces[force_index].setForceGroup(group_index+1)
+                force_group_names[group_index] = 'NonbondedForce (direct)'
+                group_index += 1
+                forces[force_index].setReciprocalSpaceForceGroup(group_index+1)
+                force_group_names[group_index] = 'NonbondedForce (reciprocal)'
+                group_index += 1
+            else:
+                forces[force_index].setForceGroup(group_index+1)
+                force_group_names[group_index] = force_name
+                group_index += 1
+        ngroups = len(force_group_names)
+
+        # Test all platforms.
         test_success = True
         for platform_index in range(openmm.Platform.getNumPlatforms()):
             try:
@@ -290,10 +349,10 @@ def main():
             # Test by force group.
             print("Breakdown of discrepancies by Force component:")
             nforces = system.getNumForces()
-            for force_index in range(nforces):
-                force_name = system.getForce(force_index).__class__.__name__
+            for force_group in range(ngroups):
+                force_name = force_group_names[force_group]
                 print(force_name)
-                [reference_potential, reference_force] = compute_potential_and_force_by_force_index(system, positions, reference_platform, force_index)
+                [reference_potential, reference_force] = compute_potential_and_force_by_force_group(system, positions, reference_platform, force_group)
                 print("%16s%16s %16s          %16s          %16s          %16s" % ("platform", "precision", "potential", "error", "force mag", "rms error"))
 
                 for platform_index in range(openmm.Platform.getNumPlatforms()):
@@ -309,7 +368,7 @@ def main():
                                 platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
                                 
                             # Compute potential and force.
-                            [platform_potential, platform_force] = compute_potential_and_force_by_force_index(system, positions, platform, force_index)
+                            [platform_potential, platform_force] = compute_potential_and_force_by_force_group(system, positions, platform, force_group)
 
                             # Compute error in potential.
                             potential_error = platform_potential - reference_potential
