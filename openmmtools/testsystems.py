@@ -433,6 +433,58 @@ class TestSystem(object):
         """The name of the test system."""
         return self.__class__.__name__
 
+
+class CustomExternalForcesTestSystem(TestSystem):
+    """Create a system with an arbitrary number of CustomExternalForces.
+
+    Parameters
+    ----------
+    energy_expressions : tuple(string)
+        Each string in the tuple will add a CustomExternalForce to the
+        OpenMM system.  Each force will be assigned a different force
+        group, starting with 0.  By default this will be a 3D harmonic oscillator.
+    mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
+        particle mass.  Default corresponds to argon.
+    n_particles : int, optional, default=500
+        Number of (identical) particles to add.
+    
+    Notes
+    -----
+    This may be useful for testing multiple timestep integrators.
+    """
+    def __init__(self, energy_expressions=("x^2 + y^2 + z^2",), mass=39.948 * unit.amu, n_particles=500, **kwargs):
+        TestSystem.__init__(self, **kwargs)
+
+        system = openmm.System()
+
+        for n in range(n_particles):
+            system.addParticle(mass)
+
+        positions = unit.Quantity(np.zeros([n_particles, 3], np.float32), unit.angstroms)
+
+        forces = [openmm.CustomExternalForce(energy_expression) for energy_expression in energy_expressions]
+        
+        for i, force in enumerate(forces):
+            for n in range(n_particles):
+                parameters = ()
+                force.addParticle(n, parameters)
+            force.setForceGroup(i)
+            system.addForce(force)
+
+        # Create topology.
+        topology = app.Topology()
+        element = app.Element.getBySymbol('Ar')
+        chain = topology.addChain()
+        for particle in range(n_particles):
+            residue = topology.addResidue('Ar', chain)
+            topology.addAtom('Ar', element, residue)
+
+        self.topology = topology
+        self.system, self.positions = system, positions
+        self.n_particles = n_particles
+        self.mass = mass
+        self.ndof = 3 * n_particles   
+
 #=============================================================================================
 # 3D harmonic oscillator
 #=============================================================================================
@@ -1380,6 +1432,12 @@ class LennardJonesCluster(TestSystem):
         number of particles in the z direction
     K : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
         harmonic restraining potential
+    cutoff : simtk.unit.Quantity, optional, default=None
+        If None, will use NoCutoff for the NonbondedForce.  Otherwise,
+        use CutoffNonPeriodic with the specified cutoff.  
+    switch_width : simtk.unit.Quantity, optional, default=None
+        If None, the cutoff is a hard cutoff.  If switch_width is specified,
+        use a switching function with this width.  
 
     Examples
     --------
@@ -1394,7 +1452,7 @@ class LennardJonesCluster(TestSystem):
     >>> cluster = LennardJonesCluster(nx=10, ny=10, nz=10)
     >>> system, positions = cluster.system, cluster.positions
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, **kwargs):
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, cutoff=None, switch_width=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1414,9 +1472,19 @@ class LennardJonesCluster(TestSystem):
         # Create an empty system object.
         system = openmm.System()
 
-        # Create a NonbondedForce object with no cutoff.
+        # Create a nonperiodic NonbondedForce object.
         nb = openmm.NonbondedForce()
-        nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
+        
+        if cutoff is None:
+            nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
+        else:
+            nb.setNonbondedMethod(openmm.NonbondedForce.CutoffNonPeriodic)
+            nb.setCutoffDistance(cutoff)
+            nb.setUseDispersionCorrection(False)
+            nb.setUseSwitchingFunction(False)
+            if switch_width is not None:
+                nb.setUseSwitchingFunction(True)
+                nb.setSwitchingDistance(cutoff - switch_width)             
 
         positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
 
