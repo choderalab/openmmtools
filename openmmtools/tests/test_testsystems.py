@@ -141,7 +141,6 @@ def test_energy_all_testsystems(skip_slow_tests=False):
     """Testing computation of potential energy for all systems.
     """
     testsystem_classes = get_all_subclasses(testsystems.TestSystem)
-
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
         if skip_slow_tests and not (class_name in fast_testsystems):
