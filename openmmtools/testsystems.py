@@ -1552,10 +1552,10 @@ class LennardJonesFluid(TestSystem):
     epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
         Lennard-Jones well depth; default is appropriate for argon
     cutoff : simtk.unit.Quantity, optional, default=None
-        Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+        Cutoff for nonbonded interactions.  If None, defaults to 3.0 * sigma
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=3.4*unit.angstrom
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1574,7 +1574,7 @@ class LennardJonesFluid(TestSystem):
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
-    >>> fluid = LennardJonesFluid(switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
+    >>> fluid = LennardJonesFluid(switch_width=2.0*unit.angstroms, cutoff=9.0*unit.angstroms)
     >>> system, positions = fluid.system, fluid.positions
     """
 
@@ -1585,7 +1585,7 @@ class LennardJonesFluid(TestSystem):
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
         cutoff=None,
-        switch_width=0.2*unit.angstrom,
+        switch_width=3.4*unit.angstrom,
         dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1640,6 +1640,27 @@ class LennardJonesFluid(TestSystem):
         self.topology = topology
 
         self.system, self.positions = system, positions
+
+class LennardJonesFluidTruncated(LennardJonesFluid):
+   """
+   Lennard-Jones fluid with truncated (instead of switched) potential.
+
+   """
+
+   def __init__(self, *args, **kwargs):
+       """
+       Create Lennard-Jones fluid with truncated potential.
+
+       Parameters are inherited from LennardJonesFluid (except for 'switch_width').
+
+       Examples
+       --------
+
+       >>> fluid = LennardJonesFluidTruncated()
+       >>> [system, positions] = [fluid.system, fluid.positions]
+
+       """
+       super(LennardJonesFluidTruncated, self).__init__(switch_width=None, *args, **kwargs)
 
 #=============================================================================================
 # Lennard-Jones grid
