@@ -10,6 +10,30 @@ from openmmtools import testsystems
 
 from functools import partial
 
+def get_all_subclasses(cls):
+    """
+    Return all subclasses of a specified class.
+
+    Parameters
+    ----------
+    cls : class
+       The class for which all subclasses are to be returned.
+
+    Returns
+    -------
+    all_subclasses : list of class
+       List of all subclasses of `cls`.
+
+    """
+
+    all_subclasses = []
+
+    for subclass in cls.__subclasses__():
+        all_subclasses.append(subclass)
+        all_subclasses.extend(get_all_subclasses(subclass))
+
+    return all_subclasses
+
 def test_get_data_filename():
     """Testing retrieval of data files shipped with distro.
     """
@@ -116,10 +140,7 @@ def check_potential_energy(system, positions):
 def test_energy_all_testsystems(skip_slow_tests=False):
     """Testing computation of potential energy for all systems.
     """
-    def all_subclasses(cls):
-        """Return list of all subclasses and subsubclasses for a given class."""
-        return cls.__subclasses__() + [s for s in cls.__subclasses__()]
-    testsystem_classes = all_subclasses(testsystems.TestSystem)
+    testsystem_classes = get_all_subclasses(testsystems.TestSystem)
 
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
@@ -155,10 +176,7 @@ def check_topology(system, topology):
 def test_topology_all_testsystems():
     """Testing topology contains correct number of atoms for all systems.
     """
-    def all_subclasses(cls):
-        """Return list of all subclasses and subsubclasses for a given class."""
-        return cls.__subclasses__() + [s for s in cls.__subclasses__()]
-    testsystem_classes = all_subclasses(testsystems.TestSystem)
+    testsystem_classes = get_all_subclasses(testsystems.TestSystem)
 
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
