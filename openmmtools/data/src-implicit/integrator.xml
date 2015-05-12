@@ -1,0 +1,2 @@
+<?xml version="1.0" ?>
+<Integrator constraintTolerance="1e-05" stepSize=".001" type="VerletIntegrator" version="1"/>

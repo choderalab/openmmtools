@@ -1552,10 +1552,10 @@ class LennardJonesFluid(TestSystem):
     epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
         Lennard-Jones well depth; default is appropriate for argon
     cutoff : simtk.unit.Quantity, optional, default=None
-        Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+        Cutoff for nonbonded interactions.  If None, defaults to 3.0 * sigma
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=3.4 * unit.angstrom
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1574,7 +1574,7 @@ class LennardJonesFluid(TestSystem):
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
-    >>> fluid = LennardJonesFluid(switch_width=7.0*unit.angstroms, cutoff=9.0*unit.angstroms)
+    >>> fluid = LennardJonesFluid(switch_width=2.0*unit.angstroms, cutoff=9.0*unit.angstroms)
     >>> system, positions = fluid.system, fluid.positions
     """
 
@@ -1585,7 +1585,7 @@ class LennardJonesFluid(TestSystem):
         sigma=3.4 * unit.angstrom, # argon,
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
         cutoff=None,
-        switch_width=0.2*unit.angstrom,
+        switch_width=3.4 * unit.angstrom, # argon
         dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1640,6 +1640,48 @@ class LennardJonesFluid(TestSystem):
         self.topology = topology
 
         self.system, self.positions = system, positions
+
+class LennardJonesFluidTruncated(LennardJonesFluid):
+   """
+   Lennard-Jones fluid with truncated potential (instead of switched).
+
+   """
+
+   def __init__(self, *args, **kwargs):
+       """
+       Create a Lennard-Jones fluid with truncated potential.
+
+       Parameters are inherited from LennardJonesFluid (except for 'switch_width').
+
+       Examples
+       --------
+
+       >>> testsystem = LennardJonesFluidTruncated()
+       >>> [system, positions] = [testsystem.system, testsystem.positions]
+
+       """
+       super(LennardJonesFluidTruncated, self).__init__(switch_width=None, *args, **kwargs)
+
+class LennardJonesFluidSwitched(LennardJonesFluid):
+   """
+   Lennard-Jones fluid with switched potential (instead of truncated).
+
+   """
+
+   def __init__(self, *args, **kwargs):
+       """
+       Create a Lennard-Jones fluid with switched potential.
+
+       Parameters are inherited from LennardJonesFluid (except for 'switch_width').
+
+       Examples
+       --------
+
+       >>> testsystem = LennardJonesFluidSwitched()
+       >>> [system, positions] = [testsystem.system, testsystem.positions]
+
+       """
+       super(LennardJonesFluidSwitched, self).__init__(switch_width=3.4*unit.angstrom, *args, **kwargs)
 
 #=============================================================================================
 # Lennard-Jones grid
@@ -2682,7 +2724,7 @@ class SrcImplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-implicit/implicit-refined.pdb")
+        pdb_filename = get_data_filename("data/src-implicit/2src-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
@@ -2700,7 +2742,7 @@ class SrcImplicit(TestSystem):
 #=============================================================================================
 
 class SrcExplicit(TestSystem):
-    """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent.
+    """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using PME electrostatics.
 
     Parameters
     ----------
@@ -2717,7 +2759,7 @@ class SrcExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-explicit/src-explicit.pdb")
+        pdb_filename = get_data_filename("data/src-explicit/2src-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
@@ -2729,6 +2771,26 @@ class SrcExplicit(TestSystem):
         positions = pdbfile.getPositions()
 
         self.system, self.positions, self.topology = system, positions, pdbfile.topology
+
+class SrcExplicitReactionField(SrcExplicit):
+   """
+   Flexible water box.
+
+   """
+
+   def __init__(self, *args, **kwargs):
+       """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using reaction field electrostatics.
+       
+       Parameters are inherited from SrcExplicit (except for 'nonbondedMethod').
+              
+       Examples
+       --------
+       
+       >>> src = SrcExplicitReactionField()
+       >>> system, positions = src.system, src.positions
+       
+       """
+       super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 #=============================================================================================
 # Methanol box.
@@ -3133,7 +3195,7 @@ class AlchemicalTestSystem(object):
         energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
         energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
         energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-        energy_expression += "lambda = lennard_jones_lambda;" # lambda
+        energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;" # lambda
 
         # Create atom groups.
         atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
