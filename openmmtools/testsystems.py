@@ -49,14 +49,19 @@ import numpy as np
 import numpy.random
 import math
 import copy
+import itertools
 
 import scipy
 import scipy.special
 import scipy.integrate
 
+import pandas as pd
+
 from simtk import openmm
 from simtk import unit
 from simtk.openmm import app
+
+import mdtraj as md
 
 from .constants import kB
 
@@ -206,6 +211,55 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
         raise Exception("method '%s' must be 'halton' or 'sobol'" % method)
 
     return positions
+
+def build_lattice(n_particles, r, box=None):
+    """Build a HCP lattice with n atoms per dimension and radius r.
+
+    Notes
+    -----
+    Equations from http://en.wikipedia.org/wiki/Close-packing_of_equal_spheres
+    """
+
+    n = (n_particles ** (1 / 3.))
+
+    if np.abs(n - np.round(n)) > 1E-10:
+        raise(ValueError("Must input a cube number of particles!"))
+    else:
+        n = int(np.round(n))
+
+    if box is None:
+        box = r * (n + 1)
+
+    xyz = np.zeros(((2 * n) ** 3, 3))
+    for atom, (i, j, k) in enumerate(itertools.product(np.arange(2 * n), repeat=3)):
+        xyz[atom, 0] = 2 * i + ((j + k) % 2)
+        xyz[atom, 1] = (3 ** 0.5) * (j + (k % 2) / 3.)
+        xyz[atom, 2] = k * (2 / 3.) * 6 ** 0.5
+
+    xyz *= r
+
+    index = (xyz <= box).all(1)
+    xyz = xyz[index]
+
+    return xyz, box
+
+def generate_dummy_trajectory(xyz, box):
+    """Convert xyz coordinates and box vectors into a simple MDTraj topology."""
+    n_atoms = len(xyz)
+    data = []
+
+    for i in range(n_atoms):
+        data.append(dict(serial=i, name="H", element="H", resSeq=i+1, resName="UNK", chainID=0))
+
+    data = pd.DataFrame(data)
+    unitcell_lengths = box * np.ones((1, 3))
+    unitcell_angles = 90 * np.ones((1, 3))
+    top = md.Topology.from_dataframe(data, np.zeros((0, 2), dtype='int'))
+    traj = md.Trajectory(xyz, top, unitcell_lengths=unitcell_lengths, unitcell_angles=unitcell_angles)
+
+    return traj
+
+
 
 #=============================================================================================
 # Thermodynamic state description
@@ -379,14 +433,14 @@ class TestSystem(object):
 
     def reduced_potential_expectation(self, state_sampled_from, state_evaluated_in):
         """Calculate the expected potential energy in state_sampled_from, divided by kB * T in state_evaluated_in.
-        
+
         Notes
         -----
-        
+
         This is not called get_reduced_potential_expectation because this function
         requires two, not one, inputs.
         """
-        
+
         if hasattr(self, "get_potential_expectation"):
             U = self.get_potential_expectation(state_sampled_from)
             U_red = U / (kB * state_evaluated_in.temperature)
@@ -399,17 +453,17 @@ class TestSystem(object):
 
         Returns
         -------
-        
+
         system_xml : str
             Serialized XML form of System object.
-            
+
         state_xml : str
             Serialized XML form of State object containing particle positions.
 
         """
 
         from simtk.openmm import XmlSerializer
-        
+
         # Serialize System.
         system_xml = XmlSerializer.serialize(self._system)
 
@@ -447,7 +501,7 @@ class CustomExternalForcesTestSystem(TestSystem):
         particle mass.  Default corresponds to argon.
     n_particles : int, optional, default=500
         Number of (identical) particles to add.
-    
+
     Notes
     -----
     This may be useful for testing multiple timestep integrators.
@@ -463,7 +517,7 @@ class CustomExternalForcesTestSystem(TestSystem):
         positions = unit.Quantity(np.zeros([n_particles, 3], np.float32), unit.angstroms)
 
         forces = [openmm.CustomExternalForce(energy_expression) for energy_expression in energy_expressions]
-        
+
         for i, force in enumerate(forces):
             for n in range(n_particles):
                 parameters = ()
@@ -483,7 +537,7 @@ class CustomExternalForcesTestSystem(TestSystem):
         self.system, self.positions = system, positions
         self.n_particles = n_particles
         self.mass = mass
-        self.ndof = 3 * n_particles   
+        self.ndof = 3 * n_particles
 
 #=============================================================================================
 # 3D harmonic oscillator
@@ -989,8 +1043,8 @@ class DiatomicFluid(TestSystem):
         nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nb.setUseDispersionCorrection(dispersion_correction)
         nb.setCutoffDistance(cutoff)
-        
-        nb.setUseSwitchingFunction(False)        
+
+        nb.setUseSwitchingFunction(False)
         if switch_width is not None:
             nb.setUseSwitchingFunction(True)
             nb.setSwitchingDistance(cutoff - switch_width)
@@ -1039,7 +1093,7 @@ class UnconstrainedDiatomicFluid(DiatomicFluid):
 
     >>> test = UnconstrainedDiatomicFluid()
     >>> system, positions = test.system, test.positions
-    
+
     """
     def __init__(self, *args, **kwargs):
        super(UnconstrainedDiatomicFluid, self).__init__(constraint=False, *args, **kwargs)
@@ -1053,7 +1107,7 @@ class ConstrainedDiatomicFluid(DiatomicFluid):
 
     >>> test = ConstrainedDiatomicFluid()
     >>> system, positions = test.system, test.positions
-    
+
     """
     def __init__(self, *args, **kwargs):
        super(ConstrainedDiatomicFluid, self).__init__(constraint=True, *args, **kwargs)
@@ -1067,7 +1121,7 @@ class DipolarFluid(DiatomicFluid):
 
     >>> test = DipolarFluid()
     >>> system, positions = test.system, test.positions
-    
+
     """
     def __init__(self, *args, **kwargs):
        super(DipolarFluid, self).__init__(charge=0.25*unit.elementary_charge, *args, **kwargs)
@@ -1319,7 +1373,7 @@ class SodiumChlorideCrystal(TestSystem):
 
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1436,10 +1490,10 @@ class LennardJonesCluster(TestSystem):
         harmonic restraining potential
     cutoff : simtk.unit.Quantity, optional, default=None
         If None, will use NoCutoff for the NonbondedForce.  Otherwise,
-        use CutoffNonPeriodic with the specified cutoff.  
+        use CutoffNonPeriodic with the specified cutoff.
     switch_width : simtk.unit.Quantity, optional, default=None
         If None, the cutoff is a hard cutoff.  If switch_width is specified,
-        use a switching function with this width.  
+        use a switching function with this width.
 
     Examples
     --------
@@ -1476,7 +1530,7 @@ class LennardJonesCluster(TestSystem):
 
         # Create a nonperiodic NonbondedForce object.
         nb = openmm.NonbondedForce()
-        
+
         if cutoff is None:
             nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
         else:
@@ -1486,7 +1540,7 @@ class LennardJonesCluster(TestSystem):
             nb.setUseSwitchingFunction(False)
             if switch_width is not None:
                 nb.setUseSwitchingFunction(True)
-                nb.setSwitchingDistance(cutoff - switch_width)             
+                nb.setSwitchingDistance(cutoff - switch_width)
 
         positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
 
@@ -1561,6 +1615,8 @@ class LennardJonesFluid(TestSystem):
         If True, will shift Lennard-Jones potential so energy will be continuous at cutoff (switch_width is ignored).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
+    hcp : bool, optional, default=False
+        If True, use a hcp (A-B) sphere packing to generate initial positions.
 
     Examples
     --------
@@ -1596,7 +1652,9 @@ class LennardJonesFluid(TestSystem):
         cutoff=None,
         switch_width=3.4 * unit.angstrom, # argon
         shift=False,
-        dispersion_correction=True, **kwargs):
+        dispersion_correction=True,
+        hcp=False,
+        **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1645,9 +1703,15 @@ class LennardJonesFluid(TestSystem):
                 cnb.addParticle([])
             system.addForce(cnb)
 
-        # Create initial coordinates using subrandom positions.
-        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
 
+        if hcp:
+            box_nm = box_edge / unit.nanometers
+            r = (box_nm) / (nparticles ** (1 / 3.) + 1)
+            xyz, box = build_lattice(nparticles, r)
+            traj = generate_dummy_trajectory(xyz, box_nm)
+            positions = traj.openmm_positions(0)
+        else:  # Create initial coordinates using subrandom positions.
+            positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
         # Add the nonbonded force.
         system.addForce(nb)
 
@@ -1727,7 +1791,7 @@ class LennardJonesGrid(LennardJonesFluid):
         Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1812,7 +1876,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
         Cutoff for nonbonded interactions.  If None, defaults to 3 * sigma
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1888,7 +1952,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
         if switch_width is not None:
             nb.setUseSwitchingFunction(True)
             nb.setSwitchingDistance(cutoff - switch_width)
-        
+
         system.addForce(nb)
 
         # Set up periodic nonbonded interactions with a cutoff.
@@ -1902,12 +1966,12 @@ class CustomLennardJonesFluidMixture(TestSystem):
         cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
         cnb.setUseLongRangeCorrection(dispersion_correction)
         cnb.setCutoffDistance(cutoff)
-        
+
         cnb.setUseSwitchingFunction(False)
         if switch_width is not None:
             cnb.setUseSwitchingFunction(True)
             cnb.setSwitchingDistance(cutoff - switch_width)
-        
+
         system.addForce(cnb)
 
         # Add particles to system.
@@ -2235,10 +2299,10 @@ class WaterBox(TestSystem):
    def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
        """
        Create a water box test system.
-       
+
        Parameters
        ----------
-       
+
        box_edge : simtk.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
           Edge length for cubic box [should be greater than 2*cutoff]
        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.9 nm
@@ -2256,26 +2320,26 @@ class WaterBox(TestSystem):
 
        Examples
        --------
-       
+
        Create a default waterbox.
-       
+
        >>> waterbox = WaterBox()
        >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
+
        Use reaction-field electrostatics instead.
 
        >>> waterbox = WaterBox(nonbondedMethod=app.CutoffPeriodic)
 
        Control the cutoff.
-       
+
        >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
+
        Use a different water model.
-       
+
        >>> waterbox = WaterBox(model='spce')
 
        Use a five-site water model.
-       
+
        >>> waterbox = WaterBox(model='tip5p')
 
        Turn off the switch function.
@@ -2324,12 +2388,12 @@ class WaterBox(TestSystem):
 
        # Set switching function and dispersion correction.
        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-       
+
        forces['NonbondedForce'].setUseSwitchingFunction(False)
        if switch_width is not None:
            forces['NonbondedForce'].setUseSwitchingFunction(True)
            forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
-       
+
        forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
 
        self.ndof = 3*system.getNumParticles() - 3*constrained
@@ -2347,17 +2411,17 @@ class FlexibleWaterBox(WaterBox):
    def __init__(self, *args, **kwargs):
        """
        Create a flexible water box.
-       
+
        Parameters are inherited from WaterBox (except for 'constrained').
-              
+
        Examples
        --------
-       
+
        Create a default flexible waterbox.
-       
+
        >>> waterbox = FlexibleWaterBox()
        >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
+
        """
        super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
 
@@ -2370,21 +2434,21 @@ class FourSiteWaterBox(WaterBox):
    def __init__(self, *args, **kwargs):
        """
        Create a water box test systemm using a four-site water model (TIP4P-Ew).
-              
+
        Parameters are inherited from WaterBox (except for 'model').
 
        Examples
        --------
-       
+
        Create a default waterbox.
-       
+
        >>> waterbox = FourSiteWaterBox()
        >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
+
        Control the cutoff.
-       
+
        >>> waterbox = FourSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
+
        """
        super(FourSiteWaterBox, self).__init__(model='tip4pew', *args, **kwargs)
 
@@ -2397,21 +2461,21 @@ class FiveSiteWaterBox(WaterBox):
    def __init__(self, *args, **kwargs):
        """
        Create a water box test systemm using a five-site water model (TIP5P).
-       
+
        Parameters are inherited from WaterBox (except for 'model').
-       
+
        Examples
        --------
-       
+
        Create a default waterbox.
-       
+
        >>> waterbox = FiveSiteWaterBox()
        >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
+
        Control the cutoff.
-       
+
        >>> waterbox = FiveSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
+
        """
        super(FiveSiteWaterBox, self).__init__(model='tip5p', *args, **kwargs)
 
@@ -2424,21 +2488,21 @@ class DischargedWaterBox(WaterBox):
    def __init__(self, *args, **kwargs):
        """
        Create a water box test systemm using a four-site water model (TIP4P-Ew).
-       
+
        Parameters are inherited from WaterBox.
-       
+
        Examples
        --------
-       
+
        Create a default waterbox.
-       
+
        >>> waterbox = DischargedWaterBox()
        >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
+
        Control the cutoff.
-       
+
        >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
+
        """
        super(DischargedWaterBox, self).__init__(*args, **kwargs)
 
@@ -2452,7 +2516,7 @@ class DischargedWaterBox(WaterBox):
        for index in range(force.getNumExceptions()):
            [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
            force.setExceptionParameters(index, particle1, particle2, 0*chargeProd, sigma, epsilon)
-           
+
        return
 
 class DischargedWaterBoxHsites(WaterBox):
@@ -2464,21 +2528,21 @@ class DischargedWaterBoxHsites(WaterBox):
    def __init__(self, *args, **kwargs):
        """
        Create a water box with zeroed charges and Lennard-Jones sites on hydrogens.
-       
+
        Parameters are inherited from WaterBox.
-       
+
        Examples
        --------
-       
+
        Create a default waterbox.
-       
+
        >>> waterbox = DischargedWaterBox()
        >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
+
        Control the cutoff.
-       
+
        >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
+
        """
        super(DischargedWaterBoxHsites, self).__init__(*args, **kwargs)
 
@@ -2499,7 +2563,7 @@ class DischargedWaterBoxHsites(WaterBox):
            chargeProd *= 0
            epsilon *= 0
            force.setExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon)
-           
+
        return
 
 #=============================================================================================
@@ -2508,14 +2572,14 @@ class DischargedWaterBoxHsites(WaterBox):
 
 class AlanineDipeptideVacuum(TestSystem):
     """Alanine dipeptide ff96 in vacuum.
-    
+
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
-    
+
     Examples
     --------
-    
+
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideVacuum()
     >>> (system, positions) = alanine.system, alanine.positions
@@ -2546,14 +2610,14 @@ class AlanineDipeptideVacuum(TestSystem):
 
 class AlanineDipeptideImplicit(TestSystem):
     """Alanine dipeptide ff96 in OBC GBSA implicit solvent.
-    
+
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
-    
+
     Examples
     --------
-    
+
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideImplicit()
     >>> (system, positions) = alanine.system, alanine.positions
@@ -2596,7 +2660,7 @@ class AlanineDipeptideExplicit(TestSystem):
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
-        If set, will pass along a modified hydrogen mass for OpenMM to 
+        If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
 
     Examples
@@ -2652,15 +2716,15 @@ class DHFRExplicit(TestSystem):
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
-        If set, will pass along a modified hydrogen mass for OpenMM to 
-        use mass repartitioning.       
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
 
     """
 
     def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
-        
+
         try:
             import chemistry
             from chemistry.amber.openmmloader import AmberParm
@@ -2801,15 +2865,15 @@ class SrcExplicitReactionField(SrcExplicit):
 
    def __init__(self, *args, **kwargs):
        """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using reaction field electrostatics.
-       
+
        Parameters are inherited from SrcExplicit (except for 'nonbondedMethod').
-              
+
        Examples
        --------
-       
+
        >>> src = SrcExplicitReactionField()
        >>> system, positions = src.system, src.positions
-       
+
        """
        super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
