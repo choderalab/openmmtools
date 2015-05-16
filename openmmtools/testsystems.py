@@ -871,7 +871,7 @@ class DiatomicFluid(TestSystem):
         if specified, the specified cutoff will be used; otherwise, 3.0 * sigma will be used
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1556,6 +1556,9 @@ class LennardJonesFluid(TestSystem):
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=3.4 * unit.angstrom
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
+        Ignored if `shift=True`.
+    shift : bool, optional, default=False
+        If True, will shift Lennard-Jones potential so energy will be continuous at cutoff (switch_width is ignored).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1576,6 +1579,12 @@ class LennardJonesFluid(TestSystem):
 
     >>> fluid = LennardJonesFluid(switch_width=2.0*unit.angstroms, cutoff=9.0*unit.angstroms)
     >>> system, positions = fluid.system, fluid.positions
+
+    Create Lennard-Jones fluid using shifted potential.
+
+    >>> fluid = LennardJonesFluid(cutoff=9.0*unit.angstroms, shift=True)
+    >>> system, positions = fluid.system, fluid.positions
+
     """
 
     def __init__(self,
@@ -1586,6 +1595,7 @@ class LennardJonesFluid(TestSystem):
         epsilon=0.238 * unit.kilocalories_per_mole, # argon,
         cutoff=None,
         switch_width=3.4 * unit.angstrom, # argon
+        shift=False,
         dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1616,13 +1626,24 @@ class LennardJonesFluid(TestSystem):
         nb.setUseDispersionCorrection(dispersion_correction)
 
         nb.setUseSwitchingFunction(False)
-        if switch_width is not None:
+        if (switch_width!=None) and (not shift):
             nb.setUseSwitchingFunction(True)
             nb.setSwitchingDistance(cutoff - switch_width)
 
         for particle_index in range(nparticles):
             system.addParticle(mass)
             nb.addParticle(charge, sigma, epsilon)
+
+        # Add shift if desired.
+        if (shift):
+            shift_potential = - 4*epsilon*((sigma/cutoff)**12 - (sigma/cutoff)**6) # amount by which potential is to be shifted
+            cnb = openmm.CustomNonbondedForce('%f' % in_openmm_units(shift_potential))
+            cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+            cnb.setUseSwitchingFunction(False)
+            cnb.setCutoffDistance(cutoff)
+            for particle_index in range(nparticles):
+                cnb.addParticle([])
+            system.addForce(cnb)
 
         # Create initial coordinates using subrandom positions.
         positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
