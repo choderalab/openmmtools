@@ -19,6 +19,7 @@ import numpy
 from simtk import unit
 from simtk import openmm
 from openmmtools import integrators, testsystems
+from functools import partial
 
 #=============================================================================================
 # CONSTANTS
@@ -87,8 +88,9 @@ def test_bitwise_reversible_velocity_verlet():
       testsystems.AlanineDipeptideExplicit(constraints=None)
       ]
    for testsystem in testsystem_list:
-      check_bitwise_reversible_velocity_verlet.description = "Testing bitwise reversible velocity Verlet integration with %s" % testsystem.__class__.__name__
-      yield check_bitwise_reversible_velocity_verlet, testsystem
+      f = partial(check_bitwise_reversible_velocity_verlet, testsystem)
+      f.description = "Testing bitwise reversible velocity Verlet integration with %s" % testsystem.__class__.__name__
+      yield f
 
    return
 
@@ -145,8 +147,9 @@ def test_stabilities_harmonic_oscillator():
       if re.match('.*Integrator$', methodname):
          integrator = getattr(integrators, methodname)()
          integrator.__doc__ = methodname
-         check_stability.description = "Testing %s for stability over a short number of integration steps of a harmonic oscillator." % methodname
-         yield check_stability, integrator, test
+         f = partial(check_stability, integrator, test)
+         f.description = "Testing %s for stability over a short number of integration steps of a harmonic oscillator." % methodname
+         yield f
 
 def test_stabilities_alanine_dipeptide():
    """
@@ -159,8 +162,9 @@ def test_stabilities_alanine_dipeptide():
       if re.match('.*Integrator$', methodname):
          integrator = getattr(integrators, methodname)()
          integrator.__doc__ = methodname
-         check_stability.description = "Testing %s for stability over a short number of integration steps of alanine dipeptide in implicit solvent." % methodname
-         yield check_stability, integrator, test
+         f = partial(check_stability, integrator, test)
+         f.description = "Testing %s for stability over a short number of integration steps of alanine dipeptide in implicit solvent." % methodname
+         yield f
 
 def test_integrator_decorators():
     integrator = integrators.HMCIntegrator(timestep=0.05 * unit.femtoseconds)
