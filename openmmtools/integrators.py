@@ -35,7 +35,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 #=============================================================================================
 
-import numpy
+import numpy as np
+import math
 
 import simtk.unit
 
@@ -217,6 +218,121 @@ class VelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
         self.addConstrainPositions()
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
+
+class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
+    """Bitwise-reversible Verlocity Verlet integrator.
+
+    The Velocity Verlet integrator [1] is implemented using forces truncated to fewer digits of precision so that the
+    resulting position and velocity updates will not lose any precision to rounding, using concepts from [2].
+
+    Notes
+    -----
+    * This integrator requires the use of a deterministic Platform (Reference or OpenCL) to be bitwise-reversible.
+    * This integrator cannot handle constraints.
+    * This integrator must be used in `mixed` or `double` precision mode.
+
+    References
+    ----------
+    [1] W. C. Swope, H. C. Andersen, P. H. Berens, and K. R. Wilson, J. Chem. Phys. 76, 637 (1982)
+    [2] https://qed.princeton.edu/main/User:Hammett/physics_notes/Time_Reversible_Algorithms
+
+    Examples
+    --------
+
+    Create a bitwise-reversible velocity Verlet integrator.
+
+    >>> timestep = 1.0 * simtk.unit.femtoseconds
+    >>> integrator = BitwiseReversibleVelocityVerletIntegrator(timestep)
+
+    Demonstrate bitwise reversibility for a simple harmonic oscillator.
+
+    >>> from simtk import openmm, unit
+    >>> platform = openmm.Platform.getPlatformByName('Reference')
+    >>> from openmmtools import testsytems
+    >>> testsystem = testsystems.LennardJonesCluster()
+    >>> context = openmm.Context(testsystem.system, integrator, platform)
+    >>> context.setPositions(testsystem.positions)
+    >>> # Select velocity.
+    >>> context.setVelocitiesToTemperature(300*unit.kelvin)
+    >>> # Truncate accuracy and store initial positions.
+    >>> integrator.truncatePrecision(context)
+    >>> initial_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    >>> # Integrate forward in time.
+    >>> nsteps = 20
+    >>> integrator.step(nsteps)
+    >>> # Negate velocity and integrate backwards
+    >>> context.setVelocities(-context.getState(getVelocities=True).getVelocities(asNumpy=True))
+    >>> integrator.step(nsteps)
+    >>> # Compare positions.
+    >>> final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    >>> initial_positions - final_positions
+
+    """
+
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, precision_nbits=20, timestep_precision_nbits=5):
+        """Construct a velocity Verlet integrator.
+
+        Parameters
+        ----------
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+            The integration timestep.
+        precision : str, optional, default='single'
+            Precision of forces ['single', 'double'].
+        nbits_precision : int, optional, default=20
+            Number of bits of precision to maintain.
+        timestep_precision_nbits : int, optional, default=2
+            Number of bits of precision to truncate the timestep to.
+
+        """
+
+        # Store number of bits of precision.
+        self.precision_nbits = precision_nbits
+        self.scale = 2**precision_nbits
+
+        # Degrade precision of timestep to `timestep_precision_nbits` significant bits in the mantissa.
+        # This will ensure we don't accumulate too much error in the `x = x + dt*v` part of integration to lose precision.
+        from testsystems import in_openmm_units
+        old_timestep = in_openmm_units(timestep)
+        [x,i] = math.frexp(old_timestep)
+        timestep_scale = 2**timestep_precision_nbits
+        x = np.floor(x*timestep_scale + 0.5)/timestep_scale
+        new_timestep = math.ldexp(x, i)
+        timestep = new_timestep
+        if (timestep == 0.0):
+            raise Exception("Timestep is too small to be represented by %d bits of fixed-point precision." % self.precision_nbits)
+
+        # Initialize integrator.
+        super(BitwiseReversibleVelocityVerletIntegrator, self).__init__(timestep)
+
+        self.addGlobalVariable("scale", self.scale)
+
+        self.addUpdateContextState()
+
+        self.addComputePerDof("v", "v+floor(0.5*dt*f/m*scale + 0.5)/scale")
+        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("v", "v+floor(0.5*dt*f/m*scale + 0.5)/scale")
+
+    def truncatePrecision(self, context):
+        """Truncate precision of stored positions and velocities.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The Context object whose which positions and velocities are to be truncated in significant bit accuracy.
+
+        """
+        from testsystems import in_openmm_units
+        # Retrieve positions and velocities in natural openmm units.
+        state = context.getState(getPositions=True, getVelocities=True)
+        positions = in_openmm_units(state.getPositions(asNumpy=True))
+        velocities = in_openmm_units(state.getVelocities(asNumpy=True))
+        # Truncate precision.
+        positions = np.floor(positions*self.scale+0.5)/self.scale
+        velocities = np.floor(velocities*self.scale+0.5)/self.scale
+        # Store updated positions and velocities.
+        context.setPositions(positions)
+        context.setVelocities(velocities)
+        return
 
 class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
@@ -566,7 +682,7 @@ class GHMCIntegrator(simtk.openmm.CustomIntegrator):
         # Integrator initialization.
         #
         self.addGlobalVariable("kT", kT) # thermal energy
-        self.addGlobalVariable("b", numpy.exp(-gamma*timestep)) # velocity mixing parameter
+        self.addGlobalVariable("b", np.exp(-gamma*timestep)) # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0) # kinetic energy
         self.addPerDofVariable("vold", 0) # old velocities
@@ -693,7 +809,7 @@ class VVVRIntegrator(simtk.openmm.CustomIntegrator):
         # Integrator initialization.
         #
         self.addGlobalVariable("kT", kT) # thermal energy
-        self.addGlobalVariable("b", numpy.exp(-gamma*timestep)) # velocity mixing parameter
+        self.addGlobalVariable("b", np.exp(-gamma*timestep)) # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addPerDofVariable("x1", 0) # position before application of constraints
 
