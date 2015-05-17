@@ -1623,7 +1623,7 @@ class LennardJonesFluid(TestSystem):
         If not None, use alternating plus and minus `charge` for the particle charges.
         Also, if not None, use PME for electrostatics.  Obviously this is no
         longer a traditional LJ system, but this option could be useful for
-        testing the effect of charges in small systems.  
+        testing the effect of charges in small systems.
 
     Examples
     --------
@@ -1662,6 +1662,7 @@ class LennardJonesFluid(TestSystem):
         dispersion_correction=True,
         lattice=False,
         charge=None,
+        ewaldErrorTolerance=None,
         **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1693,6 +1694,8 @@ class LennardJonesFluid(TestSystem):
         nb.setNonbondedMethod(cutoff_type)
         nb.setCutoffDistance(cutoff)
         nb.setUseDispersionCorrection(dispersion_correction)
+        if ewaldErrorTolerance is not None:
+            nb.setEwaldErrorTolerance(ewaldErrorTolerance)
 
         nb.setUseSwitchingFunction(False)
         if (switch_width!=None) and (not shift):
