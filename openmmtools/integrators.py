@@ -223,18 +223,28 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
     """Bitwise-reversible Verlocity Verlet integrator.
 
     The Velocity Verlet integrator [1] is implemented using forces truncated to fewer digits of precision so that the
-    resulting position and velocity updates will not lose any precision to rounding, using concepts from [2].
+    resulting position and velocity updates will not lose any precision to rounding, using concepts from [2] and [3].
+
+    The number of bits of precision to maintain and the maximum magnitude of positions and velocities for which the
+    integrator will be bitwise-reversible in OpenMM units (nm and nm/ps) are user-adjustable parameters.  If these are
+    not correctly set, the integrator may become no longer bitwise-reversible as the simulation proceeds, but integration
+    accuracy will gracefully degrade [3].
 
     Notes
     -----
     * This integrator requires the use of a deterministic Platform (Reference or OpenCL) to be bitwise-reversible.
     * This integrator cannot handle constraints.
-    * This integrator must be used in `mixed` or `double` precision mode.
+    * Use of the center-of-mass-motion remover will destroy bitwise reversibility.
+    * updateContextState *is* called in this integrator, but be warned that other forces (e.g. MonteCarloBarostat) can also destroy bitwise reversibility
+    * No special handling of NaNs is performed.  If any force components become NaN, bitwise-reversibility is lost.
+    * Because the magnitude of positions and velocities must be smaller than the maximum magnitude for bitwise reversibility
+      it is recommended that the system first be shifted to its center of geometry.
 
     References
     ----------
     [1] W. C. Swope, H. C. Andersen, P. H. Berens, and K. R. Wilson, J. Chem. Phys. 76, 637 (1982)
     [2] https://qed.princeton.edu/main/User:Hammett/physics_notes/Time_Reversible_Algorithms
+    [3] Kevin J. Bowers. US Patent publication US7809535 B2. Publication date 5 Oct 2010. https://www.google.com/patents/US7809535
 
     Examples
     --------
@@ -269,7 +279,7 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
 
     """
 
-    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, precision_nbits=20, timestep_precision_nbits=5):
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, precision_nbits=22, max_magnitude_nbits=5, precision_mode='single', timestep_precision_nbits=5):
         """Construct a velocity Verlet integrator.
 
         Parameters
@@ -278,19 +288,32 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
             The integration timestep.
         precision : str, optional, default='single'
             Precision of forces ['single', 'double'].
-        nbits_precision : int, optional, default=20
+        precision_nbits : int, optional, default=20
             Number of bits of precision to maintain.
-        timestep_precision_nbits : int, optional, default=2
-            Number of bits of precision to truncate the timestep to.
+        max_magnitude_nbits : int, optional, default=5
+            The maximum magnitude of positions or velocities in natural OpenMM units (nm, nm/ps) for which
+            integration will still be bitwise reversible is `2**max_magnitude_nbits`.
+        precision_mode : str, optional, default='single'
+            Precision mode used by context for position and velocity accumulation ['single', 'mixed', 'double']
+        timestep_precision_nbits : int, optional, default=5
+            Number of bits of precision to keep in significand of timestep.
 
         """
 
+        # Sanity check of number of bits to retain.
+        if (precision_mode == 'single') and (precision_nbits > 22):
+            raise Exception("'precision_nbits' must be <= 22 for platforms that use 'single' precision mode.")
+        if (precision_mode in ['mixed', 'double']) and (precision_nbits > 52):
+            raise Exception("'precision_nbits' must be <= 52 for platforms that use 'mixed' or 'double' precision mode.")
+
         # Store number of bits of precision.
         self.precision_nbits = precision_nbits
-        self.scale = 2**precision_nbits
+        self.max_magnitude_nbits = max_magnitude_nbits
+        self.scale = 2**(precision_nbits - max_magnitude_nbits + 1)
 
-        # Degrade precision of timestep to `timestep_precision_nbits` significant bits in the mantissa.
-        # This will ensure we don't accumulate too much error in the `x = x + dt*v` part of integration to lose precision.
+        # Degrade precision of timestep to `timestep_precision_nbits`
+        # significant bits in the mantissa.
+        # This will ensure we don't accumulate too much error in the `x = x  dt*v` part of integration to lose precision.
         from testsystems import in_openmm_units
         old_timestep = in_openmm_units(timestep)
         [x,i] = math.frexp(old_timestep)
@@ -306,11 +329,14 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
 
         self.addGlobalVariable("scale", self.scale)
 
+        # We cannot update Context state since this could destroy bitwise reversibility.
         self.addUpdateContextState()
 
-        self.addComputePerDof("v", "v+floor(0.5*dt*f/m*scale + 0.5)/scale")
-        self.addComputePerDof("x", "x+dt*v")
-        self.addComputePerDof("v", "v+floor(0.5*dt*f/m*scale + 0.5)/scale")
+        # TODO: Use a different scheme than floor(scale*a+0.5)/scale since this may lead to inaccurate rounding
+        self.addComputePerDof("v", "v+floor(scale * 0.5*dt*f/m + 0.5)/scale")
+        #self.addComputePerDof("x", "x+floor(scale * dt*v + 0.5)/scale") # WARNING: This scheme recommended by Ref [3], but does not seem to work.
+        self.addComputePerDof("x", "x+dt*v") # WARNING: This scheme may lead to the accumulation of additional digits of precision, which could destroy reversibility
+        self.addComputePerDof("v", "v+floor(scale * 0.5*dt*f/m + 0.5)/scale")
 
     def truncatePrecision(self, context):
         """Truncate precision of stored positions and velocities.
