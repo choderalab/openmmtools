@@ -212,36 +212,38 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
 
     return positions
 
-def build_lattice(n_particles, r, box=None):
-    """Build a HCP lattice with n atoms per dimension and radius r.
+def build_lattice_cell():
+    """Build a single (4 atom) unit cell of a FCC lattice."""
+    xyz = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5]]
+    xyz = np.array(xyz)
+
+    return xyz
+
+def build_lattice(n_particles):
+    """Build a FCC lattice with n_particles, where (n / 4) must be a cubed integer.
 
     Notes
     -----
-    Equations from http://en.wikipedia.org/wiki/Close-packing_of_equal_spheres
+    Equations eyeballed from http://en.wikipedia.org/wiki/Close-packing_of_equal_spheres
     """
-
-    n = (n_particles ** (1 / 3.))
+    n = ((n_particles / 4.) ** (1 / 3.))
 
     if np.abs(n - np.round(n)) > 1E-10:
-        raise(ValueError("Must input a cube number of particles!"))
+        raise(ValueError("Must input 14 n^3 particles for some integer n!"))
     else:
         n = int(np.round(n))
 
-    if box is None:
-        box = r * (n + 1)
+    xyz = []
+    cell = build_lattice_cell()
+    x, y, z = np.eye(3)
+    for atom, (i, j, k) in enumerate(itertools.product(np.arange(n), repeat=3)):
+        xi = cell + i * x + j * y + k * z
+        xyz.append(xi)
 
-    xyz = np.zeros(((2 * n) ** 3, 3))
-    for atom, (i, j, k) in enumerate(itertools.product(np.arange(2 * n), repeat=3)):
-        xyz[atom, 0] = 2 * i + ((j + k) % 2)
-        xyz[atom, 1] = (3 ** 0.5) * (j + (k % 2) / 3.)
-        xyz[atom, 2] = k * (2 / 3.) * 6 ** 0.5
+    xyz = np.concatenate(xyz)
 
-    xyz *= r
+    return xyz, n
 
-    index = (xyz <= box).all(1)
-    xyz = xyz[index]
-
-    return xyz, box
 
 def generate_dummy_trajectory(xyz, box):
     """Convert xyz coordinates and box vectors into a simple MDTraj topology."""
@@ -1615,8 +1617,8 @@ class LennardJonesFluid(TestSystem):
         If True, will shift Lennard-Jones potential so energy will be continuous at cutoff (switch_width is ignored).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
-    hcp : bool, optional, default=False
-        If True, use a hcp (A-B) sphere packing to generate initial positions.
+    lattice : bool, optional, default=False
+        If True, use a fcc sphere packing to generate initial positions.
 
     Examples
     --------
@@ -1653,7 +1655,7 @@ class LennardJonesFluid(TestSystem):
         switch_width=3.4 * unit.angstrom, # argon
         shift=False,
         dispersion_correction=True,
-        hcp=False,
+        lattice=False,
         **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1704,10 +1706,10 @@ class LennardJonesFluid(TestSystem):
             system.addForce(cnb)
 
 
-        if hcp:
+        if lattice:
             box_nm = box_edge / unit.nanometers
-            r = (box_nm) / (nparticles ** (1 / 3.) + 1)
-            xyz, box = build_lattice(nparticles, r)
+            xyz, box = build_lattice(nparticles)
+            xyz *= (box_nm / box)
             traj = generate_dummy_trajectory(xyz, box_nm)
             positions = traj.openmm_positions(0)
         else:  # Create initial coordinates using subrandom positions.
