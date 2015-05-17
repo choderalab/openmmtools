@@ -1619,6 +1619,11 @@ class LennardJonesFluid(TestSystem):
         if True, will use analytical dispersion correction (if not using switching function)
     lattice : bool, optional, default=False
         If True, use a fcc sphere packing to generate initial positions.
+    charge : simtk.unit, optional, default=None
+        If not None, use alternating plus and minus `charge` for the particle charges.
+        Also, if not None, use PME for electrostatics.  Obviously this is no
+        longer a traditional LJ system, but this option could be useful for
+        testing the effect of charges in small systems.  
 
     Examples
     --------
@@ -1656,6 +1661,7 @@ class LennardJonesFluid(TestSystem):
         shift=False,
         dispersion_correction=True,
         lattice=False,
+        charge=None,
         **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -1664,8 +1670,11 @@ class LennardJonesFluid(TestSystem):
         if cutoff is None:
             cutoff = 3.0 * sigma
 
-        # Charge is zero.
-        charge        = 0.0 * unit.elementary_charge
+        if charge is None: # Charge is zero.
+            charge        = 0.0 * unit.elementary_charge
+            cutoff_type = openmm.NonbondedForce.CutoffPeriodic
+        else:
+            cutoff_type = openmm.NonbondedForce.PME
 
         # Create an empty system object.
         system = openmm.System()
@@ -1681,7 +1690,7 @@ class LennardJonesFluid(TestSystem):
 
         # Set up periodic nonbonded interactions with a cutoff.
         nb = openmm.NonbondedForce()
-        nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
+        nb.setNonbondedMethod(cutoff_type)
         nb.setCutoffDistance(cutoff)
         nb.setUseDispersionCorrection(dispersion_correction)
 
@@ -1692,7 +1701,11 @@ class LennardJonesFluid(TestSystem):
 
         for particle_index in range(nparticles):
             system.addParticle(mass)
-            nb.addParticle(charge, sigma, epsilon)
+            if cutoff_type == openmm.NonbondedForce.PME:
+                charge_i = charge * ((particle_index % 2) * 2 - 1.)  # Alternate plus and minus
+            else:
+                charge_i = charge
+            nb.addParticle(charge_i, sigma, epsilon)
 
         # Add shift if desired.
         if (shift):
