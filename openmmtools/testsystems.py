@@ -2508,20 +2508,24 @@ class DischargedWaterBoxHsites(WaterBox):
 
 class AlanineDipeptideVacuum(TestSystem):
     """Alanine dipeptide ff96 in vacuum.
-    
+
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
-    
+        Type of constraints to use.
+    removeCMMotion : bool, optional, default=False
+        If True, will remove center of mass motion periodically.
+
     Examples
     --------
-    
+
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideVacuum()
     >>> (system, positions) = alanine.system, alanine.positions
+
     """
 
-    def __init__(self, constraints=app.HBonds, **kwargs):
+    def __init__(self, constraints=app.HBonds, removeCMMotion=False, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2529,7 +2533,7 @@ class AlanineDipeptideVacuum(TestSystem):
         crd_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.crd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None)
+        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, removeCMMotion=removeCMMotion)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -2546,20 +2550,24 @@ class AlanineDipeptideVacuum(TestSystem):
 
 class AlanineDipeptideImplicit(TestSystem):
     """Alanine dipeptide ff96 in OBC GBSA implicit solvent.
-    
+
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
-    
+        Type of constraints to use.
+    removeCMMotion : bool, optional, default=False
+        If True, will remove center of mass motion periodically.
+
     Examples
     --------
-    
+
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideImplicit()
     >>> (system, positions) = alanine.system, alanine.positions
+
     """
 
-    def __init__(self, constraints=app.HBonds, **kwargs):
+    def __init__(self, constraints=app.HBonds, removeCMMotion=False, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2568,7 +2576,7 @@ class AlanineDipeptideImplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None)
+        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, removeCMMotion=removeCMMotion)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -2596,17 +2604,20 @@ class AlanineDipeptideExplicit(TestSystem):
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
-        If set, will pass along a modified hydrogen mass for OpenMM to 
+        If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
+    removeCMMotion : bool, optional, default=False
+        If True, will remove center of mass motion periodically.
 
     Examples
     --------
 
     >>> alanine = AlanineDipeptideExplicit()
     >>> (system, positions) = alanine.system, alanine.positions
+
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, removeCMMotion=False, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2615,7 +2626,7 @@ class AlanineDipeptideExplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass, removeCMMotion=removeCMMotion)
 
         # Extract topology
         self.topology = prmtop.topology
