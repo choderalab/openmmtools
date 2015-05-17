@@ -85,7 +85,6 @@ def test_bitwise_reversible_velocity_verlet():
       testsystems.UnconstrainedDiatomicFluid(),
       testsystems.FlexibleWaterBox(nonbondedMethod=app.CutoffPeriodic),
       testsystems.AlanineDipeptideImplicit(constraints=None),
-      testsystems.AlanineDipeptideExplicit(constraints=None)
       ]
    for testsystem in testsystem_list:
       f = partial(check_bitwise_reversible_velocity_verlet, testsystem)
@@ -103,7 +102,7 @@ def check_bitwise_reversible_velocity_verlet(testsystem):
    # Create a bitwise-reversible velocity Verlet integrator.
    timestep = 1.0 * unit.femtoseconds
    integrator = integrators.BitwiseReversibleVelocityVerletIntegrator(timestep)
-   nsteps = 10
+   nsteps = 100
    # Demonstrate bitwise reversibility for a simple harmonic oscillator.
    platform = openmm.Platform.getPlatformByName('Reference')
    context = openmm.Context(testsystem.system, integrator, platform)
