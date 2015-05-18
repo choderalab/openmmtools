@@ -2314,7 +2314,7 @@ class WaterBox(TestSystem):
 
    """
 
-   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
+   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
        """
        Create a water box test system.
 
@@ -2335,6 +2335,8 @@ class WaterBox(TestSystem):
           Sets whether the long-range dispersion correction should be used.
        nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
           Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+       ewaldErrorTolerance : float, optional, default=5E-4
+          The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
 
        Examples
        --------
@@ -2413,6 +2415,7 @@ class WaterBox(TestSystem):
            forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
 
        forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
+       forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
 
        self.ndof = 3*system.getNumParticles() - 3*constrained
 
