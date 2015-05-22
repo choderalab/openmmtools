@@ -220,7 +220,7 @@ def build_lattice_cell():
 
 
 def build_lattice(n_particles):
-    """Build a FCC lattice with n_particles, where (n / 4) must be a cubed integer.
+    """Build a FCC lattice with n_particles, where (n_particles / 4) must be a cubed integer.
 
     Notes
     -----
@@ -229,7 +229,7 @@ def build_lattice(n_particles):
     n = ((n_particles / 4.) ** (1 / 3.))
 
     if np.abs(n - np.round(n)) > 1E-10:
-        raise(ValueError("Must input 14 n^3 particles for some integer n!"))
+        raise(ValueError("Must input 4 m^3 particles for some integer m!"))
     else:
         n = int(np.round(n))
 
