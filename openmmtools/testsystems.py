@@ -212,7 +212,14 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
 
 
 def build_lattice_cell():
-    """Build a single (4 atom) unit cell of a FCC lattice."""
+    """Build a single (4 atom) unit cell of a FCC lattice, assuming a cell length
+    of 1.0.
+
+    Returns
+    -------
+    xyz : np.ndarray, shape=(4, 3), dtype=float
+        Coordinates of each particle in cell
+    """
     xyz = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5]]
     xyz = np.array(xyz)
 
@@ -221,6 +228,20 @@ def build_lattice_cell():
 
 def build_lattice(n_particles):
     """Build a FCC lattice with n_particles, where (n_particles / 4) must be a cubed integer.
+
+    Parameters
+    ----------
+    n_particles : int
+        How many particles.
+
+    Returns
+    -------
+    xyz : np.ndarray, shape=(n_particles, 3), dtype=float
+        Coordinates of each particle in box.  Each subcell is based on a unit-sized
+        cell output by build_lattice_cell()
+    n : int
+        The number of cells along each direction.  Because each cell has unit
+        length, `n` is also the total box length of the `n_particles` system.
 
     Notes
     -----
