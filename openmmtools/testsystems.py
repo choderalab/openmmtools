@@ -54,13 +54,9 @@ import scipy
 import scipy.special
 import scipy.integrate
 
-import pandas as pd
-
 from simtk import openmm
 from simtk import unit
 from simtk.openmm import app
-
-import mdtraj as md
 
 from .constants import kB
 
@@ -216,7 +212,14 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
 
 
 def build_lattice_cell():
-    """Build a single (4 atom) unit cell of a FCC lattice."""
+    """Build a single (4 atom) unit cell of a FCC lattice, assuming a cell length
+    of 1.0.
+
+    Returns
+    -------
+    xyz : np.ndarray, shape=(4, 3), dtype=float
+        Coordinates of each particle in cell
+    """
     xyz = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5]]
     xyz = np.array(xyz)
 
@@ -224,7 +227,21 @@ def build_lattice_cell():
 
 
 def build_lattice(n_particles):
-    """Build a FCC lattice with n_particles, where (n / 4) must be a cubed integer.
+    """Build a FCC lattice with n_particles, where (n_particles / 4) must be a cubed integer.
+
+    Parameters
+    ----------
+    n_particles : int
+        How many particles.
+
+    Returns
+    -------
+    xyz : np.ndarray, shape=(n_particles, 3), dtype=float
+        Coordinates of each particle in box.  Each subcell is based on a unit-sized
+        cell output by build_lattice_cell()
+    n : int
+        The number of cells along each direction.  Because each cell has unit
+        length, `n` is also the total box length of the `n_particles` system.
 
     Notes
     -----
@@ -233,7 +250,7 @@ def build_lattice(n_particles):
     n = ((n_particles / 4.) ** (1 / 3.))
 
     if np.abs(n - np.round(n)) > 1E-10:
-        raise(ValueError("Must input 14 n^3 particles for some integer n!"))
+        raise(ValueError("Must input 4 m^3 particles for some integer m!"))
     else:
         n = int(np.round(n))
 
@@ -250,7 +267,14 @@ def build_lattice(n_particles):
 
 
 def generate_dummy_trajectory(xyz, box):
-    """Convert xyz coordinates and box vectors into a simple MDTraj topology."""
+    """Convert xyz coordinates and box vectors into an MDTraj Trajectory (with Topology)."""
+    try:
+        import mdtraj as md
+        import pandas as pd
+    except ImportError as e:
+        print("Error: generate_dummy_trajectory() requires mdtraj and pandas!")
+        raise(e)
+
     n_atoms = len(xyz)
     data = []
 
@@ -1665,12 +1689,15 @@ class LennardJonesFluid(TestSystem):
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
     lattice : bool, optional, default=False
-        If True, use a fcc sphere packing to generate initial positions.
+        If True, use fcc sphere packing to generate initial positions.  The box
+        size will be determined by `nparticles` and `reduced_density`.
     charge : simtk.unit, optional, default=None
         If not None, use alternating plus and minus `charge` for the particle charges.
         Also, if not None, use PME for electrostatics.  Obviously this is no
         longer a traditional LJ system, but this option could be useful for
         testing the effect of charges in small systems.
+    ewaldErrorTolerance : float, optional, default=5E-4
+           The Ewald or PME tolerance.  Used only if charge is not None.
 
     Examples
     --------
