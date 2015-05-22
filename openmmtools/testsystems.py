@@ -44,11 +44,10 @@ TODO
 
 """
 
-import os, os.path
+import os
+import os.path
 import numpy as np
 import numpy.random
-import math
-import copy
 
 import scipy
 import scipy.special
@@ -65,6 +64,7 @@ pi = np.pi
 #=============================================================================================
 # SUBROUTINES
 #=============================================================================================
+
 
 def in_openmm_units(quantity):
     """Strip the units from a simtk.unit.Quantity object after converting to natural OpenMM units
@@ -84,6 +84,7 @@ def in_openmm_units(quantity):
     unitless_quantity = quantity.in_unit_system(unit.md_unit_system)
     unitless_quantity /= unitless_quantity.unit
     return unitless_quantity
+
 
 def get_data_filename(relative_path):
     """Get the full path to one of the reference files in testsystems.
@@ -107,7 +108,8 @@ def get_data_filename(relative_path):
 
     return fn
 
-def halton_sequence(p,n):
+
+def halton_sequence(p, n):
     """
     Halton deterministic sequence on [0,1].
 
@@ -137,19 +139,20 @@ def halton_sequence(p,n):
 
     """
     eps = np.finfo(np.double).eps
-    b = np.zeros( np.ceil(np.log(n)/np.log(p)) + 1 )   # largest number of digits (adding one for halton_sequence(2,64) corner case)
-    u = np.empty( n )
+    b = np.zeros(np.ceil(np.log(n) / np.log(p)) + 1)   # largest number of digits (adding one for halton_sequence(2,64) corner case)
+    u = np.empty(n)
     for j in range(n):
         i = 0
         b[0] += 1                       # add one to current integer
-        while b[i] > p-1+eps:           # this loop does carrying in base p
+        while b[i] > p - 1 + eps:           # this loop does carrying in base p
             b[i] = 0
-            i = i+1
+            i = i + 1
             b[i] += 1
         u[j] = 0
         for k in range(len(b)):         # add up reversed digits
-            u[j] += b[k]*p**-(k+1)
+            u[j] += b[k] * p**-(k + 1)
     return u
+
 
 def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
     """Generate a deterministic list of subrandom particle positions.
@@ -182,25 +185,24 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
 
     """
     # Create positions array.
-    positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.nanometers)
+    positions = unit.Quantity(np.zeros([nparticles, 3], np.float32), unit.nanometers)
 
     if method == 'halton':
         # Fill in each dimension.
-        primes = [2, 3, 5] # prime bases for Halton sequence
+        primes = [2, 3, 5]  # prime bases for Halton sequence
         for dim in range(3):
             x = halton_sequence(primes[dim], nparticles)
             l = box_vectors[dim][dim]
-            positions[:,dim] = unit.Quantity(x * l/l.unit, l.unit)
+            positions[:, dim] = unit.Quantity(x * l / l.unit, l.unit)
 
     elif method == 'sobol':
         # Generate Sobol' sequence.
-        import sys
         from openmmtools import sobol
         ivec = sobol.i4_sobol_generate(3, nparticles, 1)
         x = np.array(ivec, np.float32)
         for dim in range(3):
             l = box_vectors[dim][dim]
-            positions[:,dim] = unit.Quantity(x[dim,:] * l/l.unit, l.unit)
+            positions[:, dim] = unit.Quantity(x[dim, :] * l / l.unit, l.unit)
 
     else:
         raise Exception("method '%s' must be 'halton' or 'sobol'" % method)
@@ -211,7 +213,9 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
 # Thermodynamic state description
 #=============================================================================================
 
+
 class ThermodynamicState(object):
+
     """Object describing a thermodynamic state obeying Boltzmann statistics.
 
     Examples
@@ -244,6 +248,7 @@ class ThermodynamicState(object):
     * Implement pH.
 
     """
+
     def __init__(self, system=None, temperature=None, pressure=None):
         """Construct a thermodynamic state with given system and temperature.
 
@@ -270,7 +275,9 @@ class ThermodynamicState(object):
 # Abstract base class for test systems
 #=============================================================================================
 
+
 class TestSystem(object):
+
     """Abstract base class for test systems, demonstrating how to implement a test system.
 
     Parameters
@@ -314,6 +321,7 @@ class TestSystem(object):
     >>> (system_xml, positions_xml) = testsystem.serialize()
 
     """
+
     def __init__(self, **kwargs):
         """Abstract base class for test system.
 
@@ -326,7 +334,7 @@ class TestSystem(object):
         self._system = openmm.System()
 
         # Store positions.
-        self._positions = unit.Quantity(np.zeros([0,3], np.float), unit.nanometers)
+        self._positions = unit.Quantity(np.zeros([0, 3], np.float), unit.nanometers)
 
         # Empty topology.
         self._topology = app.Topology()
@@ -375,18 +383,18 @@ class TestSystem(object):
     @property
     def analytical_properties(self):
         """A list of available analytical properties, accessible via 'get_propertyname(thermodynamic_state)' calls."""
-        return [ method[4:] for method in dir(self) if (method[0:4]=='get_') ]
+        return [method[4:] for method in dir(self) if (method[0:4] == 'get_')]
 
     def reduced_potential_expectation(self, state_sampled_from, state_evaluated_in):
         """Calculate the expected potential energy in state_sampled_from, divided by kB * T in state_evaluated_in.
-        
+
         Notes
         -----
-        
+
         This is not called get_reduced_potential_expectation because this function
         requires two, not one, inputs.
         """
-        
+
         if hasattr(self, "get_potential_expectation"):
             U = self.get_potential_expectation(state_sampled_from)
             U_red = U / (kB * state_evaluated_in.temperature)
@@ -399,23 +407,23 @@ class TestSystem(object):
 
         Returns
         -------
-        
+
         system_xml : str
             Serialized XML form of System object.
-            
+
         state_xml : str
             Serialized XML form of State object containing particle positions.
 
         """
 
         from simtk.openmm import XmlSerializer
-        
+
         # Serialize System.
         system_xml = XmlSerializer.serialize(self._system)
 
         # Serialize positions via State.
         if self._system.getNumParticles() == 0:
-        # Cannot serialize the State of a system with no particles.
+            # Cannot serialize the State of a system with no particles.
             state_xml = None
         else:
             platform = openmm.Platform.getPlatformByName('Reference')
@@ -435,6 +443,7 @@ class TestSystem(object):
 
 
 class CustomExternalForcesTestSystem(TestSystem):
+
     """Create a system with an arbitrary number of CustomExternalForces.
 
     Parameters
@@ -447,11 +456,12 @@ class CustomExternalForcesTestSystem(TestSystem):
         particle mass.  Default corresponds to argon.
     n_particles : int, optional, default=500
         Number of (identical) particles to add.
-    
+
     Notes
     -----
     This may be useful for testing multiple timestep integrators.
     """
+
     def __init__(self, energy_expressions=("x^2 + y^2 + z^2",), mass=39.948 * unit.amu, n_particles=500, **kwargs):
         TestSystem.__init__(self, **kwargs)
 
@@ -463,7 +473,7 @@ class CustomExternalForcesTestSystem(TestSystem):
         positions = unit.Quantity(np.zeros([n_particles, 3], np.float32), unit.angstroms)
 
         forces = [openmm.CustomExternalForce(energy_expression) for energy_expression in energy_expressions]
-        
+
         for i, force in enumerate(forces):
             for n in range(n_particles):
                 parameters = ()
@@ -483,13 +493,15 @@ class CustomExternalForcesTestSystem(TestSystem):
         self.system, self.positions = system, positions
         self.n_particles = n_particles
         self.mass = mass
-        self.ndof = 3 * n_particles   
+        self.ndof = 3 * n_particles
 
 #=============================================================================================
 # 3D harmonic oscillator
 #=============================================================================================
 
+
 class HarmonicOscillator(TestSystem):
+
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
 
     Parameters
@@ -556,10 +568,10 @@ class HarmonicOscillator(TestSystem):
         system.addParticle(mass)
 
         # Set the positions.
-        positions = unit.Quantity(np.zeros([1,3], np.float32), unit.angstroms)
+        positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
 
         # Add a restrining potential centered at the origin.
-        energy_expression  = '(K/2.0) * (x^2 + y^2 + z^2);'
+        energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
         energy_expression += 'K = testsystems_HarmonicOscillator_K;'
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_HarmonicOscillator_K', K)
@@ -597,7 +609,7 @@ class HarmonicOscillator(TestSystem):
 
         """
 
-        return (3./2.) * kB * state.temperature
+        return (3. / 2.) * kB * state.temperature
 
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
@@ -616,9 +628,11 @@ class HarmonicOscillator(TestSystem):
 
         """
 
-        return (3./2.) * kB * state.temperature
+        return (3. / 2.) * kB * state.temperature
+
 
 class PowerOscillator(TestSystem):
+
     """Create a 3D Power oscillator, with a single particle confined in an isotropic x^b well.
 
     Parameters
@@ -660,10 +674,10 @@ class PowerOscillator(TestSystem):
         system.addParticle(mass)
 
         # Set the positions.
-        positions = unit.Quantity(np.zeros([1,3], np.float32), unit.angstroms)
+        positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
 
         # Add a restrining potential centered at the origin.
-        energy_expression  = 'K * (x^%d + y^%d + z^%d);' % (b, b, b)
+        energy_expression = 'K * (x^%d + y^%d + z^%d);' % (b, b, b)
         energy_expression += 'K = testsystems_PowerOscillator_K;'
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_PowerOscillator_K', K)
@@ -721,7 +735,9 @@ class PowerOscillator(TestSystem):
 # Diatomic molecule
 #=============================================================================================
 
+
 class Diatom(TestSystem):
+
     """Create a free diatomic molecule with a single harmonic bond between the two atoms.
 
     Parameters
@@ -761,12 +777,12 @@ class Diatom(TestSystem):
     """
 
     def __init__(self,
-        K=290.1 * unit.kilocalories_per_mole / unit.angstrom**2,
-        r0=1.550 * unit.angstroms,
-        m1=39.948 * unit.amu,
-        m2=39.948 * unit.amu,
-        constraint=False,
-        use_central_potential=False, **kwargs):
+                 K=290.1 * unit.kilocalories_per_mole / unit.angstrom**2,
+                 r0=1.550 * unit.angstroms,
+                 m1=39.948 * unit.amu,
+                 m2=39.948 * unit.amu,
+                 constraint=False,
+                 use_central_potential=False, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -787,13 +803,13 @@ class Diatom(TestSystem):
             system.addConstraint(0, 1, r0)
 
         # Set the positions.
-        positions = unit.Quantity(np.zeros([2,3], np.float32), unit.angstroms)
-        positions[1,0] = r0
+        positions = unit.Quantity(np.zeros([2, 3], np.float32), unit.angstroms)
+        positions[1, 0] = r0
 
         if use_central_potential:
             # Add a central restraining potential.
             Kcentral = 1.0 * unit.kilocalories_per_mole / unit.nanometer**2
-            energy_expression  = '(K/2.0) * (x^2 + y^2 + z^2);'
+            energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
             energy_expression += 'K = testsystems_Diatom_Kcentral;'
             force = openmm.CustomExternalForce(energy_expression)
             force.addGlobalParameter('testsystems_Diatom_Kcentral', Kcentral)
@@ -814,7 +830,7 @@ class Diatom(TestSystem):
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
 
         # Store number of degrees of freedom.
-        self.ndof = 6 - 1*constraint
+        self.ndof = 6 - 1 * constraint
 
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
@@ -832,13 +848,15 @@ class Diatom(TestSystem):
 
         """
 
-        return (self.ndof/2.) * kB * state.temperature
+        return (self.ndof / 2.) * kB * state.temperature
 
 #=============================================================================================
 # Diatomic fluid
 #=============================================================================================
 
+
 class DiatomicFluid(TestSystem):
+
     """Create a diatomic fluid.
 
     Note
@@ -908,20 +926,20 @@ class DiatomicFluid(TestSystem):
     """
 
     def __init__(self,
-        nmolecules = 250,
-        K=424.0* unit.kilocalories_per_mole / unit.angstrom**2,
-        r0=1.383 * unit.angstroms,
-        m1=14.01 * unit.amu,
-        m2=14.01 * unit.amu,
-        epsilon=0.1700 * unit.kilocalories_per_mole,
-        sigma=1.8240 * unit.angstroms,
-        charge=0.0 * unit.elementary_charge,
-        reduced_density=0.05,
-        switch_width=0.5*unit.angstroms,
-        cutoff=None,
-        constraint=False,
-        dispersion_correction=True,
-        **kwargs):
+                 nmolecules=250,
+                 K=424.0 * unit.kilocalories_per_mole / unit.angstrom**2,
+                 r0=1.383 * unit.angstroms,
+                 m1=14.01 * unit.amu,
+                 m2=14.01 * unit.amu,
+                 epsilon=0.1700 * unit.kilocalories_per_mole,
+                 sigma=1.8240 * unit.angstroms,
+                 charge=0.0 * unit.elementary_charge,
+                 reduced_density=0.05,
+                 switch_width=0.5 * unit.angstroms,
+                 cutoff=None,
+                 constraint=False,
+                 dispersion_correction=True,
+                 **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -938,12 +956,12 @@ class DiatomicFluid(TestSystem):
         if constraint:
             # Add constraint between particles.
             for molecule_index in range(nmolecules):
-                system.addConstraint(2*molecule_index+0, 2*molecule_index+1, r0)
+                system.addConstraint(2 * molecule_index + 0, 2 * molecule_index + 1, r0)
         else:
             # Add a harmonic bonds.
             force = openmm.HarmonicBondForce()
             for molecule_index in range(nmolecules):
-                force.addBond(2*molecule_index+0, 2*molecule_index+1, r0, K)
+                force.addBond(2 * molecule_index + 0, 2 * molecule_index + 1, r0, K)
             system.addForce(force)
 
         # Set up nonbonded interactions.
@@ -961,42 +979,42 @@ class DiatomicFluid(TestSystem):
         # Determine volume and periodic box vectors.
         number_density = reduced_density / sigma**3
         volume = nparticles * (number_density ** -1)
-        box_edge = volume ** (1./3.)
-        a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
+        box_edge = volume ** (1. / 3.)
+        a = unit.Quantity((box_edge,        0 * unit.angstrom, 0 * unit.angstrom))
+        b = unit.Quantity((0 * unit.angstrom, box_edge,        0 * unit.angstrom))
+        c = unit.Quantity((0 * unit.angstrom, 0 * unit.angstrom, box_edge))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Create initial molecule centers of geometry using subrandom positions.
-        molecule_positions = subrandom_particle_positions(nmolecules, system.getDefaultPeriodicBoxVectors()) # for molecule centers
-        molecule_directions = subrandom_particle_positions(nmolecules, system.getDefaultPeriodicBoxVectors()) # for molecule orientations
+        molecule_positions = subrandom_particle_positions(nmolecules, system.getDefaultPeriodicBoxVectors())  # for molecule centers
+        molecule_directions = subrandom_particle_positions(nmolecules, system.getDefaultPeriodicBoxVectors())  # for molecule orientations
 
         # Compute particle positions.
-        positions = unit.Quantity(np.zeros([nparticles,3], np.float32), unit.angstroms)
+        positions = unit.Quantity(np.zeros([nparticles, 3], np.float32), unit.angstroms)
         unit_vector = np.array([1, 0, 0], np.float32)
         for molecule_index in range(0, nmolecules):
-            vector = molecule_directions[molecule_index,:] - molecule_directions.mean(0)
+            vector = molecule_directions[molecule_index, :] - molecule_directions.mean(0)
             unit_vector = vector / unit.norm(vector)
-            positions[2*molecule_index+0,:] = molecule_positions[molecule_index,:] + 0.5 * r0 * unit_vector
-            positions[2*molecule_index+1,:] = molecule_positions[molecule_index,:] - 0.5 * r0 * unit_vector
+            positions[2 * molecule_index + 0, :] = molecule_positions[molecule_index, :] + 0.5 * r0 * unit_vector
+            positions[2 * molecule_index + 1, :] = molecule_positions[molecule_index, :] - 0.5 * r0 * unit_vector
 
         # Add exceptions for intramolecular forces.
         for molecule_index in range(nmolecules):
-            nb.addException(2*molecule_index+0, 2*molecule_index+1, 0.0*charge*charge, sigma, 0.0*epsilon)
+            nb.addException(2 * molecule_index + 0, 2 * molecule_index + 1, 0.0 * charge * charge, sigma, 0.0 * epsilon)
 
         system.addForce(nb)
 
         nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
         nb.setUseDispersionCorrection(dispersion_correction)
         nb.setCutoffDistance(cutoff)
-        
-        nb.setUseSwitchingFunction(False)        
+
+        nb.setUseSwitchingFunction(False)
         if switch_width is not None:
             nb.setUseSwitchingFunction(True)
             nb.setSwitchingDistance(cutoff - switch_width)
 
         # Store number of degrees of freedom.
-        self.ndof = 3*nparticles - nmolecules*constraint
+        self.ndof = 3 * nparticles - nmolecules * constraint
 
         # Create topology.
         topology = app.Topology()
@@ -1027,10 +1045,11 @@ class DiatomicFluid(TestSystem):
 
         """
 
-        return (self.ndof/2.) * kB * state.temperature
+        return (self.ndof / 2.) * kB * state.temperature
 
 
 class UnconstrainedDiatomicFluid(DiatomicFluid):
+
     """
     Examples
     --------
@@ -1039,12 +1058,15 @@ class UnconstrainedDiatomicFluid(DiatomicFluid):
 
     >>> test = UnconstrainedDiatomicFluid()
     >>> system, positions = test.system, test.positions
-    
+
     """
+
     def __init__(self, *args, **kwargs):
-       super(UnconstrainedDiatomicFluid, self).__init__(constraint=False, *args, **kwargs)
+        super(UnconstrainedDiatomicFluid, self).__init__(constraint=False, *args, **kwargs)
+
 
 class ConstrainedDiatomicFluid(DiatomicFluid):
+
     """
     Examples
     --------
@@ -1053,12 +1075,15 @@ class ConstrainedDiatomicFluid(DiatomicFluid):
 
     >>> test = ConstrainedDiatomicFluid()
     >>> system, positions = test.system, test.positions
-    
+
     """
+
     def __init__(self, *args, **kwargs):
-       super(ConstrainedDiatomicFluid, self).__init__(constraint=True, *args, **kwargs)
+        super(ConstrainedDiatomicFluid, self).__init__(constraint=True, *args, **kwargs)
+
 
 class DipolarFluid(DiatomicFluid):
+
     """
     Examples
     --------
@@ -1067,12 +1092,15 @@ class DipolarFluid(DiatomicFluid):
 
     >>> test = DipolarFluid()
     >>> system, positions = test.system, test.positions
-    
+
     """
+
     def __init__(self, *args, **kwargs):
-       super(DipolarFluid, self).__init__(charge=0.25*unit.elementary_charge, *args, **kwargs)
+        super(DipolarFluid, self).__init__(charge=0.25 * unit.elementary_charge, *args, **kwargs)
+
 
 class UnconstrainedDipolarFluid(DipolarFluid):
+
     """
     Examples
     --------
@@ -1083,10 +1111,13 @@ class UnconstrainedDipolarFluid(DipolarFluid):
     >>> system, positions = test.system, test.positions
 
     """
+
     def __init__(self, *args, **kwargs):
-       super(UnconstrainedDipolarFluid, self).__init__(constraint=False, *args, **kwargs)
+        super(UnconstrainedDipolarFluid, self).__init__(constraint=False, *args, **kwargs)
+
 
 class ConstrainedDipolarFluid(DipolarFluid):
+
     """
     Examples
     --------
@@ -1097,14 +1128,17 @@ class ConstrainedDipolarFluid(DipolarFluid):
     >>> system, positions = test.system, test.positions
 
     """
+
     def __init__(self, *args, **kwargs):
-       super(ConstrainedDipolarFluid, self).__init__(constraint=True, *args, **kwargs)
+        super(ConstrainedDipolarFluid, self).__init__(constraint=True, *args, **kwargs)
 
 #=============================================================================================
 # Constraint-coupled harmonic oscillator
 #=============================================================================================
 
+
 class ConstraintCoupledHarmonicOscillator(TestSystem):
+
     """Create a pair of particles in 3D harmonic oscillator wells, coupled by a constraint.
 
     Parameters
@@ -1141,9 +1175,9 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
     """
 
     def __init__(self,
-        K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2,
-        d=1.0 * unit.nanometer,
-        mass=39.948 * unit.amu, **kwargs):
+                 K=1.0 * unit.kilojoules_per_mole / unit.nanometer**2,
+                 d=1.0 * unit.nanometer,
+                 mass=39.948 * unit.amu, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1155,11 +1189,11 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
         system.addParticle(mass)
 
         # Set the positions.
-        positions = unit.Quantity(np.zeros([2,3], np.float32), unit.angstroms)
-        positions[1,0] = d
+        positions = unit.Quantity(np.zeros([2, 3], np.float32), unit.angstroms)
+        positions[1, 0] = d
 
         # Add a restrining potential centered at the origin.
-        energy_expression  = '(K/2.0) * ((x-d)^2 + y^2 + z^2);'
+        energy_expression = '(K/2.0) * ((x-d)^2 + y^2 + z^2);'
         energy_expression += 'K = testsystems_ConstraintCoupledHarmonicOscillator_K;'
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_ConstraintCoupledHarmonicOscillator_K', K)
@@ -1173,7 +1207,7 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
 
         # Add a harmonic bond force as well so minimization will roughly satisfy constraints.
         force = openmm.HarmonicBondForce()
-        K = 10.0 * unit.kilocalories_per_mole / unit.angstrom**2 # force constant
+        K = 10.0 * unit.kilocalories_per_mole / unit.angstrom**2  # force constant
         force.addBond(0, 1, d, K)
         system.addForce(force)
 
@@ -1193,7 +1227,9 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
 # Harmonic oscillator array
 #=============================================================================================
 
+
 class HarmonicOscillatorArray(TestSystem):
+
     """Create a 1D array of noninteracting particles in 3D harmonic oscillator wells.
 
     Parameters
@@ -1231,10 +1267,10 @@ class HarmonicOscillatorArray(TestSystem):
     >>> system, positions = ccho.system, ccho.positions
     """
 
-    def __init__(self, K=90.0 * unit.kilocalories_per_mole/unit.angstroms**2,
-        d=1.0 * unit.nanometer,
-        mass=39.948 * unit.amu ,
-        N=5, **kwargs):
+    def __init__(self, K=90.0 * unit.kilocalories_per_mole / unit.angstroms**2,
+                 d=1.0 * unit.nanometer,
+                 mass=39.948 * unit.amu,
+                 N=5, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1246,18 +1282,18 @@ class HarmonicOscillatorArray(TestSystem):
             system.addParticle(mass)
 
         # Set the positions for a 1D array of particles spaced d apart along the x-axis.
-        positions = unit.Quantity(np.zeros([N,3], np.float32), unit.angstroms)
+        positions = unit.Quantity(np.zeros([N, 3], np.float32), unit.angstroms)
         for n in range(N):
-            positions[n,0] = n*d
+            positions[n, 0] = n * d
 
         # Add a restrining potential for each oscillator.
-        energy_expression  = '(K/2.0) * ((x-x0)^2 + y^2 + z^2);'
+        energy_expression = '(K/2.0) * ((x-x0)^2 + y^2 + z^2);'
         energy_expression += 'K = testsystems_HarmonicOscillatorArray_K;'
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_HarmonicOscillatorArray_K', K)
         force.addPerParticleParameter('x0')
         for n in range(N):
-            parameters = (d*n / unit.nanometers, )
+            parameters = (d * n / unit.nanometers, )
             force.addParticle(n, parameters)
         system.addForce(force)
 
@@ -1272,7 +1308,7 @@ class HarmonicOscillatorArray(TestSystem):
 
         self.system, self.positions = system, positions
         self.K, self.d, self.mass, self.N = K, d, mass, N
-        self.ndof = 3*N
+        self.ndof = 3 * N
 
     def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
@@ -1289,7 +1325,7 @@ class HarmonicOscillatorArray(TestSystem):
 
         """
 
-        return (self.ndof/2.) * kB * state.temperature
+        return (self.ndof / 2.) * kB * state.temperature
 
     def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
@@ -1306,13 +1342,15 @@ class HarmonicOscillatorArray(TestSystem):
 
         """
 
-        return (self.ndof/2.) * kB * state.temperature
+        return (self.ndof / 2.) * kB * state.temperature
 
 #=============================================================================================
 # Sodium chloride FCC crystal.
 #=============================================================================================
 
+
 class SodiumChlorideCrystal(TestSystem):
+
     """Create an FCC crystal of sodium chloride.
 
     Each atom is represented by a charged Lennard-Jones sphere in an Ewald lattice.
@@ -1340,19 +1378,20 @@ class SodiumChlorideCrystal(TestSystem):
     >>> crystal = SodiumChlorideCrystal()
     >>> system, positions = crystal.system, crystal.positions
     """
-    def __init__(self, switch_width=0.2*unit.angstroms, dispersion_correction=True, **kwargs):
+
+    def __init__(self, switch_width=0.2 * unit.angstroms, dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
         # Set default parameters (from Tinker).
-        mass_Na     = 22.990 * unit.amu
-        mass_Cl     = 35.453 * unit.amu
-        q_Na        = 1.0 * unit.elementary_charge
-        q_Cl        =-1.0 * unit.elementary_charge
-        sigma_Na    = 3.330445 * unit.angstrom
-        sigma_Cl    = 4.41724 * unit.angstrom
-        epsilon_Na  = 0.002772 * unit.kilocalorie_per_mole
-        epsilon_Cl  = 0.118 * unit.kilocalorie_per_mole
+        mass_Na = 22.990 * unit.amu
+        mass_Cl = 35.453 * unit.amu
+        q_Na = 1.0 * unit.elementary_charge
+        q_Cl = -1.0 * unit.elementary_charge
+        sigma_Na = 3.330445 * unit.angstrom
+        sigma_Cl = 4.41724 * unit.angstrom
+        epsilon_Na = 0.002772 * unit.kilocalorie_per_mole
+        epsilon_Cl = 0.118 * unit.kilocalorie_per_mole
 
         # Create system
         system = openmm.System()
@@ -1362,10 +1401,13 @@ class SodiumChlorideCrystal(TestSystem):
         chain = topology.addChain()
 
         # Set box vectors.
-        box_size = 5.628 * unit.angstroms # box width
-        a = unit.Quantity(np.zeros([3]), unit.nanometers); a[0] = box_size
-        b = unit.Quantity(np.zeros([3]), unit.nanometers); b[1] = box_size
-        c = unit.Quantity(np.zeros([3]), unit.nanometers); c[2] = box_size
+        box_size = 5.628 * unit.angstroms  # box width
+        a = unit.Quantity(np.zeros([3]), unit.nanometers)
+        a[0] = box_size
+        b = unit.Quantity(np.zeros([3]), unit.nanometers)
+        b[1] = box_size
+        c = unit.Quantity(np.zeros([3]), unit.nanometers)
+        c[2] = box_size
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Create nonbonded force term.
@@ -1387,14 +1429,14 @@ class SodiumChlorideCrystal(TestSystem):
 
         # Allocate storage for positions.
         natoms = 2
-        positions = unit.Quantity(np.zeros([natoms,3], np.float32), unit.angstroms)
+        positions = unit.Quantity(np.zeros([natoms, 3], np.float32), unit.angstroms)
 
         # Add sodium ion.
         system.addParticle(mass_Na)
         force.addParticle(q_Na, sigma_Na, epsilon_Na)
-        positions[0,0] = 0.0 * unit.angstrom
-        positions[0,1] = 0.0 * unit.angstrom
-        positions[0,2] = 0.0 * unit.angstrom
+        positions[0, 0] = 0.0 * unit.angstrom
+        positions[0, 1] = 0.0 * unit.angstrom
+        positions[0, 2] = 0.0 * unit.angstrom
 
         element = app.Element.getBySymbol('Na')
         residue = topology.addResidue('Na+', chain)
@@ -1403,9 +1445,9 @@ class SodiumChlorideCrystal(TestSystem):
         # Add chloride atom.
         system.addParticle(mass_Cl)
         force.addParticle(q_Cl, sigma_Cl, epsilon_Cl)
-        positions[1,0] = 2.814 * unit.angstrom
-        positions[1,1] = 2.814 * unit.angstrom
-        positions[1,2] = 2.814 * unit.angstrom
+        positions[1, 0] = 2.814 * unit.angstrom
+        positions[1, 1] = 2.814 * unit.angstrom
+        positions[1, 2] = 2.814 * unit.angstrom
 
         element = app.Element.getBySymbol('Cl')
         residue = topology.addResidue('Cl-', chain)
@@ -1421,7 +1463,9 @@ class SodiumChlorideCrystal(TestSystem):
 # Lennard-Jones cluster
 #=============================================================================================
 
+
 class LennardJonesCluster(TestSystem):
+
     """Create a non-periodic rectilinear grid of Lennard-Jones particles in a harmonic restraining potential.
 
     Parameters
@@ -1454,15 +1498,16 @@ class LennardJonesCluster(TestSystem):
     >>> cluster = LennardJonesCluster(nx=10, ny=10, nz=10)
     >>> system, positions = cluster.system, cluster.positions
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, cutoff=None, switch_width=None, **kwargs):
+
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole / unit.nanometer**2, cutoff=None, switch_width=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
         # Default parameters
-        mass_Ar     = 39.9 * unit.amu
-        q_Ar        = 0.0 * unit.elementary_charge
-        sigma_Ar    = 3.350 * unit.angstrom
-        epsilon_Ar  = 0.001603 * unit.kilojoule_per_mole
+        mass_Ar = 39.9 * unit.amu
+        q_Ar = 0.0 * unit.elementary_charge
+        sigma_Ar = 3.350 * unit.angstrom
+        epsilon_Ar = 0.001603 * unit.kilojoule_per_mole
 
         scaleStepSizeX = 1.0
         scaleStepSizeY = 1.0
@@ -1476,7 +1521,7 @@ class LennardJonesCluster(TestSystem):
 
         # Create a nonperiodic NonbondedForce object.
         nb = openmm.NonbondedForce()
-        
+
         if cutoff is None:
             nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
         else:
@@ -1486,9 +1531,9 @@ class LennardJonesCluster(TestSystem):
             nb.setUseSwitchingFunction(False)
             if switch_width is not None:
                 nb.setUseSwitchingFunction(True)
-                nb.setSwitchingDistance(cutoff - switch_width)             
+                nb.setSwitchingDistance(cutoff - switch_width)
 
-        positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
+        positions = unit.Quantity(np.zeros([natoms, 3], np.float32), unit.angstrom)
 
         atom_index = 0
         for ii in range(nx):
@@ -1496,13 +1541,13 @@ class LennardJonesCluster(TestSystem):
                 for kk in range(nz):
                     system.addParticle(mass_Ar)
                     nb.addParticle(q_Ar, sigma_Ar, epsilon_Ar)
-                    x = sigma_Ar*scaleStepSizeX*(ii - nx/2.0)
-                    y = sigma_Ar*scaleStepSizeY*(jj - ny/2.0)
-                    z = sigma_Ar*scaleStepSizeZ*(kk - nz/2.0)
+                    x = sigma_Ar * scaleStepSizeX * (ii - nx / 2.0)
+                    y = sigma_Ar * scaleStepSizeY * (jj - ny / 2.0)
+                    z = sigma_Ar * scaleStepSizeZ * (kk - nz / 2.0)
 
-                    positions[atom_index,0] = x
-                    positions[atom_index,1] = y
-                    positions[atom_index,2] = z
+                    positions[atom_index, 0] = x
+                    positions[atom_index, 1] = y
+                    positions[atom_index, 2] = z
                     atom_index += 1
 
         # Add the nonbonded force.
@@ -1519,7 +1564,7 @@ class LennardJonesCluster(TestSystem):
 
         # Add a restrining potential centered at the origin.
         energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
-        energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers**2)) # in OpenMM units
+        energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers**2))  # in OpenMM units
         force = openmm.CustomExternalForce(energy_expression)
         for particle_index in range(natoms):
             force.addParticle(particle_index, [])
@@ -1531,7 +1576,9 @@ class LennardJonesCluster(TestSystem):
 # Lennard-Jones fluid
 #=============================================================================================
 
+
 class LennardJonesFluid(TestSystem):
+
     """Create a periodic fluid of Lennard-Jones particles.
     Initial positions are assigned using a subrandom grid to minimize steric interactions.
 
@@ -1588,15 +1635,15 @@ class LennardJonesFluid(TestSystem):
     """
 
     def __init__(self,
-        nparticles=1000,
-        reduced_density=0.05,
-        mass=39.9 * unit.amu, # argon
-        sigma=3.4 * unit.angstrom, # argon,
-        epsilon=0.238 * unit.kilocalories_per_mole, # argon,
-        cutoff=None,
-        switch_width=3.4 * unit.angstrom, # argon
-        shift=False,
-        dispersion_correction=True, **kwargs):
+                 nparticles=1000,
+                 reduced_density=0.05,
+                 mass=39.9 * unit.amu,  # argon
+                 sigma=3.4 * unit.angstrom,  # argon,
+                 epsilon=0.238 * unit.kilocalories_per_mole,  # argon,
+                 cutoff=None,
+                 switch_width=3.4 * unit.angstrom,  # argon
+                 shift=False,
+                 dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1605,7 +1652,7 @@ class LennardJonesFluid(TestSystem):
             cutoff = 3.0 * sigma
 
         # Charge is zero.
-        charge        = 0.0 * unit.elementary_charge
+        charge = 0.0 * unit.elementary_charge
 
         # Create an empty system object.
         system = openmm.System()
@@ -1613,10 +1660,10 @@ class LennardJonesFluid(TestSystem):
         # Determine volume and periodic box vectors.
         number_density = reduced_density / sigma**3
         volume = nparticles * (number_density ** -1)
-        box_edge = volume ** (1./3.)
-        a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
+        box_edge = volume ** (1. / 3.)
+        a = unit.Quantity((box_edge,        0 * unit.angstrom, 0 * unit.angstrom))
+        b = unit.Quantity((0 * unit.angstrom, box_edge,        0 * unit.angstrom))
+        c = unit.Quantity((0 * unit.angstrom, 0 * unit.angstrom, box_edge))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Set up periodic nonbonded interactions with a cutoff.
@@ -1626,7 +1673,7 @@ class LennardJonesFluid(TestSystem):
         nb.setUseDispersionCorrection(dispersion_correction)
 
         nb.setUseSwitchingFunction(False)
-        if (switch_width!=None) and (not shift):
+        if (switch_width != None) and (not shift):
             nb.setUseSwitchingFunction(True)
             nb.setSwitchingDistance(cutoff - switch_width)
 
@@ -1636,7 +1683,7 @@ class LennardJonesFluid(TestSystem):
 
         # Add shift if desired.
         if (shift):
-            shift_potential = - 4*epsilon*((sigma/cutoff)**12 - (sigma/cutoff)**6) # amount by which potential is to be shifted
+            shift_potential = - 4 * epsilon * ((sigma / cutoff)**12 - (sigma / cutoff)**6)  # amount by which potential is to be shifted
             cnb = openmm.CustomNonbondedForce('%f' % in_openmm_units(shift_potential))
             cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             cnb.setUseSwitchingFunction(False)
@@ -1662,52 +1709,59 @@ class LennardJonesFluid(TestSystem):
 
         self.system, self.positions = system, positions
 
+
 class LennardJonesFluidTruncated(LennardJonesFluid):
-   """
-   Lennard-Jones fluid with truncated potential (instead of switched).
 
-   """
+    """
+    Lennard-Jones fluid with truncated potential (instead of switched).
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a Lennard-Jones fluid with truncated potential.
+    """
 
-       Parameters are inherited from LennardJonesFluid (except for 'switch_width').
+    def __init__(self, *args, **kwargs):
+        """
+        Create a Lennard-Jones fluid with truncated potential.
 
-       Examples
-       --------
+        Parameters are inherited from LennardJonesFluid (except for 'switch_width').
 
-       >>> testsystem = LennardJonesFluidTruncated()
-       >>> [system, positions] = [testsystem.system, testsystem.positions]
+        Examples
+        --------
 
-       """
-       super(LennardJonesFluidTruncated, self).__init__(switch_width=None, *args, **kwargs)
+        >>> testsystem = LennardJonesFluidTruncated()
+        >>> [system, positions] = [testsystem.system, testsystem.positions]
+
+        """
+        super(LennardJonesFluidTruncated, self).__init__(switch_width=None, *args, **kwargs)
+
 
 class LennardJonesFluidSwitched(LennardJonesFluid):
-   """
-   Lennard-Jones fluid with switched potential (instead of truncated).
 
-   """
+    """
+    Lennard-Jones fluid with switched potential (instead of truncated).
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a Lennard-Jones fluid with switched potential.
+    """
 
-       Parameters are inherited from LennardJonesFluid (except for 'switch_width').
+    def __init__(self, *args, **kwargs):
+        """
+        Create a Lennard-Jones fluid with switched potential.
 
-       Examples
-       --------
+        Parameters are inherited from LennardJonesFluid (except for 'switch_width').
 
-       >>> testsystem = LennardJonesFluidSwitched()
-       >>> [system, positions] = [testsystem.system, testsystem.positions]
+        Examples
+        --------
 
-       """
-       super(LennardJonesFluidSwitched, self).__init__(switch_width=3.4*unit.angstrom, *args, **kwargs)
+        >>> testsystem = LennardJonesFluidSwitched()
+        >>> [system, positions] = [testsystem.system, testsystem.positions]
+
+        """
+        super(LennardJonesFluidSwitched, self).__init__(switch_width=3.4 * unit.angstrom, *args, **kwargs)
 
 #=============================================================================================
 # Lennard-Jones grid
 #=============================================================================================
+
+
 class LennardJonesGrid(LennardJonesFluid):
+
     """Create a periodic fluid of Lennard-Jones particles on a grid.
     Initial positions are assigned using a subrandom grid to minimize steric interactions.
 
@@ -1747,24 +1801,24 @@ class LennardJonesGrid(LennardJonesFluid):
     """
 
     def __init__(self,
-        nx=8, ny=8, nz=8, # grid dimensions
-        *args,
-        **kwargs):
+                 nx=8, ny=8, nz=8,  # grid dimensions
+                 *args,
+                 **kwargs):
 
         # Create system with quasirandom particle positions.
-        nparticles = nx*ny*nz
+        nparticles = nx * ny * nz
         super(LennardJonesGrid, self).__init__(nparticles, *args, **kwargs)
 
         # Compute volume per particle.
         box = self._system.getDefaultPeriodicBoxVectors()
         volume = box[0][0] * box[1][1] * box[2][2]
         volume_per_particle = volume / float(nparticles)
-        delta = volume_per_particle**(1.0/3.0)
+        delta = volume_per_particle**(1.0 / 3.0)
 
         # Adjust box vectors.
         box[0] = openmm.Vec3(nx * delta,  0 * delta,  0 * delta)
-        box[1] = openmm.Vec3( 0 * delta, ny * delta,  0 * delta)
-        box[2] = openmm.Vec3( 0 * delta,  0 * delta, nz * delta)
+        box[1] = openmm.Vec3(0 * delta, ny * delta,  0 * delta)
+        box[2] = openmm.Vec3(0 * delta,  0 * delta, nz * delta)
         self._system.setDefaultPeriodicBoxVectors(box[0], box[1], box[2])
 
         # Set positions.
@@ -1772,10 +1826,9 @@ class LennardJonesGrid(LennardJonesFluid):
         for x in range(nx):
             for y in range(ny):
                 for z in range(nz):
-                    self._positions[particle,0] = x * delta
-                    self._positions[particle,1] = y * delta
-                    self._positions[particle,2] = z * delta
-
+                    self._positions[particle, 0] = x * delta
+                    self._positions[particle, 1] = y * delta
+                    self._positions[particle, 2] = z * delta
 
         # Create topology.
         topology = app.Topology()
@@ -1792,7 +1845,9 @@ class LennardJonesGrid(LennardJonesFluid):
 # Custom Lennard-Jones fluid mixture of NonbondedForce and CustomNonbondedForce
 #=============================================================================================
 
+
 class CustomLennardJonesFluidMixture(TestSystem):
+
     """Create a periodic rectilinear grid of Lennard-Jones particles, but implemented via CustomBondForce and NonbondedForce.
     Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
 
@@ -1841,21 +1896,16 @@ class CustomLennardJonesFluidMixture(TestSystem):
     """
 
     def __init__(self,
-        nparticles = 1000,
-        reduced_density = 0.05, # gas
-        mass=39.9 * unit.amu, # argon
-        sigma=3.4 * unit.angstrom, # argon,
-        epsilon=0.238 * unit.kilocalories_per_mole, # argon,
-        cutoff=None,
-        switch_width=None,
-        dispersion_correction=True, **kwargs):
+                 nparticles=1000,
+                 reduced_density=0.05,  # gas
+                 mass=39.9 * unit.amu,  # argon
+                 sigma=3.4 * unit.angstrom,  # argon,
+                 epsilon=0.238 * unit.kilocalories_per_mole,  # argon,
+                 cutoff=None,
+                 switch_width=None,
+                 dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
-
-        charge        = 0.0 * unit.elementary_charge
-        scaleStepSizeX = 1.0
-        scaleStepSizeY = 1.0
-        scaleStepSizeZ = 1.0
 
         charge = 0.0 * unit.elementary_charge
 
@@ -1864,7 +1914,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
             cutoff = 3.0 * sigma
 
         # Determine number of atoms that will be treated by CustomNonbondedForce
-        ncustom = int(nparticles/2)
+        ncustom = int(nparticles / 2)
 
         # Create an empty system object.
         system = openmm.System()
@@ -1872,10 +1922,10 @@ class CustomLennardJonesFluidMixture(TestSystem):
         # Determine volume and periodic box vectors.
         number_density = reduced_density / sigma**3
         volume = nparticles * (number_density ** -1)
-        box_edge = volume ** (1./3.)
-        a = unit.Quantity((box_edge,        0*unit.angstrom, 0*unit.angstrom))
-        b = unit.Quantity((0*unit.angstrom, box_edge,        0*unit.angstrom))
-        c = unit.Quantity((0*unit.angstrom, 0*unit.angstrom, box_edge))
+        box_edge = volume ** (1. / 3.)
+        a = unit.Quantity((box_edge,        0 * unit.angstrom, 0 * unit.angstrom))
+        b = unit.Quantity((0 * unit.angstrom, box_edge,        0 * unit.angstrom))
+        c = unit.Quantity((0 * unit.angstrom, 0 * unit.angstrom, box_edge))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Set up periodic nonbonded interactions with a cutoff.
@@ -1888,11 +1938,11 @@ class CustomLennardJonesFluidMixture(TestSystem):
         if switch_width is not None:
             nb.setUseSwitchingFunction(True)
             nb.setSwitchingDistance(cutoff - switch_width)
-        
+
         system.addForce(nb)
 
         # Set up periodic nonbonded interactions with a cutoff.
-        energy_expression  = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
+        energy_expression = '4*epsilon*((sigma/r)^12 - (sigma/r)^6);'
         energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
         energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
         cnb = openmm.CustomNonbondedForce(energy_expression)
@@ -1902,12 +1952,12 @@ class CustomLennardJonesFluidMixture(TestSystem):
         cnb.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
         cnb.setUseLongRangeCorrection(dispersion_correction)
         cnb.setCutoffDistance(cutoff)
-        
+
         cnb.setUseSwitchingFunction(False)
         if switch_width is not None:
             cnb.setUseSwitchingFunction(True)
             cnb.setSwitchingDistance(cutoff - switch_width)
-        
+
         system.addForce(cnb)
 
         # Add particles to system.
@@ -1915,9 +1965,9 @@ class CustomLennardJonesFluidMixture(TestSystem):
             system.addParticle(mass)
             if (atom_index < ncustom):
                 cnb.addParticle([charge, sigma, epsilon])
-                nb.addParticle(0.0*charge, sigma, 0.0*epsilon)
+                nb.addParticle(0.0 * charge, sigma, 0.0 * epsilon)
             else:
-                cnb.addParticle([0.0*charge, sigma, 0.0*epsilon])
+                cnb.addParticle([0.0 * charge, sigma, 0.0 * epsilon])
                 nb.addParticle(charge, sigma, epsilon)
 
         # Create initial coordinates using subrandom positions.
@@ -1941,7 +1991,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
 
 class WCAFluid(TestSystem):
 
-    def __init__(self, nparticles=216, density=0.96, mass=39.9*unit.amu, epsilon=120.0*unit.kelvin*kB, sigma=3.4*unit.angstrom, **kwargs):
+    def __init__(self, nparticles=216, density=0.96, mass=39.9 * unit.amu, epsilon=120.0 * unit.kelvin * kB, sigma=3.4 * unit.angstrom, **kwargs):
         """
         Create a Weeks-Chandler-Andersen system.
 
@@ -1969,11 +2019,11 @@ class WCAFluid(TestSystem):
         volume = nparticles / density
 
         # Make system cubic in dimension.
-        length = volume**(1.0/3.0)
+        length = volume**(1.0 / 3.0)
         # TODO: Can we change this to use tuples or 3x3 array?
-        a = unit.Quantity(numpy.array([1.0, 0.0, 0.0], numpy.float32), unit.nanometer) * length/unit.nanometer
-        b = unit.Quantity(numpy.array([0.0, 1.0, 0.0], numpy.float32), unit.nanometer) * length/unit.nanometer
-        c = unit.Quantity(numpy.array([0.0, 0.0, 1.0], numpy.float32), unit.nanometer) * length/unit.nanometer
+        a = unit.Quantity(numpy.array([1.0, 0.0, 0.0], numpy.float32), unit.nanometer) * length / unit.nanometer
+        b = unit.Quantity(numpy.array([0.0, 1.0, 0.0], numpy.float32), unit.nanometer) * length / unit.nanometer
+        c = unit.Quantity(numpy.array([0.0, 0.0, 1.0], numpy.float32), unit.nanometer) * length / unit.nanometer
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Add particles to system.
@@ -1981,7 +2031,7 @@ class WCAFluid(TestSystem):
             system.addParticle(mass)
 
         # Create nonbonded force term implementing Kob-Andersen two-component Lennard-Jones interaction.
-        energy_expression  = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon;'
+        energy_expression = '4.0*epsilon*((sigma/r)^12 - (sigma/r)^6) + epsilon;'
         energy_expression += 'sigma = %f;' % in_openmm_units(sigma)
         energy_expression += 'epsilon = %f;' % in_openmm_units(epsilon)
 
@@ -1994,7 +2044,7 @@ class WCAFluid(TestSystem):
 
         # Set periodic boundary conditions with cutoff.
         force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-        rmin = 2.**(1./6.) * sigma # distance of minimum energy for Lennard-Jones potential
+        rmin = 2.**(1. / 6.) * sigma  # distance of minimum energy for Lennard-Jones potential
         force.setCutoffDistance(rmin)
 
         # Add nonbonded force term to the system.
@@ -2019,7 +2069,9 @@ class WCAFluid(TestSystem):
 # Ideal gas
 #=============================================================================================
 
+
 class IdealGas(TestSystem):
+
     """Create an 'ideal gas' of noninteracting particles in a periodic box.
 
     Parameters
@@ -2058,10 +2110,10 @@ class IdealGas(TestSystem):
         system = openmm.System()
 
         # Compute box size.
-        length = volume**(1.0/3.0)
-        a = unit.Quantity((length,           0*unit.nanometer, 0*unit.nanometer))
-        b = unit.Quantity((0*unit.nanometer,           length, 0*unit.nanometer))
-        c = unit.Quantity((0*unit.nanometer, 0*unit.nanometer, length))
+        length = volume**(1.0 / 3.0)
+        a = unit.Quantity((length,           0 * unit.nanometer, 0 * unit.nanometer))
+        b = unit.Quantity((0 * unit.nanometer,           length, 0 * unit.nanometer))
+        c = unit.Quantity((0 * unit.nanometer, 0 * unit.nanometer, length))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
         # Add particles.
@@ -2132,7 +2184,7 @@ class IdealGas(TestSystem):
 
         """
 
-        return (3./2.) * kB * state.temperature
+        return (3. / 2.) * kB * state.temperature
 
     def get_kinetic_standard_deviation(self, state):
         """Return the standard deviation of the kinetic energy, computed analytically or numerically.
@@ -2149,7 +2201,7 @@ class IdealGas(TestSystem):
 
         """
 
-        return (3./2.) * kB * state.temperature
+        return (3. / 2.) * kB * state.temperature
 
     def get_volume_expectation(self, state):
         """Return the expectation of the volume, computed analytically.
@@ -2176,7 +2228,7 @@ class IdealGas(TestSystem):
             return volume
 
         N = self._system.getNumParticles()
-        return ((N+1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
+        return ((N + 1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
 
     def get_volume_standard_deviation(self, state):
         """Return the standard deviation of the volume, computed analytically.
@@ -2201,321 +2253,335 @@ class IdealGas(TestSystem):
             return 0.0 * unit.nanometers**3
 
         N = self._system.getNumParticles()
-        return (numpy.sqrt(N+1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
+        return (numpy.sqrt(N + 1) * unit.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(unit.nanometers**3)
 
 #=============================================================================================
 # Water box
 #=============================================================================================
 
+
 class WaterBox(TestSystem):
-   """
-   Create a water box test system.
 
-   Examples
-   --------
+    """
+    Create a water box test system.
 
-   Create a default (TIP3P) waterbox.
+    Examples
+    --------
 
-   >>> waterbox = WaterBox()
+    Create a default (TIP3P) waterbox.
 
-   Control the cutoff.
+    >>> waterbox = WaterBox()
 
-   >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+    Control the cutoff.
 
-   Use a different water model.
+    >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
-   >>> waterbox = WaterBox(model='tip4pew')
+    Use a different water model.
 
-   Don't use constraints.
+    >>> waterbox = WaterBox(model='tip4pew')
 
-   >>> waterbox = WaterBox(constrained=False)
+    Don't use constraints.
 
-   """
+    >>> waterbox = WaterBox(constrained=False)
 
-   def __init__(self, box_edge=2.5*unit.nanometers, cutoff=0.9*unit.nanometers, model='tip3p', switch_width=0.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
-       """
-       Create a water box test system.
-       
-       Parameters
-       ----------
-       
-       box_edge : simtk.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
-          Edge length for cubic box [should be greater than 2*cutoff]
-       cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.9 nm
-          Nonbonded cutoff
-       model : str, optional, default = 'tip3p'
-          The name of the water model to use ['tip3p', 'tip4p', 'tip4pew', 'tip5p', 'spce']
-       switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.5 A
-          Sets the width of the switch function for Lennard-Jones.
-       constrained : bool, optional, default=True
-          Sets whether water geometry should be constrained (rigid water implemented via SETTLE) or flexible.
-       dispersion_correction : bool, optional, default=True
-          Sets whether the long-range dispersion correction should be used.
-       nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
-          Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+    """
 
-       Examples
-       --------
-       
-       Create a default waterbox.
-       
-       >>> waterbox = WaterBox()
-       >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
-       Use reaction-field electrostatics instead.
+    def __init__(self, box_edge=2.5 * unit.nanometers, cutoff=0.9 * unit.nanometers, model='tip3p', switch_width=0.5 * unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
+        """
+        Create a water box test system.
 
-       >>> waterbox = WaterBox(nonbondedMethod=app.CutoffPeriodic)
+        Parameters
+        ----------
 
-       Control the cutoff.
-       
-       >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
-       Use a different water model.
-       
-       >>> waterbox = WaterBox(model='spce')
+        box_edge : simtk.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
+           Edge length for cubic box [should be greater than 2*cutoff]
+        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.9 nm
+           Nonbonded cutoff
+        model : str, optional, default = 'tip3p'
+           The name of the water model to use ['tip3p', 'tip4p', 'tip4pew', 'tip5p', 'spce']
+        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.5 A
+           Sets the width of the switch function for Lennard-Jones.
+        constrained : bool, optional, default=True
+           Sets whether water geometry should be constrained (rigid water implemented via SETTLE) or flexible.
+        dispersion_correction : bool, optional, default=True
+           Sets whether the long-range dispersion correction should be used.
+        nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+           Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
 
-       Use a five-site water model.
-       
-       >>> waterbox = WaterBox(model='tip5p')
+        Examples
+        --------
 
-       Turn off the switch function.
+        Create a default waterbox.
 
-       >>> waterbox = WaterBox(switch_width=None)
+        >>> waterbox = WaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
 
-       Set the switch width.
+        Use reaction-field electrostatics instead.
 
-       >>> waterbox = WaterBox(switch_width=0.8*unit.angstroms)
+        >>> waterbox = WaterBox(nonbondedMethod=app.CutoffPeriodic)
 
-       Turn of long-range dispersion correction.
+        Control the cutoff.
 
-       >>> waterbox = WaterBox(dispersion_correction=False)
+        >>> waterbox = WaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
-       """
+        Use a different water model.
 
-       TestSystem.__init__(self, **kwargs)
+        >>> waterbox = WaterBox(model='spce')
 
-       supported_models = ['tip3p', 'tip4pew', 'tip5p', 'spce']
-       if model not in supported_models:
-           raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
+        Use a five-site water model.
 
-       # Load forcefield for solvent model.
-       ff =  app.ForceField(model + '.xml')
+        >>> waterbox = WaterBox(model='tip5p')
 
-       # Create empty topology and coordinates.
-       top = app.Topology()
-       pos = unit.Quantity((), unit.angstroms)
+        Turn off the switch function.
 
-       # Create new Modeller instance.
-       m = app.Modeller(top, pos)
+        >>> waterbox = WaterBox(switch_width=None)
 
-       # Add solvent to specified box dimensions.
-       boxSize = unit.Quantity(numpy.ones([3]) * box_edge/box_edge.unit, box_edge.unit)
-       m.addSolvent(ff, boxSize=boxSize, model=model)
+        Set the switch width.
 
-       # Get new topology and coordinates.
-       newtop = m.getTopology()
-       newpos = m.getPositions()
+        >>> waterbox = WaterBox(switch_width=0.8*unit.angstroms)
 
-       # Convert positions to numpy.
-       positions = unit.Quantity(numpy.array(newpos / newpos.unit), newpos.unit)
+        Turn of long-range dispersion correction.
 
-       # Create OpenMM System.
-       system = ff.createSystem(newtop, nonbondedMethod=nonbondedMethod, nonbondedCutoff=cutoff, constraints=None, rigidWater=constrained, removeCMMotion=False)
+        >>> waterbox = WaterBox(dispersion_correction=False)
 
-       # Set switching function and dispersion correction.
-       forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-       
-       forces['NonbondedForce'].setUseSwitchingFunction(False)
-       if switch_width is not None:
-           forces['NonbondedForce'].setUseSwitchingFunction(True)
-           forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
-       
-       forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
+        """
 
-       self.ndof = 3*system.getNumParticles() - 3*constrained
+        TestSystem.__init__(self, **kwargs)
 
-       self.topology = m.getTopology()
-       self.system = system
-       self.positions = positions
+        supported_models = ['tip3p', 'tip4pew', 'tip5p', 'spce']
+        if model not in supported_models:
+            raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
+
+        # Load forcefield for solvent model.
+        ff = app.ForceField(model + '.xml')
+
+        # Create empty topology and coordinates.
+        top = app.Topology()
+        pos = unit.Quantity((), unit.angstroms)
+
+        # Create new Modeller instance.
+        m = app.Modeller(top, pos)
+
+        # Add solvent to specified box dimensions.
+        boxSize = unit.Quantity(numpy.ones([3]) * box_edge / box_edge.unit, box_edge.unit)
+        m.addSolvent(ff, boxSize=boxSize, model=model)
+
+        # Get new topology and coordinates.
+        newtop = m.getTopology()
+        newpos = m.getPositions()
+
+        # Convert positions to numpy.
+        positions = unit.Quantity(numpy.array(newpos / newpos.unit), newpos.unit)
+
+        # Create OpenMM System.
+        system = ff.createSystem(newtop, nonbondedMethod=nonbondedMethod, nonbondedCutoff=cutoff, constraints=None, rigidWater=constrained, removeCMMotion=False)
+
+        # Set switching function and dispersion correction.
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+
+        forces['NonbondedForce'].setUseSwitchingFunction(False)
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
+
+        forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
+
+        self.ndof = 3 * system.getNumParticles() - 3 * constrained
+
+        self.topology = m.getTopology()
+        self.system = system
+        self.positions = positions
+
 
 class FlexibleWaterBox(WaterBox):
-   """
-   Flexible water box.
 
-   """
+    """
+    Flexible water box.
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a flexible water box.
-       
-       Parameters are inherited from WaterBox (except for 'constrained').
-              
-       Examples
-       --------
-       
-       Create a default flexible waterbox.
-       
-       >>> waterbox = FlexibleWaterBox()
-       >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
-       """
-       super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible water box.
+
+        Parameters are inherited from WaterBox (except for 'constrained').
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexibleWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
+
 
 class FourSiteWaterBox(WaterBox):
-   """
-   Four-site water box (TIP4P-Ew).
 
-   """
+    """
+    Four-site water box (TIP4P-Ew).
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a water box test systemm using a four-site water model (TIP4P-Ew).
-              
-       Parameters are inherited from WaterBox (except for 'model').
+    """
 
-       Examples
-       --------
-       
-       Create a default waterbox.
-       
-       >>> waterbox = FourSiteWaterBox()
-       >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
-       Control the cutoff.
-       
-       >>> waterbox = FourSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
-       """
-       super(FourSiteWaterBox, self).__init__(model='tip4pew', *args, **kwargs)
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box test systemm using a four-site water model (TIP4P-Ew).
+
+        Parameters are inherited from WaterBox (except for 'model').
+
+        Examples
+        --------
+
+        Create a default waterbox.
+
+        >>> waterbox = FourSiteWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        Control the cutoff.
+
+        >>> waterbox = FourSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+
+        """
+        super(FourSiteWaterBox, self).__init__(model='tip4pew', *args, **kwargs)
+
 
 class FiveSiteWaterBox(WaterBox):
-   """
-   Five-site water box (TIP5P).
 
-   """
+    """
+    Five-site water box (TIP5P).
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a water box test systemm using a five-site water model (TIP5P).
-       
-       Parameters are inherited from WaterBox (except for 'model').
-       
-       Examples
-       --------
-       
-       Create a default waterbox.
-       
-       >>> waterbox = FiveSiteWaterBox()
-       >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
-       Control the cutoff.
-       
-       >>> waterbox = FiveSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
-       """
-       super(FiveSiteWaterBox, self).__init__(model='tip5p', *args, **kwargs)
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box test systemm using a five-site water model (TIP5P).
+
+        Parameters are inherited from WaterBox (except for 'model').
+
+        Examples
+        --------
+
+        Create a default waterbox.
+
+        >>> waterbox = FiveSiteWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        Control the cutoff.
+
+        >>> waterbox = FiveSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+
+        """
+        super(FiveSiteWaterBox, self).__init__(model='tip5p', *args, **kwargs)
+
 
 class DischargedWaterBox(WaterBox):
-   """
-   Water box test system with zeroed charges.
 
-   """
+    """
+    Water box test system with zeroed charges.
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a water box test systemm using a four-site water model (TIP4P-Ew).
-       
-       Parameters are inherited from WaterBox.
-       
-       Examples
-       --------
-       
-       Create a default waterbox.
-       
-       >>> waterbox = DischargedWaterBox()
-       >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
-       Control the cutoff.
-       
-       >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
-       """
-       super(DischargedWaterBox, self).__init__(*args, **kwargs)
+    """
 
-       # Zero charges.
-       system = self.system
-       forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-       force = forces['NonbondedForce']
-       for index in range(force.getNumParticles()):
-           [charge, sigma, epsilon] = force.getParticleParameters(index)
-           force.setParticleParameters(index, 0*charge, sigma, epsilon)
-       for index in range(force.getNumExceptions()):
-           [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
-           force.setExceptionParameters(index, particle1, particle2, 0*chargeProd, sigma, epsilon)
-           
-       return
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box test systemm using a four-site water model (TIP4P-Ew).
+
+        Parameters are inherited from WaterBox.
+
+        Examples
+        --------
+
+        Create a default waterbox.
+
+        >>> waterbox = DischargedWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        Control the cutoff.
+
+        >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+
+        """
+        super(DischargedWaterBox, self).__init__(*args, **kwargs)
+
+        # Zero charges.
+        system = self.system
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        force = forces['NonbondedForce']
+        for index in range(force.getNumParticles()):
+            [charge, sigma, epsilon] = force.getParticleParameters(index)
+            force.setParticleParameters(index, 0 * charge, sigma, epsilon)
+        for index in range(force.getNumExceptions()):
+            [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
+            force.setExceptionParameters(index, particle1, particle2, 0 * chargeProd, sigma, epsilon)
+
+        return
+
 
 class DischargedWaterBoxHsites(WaterBox):
-   """
-   Water box test system with zeroed charges and Lennard-Jones sites on hydrogens.
 
-   """
+    """
+    Water box test system with zeroed charges and Lennard-Jones sites on hydrogens.
 
-   def __init__(self, *args, **kwargs):
-       """
-       Create a water box with zeroed charges and Lennard-Jones sites on hydrogens.
-       
-       Parameters are inherited from WaterBox.
-       
-       Examples
-       --------
-       
-       Create a default waterbox.
-       
-       >>> waterbox = DischargedWaterBox()
-       >>> [system, positions] = [waterbox.system, waterbox.positions]
-       
-       Control the cutoff.
-       
-       >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
-       
-       """
-       super(DischargedWaterBoxHsites, self).__init__(*args, **kwargs)
+    """
 
-       # Zero charges.
-       system = self.system
-       forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
-       force = forces['NonbondedForce']
-       for index in range(force.getNumParticles()):
-           [charge, sigma, epsilon] = force.getParticleParameters(index)
-           charge *= 0
-           if epsilon == 0.0 * unit.kilojoules_per_mole:
-               # Add LJ site to hydrogens.
-               epsilon = 0.0157 * unit.kilojoules_per_mole
-               sigma = 0.06 * unit.angstroms
-           force.setParticleParameters(index, charge, sigma, epsilon)
-       for index in range(force.getNumExceptions()):
-           [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
-           chargeProd *= 0
-           epsilon *= 0
-           force.setExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon)
-           
-       return
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box with zeroed charges and Lennard-Jones sites on hydrogens.
+
+        Parameters are inherited from WaterBox.
+
+        Examples
+        --------
+
+        Create a default waterbox.
+
+        >>> waterbox = DischargedWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        Control the cutoff.
+
+        >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+
+        """
+        super(DischargedWaterBoxHsites, self).__init__(*args, **kwargs)
+
+        # Zero charges.
+        system = self.system
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        force = forces['NonbondedForce']
+        for index in range(force.getNumParticles()):
+            [charge, sigma, epsilon] = force.getParticleParameters(index)
+            charge *= 0
+            if epsilon == 0.0 * unit.kilojoules_per_mole:
+                # Add LJ site to hydrogens.
+                epsilon = 0.0157 * unit.kilojoules_per_mole
+                sigma = 0.06 * unit.angstroms
+            force.setParticleParameters(index, charge, sigma, epsilon)
+        for index in range(force.getNumExceptions()):
+            [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
+            chargeProd *= 0
+            epsilon *= 0
+            force.setExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon)
+
+        return
 
 #=============================================================================================
 # Alanine dipeptide in vacuum.
 #=============================================================================================
 
+
 class AlanineDipeptideVacuum(TestSystem):
+
     """Alanine dipeptide ff96 in vacuum.
-    
+
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
-    
+
     Examples
     --------
-    
+
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideVacuum()
     >>> (system, positions) = alanine.system, alanine.positions
@@ -2544,16 +2610,18 @@ class AlanineDipeptideVacuum(TestSystem):
 # Alanine dipeptide in implicit solvent.
 #=============================================================================================
 
+
 class AlanineDipeptideImplicit(TestSystem):
+
     """Alanine dipeptide ff96 in OBC GBSA implicit solvent.
-    
+
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
-    
+
     Examples
     --------
-    
+
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideImplicit()
     >>> (system, positions) = alanine.system, alanine.positions
@@ -2583,7 +2651,9 @@ class AlanineDipeptideImplicit(TestSystem):
 # Alanine dipeptide in explicit solvent
 #=============================================================================================
 
+
 class AlanineDipeptideExplicit(TestSystem):
+
     """Alanine dipeptide ff96 in TIP3P explicit solvent..
 
     Parameters
@@ -2621,7 +2691,7 @@ class AlanineDipeptideExplicit(TestSystem):
         self.topology = prmtop.topology
 
         # Set dispersion correction use.
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
 
         # Read positions.
@@ -2640,6 +2710,7 @@ class AlanineDipeptideExplicit(TestSystem):
 #=============================================================================================
 
 class DHFRExplicit(TestSystem):
+
     """Joint Amber CHARMM (JAC) DHFR / TIP3P benchmark system with 23558 atoms.
 
     Parameters
@@ -2660,10 +2731,9 @@ class DHFRExplicit(TestSystem):
     def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
-        
+
         try:
-            import chemistry
-            from chemistry.amber.openmmloader import AmberParm
+            from chemistry.amber import AmberParm
         except ImportError as e:
             print("DHFR test system requires Parmed (`import chemistry`).")
             raise(e)
@@ -2679,7 +2749,7 @@ class DHFRExplicit(TestSystem):
         self.topology = self.prmtop.topology
 
         # Set dispersion correction use.
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
 
         positions = self.prmtop.positions
@@ -2691,12 +2761,12 @@ class DHFRExplicit(TestSystem):
         self.system, self.positions = system, positions
 
 
-
 #=============================================================================================
 # T4 lysozyme L99A mutant with p-xylene ligand.
 #=============================================================================================
 
 class LysozymeImplicit(TestSystem):
+
     """T4 lysozyme L99A (AMBER ff96) with p-xylene ligand (GAFF + AM1-BCC) in implicit OBC GBSA solvent.
 
     Parameters
@@ -2733,6 +2803,7 @@ class LysozymeImplicit(TestSystem):
 
 
 class SrcImplicit(TestSystem):
+
     """Src kinase in implicit AMBER 99sb-ildn with OBC GBSA solvent.
 
     Examples
@@ -2749,7 +2820,7 @@ class SrcImplicit(TestSystem):
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
-        forcefields_to_use = ['amber99sbildn.xml', 'amber99_obc.xml'] # list of forcefields to use in parameterization
+        forcefields_to_use = ['amber99sbildn.xml', 'amber99_obc.xml']  # list of forcefields to use in parameterization
         forcefield = app.ForceField(*forcefields_to_use)
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=app.NoCutoff, constraints=app.HBonds)
 
@@ -2762,7 +2833,9 @@ class SrcImplicit(TestSystem):
 # Src kinase in explicit solvent.
 #=============================================================================================
 
+
 class SrcExplicit(TestSystem):
+
     """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using PME electrostatics.
 
     Parameters
@@ -2776,6 +2849,7 @@ class SrcExplicit(TestSystem):
     >>> system, positions = src.system, src.positions
 
     """
+
     def __init__(self, nonbondedMethod=app.PME, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
@@ -2784,7 +2858,7 @@ class SrcExplicit(TestSystem):
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
-        forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml'] # list of forcefields to use in parameterization
+        forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml']  # list of forcefields to use in parameterization
         forcefield = app.ForceField(*forcefields_to_use)
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds)
 
@@ -2793,31 +2867,35 @@ class SrcExplicit(TestSystem):
 
         self.system, self.positions, self.topology = system, positions, pdbfile.topology
 
+
 class SrcExplicitReactionField(SrcExplicit):
-   """
-   Flexible water box.
 
-   """
+    """
+    Flexible water box.
 
-   def __init__(self, *args, **kwargs):
-       """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using reaction field electrostatics.
-       
-       Parameters are inherited from SrcExplicit (except for 'nonbondedMethod').
-              
-       Examples
-       --------
-       
-       >>> src = SrcExplicitReactionField()
-       >>> system, positions = src.system, src.positions
-       
-       """
-       super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
+    """
+
+    def __init__(self, *args, **kwargs):
+        """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent using reaction field electrostatics.
+
+        Parameters are inherited from SrcExplicit (except for 'nonbondedMethod').
+
+        Examples
+        --------
+
+        >>> src = SrcExplicitReactionField()
+        >>> system, positions = src.system, src.positions
+
+        """
+        super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 #=============================================================================================
 # Methanol box.
 #=============================================================================================
 
+
 class MethanolBox(TestSystem):
+
     """Methanol box.
 
     Parameters
@@ -2844,7 +2922,7 @@ class MethanolBox(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9*unit.nanometer)
+        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9 * unit.nanometer)
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
@@ -2860,7 +2938,9 @@ class MethanolBox(TestSystem):
 # Molecular ideal gas (methanol box).
 #=============================================================================================
 
+
 class MolecularIdealGas(TestSystem):
+
     """Molecular ideal gas (methanol box).
 
     Parameters
@@ -2887,7 +2967,7 @@ class MolecularIdealGas(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        reference_system = prmtop.createSystem(constraints=app.HBonds, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9*unit.nanometer)
+        reference_system = prmtop.createSystem(constraints=app.HBonds, nonbondedMethod=nonbondedMethod, rigidWater=True, nonbondedCutoff=0.9 * unit.nanometer)
 
         # Make a new system that contains no intermolecular interactions.
         system = openmm.System()
@@ -2946,7 +3026,9 @@ class MolecularIdealGas(TestSystem):
 # System of particles with CustomGBForce
 #=============================================================================================
 
+
 class CustomGBForceSystem(TestSystem):
+
     """A system of particles with a CustomGBForce.
 
     Notes
@@ -2966,14 +3048,14 @@ class CustomGBForceSystem(TestSystem):
         TestSystem.__init__(self, **kwargs)
 
         numMolecules = 70
-        numParticles = numMolecules*2
+        numParticles = numMolecules * 2
         boxSize = 10.0 * unit.nanometers
 
         # Default parameters
-        mass     = 39.9 * unit.amu
-        sigma    = 3.350 * unit.angstrom
-        epsilon  = 0.001603 * unit.kilojoule_per_mole
-        cutoff   = 2.0 * unit.nanometers
+        mass = 39.9 * unit.amu
+        sigma = 3.350 * unit.angstrom
+        epsilon = 0.001603 * unit.kilojoule_per_mole
+        cutoff = 2.0 * unit.nanometers
 
         system = openmm.System()
         for i in range(numParticles):
@@ -2999,29 +3081,29 @@ class CustomGBForceSystem(TestSystem):
         custom.addGlobalParameter("testsystems_CustomGBForceSystem_soluteDielectric", 1.0)
 
         custom.addComputedValue("I", "step(r+sr2-or1)*0.5*(1/L-1/U+0.25*(1/U^2-1/L^2)*(r-sr2*sr2/r)+0.5*log(L/U)/r+C);"
-                                      "U=r+sr2;"
-                                      "C=2*(1/or1-1/L)*step(sr2-r-or1);"
-                                      "L=max(or1, D);"
-                                      "D=abs(r-sr2);"
-                                      "sr2 = scale2*or2;"
-                                      "or1 = radius1-0.009; or2 = radius2-0.009", openmm.CustomGBForce.ParticlePairNoExclusions);
+                                "U=r+sr2;"
+                                "C=2*(1/or1-1/L)*step(sr2-r-or1);"
+                                "L=max(or1, D);"
+                                "D=abs(r-sr2);"
+                                "sr2 = scale2*or2;"
+                                "or1 = radius1-0.009; or2 = radius2-0.009", openmm.CustomGBForce.ParticlePairNoExclusions)
         custom.addComputedValue("B", "1/(1/or-tanh(1*psi-0.8*psi^2+4.85*psi^3)/radius);"
-                                      "psi=I*or; or=radius-0.009", openmm.CustomGBForce.SingleParticle);
+                                "psi=I*or; or=radius-0.009", openmm.CustomGBForce.SingleParticle)
 
-        energy_expression  = '28.3919551*(radius+0.14)^2*(radius/B)^6-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*charge^2/B;'
+        energy_expression = '28.3919551*(radius+0.14)^2*(radius/B)^6-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*charge^2/B;'
         energy_expression += 'solventDielectric = testsystems_CustomGBForceSystem_solventDielectric;'
         energy_expression += 'soluteDielectric = testsystems_CustomGBForceSystem_soluteDielectric;'
-        custom.addEnergyTerm(energy_expression, openmm.CustomGBForce.SingleParticle);
+        custom.addEnergyTerm(energy_expression, openmm.CustomGBForce.SingleParticle)
 
-        energy_expression  = '-138.935485*(1/soluteDielectric-1/solventDielectric)*charge1*charge2/f;'
+        energy_expression = '-138.935485*(1/soluteDielectric-1/solventDielectric)*charge1*charge2/f;'
         energy_expression += 'f=sqrt(r^2+B1*B2*exp(-r^2/(4*B1*B2)));'
         energy_expression += 'solventDielectric = testsystems_CustomGBForceSystem_solventDielectric;'
         energy_expression += 'soluteDielectric = testsystems_CustomGBForceSystem_soluteDielectric;'
-        custom.addEnergyTerm(energy_expression, openmm.CustomGBForce.ParticlePairNoExclusions);
+        custom.addEnergyTerm(energy_expression, openmm.CustomGBForce.ParticlePairNoExclusions)
 
         # Add particles.
         for i in range(numMolecules):
-            if (i < numMolecules/2):
+            if (i < numMolecules / 2):
                 charge = 1.0 * unit.elementary_charge
                 radius = 0.2 * unit.nanometers
                 scale = 0.5
@@ -3032,7 +3114,7 @@ class CustomGBForceSystem(TestSystem):
                 radius = 0.1 * unit.nanometers
                 scale = 0.5
                 nonbonded.addParticle(charge, sigma, epsilon)
-                custom.addParticle([charge, radius, scale]);
+                custom.addParticle([charge, radius, scale])
             else:
                 charge = 1.0 * unit.elementary_charge
                 radius = 0.2 * unit.nanometers
@@ -3044,7 +3126,7 @@ class CustomGBForceSystem(TestSystem):
                 radius = 0.1 * unit.nanometers
                 scale = 0.8
                 nonbonded.addParticle(charge, sigma, epsilon)
-                custom.addParticle([charge, radius, scale]);
+                custom.addParticle([charge, radius, scale])
 
         system.addForce(nonbonded)
         system.addForce(custom)
@@ -3067,41 +3149,47 @@ class CustomGBForceSystem(TestSystem):
 # AMOEBA SYSTEMS
 #=============================================================================================
 
+
 class AMOEBAIonBox(TestSystem):
+
     """A single Ca2 ion in a water box.
 
     >>> testsystem = AMOEBAIonBox()
     >>> system, positions = testsystem.system, testsystem.positions
 
     """
+
     def __init__(self, **kwargs):
         TestSystem.__init__(self, **kwargs)
 
         pdb_filename = get_data_filename("data/amoeba/ion-in-water.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
-        ff =  app.ForceField("amoeba2009.xml")
+        ff = app.ForceField("amoeba2009.xml")
         # TODO: 7A is a hack
-        system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True, nonbondedCutoff=7.0*unit.angstroms)
+        system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True, nonbondedCutoff=7.0 * unit.angstroms)
 
         positions = pdbfile.getPositions()
         self.topology = pdbfile.topology
         self.system, self.positions = system, positions
 
+
 class AMOEBAProteinBox(TestSystem):
+
     """PDB 1AP4 in water box.
 
     >>> testsystem = AMOEBAProteinBox()
     >>> system, positions = testsystem.system, testsystem.positions
 
     """
+
     def __init__(self, **kwargs):
         TestSystem.__init__(self, **kwargs)
 
         pdb_filename = get_data_filename("data/amoeba/1AP4_14_wat.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
-        ff =  app.ForceField("amoeba2009.xml")
+        ff = app.ForceField("amoeba2009.xml")
         system = ff.createSystem(pdbfile.topology, nonbondedMethod=app.PME, constraints=app.HBonds, useDispersionCorrection=True)
 
         positions = pdbfile.getPositions()
@@ -3112,7 +3200,9 @@ class AMOEBAProteinBox(TestSystem):
 # ALCHEMICALLY MODIFIED SYSTEMS
 #=============================================================================================
 
+
 class AlchemicalState(object):
+
     """
     Alchemical state description.
 
@@ -3183,7 +3273,9 @@ class AlchemicalState(object):
 
         return
 
+
 class AlchemicalTestSystem(object):
+
     def _alchemicallyModifyLennardJones(cls, system, nonbonded_force, alchemical_atom_indices, alchemical_state, alpha=0.50, a=1, b=1, c=6):
         """
         Alchemically modify the Lennard-Jones force terms.
@@ -3214,26 +3306,26 @@ class AlchemicalTestSystem(object):
 
         energy_expression = "4*epsilon*(lambda^a)*x*(x-1.0);"
         energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
-        energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
-        energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-        energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;" # lambda
+        energy_expression += "epsilon = sqrt(epsilon1*epsilon2);"  # mixing rule for epsilon
+        energy_expression += "sigma = 0.5*(sigma1 + sigma2);"  # mixing rule for sigma
+        energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;"  # lambda
 
         # Create atom groups.
-        atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
-        atomset2 = set(range(system.getNumParticles())) - atomset1 # all atoms minus intra-alchemical region
+        atomset1 = set(alchemical_atom_indices)  # only alchemically-modified atoms
+        atomset2 = set(range(system.getNumParticles())) - atomset1  # all atoms minus intra-alchemical region
 
         # Create alchemically modified nonbonded force.
         # TODO: Create a _createCustomNonbondedForce method to duplicate parameters?
         energy_expression += "alpha = %f;" % alpha
-        energy_expression += "a = %f; b = %f; c = %f;" % (a,b,c)
+        energy_expression += "a = %f; b = %f; c = %f;" % (a, b, c)
         custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
-        custom_nonbonded_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod()) # TODO: Make sure these method indices are identical.
+        custom_nonbonded_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())  # TODO: Make sure these method indices are identical.
         custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
         custom_nonbonded_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
         custom_nonbonded_force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
-        custom_nonbonded_force.addGlobalParameter("testsystems_AlchemicalTestSystem_lennard_jones_lambda", alchemical_state.ligandSterics);
-        custom_nonbonded_force.addPerParticleParameter("sigma") # Lennard-Jones sigma
-        custom_nonbonded_force.addPerParticleParameter("epsilon") # Lennard-Jones epsilon
+        custom_nonbonded_force.addGlobalParameter("testsystems_AlchemicalTestSystem_lennard_jones_lambda", alchemical_state.ligandSterics)
+        custom_nonbonded_force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
+        custom_nonbonded_force.addPerParticleParameter("epsilon")  # Lennard-Jones epsilon
 
         # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
         # Only add custom nonbonded force if interacting groups are both nonzero in size.
@@ -3246,29 +3338,29 @@ class AlchemicalTestSystem(object):
             energy_expression = "4*epsilon*(lambda^a)*x*(x-1.0);"
             energy_expression += "x = (1.0/(alpha*(1.0-lambda)^b + (r/sigma)^c))^(6/c);"
             energy_expression += "alpha = %f;" % alpha
-            energy_expression += "a = %f; b = %f; c = %f;" % (a,b,c)
+            energy_expression += "a = %f; b = %f; c = %f;" % (a, b, c)
             energy_expression += "lambda = testsystems_AlchemicalTestSystem_lennard_jones_lambda;"
             custom_bond_force = openmm.CustomBondForce(energy_expression)
-            custom_bond_force.addGlobalParameter("lennard_jones_lambda", alchemical_state.ligandSterics);
-            custom_bond_force.addPerBondParameter("sigma") # Lennard-Jones sigma
-            custom_bond_force.addPerBondParameter("epsilon") # Lennard-Jones epsilon
+            custom_bond_force.addGlobalParameter("lennard_jones_lambda", alchemical_state.ligandSterics)
+            custom_bond_force.addPerBondParameter("sigma")  # Lennard-Jones sigma
+            custom_bond_force.addPerBondParameter("epsilon")  # Lennard-Jones epsilon
             system.addForce(custom_bond_force)
         else:
             # Decoupling of sterics.
             # Add a second CustomNonbondedForce to restore "intra-alchemical" interactions to full strength.
             energy_expression = "4*epsilon*((sigma/r)^12 - (sigma/r)^6);"
-            energy_expression += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
-            energy_expression += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
+            energy_expression += "epsilon = sqrt(epsilon1*epsilon2);"  # mixing rule for epsilon
+            energy_expression += "sigma = 0.5*(sigma1 + sigma2);"  # mixing rule for sigma
             custom_nonbonded_force2 = openmm.CustomNonbondedForce(energy_expression)
             custom_nonbonded_force2.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
             custom_nonbonded_force2.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
             custom_nonbonded_force2.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
-            custom_nonbonded_force2.addPerParticleParameter("sigma") # Lennard-Jones sigma
-            custom_nonbonded_force2.addPerParticleParameter("epsilon") # Lennard-Jones epsilon
+            custom_nonbonded_force2.addPerParticleParameter("sigma")  # Lennard-Jones sigma
+            custom_nonbonded_force2.addPerParticleParameter("epsilon")  # Lennard-Jones epsilon
             system.addForce(custom_nonbonded_force2)
             # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
-            atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
-            atomset2 = set(alchemical_atom_indices) # only alchemically-modified atoms
+            atomset1 = set(alchemical_atom_indices)  # only alchemically-modified atoms
+            atomset2 = set(alchemical_atom_indices)  # only alchemically-modified atoms
             custom_nonbonded_force2.addInteractionGroup(atomset1, atomset2)
 
         # Copy Lennard-Jones particle parameters.
@@ -3278,7 +3370,7 @@ class AlchemicalTestSystem(object):
             # Add corresponding particle to softcore interactions.
             if particle_index in alchemical_atom_indices:
                 # Turn off Lennard-Jones contribution from alchemically-modified particles.
-                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon*0.0)
+                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon * 0.0)
             # Add contribution back to custom force.
             custom_nonbonded_force.addParticle([sigma, epsilon])
             if not alchemical_state.annihilateSterics:
@@ -3303,21 +3395,23 @@ class AlchemicalTestSystem(object):
         # Set periodicity and cutoff parameters corresponding to reference Force.
         if nonbonded_force.getNonbondedMethod() in [openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME]:
             # Convert Ewald and PME to CutoffPeriodic.
-            custom_nonbonded_force.setNonbondedMethod( openmm.CustomNonbondedForce.CutoffPeriodic )
+            custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
             if not alchemical_state.annihilateSterics:
-                custom_nonbonded_force2.setNonbondedMethod( openmm.CustomNonbondedForce.CutoffPeriodic )
+                custom_nonbonded_force2.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
         else:
-            custom_nonbonded_force.setNonbondedMethod( nonbonded_force.getNonbondedMethod() )
+            custom_nonbonded_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
             if not alchemical_state.annihilateSterics:
-                custom_nonbonded_force2.setNonbondedMethod(nonbonded_force.getNonbondedMethod() )
+                custom_nonbonded_force2.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
 
-        custom_nonbonded_force.setCutoffDistance( nonbonded_force.getCutoffDistance() )
+        custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
         if not alchemical_state.annihilateSterics:
-            custom_nonbonded_force2.setCutoffDistance( nonbonded_force.getCutoffDistance() )
+            custom_nonbonded_force2.setCutoffDistance(nonbonded_force.getCutoffDistance())
 
         return
 
-class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
+
+class AlchemicalLennardJonesCluster(TestSystem, AlchemicalTestSystem):
+
     """Create an alchemically-perturbed version of LennardJonesCluster.
 
 
@@ -3346,15 +3440,16 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
     >>> system, positions = cluster.system, cluster.positions
 
     """
-    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole/unit.nanometer**2, **kwargs):
+
+    def __init__(self, nx=3, ny=3, nz=3, K=1.0 * unit.kilojoules_per_mole / unit.nanometer**2, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
         # Default parameters
-        mass_Ar     = 39.9 * unit.amu
-        q_Ar        = 0.0 * unit.elementary_charge
-        sigma_Ar    = 3.350 * unit.angstrom
-        epsilon_Ar  = 0.001603 * unit.kilojoule_per_mole
+        mass_Ar = 39.9 * unit.amu
+        q_Ar = 0.0 * unit.elementary_charge
+        sigma_Ar = 3.350 * unit.angstrom
+        epsilon_Ar = 0.001603 * unit.kilojoule_per_mole
 
         scaleStepSizeX = 1.0
         scaleStepSizeY = 1.0
@@ -3370,7 +3465,7 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
         nb = openmm.NonbondedForce()
         nb.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
 
-        positions = unit.Quantity(np.zeros([natoms,3],np.float32), unit.angstrom)
+        positions = unit.Quantity(np.zeros([natoms, 3], np.float32), unit.angstrom)
 
         atom_index = 0
         for ii in range(nx):
@@ -3378,20 +3473,20 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
                 for kk in range(nz):
                     system.addParticle(mass_Ar)
                     nb.addParticle(q_Ar, sigma_Ar, epsilon_Ar)
-                    x = sigma_Ar*scaleStepSizeX*(ii - nx/2.0)
-                    y = sigma_Ar*scaleStepSizeY*(jj - ny/2.0)
-                    z = sigma_Ar*scaleStepSizeZ*(kk - nz/2.0)
+                    x = sigma_Ar * scaleStepSizeX * (ii - nx / 2.0)
+                    y = sigma_Ar * scaleStepSizeY * (jj - ny / 2.0)
+                    z = sigma_Ar * scaleStepSizeZ * (kk - nz / 2.0)
 
-                    positions[atom_index,0] = x
-                    positions[atom_index,1] = y
-                    positions[atom_index,2] = z
+                    positions[atom_index, 0] = x
+                    positions[atom_index, 1] = y
+                    positions[atom_index, 2] = z
                     atom_index += 1
 
         # Add the nonbonded force.
         system.addForce(nb)
 
         # Add a restrining potential centered at the origin.
-        energy_expression  = "(K/2.0) * (x^2 + y^2 + z^2);"
+        energy_expression = "(K/2.0) * (x^2 + y^2 + z^2);"
         energy_expression += "K = testsystems_AlchemicalLennardJonesCluster_K;"
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_AlchemicalLennardJonesCluster_K', K)
@@ -3402,7 +3497,7 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
         # Alchemically modify system.
         alchemical_atom_indices = [0]
         delta = 1.0e-5
-        alchemical_state = AlchemicalState(0, 0, 1-delta, 1, annihilateElectrostatics=True, annihilateSterics=False)
+        alchemical_state = AlchemicalState(0, 0, 1 - delta, 1, annihilateElectrostatics=True, annihilateSterics=False)
         self._alchemicallyModifyLennardJones(system, nb, alchemical_atom_indices, alchemical_state)
 
         # Create topology.
@@ -3425,6 +3520,7 @@ class AlchemicalLennardJonesCluster(TestSystem,AlchemicalTestSystem):
 #=============================================================================================
 
 class LennardJonesPair(TestSystem):
+
     """Create a pair of Lennard-Jones particles.
 
     Parameters
@@ -3461,7 +3557,8 @@ class LennardJonesPair(TestSystem):
     >>> binding_free_energy = test.get_binding_free_energy(thermodynamic_state)
 
     """
-    def __init__(self, mass=39.9*unit.amu, sigma=3.350*unit.angstrom, epsilon=10.0*unit.kilocalories_per_mole, **kwargs):
+
+    def __init__(self, mass=39.9 * unit.amu, sigma=3.350 * unit.angstrom, epsilon=10.0 * unit.kilocalories_per_mole, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3481,9 +3578,9 @@ class LennardJonesPair(TestSystem):
         force.setNonbondedMethod(openmm.NonbondedForce.NoCutoff)
 
         # Create positions.
-        positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
+        positions = unit.Quantity(np.zeros([2, 3], np.float32), unit.angstrom)
         # Move the second particle along the x axis to be at the potential minimum.
-        positions[1,0] = 2.0**(1.0/6.0) * sigma
+        positions[1, 0] = 2.0**(1.0 / 6.0) * sigma
 
         # Create first particle.
         system.addParticle(mass)
@@ -3538,30 +3635,30 @@ class LennardJonesPair(TestSystem):
         def integrand_openmm(xvec, args):
             """OpenMM implementation of integrand (for sanity checks)."""
             [context] = args
-            positions = unit.Quantity(np.zeros([2,3],np.float32), unit.angstrom)
+            positions = unit.Quantity(np.zeros([2, 3], np.float32), unit.angstrom)
             integrands = 0.0 * xvec
             for (i, x) in enumerate(xvec):
-                positions[1,0] = x * self.sigma
+                positions[1, 0] = x * self.sigma
                 context.setPositions(positions)
                 state = context.getState(getEnergy=True)
-                u = state.getPotentialEnergy() / kT # effective energy
-                integrand = 4.0*pi*(x**2) * np.exp(-u)
+                u = state.getPotentialEnergy() / kT  # effective energy
+                integrand = 4.0 * pi * (x**2) * np.exp(-u)
                 integrands[i] = integrand
 
             return integrands
 
         def integrand_numpy(x, args):
             """NumPy implementation of integrand (for speed)."""
-            u = 4.0*(self.epsilon)*(x**(-12) - x**(-6)) / kT
-            integrand = 4.0*pi*(x**2) * np.exp(-u)
+            u = 4.0 * (self.epsilon) * (x**(-12) - x**(-6)) / kT
+            integrand = 4.0 * pi * (x**2) * np.exp(-u)
             return integrand
 
         # Compute standard state volume
         V0 = (unit.liter / (unit.AVOGADRO_CONSTANT_NA * unit.mole)).in_units_of(unit.angstrom**3)
 
         # Integrate the free energy of binding in unitless coordinate system.
-        xmin = 0.15 # in units of sigma
-        xmax = 6.0 # in units of sigma
+        xmin = 0.15  # in units of sigma
+        xmax = 6.0  # in units of sigma
         from scipy.integrate import quadrature
         [integral, abserr] = quadrature(integrand_numpy, xmin, xmax, args=[context], maxiter=500)
         # correct for performing unitless integration
@@ -3569,7 +3666,7 @@ class LennardJonesPair(TestSystem):
 
         # Correct for actual integration volume (which exceeds standard state volume).
         rmax = xmax * self.sigma
-        Vint = (4.0/3.0) * pi * (rmax**3)
+        Vint = (4.0 / 3.0) * pi * (rmax**3)
         integral = integral * (V0 / Vint)
 
         # Clean up.
