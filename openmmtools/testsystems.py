@@ -48,6 +48,7 @@ import os
 import os.path
 import numpy as np
 import numpy.random
+import itertools
 
 import scipy
 import scipy.special
@@ -209,10 +210,68 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
 
     return positions
 
+
+def build_lattice_cell():
+    """Build a single (4 atom) unit cell of a FCC lattice."""
+    xyz = [[0, 0, 0], [0, 0.5, 0.5], [0.5, 0.5, 0], [0.5, 0, 0.5]]
+    xyz = np.array(xyz)
+
+    return xyz
+
+
+def build_lattice(n_particles):
+    """Build a FCC lattice with n_particles, where (n / 4) must be a cubed integer.
+
+    Notes
+    -----
+    Equations eyeballed from http://en.wikipedia.org/wiki/Close-packing_of_equal_spheres
+    """
+    n = ((n_particles / 4.) ** (1 / 3.))
+
+    if np.abs(n - np.round(n)) > 1E-10:
+        raise(ValueError("Must input 14 n^3 particles for some integer n!"))
+    else:
+        n = int(np.round(n))
+
+    xyz = []
+    cell = build_lattice_cell()
+    x, y, z = np.eye(3)
+    for atom, (i, j, k) in enumerate(itertools.product(np.arange(n), repeat=3)):
+        xi = cell + i * x + j * y + k * z
+        xyz.append(xi)
+
+    xyz = np.concatenate(xyz)
+
+    return xyz, n
+
+
+def generate_dummy_trajectory(xyz, box):
+    """Convert xyz coordinates and box vectors into an MDTraj Trajectory (with Topology)."""
+    try:
+        import mdtraj as md
+        import pandas as pd
+    except ImportError as e:
+        print("Error: generate_dummy_trajectory() requires mdtraj and pandas!")
+        raise(e)
+
+    n_atoms = len(xyz)
+    data = []
+
+    for i in range(n_atoms):
+        data.append(dict(serial=i, name="H", element="H", resSeq=i + 1, resName="UNK", chainID=0))
+
+    data = pd.DataFrame(data)
+    unitcell_lengths = box * np.ones((1, 3))
+    unitcell_angles = 90 * np.ones((1, 3))
+    top = md.Topology.from_dataframe(data, np.zeros((0, 2), dtype='int'))
+    traj = md.Trajectory(xyz, top, unitcell_lengths=unitcell_lengths, unitcell_angles=unitcell_angles)
+
+    return traj
+
+
 #=============================================================================================
 # Thermodynamic state description
 #=============================================================================================
-
 
 class ThermodynamicState(object):
 
@@ -1357,7 +1416,7 @@ class SodiumChlorideCrystal(TestSystem):
 
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1480,10 +1539,10 @@ class LennardJonesCluster(TestSystem):
         harmonic restraining potential
     cutoff : simtk.unit.Quantity, optional, default=None
         If None, will use NoCutoff for the NonbondedForce.  Otherwise,
-        use CutoffNonPeriodic with the specified cutoff.  
+        use CutoffNonPeriodic with the specified cutoff.
     switch_width : simtk.unit.Quantity, optional, default=None
         If None, the cutoff is a hard cutoff.  If switch_width is specified,
-        use a switching function with this width.  
+        use a switching function with this width.
 
     Examples
     --------
@@ -1608,6 +1667,16 @@ class LennardJonesFluid(TestSystem):
         If True, will shift Lennard-Jones potential so energy will be continuous at cutoff (switch_width is ignored).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
+    lattice : bool, optional, default=False
+        If True, use fcc sphere packing to generate initial positions.  The box
+        size will be determined by `nparticles` and `reduced_density`.
+    charge : simtk.unit, optional, default=None
+        If not None, use alternating plus and minus `charge` for the particle charges.
+        Also, if not None, use PME for electrostatics.  Obviously this is no
+        longer a traditional LJ system, but this option could be useful for
+        testing the effect of charges in small systems.
+    ewaldErrorTolerance : float, optional, default=5E-4
+           The Ewald or PME tolerance.  Used only if charge is not None.
 
     Examples
     --------
@@ -1643,7 +1712,11 @@ class LennardJonesFluid(TestSystem):
                  cutoff=None,
                  switch_width=3.4 * unit.angstrom,  # argon
                  shift=False,
-                 dispersion_correction=True, **kwargs):
+                 dispersion_correction=True,
+                 lattice=False,
+                 charge=None,
+                 ewaldErrorTolerance=None,
+                 **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -1651,8 +1724,11 @@ class LennardJonesFluid(TestSystem):
         if cutoff is None:
             cutoff = 3.0 * sigma
 
-        # Charge is zero.
-        charge = 0.0 * unit.elementary_charge
+        if charge is None:  # Charge is zero.
+            charge = 0.0 * unit.elementary_charge
+            cutoff_type = openmm.NonbondedForce.CutoffPeriodic
+        else:
+            cutoff_type = openmm.NonbondedForce.PME
 
         # Create an empty system object.
         system = openmm.System()
@@ -1668,9 +1744,11 @@ class LennardJonesFluid(TestSystem):
 
         # Set up periodic nonbonded interactions with a cutoff.
         nb = openmm.NonbondedForce()
-        nb.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
+        nb.setNonbondedMethod(cutoff_type)
         nb.setCutoffDistance(cutoff)
         nb.setUseDispersionCorrection(dispersion_correction)
+        if ewaldErrorTolerance is not None:
+            nb.setEwaldErrorTolerance(ewaldErrorTolerance)
 
         nb.setUseSwitchingFunction(False)
         if (switch_width != None) and (not shift):
@@ -1679,7 +1757,11 @@ class LennardJonesFluid(TestSystem):
 
         for particle_index in range(nparticles):
             system.addParticle(mass)
-            nb.addParticle(charge, sigma, epsilon)
+            if cutoff_type == openmm.NonbondedForce.PME:
+                charge_i = charge * ((particle_index % 2) * 2 - 1.)  # Alternate plus and minus
+            else:
+                charge_i = charge
+            nb.addParticle(charge_i, sigma, epsilon)
 
         # Add shift if desired.
         if (shift):
@@ -1692,9 +1774,14 @@ class LennardJonesFluid(TestSystem):
                 cnb.addParticle([])
             system.addForce(cnb)
 
-        # Create initial coordinates using subrandom positions.
-        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
-
+        if lattice:
+            box_nm = box_edge / unit.nanometers
+            xyz, box = build_lattice(nparticles)
+            xyz *= (box_nm / box)
+            traj = generate_dummy_trajectory(xyz, box_nm)
+            positions = traj.openmm_positions(0)
+        else:  # Create initial coordinates using subrandom positions.
+            positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
         # Add the nonbonded force.
         system.addForce(nb)
 
@@ -1781,7 +1868,7 @@ class LennardJonesGrid(LennardJonesFluid):
         Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -1867,7 +1954,7 @@ class CustomLennardJonesFluidMixture(TestSystem):
         Cutoff for nonbonded interactions.  If None, defaults to 3 * sigma
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
         switching function is turned on at cutoff - switch_width
-        If None, no switch will be applied (e.g. hard cutoff).  
+        If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
         if True, will use analytical dispersion correction (if not using switching function)
 
@@ -2286,7 +2373,7 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=2.5 * unit.nanometers, cutoff=0.9 * unit.nanometers, model='tip3p', switch_width=0.5 * unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, **kwargs):
+    def __init__(self, box_edge=2.5 * unit.nanometers, cutoff=0.9 * unit.nanometers, model='tip3p', switch_width=0.5 * unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
         """
         Create a water box test system.
 
@@ -2307,6 +2394,8 @@ class WaterBox(TestSystem):
            Sets whether the long-range dispersion correction should be used.
         nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
            Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+        ewaldErrorTolerance : float, optional, default=5E-4
+           The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
 
         Examples
         --------
@@ -2385,6 +2474,7 @@ class WaterBox(TestSystem):
             forces['NonbondedForce'].setSwitchingDistance(cutoff - switch_width)
 
         forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
+        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
 
         self.ndof = 3 * system.getNumParticles() - 3 * constrained
 
@@ -2666,7 +2756,7 @@ class AlanineDipeptideExplicit(TestSystem):
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
-        If set, will pass along a modified hydrogen mass for OpenMM to 
+        If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
 
     Examples
@@ -2723,8 +2813,8 @@ class DHFRExplicit(TestSystem):
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
-        If set, will pass along a modified hydrogen mass for OpenMM to 
-        use mass repartitioning.       
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
 
     """
 
