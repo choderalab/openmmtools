@@ -8,12 +8,12 @@ import simtk.openmm as mm
 from .constants import kB
 
 def check_groups(groups):
-    
+
     if groups is None or len(groups) == 0:
         print("No force groups specified, using [(0, 1)]!")
         groups = [(0, 1)]
         # raise ValueError("No force groups specified")
-    
+
     groups = sorted(groups, key=lambda x: x[1])
     return groups
 
@@ -36,22 +36,22 @@ def guess_force_groups(system, nonbonded=1, fft=1, others=0, multipole=1):
 
 class HMCBase(mm.CustomIntegrator):
     """Generalized or non-generalized hybrid Monte Carlo integrator base class.
-    
+
     Notes
     -----
     This loosely follows the definition of (G)HMC given in the two below
     references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then 
-    an accept / reject move is taken.  
-    
+    several steps of hamiltonian dynamics are performed, and then
+    an accept / reject move is taken.
+
     This class is the base class for a number of more specialized versions
     of GHMC.
-    
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-    
+
     """
 
     def step(self, n_steps):
@@ -60,20 +60,20 @@ class HMCBase(mm.CustomIntegrator):
             self.elapsed_steps = 0.0
         if not hasattr(self, "elapsed_time"):
             self.elapsed_time = 0.0
-        
+
         t0 = time.time()
-        mm.CustomIntegrator.step(self, n_steps)        
+        mm.CustomIntegrator.step(self, n_steps)
         dt = time.time() - t0
 
         self.elapsed_time += dt
         self.elapsed_steps += self.steps_per_hmc * n_steps
-    
+
     def reset_time(self):
         """Do this before using any benchmark timing info."""
         self.step(1)
         self.elapsed_steps = 0.0
         self.elapsed_time = 0.0
-        
+
     @property
     def time_per_step(self):
         return (self.elapsed_time / self.elapsed_steps)
@@ -99,9 +99,9 @@ class HMCBase(mm.CustomIntegrator):
 
             d = self.summary()
             data.append(d)
-        
+
         data = pd.DataFrame(data)
-        
+
         print(data.to_string(formatters=[lambda x: "%.4g" % x for x in range(data.shape[1])]))
         return data
 
@@ -125,7 +125,7 @@ class HMCBase(mm.CustomIntegrator):
 
     def add_hamiltonian_step(self):
         """Add a single step of hamiltonian integration.
-        
+
         Notes
         -----
         This function will be overwritten in RESPA subclasses!
@@ -137,7 +137,7 @@ class HMCBase(mm.CustomIntegrator):
         self.addConstrainPositions()
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
-        
+
     @property
     def kT(self):
         """The thermal energy."""
@@ -174,38 +174,41 @@ class HMCBase(mm.CustomIntegrator):
         d["ns_per_day"] = self.ns_per_day
         d["r"] = self.accept_factor
         keys = ["accept", "ke", "Enew", "naccept", "ntrials", "Eold"]
-        
+
         for key in keys:
             d[key] = self.getGlobalVariableByName(key)
-        
+
         d["deltaE"] = d["Enew"] - d["Eold"]
-        
+
         return d
 
     @property
     def accept_factor(self):
         return np.exp(-(self.getGlobalVariableByName("Enew") - self.getGlobalVariableByName("Eold")) / self.getGlobalVariableByName("kT"))
 
-
+    @property
+    def accept(self):
+        """Return True if the last step taken was accepted."""
+        return bool(self.getGlobalVariableByName("accept"))
 
 class HMCIntegrator(HMCBase):
     """Hybrid Monte Carlo (HMC) integrator.
-    
+
     Notes
     -----
     This loosely follows the definition of GHMC given in the two below
     references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then 
-    an accept / reject move is taken.  
-    
+    several steps of hamiltonian dynamics are performed, and then
+    an accept / reject move is taken.
+
     This class is the base class for a number of more specialized versions
     of HMC.
-    
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-    
+
     """
 
     def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds):
@@ -223,7 +226,7 @@ class HMCIntegrator(HMCBase):
         """
 
         mm.CustomIntegrator.__init__(self, timestep)
-        
+
         self.steps_per_hmc = steps_per_hmc
         self.temperature = temperature
         self.timestep = timestep
@@ -261,28 +264,28 @@ class HMCIntegrator(HMCBase):
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-        #self.addComputePerDof("x", "x*accept + xold*(1-accept)")  # Unstable if NANs present.
+
         self.addComputePerDof("x", "select(accept, x, xold)")  # Requires OMM Build on May 6, 2015
 
 
 class GHMCIntegrator(HMCBase):
     """Generalized hybrid Monte Carlo (GHMC) integrator.
-    
+
     Notes
     -----
     This loosely follows the definition of GHMC given in the two below
     references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then 
-    an accept / reject move is taken.  
-    
+    several steps of hamiltonian dynamics are performed, and then
+    an accept / reject move is taken.
+
     This class is the base class for a number of more specialized versions
     of GHMC.
-    
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-    
+
     """
 
     def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, collision_rate=1.0 / u.picoseconds):
@@ -302,10 +305,10 @@ class GHMCIntegrator(HMCBase):
         """
 
         mm.CustomIntegrator.__init__(self, timestep)
-        
+
         self.steps_per_hmc = steps_per_hmc
         self.temperature = temperature
-        self.collision_rate = collision_rate        
+        self.collision_rate = collision_rate
         self.timestep = timestep
         self.create()
 
@@ -322,7 +325,7 @@ class GHMCIntegrator(HMCBase):
         self.addGlobalVariable("Enew", 0) # new energy
         self.addGlobalVariable("accept", 0) # accept or reject
         self.addPerDofVariable("x1", 0) # for constraints
-        self.addGlobalVariable("b", self.b) # velocity mixing parameter                
+        self.addGlobalVariable("b", self.b) # velocity mixing parameter
 
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         self.addUpdateContextState()
@@ -337,17 +340,14 @@ class GHMCIntegrator(HMCBase):
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Eold", "ke + energy")
         self.addComputePerDof("xold", "x")
-        self.addComputePerDof("vold", "v")        
+        self.addComputePerDof("vold", "v")
 
     def add_accept_or_reject_step(self):
         print("GHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-        
-        #self.addComputePerDof("x", "x*accept + xold*(1-accept)")
-        #self.addComputePerDof("v", "v*accept - vold*(1-accept)")  # Notice the minus sign: momentum flip        
-        
+
         self.addComputePerDof("x", "select(accept, x, xold)")  # Requires OMM Build on May 6, 2015
         self.addComputePerDof("v", "select(accept, v, -1*vold)")  # Requires OMM Build on May 6, 2015
 
@@ -359,22 +359,22 @@ class GHMCIntegrator(HMCBase):
 
 class XCMixin(object):
     """Extra Chance Generalized hybrid Monte Carlo (XCGHMC) integrator Mixin.
-    
+
     Notes
     -----
     This integrator attempts to circumvent rejections by propagating
-    additional dynamics and performing a second metropolization step.  
-    
+    additional dynamics and performing a second metropolization step.
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-    
+
     """
 
     def add_accumulate_statistics_step(self):
         self.addComputeGlobal("nflip", "nflip + flip")
-        self.addComputeGlobal("naccept", "naccept + a")
+        self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
     @property
@@ -390,7 +390,7 @@ class XCMixin(object):
     @property
     def acceptance_rate(self):
         """The acceptance rate, in terms of number of force evaluations.
-        
+
         Notes
         -----
         Each completed "round" of XHMC dynamics involves extra_chances + 1
@@ -410,55 +410,51 @@ class XCMixin(object):
         """
         d = {}
         d["arate"] = self.acceptance_rate
-        keys = ["a", "s", "l", "rho", "ke", "Enew", "Unew", "mu", "mu1", "flip", "kold", "k", "naccept", "nflip", "ntrials", "nrounds", "Eold", "Uold", "uni"]
-        #keys.extend(["ke0", "ke1", "ke2", "ke3", "pe0", "pe1", "pe2", "pe3"])
+        keys = ["accept", "s", "l", "rho", "ke", "Enew", "Unew", "mu", "mu1", "flip", "kold", "k", "naccept", "nflip", "ntrials", "nrounds", "Eold", "Uold", "uni"]
         for key in keys:
             d[key] = self.getGlobalVariableByName(key)
-        
+
         d["deltaE"] = d["Enew"] - d["Eold"]
-        #for i in range(4):
-        #    d["T%d" % i] = d["pe%d" % i] + d["ke%d" % i]
-        #d["dE"] = (d["ke1"] + d["pe1"]) - (d["ke2"] + d["pe2"])
-        
+
         return d
-    
+
     @property
     def k(self):
-        return self.getGlobalVariableByName("k")        
+        return self.getGlobalVariableByName("k")
 
 
 class XCHMCIntegrator(XCMixin, HMCIntegrator):
     """Extra Chance hybrid Monte Carlo (XCHMC) integrator.
-    
+
     Notes
     -----
     This integrator attempts to circumvent rejections by propagating
-    additional dynamics and performing a second metropolization step.  
-    
+    additional dynamics and performing a second metropolization step.
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-    
+
     """
     def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, take_debug_steps=False):
         """CURRENTLY BROKEN!!!!!
         """
         self.take_debug_steps = take_debug_steps
-        
+
         mm.CustomIntegrator.__init__(self, timestep)
-        
+
         self.temperature = temperature
         self.steps_per_hmc = steps_per_hmc
         self.timestep = timestep
         self.extra_chances = extra_chances
-        
+
         self.create()
 
 
     def initialize_variables(self):
 
-        self.addGlobalVariable("a", 1.0) # accept or reject
+        self.addGlobalVariable("accept", 1.0) # accept or reject
         self.addGlobalVariable("s", 0.0)
         self.addGlobalVariable("l", 0.0)
         self.addGlobalVariable("r", 0.0) # Metropolis ratio: ratio probabilities
@@ -467,9 +463,9 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
         self.addGlobalVariable("k", 0)  # Current number of rounds of dynamics
         self.addGlobalVariable("kold", 0)  # Previous value of k stored for debugging purposes
         self.addGlobalVariable("flip", 0.0)  # Indicator variable whether this iteration was a flip
-        
+
         self.addGlobalVariable("rho", 0.0)  # temporary variables for acceptance criterion
-        self.addGlobalVariable("mu", 0.0)  # 
+        self.addGlobalVariable("mu", 0.0)  #
         self.addGlobalVariable("mu1", 0.0)  # XCHMC Fig. 3 O1
 
         self.addGlobalVariable("Uold", 0.0)
@@ -480,7 +476,7 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
         self.addGlobalVariable("nrounds", 0) # number of "rounds" of XHMC, e.g. the number of times k = 0
 
         # Below this point is possible base class material
-        
+
         self.addGlobalVariable("naccept", 0) # number accepted
         self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
 
@@ -492,7 +488,7 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
         self.addGlobalVariable("Enew", 0) # new energy
 
         self.addPerDofVariable("x1", 0) # for constraints
-        
+
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         self.addUpdateContextState()
 
@@ -507,17 +503,17 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
 
         self.addComputePerDof("v", "s * sigma * gaussian + (1 - s) * v")
         self.addConstrainVelocities()
-        
+
     def add_cache_variables_step(self):
         """Store old positions and energies."""
 
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Eold", "s * (ke + energy) + (1 - s) * Eold")
         self.addComputeGlobal("Uold", "energy")  # Not strictly necessary, used for debugging
-        #self.addComputePerDof("xold", "s * x + (1 - s) * xold")
+
         self.addComputePerDof("xold", "select(s, x, xold)")  # Requires OMM Build on May 6, 2015
-        
-        
+
+
         self.addComputeGlobal("mu1", "mu1 * (1 - s)")  # XCHMC Fig. 3 O1
         self.addComputeGlobal("uni", "(1 - s) * uni + uniform * s")  # XCHMC paper version, only draw uniform once
 
@@ -531,17 +527,16 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
         self.addComputeGlobal("mu", "min(1, r)")  # XCHMC paper version
         self.addComputeGlobal("mu1", "max(mu1, mu)")
 
-        
-        self.addComputeGlobal("a", "step(mu1 - uni)")
 
-        self.addComputeGlobal("flip", "(1 - a) * l")  # Flip is True ONLY on rejection at last cycle
-        
-        #self.addComputePerDof("x", "x * (1 - flip) + xold * flip")
+        self.addComputeGlobal("accept", "step(mu1 - uni)")
+
+        self.addComputeGlobal("flip", "(1 - accept) * l")  # Flip is True ONLY on rejection at last cycle
+
         self.addComputePerDof("x", "select(flip, xold, x)")  # Requires OMM Build on May 6, 2015
-        
+
 
         self.addComputeGlobal("kold", "k")  # Store the previous value of k for debugging purposes
-        self.addComputeGlobal("k", "(k + 1) * (1 - flip) * (1 - a)")  # Increment by one ONLY if not flipping momenta or accepting, otherwise set to zero        
+        self.addComputeGlobal("k", "(k + 1) * (1 - flip) * (1 - accept)")  # Increment by one ONLY if not flipping momenta or accepting, otherwise set to zero
 
     def step(self, n_steps):
         if self.take_debug_steps:
@@ -556,37 +551,37 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
 
 class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
     """Extra Chance Generalized hybrid Monte Carlo (XCGHMC) integrator.
-    
+
     Notes
     -----
     This integrator attempts to circumvent rejections by propagating
-    additional dynamics and performing a second metropolization step.  
-    
+    additional dynamics and performing a second metropolization step.
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-    
+
     """
     def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, collision_rate=1.0 / u.picoseconds, extra_chances=2, take_debug_steps=False):
         """CURRENTLY BROKEN!!!!!
         """
         self.take_debug_steps = take_debug_steps
-        
+
         mm.CustomIntegrator.__init__(self, timestep)
-        
+
         self.temperature = temperature
         self.steps_per_hmc = steps_per_hmc
-        self.collision_rate = collision_rate        
+        self.collision_rate = collision_rate
         self.timestep = timestep
         self.extra_chances = extra_chances
-        
+
         self.create()
 
 
     def initialize_variables(self):
 
-        self.addGlobalVariable("a", 1.0) # accept or reject
+        self.addGlobalVariable("accept", 1.0) # accept or reject
         self.addGlobalVariable("s", 0.0)
         self.addGlobalVariable("l", 0.0)
         self.addGlobalVariable("r", 0.0) # Metropolis ratio: ratio probabilities
@@ -595,9 +590,9 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
         self.addGlobalVariable("k", 0)  # Current number of rounds of dynamics
         self.addGlobalVariable("kold", 0)  # Previous value of k stored for debugging purposes
         self.addGlobalVariable("flip", 0.0)  # Indicator variable whether this iteration was a flip
-        
+
         self.addGlobalVariable("rho", 0.0)  # temporary variables for acceptance criterion
-        self.addGlobalVariable("mu", 0.0)  # 
+        self.addGlobalVariable("mu", 0.0)  #
         self.addGlobalVariable("mu1", 0.0)  # XCHMC Fig. 3 O1
 
         self.addGlobalVariable("Uold", 0.0)
@@ -608,7 +603,7 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
         self.addGlobalVariable("nrounds", 0) # number of "rounds" of XHMC, e.g. the number of times k = 0
 
         # Below this point is possible base class material
-        
+
         self.addGlobalVariable("naccept", 0) # number accepted
         self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
 
@@ -622,7 +617,7 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
 
         self.addPerDofVariable("x1", 0) # for constraints
         self.addGlobalVariable("b", self.b) # velocity mixing parameter
-        
+
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         self.addUpdateContextState()
 
@@ -637,23 +632,22 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
 
         self.addComputePerDof("v", "s * (sqrt(b) * v + sqrt(1 - b) * sigma * gaussian) + (1 - s) * v")
         self.addConstrainVelocities()
-        
+
     def add_cache_variables_step(self):
         """Store old positions and energies."""
 
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Eold", "s * (ke + energy) + (1 - s) * Eold")
         self.addComputeGlobal("Uold", "energy")  # Not strictly necessary, used for debugging
-        #self.addComputePerDof("xold", "s * x + (1 - s) * xold")
-        #self.addComputePerDof("vold", "s * v + (1 - s) * vold")
-        self.addComputePerDof("xold", "select(s, x, xold)")  # Requires OMM Build on May 6, 2015        
-        self.addComputePerDof("vold", "select(s, v, vold)")  # Requires OMM Build on May 6, 2015        
-        
+
+        self.addComputePerDof("xold", "select(s, x, xold)")  # Requires OMM Build on May 6, 2015
+        self.addComputePerDof("vold", "select(s, v, vold)")  # Requires OMM Build on May 6, 2015
+
         self.addComputeGlobal("mu1", "mu1 * (1 - s)")  # XCHMC Fig. 3 O1
         self.addComputeGlobal("uni", "(1 - s) * uni + uniform * s")  # XCHMC paper version, only draw uniform once
 
     def add_accept_or_reject_step(self):
-        print("XCGHMC: add_accept_or_reject_step()")        
+        print("XCGHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
 
@@ -662,18 +656,16 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
         self.addComputeGlobal("mu", "min(1, r)")  # XCHMC paper version
         self.addComputeGlobal("mu1", "max(mu1, mu)")
 
-        
-        self.addComputeGlobal("a", "step(mu1 - uni)")
 
-        self.addComputeGlobal("flip", "(1 - a) * l")  # Flip is True ONLY on rejection at last cycle
-        
-        #self.addComputePerDof("x", "x * (1 - flip) + xold * flip")
-        #self.addComputePerDof("v", "v * (1 - flip) - vold * flip")  # Conserve velocities except on flips.
-        self.addComputePerDof("x", "select(flip, xold, x)")  # Requires OMM Build on May 6, 2015        
+        self.addComputeGlobal("accept", "step(mu1 - uni)")
+
+        self.addComputeGlobal("flip", "(1 - accept) * l")  # Flip is True ONLY on rejection at last cycle
+
+        self.addComputePerDof("x", "select(flip, xold, x)")  # Requires OMM Build on May 6, 2015
         self.addComputePerDof("v", "select(flip, -vold, v)")  # Requires OMM Build on May 6, 2015
 
         self.addComputeGlobal("kold", "k")  # Store the previous value of k for debugging purposes
-        self.addComputeGlobal("k", "(k + 1) * (1 - flip) * (1 - a)")  # Increment by one ONLY if not flipping momenta or accepting, otherwise set to zero        
+        self.addComputeGlobal("k", "(k + 1) * (1 - flip) * (1 - accept)")  # Increment by one ONLY if not flipping momenta or accepting, otherwise set to zero
 
     def step(self, n_steps):
         if self.take_debug_steps:
@@ -688,7 +680,7 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
 class RESPAMixIn(object):
     def add_hamiltonian_step(self):
         """Add a single step of hamiltonian integration.
-        
+
         Notes
         -----
         This function will be overwritten in RESPA subclasses!
@@ -698,11 +690,11 @@ class RESPAMixIn(object):
         self.addConstrainVelocities()
 
     def _create_substeps(self, parentSubsteps, groups):
-        
+
         group, substeps = groups[0]
-        
+
         str_group, str_sub = str(group), str(substeps)
-        
+
         stepsPerParentStep = substeps / parentSubsteps
 
         if stepsPerParentStep < 1 or stepsPerParentStep != int(stepsPerParentStep):
@@ -715,7 +707,7 @@ class RESPAMixIn(object):
 
         for i in range(stepsPerParentStep):
             self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
-            if len(groups) == 1:                
+            if len(groups) == 1:
                 self.addComputePerDof("x1", "x")
                 self.addComputePerDof("x", "x+(dt/%s)*v" % (str_sub))
                 self.addConstrainPositions()
@@ -728,7 +720,7 @@ class RESPAMixIn(object):
 class HMCRESPAIntegrator(RESPAMixIn, HMCIntegrator):
     """Hamiltonian Monte Carlo (HMC) with a rRESPA multiple
     time step integration algorithm.  Combines HMCIntegrator with
-    MTSIntegrator.  
+    MTSIntegrator.
 
     This integrator allows different forces to be evaluated at different frequencies,
     for example to evaluate the expensive, slowly changing forces less frequently than
@@ -746,21 +738,21 @@ class HMCRESPAIntegrator(RESPAMixIn, HMCIntegrator):
     will advance time by that much.  It also says that force group 0 should be evaluated
     once per time step, force group 1 should be evaluated twice per time step (every 2 fs),
     and force group 2 should be evaluated eight times per time step (every 0.5 fs).
-    
+
     Notes
     -----
     This loosely follows the definition of GHMC given in the two below
     references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then 
-    an accept / reject move is taken.  
-    
+    several steps of hamiltonian dynamics are performed, and then
+    an accept / reject move is taken.
+
     The RESPA multiple timestep splitting should closely follow the code
     in MTSIntegrator.
-    
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
-    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)  
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
+    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
     Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992)
     """
 
@@ -785,19 +777,19 @@ class HMCRESPAIntegrator(RESPAMixIn, HMCIntegrator):
         """
 
         mm.CustomIntegrator.__init__(self, timestep)
-        
+
         self.groups = check_groups(groups)
         self.steps_per_hmc = steps_per_hmc
 
         self.timestep = timestep
         self.temperature = temperature
-        
+
         self.create()
 
 class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
     """Generalized Hamiltonian Monte Carlo (GHMC) with a rRESPA multiple
     time step integration algorithm.  Combines GHMCIntegrator with
-    MTSIntegrator.  
+    MTSIntegrator.
 
     This integrator allows different forces to be evaluated at different frequencies,
     for example to evaluate the expensive, slowly changing forces less frequently than
@@ -815,21 +807,21 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
     will advance time by that much.  It also says that force group 0 should be evaluated
     once per time step, force group 1 should be evaluated twice per time step (every 2 fs),
     and force group 2 should be evaluated eight times per time step (every 0.5 fs).
-    
+
     Notes
     -----
     This loosely follows the definition of GHMC given in the two below
     references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then 
-    an accept / reject move is taken.  
-    
+    several steps of hamiltonian dynamics are performed, and then
+    an accept / reject move is taken.
+
     The RESPA multiple timestep splitting should closely follow the code
     in MTSIntegrator.
-    
+
     References
     ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015) 
-    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)  
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
+    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
     Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992)
     """
 
@@ -863,12 +855,12 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
         self.collision_rate = collision_rate
         self.timestep = timestep
         self.temperature = temperature
-        
+
         self.create()
 
 
 class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
-    """Extra Chance Generalized hybrid Monte Carlo RESPA integrator.    
+    """Extra Chance Generalized hybrid Monte Carlo RESPA integrator.
     """
     def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, collision_rate=1.0 / u.picoseconds, extra_chances=2, groups=None, take_debug_steps=False):
         """
@@ -880,21 +872,21 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
         self.take_debug_steps = take_debug_steps
         self.temperature = temperature
         self.steps_per_hmc = steps_per_hmc
-        self.collision_rate = collision_rate        
+        self.collision_rate = collision_rate
         self.timestep = timestep
         self.extra_chances = extra_chances
-        
+
         self.create()
 
 
 class XCHMCRESPAIntegrator(RESPAMixIn, XCHMCIntegrator):
-    """Extra Chance Generalized hybrid Monte Carlo RESPA integrator.    
+    """Extra Chance Generalized hybrid Monte Carlo RESPA integrator.
     """
     def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, groups=None, take_debug_steps=False):
         """
         """
         mm.CustomIntegrator.__init__(self, timestep)
-        
+
         self.groups = check_groups(groups)
 
         self.take_debug_steps = take_debug_steps
@@ -902,5 +894,5 @@ class XCHMCRESPAIntegrator(RESPAMixIn, XCHMCIntegrator):
         self.steps_per_hmc = steps_per_hmc
         self.timestep = timestep
         self.extra_chances = extra_chances
-        
+
         self.create()
