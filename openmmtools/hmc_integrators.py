@@ -372,10 +372,34 @@ class XCMixin(object):
 
     """
 
+    def add_accumulate_xc_accept_statistics(self):
+        """Increment acceptance counts for each step of xmc"""
+        for i in range(1 + self.extra_chances):
+            # Increment 1 to n_i if the current move was accepted and k == i
+            self.addComputeGlobal("n%d" % i, "n%d + accept * delta(%d - k)" % (i, i))
+
     def add_accumulate_statistics_step(self):
         self.addComputeGlobal("nflip", "nflip + flip")
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
+
+    @property
+    def all_counts(self):
+        """Return a pandas series of moves accepted after step 0, 1, ... extra_chances - 1, and flip"""
+        d = {}
+        for i in range(1 + self.extra_chances):
+            d[i] = self.getGlobalVariableByName("n%d" % i)
+
+        d["flip"] = self.n_flip
+
+        return pd.Series(d)
+
+    @property
+    def all_probs(self):
+        """Return a pandas series of probabilities of moves accepted after step 0, 1, ... extra_chances - 1, and flip"""
+        d = self.all_counts
+        return d / d.sum()
+
 
     @property
     def n_flip(self):
@@ -384,8 +408,18 @@ class XCMixin(object):
 
     @property
     def n_rounds(self):
-        """The total number of momentum flips."""
+        """The total number of rounds of XCMC."""
         return self.getGlobalVariableByName("nrounds")
+
+    @property
+    def n_force_wasted(self):
+        """The number of wasted force evaluations."""
+        return self.n_flip * (1 + self.extra_chances)
+
+    @property
+    def fraction_force_wasted(self):
+        """The fraction of wasted force evaluations."""
+        return self.n_force_wasted / (1.0 * self.n_trials)
 
     @property
     def acceptance_rate(self):
@@ -468,6 +502,9 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
         self.addGlobalVariable("mu", 0.0)  #
         self.addGlobalVariable("mu1", 0.0)  # XCHMC Fig. 3 O1
 
+        for i in range(1 + self.extra_chances):
+            self.addGlobalVariable("n%d" % i, 0.0)  # Number of times accepted when k = i
+
         self.addGlobalVariable("Uold", 0.0)
         self.addGlobalVariable("Unew", 0.0)
         self.addGlobalVariable("uni", 0.0)  # Uniform random variable generated once per round of XHMC
@@ -529,6 +566,8 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
 
 
         self.addComputeGlobal("accept", "step(mu1 - uni)")
+
+        self.add_accumulate_xc_accept_statistics()
 
         self.addComputeGlobal("flip", "(1 - accept) * l")  # Flip is True ONLY on rejection at last cycle
 
@@ -595,6 +634,9 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
         self.addGlobalVariable("mu", 0.0)  #
         self.addGlobalVariable("mu1", 0.0)  # XCHMC Fig. 3 O1
 
+        for i in range(1 + self.extra_chances):
+            self.addGlobalVariable("n%d" % i, 0.0)  # Number of times accepted when k = i
+
         self.addGlobalVariable("Uold", 0.0)
         self.addGlobalVariable("Unew", 0.0)
         self.addGlobalVariable("uni", 0.0)  # Uniform random variable generated once per round of XHMC
@@ -658,6 +700,7 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
 
 
         self.addComputeGlobal("accept", "step(mu1 - uni)")
+        self.add_accumulate_xc_accept_statistics()
 
         self.addComputeGlobal("flip", "(1 - accept) * l")  # Flip is True ONLY on rejection at last cycle
 
