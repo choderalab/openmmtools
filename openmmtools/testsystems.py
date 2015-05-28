@@ -2689,6 +2689,9 @@ class AlanineDipeptideVacuum(TestSystem):
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
 
     Examples
     --------
@@ -2698,7 +2701,7 @@ class AlanineDipeptideVacuum(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, **kwargs):
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2706,7 +2709,7 @@ class AlanineDipeptideVacuum(TestSystem):
         crd_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.crd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None)
+        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -2729,6 +2732,9 @@ class AlanineDipeptideImplicit(TestSystem):
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
 
     Examples
     --------
@@ -2738,7 +2744,7 @@ class AlanineDipeptideImplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, **kwargs):
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2747,7 +2753,7 @@ class AlanineDipeptideImplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None)
+        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
 
         # Extract topology
         self.topology = prmtop.topology
