@@ -7,12 +7,14 @@ import simtk.unit as u
 import simtk.openmm as mm
 from .constants import kB
 
-def check_groups(groups):
-
+def check_groups(groups, guess=True):
+    """Check that `groups` is list of tuples suitable for force group / RESPA."""
     if groups is None or len(groups) == 0:
-        print("No force groups specified, using [(0, 1)]!")
-        groups = [(0, 1)]
-        # raise ValueError("No force groups specified")
+        if guess:
+            print("No force groups specified, using [(0, 1)]!")
+            groups = [(0, 1)]
+        else:
+            raise ValueError("No force groups specified")
 
     groups = sorted(groups, key=lambda x: x[1])
     return groups
@@ -26,6 +28,10 @@ def guess_force_groups(system, nonbonded=1, fft=1, others=0, multipole=1):
         if isinstance(force, mm.openmm.NonbondedForce):
             force.setForceGroup(nonbonded)
             force.setReciprocalSpaceForceGroup(fft)
+        elif isinstance(force, mm.openmm.CustomGBForce):
+            force.setForceGroup(nonbonded)
+        elif isinstance(force, mm.openmm.GBSAOBCForce):
+            force.setForceGroup(nonbonded)
         elif isinstance(force, mm.AmoebaMultipoleForce):
             force.setForceGroup(multipole)
         elif isinstance(force, mm.AmoebaVdwForce):
