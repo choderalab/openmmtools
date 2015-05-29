@@ -279,7 +279,7 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
 
     """
 
-    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, precision_nbits=22, max_magnitude_nbits=5, precision_mode='single', timestep_precision_nbits=5):
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, precision_nbits=22, max_magnitude_nbits=5, precision_mode='single', timestep_precision_nbits=5, test=False):
         """Construct a velocity Verlet integrator.
 
         Parameters
@@ -329,14 +329,65 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
 
         self.addGlobalVariable("scale", self.scale)
 
+        # DEBUG
+        self.addPerDofVariable('v0', 0)
+        self.addPerDofVariable('x0', 0)
+        self.addPerDofVariable('v1', 0)
+        self.addPerDofVariable('x1', 0)
+        self.addPerDofVariable('v2', 0)
+        self.addPerDofVariable('vr', 0)
+        self.addPerDofVariable('v1r', 0)
+        self.addPerDofVariable('x1r', 0)
+        self.addPerDofVariable('v2r', 0)
+
+
         # We cannot update Context state since this could destroy bitwise reversibility.
         self.addUpdateContextState()
 
+        # Truncate x and v to desired precision.
+        self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
+        self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+
+        # DEBUG
+        self.addComputePerDof("v0", "v") # DEBUG
+        self.addComputePerDof("x0", "x") # DEBUG
+
         # TODO: Use a different scheme than floor(scale*a+0.5)/scale since this may lead to inaccurate rounding
-        self.addComputePerDof("v", "v+floor(scale * 0.5*dt*f/m + 0.5)/scale")
-        #self.addComputePerDof("x", "x+floor(scale * dt*v + 0.5)/scale") # WARNING: This scheme recommended by Ref [3], but does not seem to work.
-        self.addComputePerDof("x", "x+dt*v") # WARNING: This scheme may lead to the accumulation of additional digits of precision, which could destroy reversibility
-        self.addComputePerDof("v", "v+floor(scale * 0.5*dt*f/m + 0.5)/scale")
+        self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
+        self.addComputePerDof("v1", "v") # DEBUG
+        self.addComputePerDof("x", "x+floor(scale * dt*v + 0.5)/scale") # WARNING: This scheme recommended by Ref [3], but does not seem to work.
+        #self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("x1", "x") # DEBUG
+        #self.addComputePerDof("x", "x+dt*v") # WARNING: This scheme may lead to the accumulation of additional digits of precision, which could destroy reversibility
+        self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
+        self.addComputePerDof("v2", "v") # DEBUG
+
+        # DEBUG
+        self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
+        self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+
+        if test:
+            # DEBUG: Back up.
+            self.addComputePerDof("v", "-v")
+
+            self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
+            self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+
+            self.addComputePerDof("vr", "v") # DEBUG
+            self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
+            self.addComputePerDof("v1r", "v") # DEBUG
+            self.addComputePerDof("x", "x+floor(scale * dt*v + 0.5)/scale")
+            #self.addComputePerDof("x", "x+dt*v")
+            self.addComputePerDof("x1r", "x") # DEBUG
+            self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
+            self.addComputePerDof("v2r", "v") # DEBUG
+
+            self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
+            self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+
+            self.addComputePerDof("v", "-v")
+
+            self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
 
     def truncatePrecision(self, context):
         """Truncate precision of stored positions and velocities.

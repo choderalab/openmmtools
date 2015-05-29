@@ -70,6 +70,12 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 # TESTS
 #=============================================================================================
 
+def bitrepr(f):
+   import struct
+   s = bin(struct.unpack('!I', struct.pack('!f', f))[0])[2:].zfill(32)
+   s = s[0] + ' ' + s[1:9] + ' ' + s[9:]
+   return s
+
 def test_bitwise_reversible_velocity_verlet():
    """
    Test bitwise-reversible velocity Verlet integrator.
@@ -102,7 +108,7 @@ def check_bitwise_reversible_velocity_verlet(testsystem):
    # Create a bitwise-reversible velocity Verlet integrator.
    timestep = 1.0 * unit.femtoseconds
    integrator = integrators.BitwiseReversibleVelocityVerletIntegrator(timestep)
-   nsteps = 100
+   nsteps = 1
    # Demonstrate bitwise reversibility for a simple harmonic oscillator.
    platform = openmm.Platform.getPlatformByName('Reference')
    context = openmm.Context(testsystem.system, integrator, platform)
@@ -112,25 +118,46 @@ def check_bitwise_reversible_velocity_verlet(testsystem):
    # Truncate accuracy and store initial positions.
    integrator.truncatePrecision(context)
    initial_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+   initial_velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
    # Integrate forward in time.
    integrator.step(nsteps)
    # Negate velocity and integrate backwards
-   context.setVelocities(-context.getState(getVelocities=True).getVelocities(asNumpy=True))
+   velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
+   context.setVelocities(-velocities)
    integrator.step(nsteps)
    # Compare positions.
    final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+   final_velocities = context.getState(getVelocities=True).getVelocities(asNumpy=True)
    # Make sure differences are identically zero.
    delta = final_positions - initial_positions
+   distance_unit = delta.unit
    delta = delta / delta.unit
    if not np.all(delta==0.0):
       # TODO: Use bitstring representations for positions.
       string  = "Final positions do not match initial positions after %d steps of forward/backward integration.\n\n" % nsteps
-      string += "Initial positions:\n"
-      string += str(initial_positions) + '\n'
-      string += "Final positions:\n"
-      string += str(final_positions) + '\n'
-      string += "Delta:\n"
-      string += str(final_positions - initial_positions) + '\n'
+      for particle_index in range(testsystem.system.getNumParticles()):
+         if not np.all(delta[particle_index,:]==0):
+            string += "%8d Initial positions:   " % particle_index
+            for k in range(3):
+               string += bitrepr(initial_positions[particle_index,k] / initial_positions.unit)
+            string += '\n'
+            string += "%8d Final positions:     " % particle_index
+            for k in range(3):
+               string += bitrepr(final_positions[particle_index,k] / final_positions.unit)
+            string += '\n'
+            string += "%8d Initial velocities:  " % particle_index
+            for k in range(3):
+               string += bitrepr(initial_velocities[particle_index,k] / initial_velocities.unit)
+            string += '\n'
+            string += "%8d Final velocities:    " % particle_index
+            for k in range(3):
+               string += bitrepr(-final_velocities[particle_index,k] / final_velocities.unit)
+            string += '\n'
+            string += '\n'
+            #string += "%8d Delta:              " % particle_index
+            #for k in range(3):
+            #   string += bitrepr(delta[particle_index,k])
+            #string += '\n'
       raise Exception(string)
 
    return
