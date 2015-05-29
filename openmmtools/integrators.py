@@ -230,8 +230,7 @@ class VelocityVerletIntegrator(mm.CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
-<<<<<<< HEAD
-class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
+class BitwiseReversibleVelocityVerletIntegrator(mm.CustomIntegrator):
     """Bitwise-reversible Verlocity Verlet integrator.
 
     The Velocity Verlet integrator [1] is implemented using forces truncated to fewer digits of precision so that the
@@ -423,12 +422,7 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
         context.setVelocities(velocities)
         return
 
-class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
-=======
-
 class AndersenVelocityVerletIntegrator(mm.CustomIntegrator):
-
->>>>>>> upstream/master
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
     References
