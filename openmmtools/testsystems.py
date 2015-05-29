@@ -2842,11 +2842,20 @@ class DHFRExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+        switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).
     ewaldErrorTolerance : float, optional, default=5E-4
            The Ewald or PME tolerance.
+
+    Notes
+    -----
+    If you are using this testsystem for performance benchmarking, you may wish
+    to tune the nonbondedCutoff to a distance that is optimal for your compute
+    hardware.  For modern GPUs, 0.95 nm may be a good place to start.
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2870,6 +2879,11 @@ class DHFRExplicit(TestSystem):
         forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
         forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
+
 
         positions = self.prmtop.positions
 
