@@ -2842,7 +2842,7 @@ class DHFRExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     ewaldErrorTolerance : float, optional, default=5E-4
