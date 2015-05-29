@@ -49,7 +49,10 @@ from .constants import kB
 #=============================================================================================
 
 from openmmtools import respa
+
+
 class MTSIntegrator(respa.MTSIntegrator):
+
     """
     MTSIntegrator implements the rRESPA multiple time step integration algorithm.
 
@@ -73,7 +76,8 @@ class MTSIntegrator(respa.MTSIntegrator):
     For details, see Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992).
 
     """
-    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, groups=[(0,1)]):
+
+    def __init__(self, timestep=1.0 * simtk.unit.femtoseconds, groups=[(0, 1)]):
         """Create an MTSIntegrator.
 
         Parameters
@@ -86,13 +90,15 @@ class MTSIntegrator(respa.MTSIntegrator):
         """
         super(MTSIntegrator, self).__init__(timestep, groups)
 
-class DummyIntegrator(simtk.openmm.CustomIntegrator):
+
+class DummyIntegrator(mm.CustomIntegrator):
+
     """
     Construct a dummy integrator that does nothing except update call the force updates.
 
     Returns
     -------
-    integrator : simtk.openmm.CustomIntegrator
+    integrator : mm.CustomIntegrator
         A dummy integrator.
 
     Examples
@@ -103,6 +109,7 @@ class DummyIntegrator(simtk.openmm.CustomIntegrator):
     >>> integrator = DummyIntegrator()
 
     """
+
     def __init__(self):
         timestep = 0.0 * units.femtoseconds
         super(DummyIntegrator, self).__init__(timestep)
@@ -110,7 +117,9 @@ class DummyIntegrator(simtk.openmm.CustomIntegrator):
         self.addConstrainPositions()
         self.addConstrainVelocities()
 
-class GradientDescentMinimizationIntegrator(simtk.openmm.CustomIntegrator):
+
+class GradientDescentMinimizationIntegrator(mm.CustomIntegrator):
+
     """Simple gradient descent minimizer implemented as an integrator.
 
     Examples
@@ -122,7 +131,7 @@ class GradientDescentMinimizationIntegrator(simtk.openmm.CustomIntegrator):
 
     """
 
-    def __init__(self, initial_step_size=0.01*units.angstroms):
+    def __init__(self, initial_step_size=0.01 * units.angstroms):
         """
         Construct a simple gradient descent minimization integrator.
 
@@ -140,7 +149,7 @@ class GradientDescentMinimizationIntegrator(simtk.openmm.CustomIntegrator):
         timestep = 1.0 * units.femtoseconds
         super(GradientDescentMinimizationIntegrator, self).__init__(timestep)
 
-        self.addGlobalVariable("step_size", initial_step_size/units.nanometers)
+        self.addGlobalVariable("step_size", initial_step_size / units.nanometers)
         self.addGlobalVariable("energy_old", 0)
         self.addGlobalVariable("energy_new", 0)
         self.addGlobalVariable("delta_energy", 0)
@@ -176,7 +185,9 @@ class GradientDescentMinimizationIntegrator(simtk.openmm.CustomIntegrator):
         # Update step size.
         self.addComputeGlobal("step_size", "step_size * (2.0*accept + 0.5*(1-accept))")
 
-class VelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
+
+class VelocityVerletIntegrator(mm.CustomIntegrator):
+
     """Verlocity Verlet integrator.
 
     Notes
@@ -197,7 +208,7 @@ class VelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
 
     """
 
-    def __init__(self, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, timestep=1.0 * simtk.unit.femtoseconds):
         """Construct a velocity Verlet integrator.
 
         Parameters
@@ -219,6 +230,7 @@ class VelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
+<<<<<<< HEAD
 class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
     """Bitwise-reversible Verlocity Verlet integrator.
 
@@ -412,6 +424,11 @@ class BitwiseReversibleVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
         return
 
 class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
+=======
+
+class AndersenVelocityVerletIntegrator(mm.CustomIntegrator):
+
+>>>>>>> upstream/master
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
     References
@@ -436,7 +453,7 @@ class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
 
     """
 
-    def __init__(self, temperature=298*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
         """Construct a velocity Verlet integrator with Andersen thermostat, implemented as per-particle collisions (rather than massive collisions).
 
         Parameters
@@ -455,18 +472,18 @@ class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
         # Integrator initialization.
         #
         kT = kB * temperature
-        self.addGlobalVariable("kT", kT) # thermal energy
-        self.addGlobalVariable("p_collision", timestep * collision_rate) # per-particle collision probability per timestep
-        self.addPerDofVariable("sigma_v", 0) # velocity distribution stddev for Maxwell-Boltzmann (computed later)
-        self.addPerDofVariable("collision", 0) # 1 if collision has occured this timestep, 0 otherwise
-        self.addPerDofVariable("x1", 0) # for constraints
+        self.addGlobalVariable("kT", kT)  # thermal energy
+        self.addGlobalVariable("p_collision", timestep * collision_rate)  # per-particle collision probability per timestep
+        self.addPerDofVariable("sigma_v", 0)  # velocity distribution stddev for Maxwell-Boltzmann (computed later)
+        self.addPerDofVariable("collision", 0)  # 1 if collision has occured this timestep, 0 otherwise
+        self.addPerDofVariable("x1", 0)  # for constraints
 
         #
         # Update velocities from Maxwell-Boltzmann distribution for particles that collide.
         #
         self.addComputePerDof("sigma_v", "sqrt(kT/m)")
-        self.addComputePerDof("collision", "step(p_collision-uniform)") # if collision has occured this timestep, 0 otherwise
-        self.addComputePerDof("v", "(1-collision)*v + collision*sigma_v*gaussian") # randomize velocities of particles that have collided
+        self.addComputePerDof("collision", "step(p_collision-uniform)")  # if collision has occured this timestep, 0 otherwise
+        self.addComputePerDof("v", "(1-collision)*v + collision*sigma_v*gaussian")  # randomize velocities of particles that have collided
 
         #
         # Velocity Verlet step
@@ -479,13 +496,15 @@ class AndersenVelocityVerletIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
-class MetropolisMonteCarloIntegrator(simtk.openmm.CustomIntegrator):
+
+class MetropolisMonteCarloIntegrator(mm.CustomIntegrator):
+
     """
     Metropolis Monte Carlo with Gaussian displacement trials.
 
     """
 
-    def __init__(self, temperature=298.0*simtk.unit.kelvin, sigma=0.1*simtk.unit.angstroms, timestep=1*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, sigma=0.1 * simtk.unit.angstroms, timestep=1 * simtk.unit.femtoseconds):
         """
         Create a simple Metropolis Monte Carlo integrator that uses Gaussian displacement trials.
 
@@ -529,28 +548,28 @@ class MetropolisMonteCarloIntegrator(simtk.openmm.CustomIntegrator):
         #
         # Integrator initialization.
         #
-        self.addGlobalVariable("naccept", 0) # number accepted
-        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
+        self.addGlobalVariable("naccept", 0)  # number accepted
+        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
-        self.addGlobalVariable("kT", kT) # thermal energy
-        self.addPerDofVariable("sigma_x", sigma) # perturbation size
-        self.addPerDofVariable("sigma_v", 0) # velocity distribution stddev for Maxwell-Boltzmann (set later)
-        self.addPerDofVariable("xold", 0) # old positions
-        self.addGlobalVariable("Eold", 0) # old energy
-        self.addGlobalVariable("Enew", 0) # new energy
-        self.addGlobalVariable("accept", 0) # accept or reject
+        self.addGlobalVariable("kT", kT)  # thermal energy
+        self.addPerDofVariable("sigma_x", sigma)  # perturbation size
+        self.addPerDofVariable("sigma_v", 0)  # velocity distribution stddev for Maxwell-Boltzmann (set later)
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("accept", 0)  # accept or reject
 
         #
         # Context state update.
         #
-        self.addUpdateContextState();
+        self.addUpdateContextState()
 
         #
         # Update velocities from Maxwell-Boltzmann distribution.
         #
         self.addComputePerDof("sigma_v", "sqrt(kT/m)")
         self.addComputePerDof("v", "sigma_v*gaussian")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
 
         #
         # propagation steps
@@ -567,13 +586,15 @@ class MetropolisMonteCarloIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
-class HMCIntegrator(simtk.openmm.CustomIntegrator):
+
+class HMCIntegrator(mm.CustomIntegrator):
+
     """
     Hybrid Monte Carlo (HMC) integrator.
 
     """
 
-    def __init__(self, temperature=298.0*simtk.unit.kelvin, nsteps=10, timestep=1*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, nsteps=10, timestep=1 * simtk.unit.femtoseconds):
         """
         Create a hybrid Monte Carlo (HMC) integrator.
 
@@ -622,17 +643,17 @@ class HMCIntegrator(simtk.openmm.CustomIntegrator):
         #
         # Integrator initialization.
         #
-        self.addGlobalVariable("naccept", 0) # number accepted
-        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
+        self.addGlobalVariable("naccept", 0)  # number accepted
+        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
-        self.addGlobalVariable("kT", kT) # thermal energy
+        self.addGlobalVariable("kT", kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
-        self.addGlobalVariable("ke", 0) # kinetic energy
-        self.addPerDofVariable("xold", 0) # old positions
-        self.addGlobalVariable("Eold", 0) # old energy
-        self.addGlobalVariable("Enew", 0) # new energy
-        self.addGlobalVariable("accept", 0) # accept or reject
-        self.addPerDofVariable("x1", 0) # for constraints
+        self.addGlobalVariable("ke", 0)  # kinetic energy
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("accept", 0)  # accept or reject
+        self.addPerDofVariable("x1", 0)  # for constraints
 
         #
         # Pre-computation.
@@ -644,13 +665,13 @@ class HMCIntegrator(simtk.openmm.CustomIntegrator):
         #
         # Allow Context updating here, outside of inner loop only.
         #
-        self.addUpdateContextState();
+        self.addUpdateContextState()
 
         #
         # Draw new velocity.
         #
         self.addComputePerDof("v", "sigma*gaussian")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
 
         #
         # Store old position and energy.
@@ -700,13 +721,14 @@ class HMCIntegrator(simtk.openmm.CustomIntegrator):
         return self.n_accept / float(self.n_trials)
 
 
-class GHMCIntegrator(simtk.openmm.CustomIntegrator):
+class GHMCIntegrator(mm.CustomIntegrator):
+
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.
 
     """
 
-    def __init__(self, temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
         """
         Create a generalized hybrid Monte Carlo (GHMC) integrator.
 
@@ -761,15 +783,15 @@ class GHMCIntegrator(simtk.openmm.CustomIntegrator):
         self.addGlobalVariable("kT", kT) # thermal energy
         self.addGlobalVariable("b", np.exp(-gamma*timestep)) # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
-        self.addGlobalVariable("ke", 0) # kinetic energy
-        self.addPerDofVariable("vold", 0) # old velocities
-        self.addPerDofVariable("xold", 0) # old positions
-        self.addGlobalVariable("Eold", 0) # old energy
-        self.addGlobalVariable("Enew", 0) # new energy
-        self.addGlobalVariable("accept", 0) # accept or reject
-        self.addGlobalVariable("naccept", 0) # number accepted
-        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
-        self.addPerDofVariable("x1", 0) # position before application of constraints
+        self.addGlobalVariable("ke", 0)  # kinetic energy
+        self.addPerDofVariable("vold", 0)  # old velocities
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("accept", 0)  # accept or reject
+        self.addGlobalVariable("naccept", 0)  # number accepted
+        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
+        self.addPerDofVariable("x1", 0)  # position before application of constraints
 
         #
         # Pre-computation.
@@ -781,18 +803,18 @@ class GHMCIntegrator(simtk.openmm.CustomIntegrator):
         #
         # Allow context updating here.
         #
-        self.addUpdateContextState();
+        self.addUpdateContextState()
 
         #
         # Constrain positions.
         #
-        self.addConstrainPositions();
+        self.addConstrainPositions()
 
         #
         # Velocity perturbation.
         #
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
 
         #
         # Metropolized symplectic step.
@@ -804,9 +826,9 @@ class GHMCIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputePerDof("v", "v + 0.5*dt*f/m")
         self.addComputePerDof("x", "x + v*dt")
         self.addComputePerDof("x1", "x")
-        self.addConstrainPositions();
+        self.addConstrainPositions()
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
@@ -817,7 +839,7 @@ class GHMCIntegrator(simtk.openmm.CustomIntegrator):
         # Velocity randomization
         #
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
 
         #
         # Accumulate statistics.
@@ -825,13 +847,15 @@ class GHMCIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
-class VVVRIntegrator(simtk.openmm.CustomIntegrator):
+
+class VVVRIntegrator(mm.CustomIntegrator):
+
     """
     Create a velocity Verlet with velocity randomization (VVVR) integrator.
 
     """
 
-    def __init__(self, temperature=298.0*simtk.unit.kelvin, collision_rate=91.0/simtk.unit.picoseconds, timestep=1.0*simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
         """
         Create a velocity verlet with velocity randomization (VVVR) integrator.
 
@@ -888,12 +912,12 @@ class VVVRIntegrator(simtk.openmm.CustomIntegrator):
         self.addGlobalVariable("kT", kT) # thermal energy
         self.addGlobalVariable("b", np.exp(-gamma*timestep)) # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
-        self.addPerDofVariable("x1", 0) # position before application of constraints
+        self.addPerDofVariable("x1", 0)  # position before application of constraints
 
         #
         # Allow context updating here.
         #
-        self.addUpdateContextState();
+        self.addUpdateContextState()
 
         #
         # Pre-computation.
@@ -906,7 +930,7 @@ class VVVRIntegrator(simtk.openmm.CustomIntegrator):
         # Velocity perturbation.
         #
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
 
         #
         # Metropolized symplectic step.
@@ -914,14 +938,12 @@ class VVVRIntegrator(simtk.openmm.CustomIntegrator):
         self.addComputePerDof("v", "v + 0.5*dt*f/m")
         self.addComputePerDof("x", "x + v*dt")
         self.addComputePerDof("x1", "x")
-        self.addConstrainPositions();
+        self.addConstrainPositions()
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-        self.addConstrainVelocities();
+        self.addConstrainVelocities()
 
         #
         # Velocity randomization
         #
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities();
-
-
+        self.addConstrainVelocities()
