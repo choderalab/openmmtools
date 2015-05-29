@@ -13,17 +13,19 @@ def benchmark_hmc(testsystem):
    from openmmtools import integrators, testsystems
    import numpy as np
 
-   nsteps = 400
+   nsteps = 1000
 
    # Create a bitwise-reversible velocity Verlet integrator.
    timestep = 1.0 * unit.femtoseconds
    integrator = integrators.HMCIntegrator(timestep, nsteps=1)
    # Demonstrate bitwise reversibility for a simple harmonic oscillator.
-   platform = openmm.Platform.getPlatformByName('CPU')
+   platform = openmm.Platform.getPlatformByName('CUDA')
    context = openmm.Context(testsystem.system, integrator, platform)
    context.setPositions(testsystem.positions)
    # Select velocity.
    context.setVelocitiesToTemperature(300*unit.kelvin)
+   integrator.step(1)
+   integrator.step(1)
 
    # Time dynamics.
    initial_time = time.time()
