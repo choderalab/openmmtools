@@ -2785,6 +2785,11 @@ class AlanineDipeptideExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+        switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).
+    ewaldErrorTolerance : float, optional, default=5E-4
+           The Ewald or PME tolerance.
 
     Examples
     --------
@@ -2793,7 +2798,7 @@ class AlanineDipeptideExplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2810,6 +2815,11 @@ class AlanineDipeptideExplicit(TestSystem):
         # Set dispersion correction use.
         forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
