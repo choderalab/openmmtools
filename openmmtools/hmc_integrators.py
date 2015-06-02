@@ -945,3 +945,228 @@ class XCHMCRESPAIntegrator(RESPAMixIn, XCHMCIntegrator):
         self.extra_chances = extra_chances
 
         self.create()
+
+class UnrolledXCMixin(object):
+    """Extra Chance Generalized hybrid Monte Carlo (XCGHMC) integrator Mixin.
+
+    Notes
+    -----
+    This integrator attempts to circumvent rejections by propagating
+    additional dynamics and performing a second metropolization step.
+
+    References
+    ----------
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
+    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
+
+    """
+
+
+    @property
+    def all_counts(self):
+        """Return a pandas series of moves accepted after step 0, 1, ... extra_chances - 1, and flip"""
+        d = {}
+        for i in range(1 + self.extra_chances):
+            d[i] = self.getGlobalVariableByName("n%d" % i)
+
+        d["flip"] = self.n_flip
+
+        return pd.Series(d)
+
+    @property
+    def all_probs(self):
+        """Return a pandas series of probabilities of moves accepted after step 0, 1, ... extra_chances - 1, and flip"""
+        d = self.all_counts
+        return d / d.sum()
+
+    @property
+    def n_flip(self):
+        """The total number of momentum flips."""
+        return self.getGlobalVariableByName("nflip")
+
+    @property
+    def steps_taken(self):
+        return self.getGlobalVariableByName("steps_taken")
+
+    @property
+    def steps_accepted(self):
+        return self.getGlobalVariableByName("steps_accepted")
+
+    @property
+    def acceptance_rate(self):
+        """The acceptance rate, in terms of number of force evaluations.
+        """
+        return self.steps_accepted / self.steps_taken
+
+
+    def create(self):
+        self.initialize_variables()
+        self.add_draw_velocities_step()
+        self.add_cache_variables_step()
+        for i in range(1 + self.extra_chances):
+            self.add_hmc_iterations(i)
+            self.add_accept_or_reject_step(i)
+
+        self.addComputeGlobal("flip", "(1 - done)")
+
+        self.addComputePerDof("x", "select(flip, xold, xfinal)")  # Requires OMM Build on May 6, 2015
+        
+        self.addComputeGlobal("nflip", "nflip + flip")
+        self.addComputeGlobal("naccept", "naccept + accept")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
+
+
+class UnrolledXCHMCIntegrator(UnrolledXCMixin, HMCIntegrator):
+    """Extra Chance hybrid Monte Carlo (XCHMC) integrator.
+
+    Notes
+    -----
+    This integrator attempts to circumvent rejections by propagating
+    additional dynamics and performing a second metropolization step.
+
+    References
+    ----------
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
+    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
+
+    """
+    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, take_debug_steps=False):
+        """CURRENTLY BROKEN!!!!!
+        """
+        self.take_debug_steps = take_debug_steps
+
+        mm.CustomIntegrator.__init__(self, timestep)
+
+        self.temperature = temperature
+        self.steps_per_hmc = steps_per_hmc
+        self.steps_per_extra_hmc = steps_per_extra_hmc
+        self.timestep = timestep
+        self.extra_chances = extra_chances
+
+        self.create()
+
+
+    def initialize_variables(self):
+
+        self.addGlobalVariable("accept", 1.0) # accept or reject
+        self.addGlobalVariable("s", 0.0)
+        self.addGlobalVariable("l", 0.0)
+        self.addGlobalVariable("r", 0.0) # Metropolis ratio: ratio probabilities
+
+        self.addGlobalVariable("extra_chances", self.extra_chances)  # Maximum number of rounds of dynamics
+        self.addGlobalVariable("k", 0)  # Current number of rounds of dynamics
+        self.addGlobalVariable("kold", 0)  # Previous value of k stored for debugging purposes
+        self.addGlobalVariable("flip", 0.0)  # Indicator variable whether this iteration was a flip
+
+        self.addGlobalVariable("rho", 0.0)  # temporary variables for acceptance criterion
+        self.addGlobalVariable("mu", 0.0)  #
+        self.addGlobalVariable("mu1", 0.0)  # XCHMC Fig. 3 O1
+
+        for i in range(1 + self.extra_chances):
+            self.addGlobalVariable("n%d" % i, 0.0)  # Number of times accepted when k = i
+
+        self.addGlobalVariable("nflip", 0) # number of momentum flips (e.g. complete rejections)
+        self.addGlobalVariable("nrounds", 0) # number of "rounds" of XHMC, e.g. the number of times k = 0
+
+        # Below this point is possible base class material
+
+        self.addGlobalVariable("naccept", 0) # number accepted
+        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
+
+        self.addGlobalVariable("kT", self.kT) # thermal energy
+        self.addPerDofVariable("sigma", 0)
+        self.addGlobalVariable("ke", 0) # kinetic energy
+        self.addPerDofVariable("xold", 0) # old positions
+        self.addGlobalVariable("Eold", 0) # old energy
+        self.addGlobalVariable("Enew", 0) # new energy
+        
+        self.addGlobalVariable("done", 0) # Becomes true once we find a good value of (x, p)
+
+        self.addPerDofVariable("x1", 0) # for constraints
+        
+        self.addPerDofVariable("xfinal", 0)
+        #self.addPerDofVariable("vfinal", 0)
+        
+        self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
+        self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
+        
+
+        self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addUpdateContextState()
+
+    def add_draw_velocities_step(self):
+        """Draw perturbed velocities."""
+
+        self.addUpdateContextState()
+        self.addConstrainPositions()
+
+        self.addComputeGlobal("done", "0.0")
+        self.addComputePerDof("v", "sigma*gaussian")
+        self.addConstrainVelocities()
+
+    def add_cache_variables_step(self):
+        """Store old positions and energies."""
+
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputePerDof("xold", "x")
+
+        self.addComputeGlobal("mu1", "0.0")  # XCHMC Fig. 3 O1
+
+    def add_hmc_iterations(self, i):
+        """Add self.steps_per_hmc or self.steps_per_extra_hmc iterations of symplectic hamiltonian dynamics."""
+        print("Adding XCHMCIntegrator steps.")
+        
+        steps = self.steps_per_hmc
+        
+        if i > 0:
+            steps = self.steps_per_extra_hmc
+        
+        for step in range(steps):
+            self.add_hamiltonian_step()
+                
+
+    def add_accept_or_reject_step(self, i):
+        print("XCHMC: add_accept_or_reject_step()")
+        self.addComputeSum("ke", "0.5*m*v*v")
+        self.addComputeGlobal("Enew", "ke + energy")
+
+        self.addComputeGlobal("r", "exp(-(Enew - Eold) / kT)")
+        self.addComputeGlobal("mu", "min(1, r)")  # XCHMC paper version
+        self.addComputeGlobal("mu1", "max(mu1, mu)")
+        self.addComputeGlobal("accept", "step(mu1 - uniform) * (1 - done)")
+        
+        if i == 0:
+            steps = self.steps_per_hmc
+        else:
+            steps = self.steps_per_extra_hmc
+        
+        self.addComputeGlobal("n%d" % i, "n%d + accept" % (i))
+        
+        self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (steps))
+        self.addComputeGlobal("steps_taken", "steps_taken + %d" % (steps))
+
+        self.addComputePerDof("xfinal", "select(accept, x, xfinal)")
+        #self.addComputePerDof("vfinal", "select(accept, v, vfinal)")
+
+        self.addComputeGlobal("done", "max(done, accept)")
+
+
+class UnrolledXCHMCRESPAIntegrator(RESPAMixIn, UnrolledXCHMCIntegrator):
+    """Extra Chance Generalized hybrid Monte Carlo RESPA integrator.
+    """
+    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, groups=None, take_debug_steps=False):
+        """
+        """
+        mm.CustomIntegrator.__init__(self, timestep)
+
+        self.groups = check_groups(groups)
+
+        self.take_debug_steps = take_debug_steps
+        self.temperature = temperature
+        self.steps_per_hmc = steps_per_hmc
+        self.steps_per_extra_hmc = steps_per_extra_hmc
+        self.timestep = timestep
+        self.extra_chances = extra_chances
+
+        self.create()
