@@ -2,16 +2,22 @@ import time
 import pandas as pd
 import numpy as np
 
+import logging
+ 
 import simtk.unit as u
 
 import simtk.openmm as mm
 from .constants import kB
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("ex")
+
+
 def check_groups(groups, guess=True):
     """Check that `groups` is list of tuples suitable for force group / RESPA."""
     if groups is None or len(groups) == 0:
         if guess:
-            print("No force groups specified, using [(0, 1)]!")
+            logger.info("No force groups specified, using [(0, 1)]!")
             groups = [(0, 1)]
         else:
             raise ValueError("No force groups specified")
@@ -121,7 +127,7 @@ class HMCBase(mm.CustomIntegrator):
 
     def add_hmc_iterations(self):
         """Add self.steps_per_hmc iterations of symplectic hamiltonian dynamics."""
-        print("Adding (G)HMCIntegrator steps.")
+        logger.debug("Adding (G)HMCIntegrator steps.")
         for step in range(self.steps_per_hmc):
             self.add_hamiltonian_step()
 
@@ -136,7 +142,7 @@ class HMCBase(mm.CustomIntegrator):
         -----
         This function will be overwritten in RESPA subclasses!
         """
-        print("Adding step of hamiltonian dynamics.""")
+        logger.debug("Adding step of hamiltonian dynamics.""")
         self.addComputePerDof("v", "v+0.5*dt*f/m")
         self.addComputePerDof("x", "x+dt*v")
         self.addComputePerDof("x1", "x")
@@ -266,7 +272,7 @@ class HMCIntegrator(HMCBase):
         self.addComputePerDof("xold", "x")
 
     def add_accept_or_reject_step(self):
-        print("HMC: add_accept_or_reject_step()")
+        logger.debug("HMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
@@ -349,7 +355,7 @@ class GHMCIntegrator(HMCBase):
         self.addComputePerDof("vold", "v")
 
     def add_accept_or_reject_step(self):
-        print("GHMC: add_accept_or_reject_step()")
+        logger.debug("GHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
@@ -561,7 +567,7 @@ class XCHMCIntegrator(XCMixin, HMCIntegrator):
         self.addComputeGlobal("uni", "(1 - s) * uni + uniform * s")  # XCHMC paper version, only draw uniform once
 
     def add_accept_or_reject_step(self):
-        print("XCHMC: add_accept_or_reject_step()")
+        logger.debug("XCHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
 
@@ -695,7 +701,7 @@ class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
         self.addComputeGlobal("uni", "(1 - s) * uni + uniform * s")  # XCHMC paper version, only draw uniform once
 
     def add_accept_or_reject_step(self):
-        print("XCGHMC: add_accept_or_reject_step()")
+        logger.debug("XCGHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
 
@@ -734,7 +740,7 @@ class RESPAMixIn(object):
         -----
         This function will be overwritten in RESPA subclasses!
         """
-        print("Adding step of RESPA hamiltonian dynamics.""")
+        logger.debug("Adding step of RESPA hamiltonian dynamics.""")
         self._create_substeps(1, self.groups)
         self.addConstrainVelocities()
 
@@ -1115,7 +1121,7 @@ class UnrolledXCHMCIntegrator(UnrolledXCMixin, HMCIntegrator):
 
     def add_hmc_iterations(self, i):
         """Add self.steps_per_hmc or self.steps_per_extra_hmc iterations of symplectic hamiltonian dynamics."""
-        print("Adding XCHMCIntegrator steps.")
+        logger.debug("Adding XCHMCIntegrator steps.")
         
         steps = self.steps_per_hmc
         
@@ -1127,7 +1133,7 @@ class UnrolledXCHMCIntegrator(UnrolledXCMixin, HMCIntegrator):
                 
 
     def add_accept_or_reject_step(self, i):
-        print("XCHMC: add_accept_or_reject_step()")
+        logger.debug("XCHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
 
@@ -1141,13 +1147,14 @@ class UnrolledXCHMCIntegrator(UnrolledXCMixin, HMCIntegrator):
         else:
             steps = self.steps_per_extra_hmc
         
+        cumulative_steps = self.steps_per_hmc + i * self.steps_per_extra_hmc
+        
         self.addComputeGlobal("n%d" % i, "n%d + accept" % (i))
         
-        self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (steps))
+        self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (cumulative_steps))
         self.addComputeGlobal("steps_taken", "steps_taken + %d" % (steps))
 
         self.addComputePerDof("xfinal", "select(accept, x, xfinal)")
-        #self.addComputePerDof("vfinal", "select(accept, v, vfinal)")
 
         self.addComputeGlobal("done", "max(done, accept)")
 
