@@ -612,6 +612,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
             self.addComputePerDof("vfinal", "select(accept, v, vfinal)")
 
         self.addComputeGlobal("done", "max(done, accept)")
+        #self.addConditionalTermination("done")  #  Conditional termination here would avoid additional force+energy evaluations.
 
 
 class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
