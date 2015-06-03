@@ -325,7 +325,7 @@ def main():
                         print("%32s WARNING: Potential energy error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", potential_error/units.kilocalories_per_mole, ENERGY_TOLERANCE/units.kilocalories_per_mole))
                     if abs(force_rmse) > FORCE_RMSE_TOLERANCE:
                         test_success = False
-                        print("%32s WARNING: Force RMS error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit))
+                        print("%32s WARNING: Force RMS error (%.6f kcal/mol/nm) exceeds tolerance (%.6f kcal/mol/nm).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit))
                         if debug:
                             for atom_index in range(natoms):
                                 for k in range(3):
