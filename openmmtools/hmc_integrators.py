@@ -46,12 +46,12 @@ def guess_force_groups(system, nonbonded=1, fft=1, others=0, multipole=1):
             force.setForceGroup(others)
 
 
-class HMCBase(mm.CustomIntegrator):
-    """Generalized or non-generalized hybrid Monte Carlo integrator base class.
+class GHMCBase(mm.CustomIntegrator):
+    """Generalized hybrid Monte Carlo integrator base class.
 
     Notes
     -----
-    This loosely follows the definition of (G)HMC given in the two below
+    This loosely follows the definition of GHMC given in the two below
     references.  Specifically, the velocities are corrupted,
     several steps of hamiltonian dynamics are performed, and then
     an accept / reject move is taken.
@@ -185,7 +185,7 @@ class HMCBase(mm.CustomIntegrator):
         d["effective_ns_per_day"] = self.effective_ns_per_day
         d["ns_per_day"] = self.ns_per_day
         d["r"] = self.accept_factor
-        keys = ["accept", "ke", "Enew", "naccept", "ntrials", "Eold"]
+        keys = ["accept", "ke", "Enew", "Eold"]
 
         for key in keys:
             d[key] = self.getGlobalVariableByName(key)
@@ -203,10 +203,16 @@ class HMCBase(mm.CustomIntegrator):
         """Return True if the last step taken was accepted."""
         return bool(self.getGlobalVariableByName("accept"))
 
+    @property
+    def b(self):
+        """The scaling factor for preserving versus randomizing velocities."""
+        return np.exp(-self.collision_rate * self.timestep)
+    
+    @property
     def is_GHMC(self):
         return self.collision_rate is not None
 
-class GHMCIntegrator(HMCBase):
+class GHMCIntegrator(GHMCBase):
     """Generalized hybrid Monte Carlo (GHMC) integrator.
 
     Notes
@@ -300,12 +306,6 @@ class GHMCIntegrator(HMCBase):
         
         if self.is_GHMC:
             self.addComputePerDof("v", "select(accept, v, -1*vold)")
-        
-
-    @property
-    def b(self):
-        """The scaling factor for preserving versus randomizing velocities."""
-        return np.exp(-self.collision_rate * self.timestep)
 
 
 class RESPAMixIn(object):
@@ -629,5 +629,6 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
         self.steps_per_extra_hmc = steps_per_extra_hmc
         self.timestep = timestep
         self.extra_chances = extra_chances
+        self.collision_rate = collision_rate
 
         self.create()
