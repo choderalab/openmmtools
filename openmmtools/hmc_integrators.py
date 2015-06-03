@@ -202,8 +202,7 @@ class HMCBase(mm.CustomIntegrator):
     def accept(self):
         """Return True if the last step taken was accepted."""
         return bool(self.getGlobalVariableByName("accept"))
-    
-    @property
+
     def is_GHMC(self):
         return self.collision_rate is not None
 
@@ -423,8 +422,11 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
         self.create()
 
 
-class XCMixin(object):
-    """Extra Chance Generalized hybrid Monte Carlo (XCGHMC) integrator Mixin.
+
+
+
+class XCGHMCIntegrator(GHMCIntegrator):
+    """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
 
     Notes
     -----
@@ -437,7 +439,19 @@ class XCMixin(object):
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
 
     """
+    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
+        """CURRENTLY BROKEN!!!!!
+        """
+        mm.CustomIntegrator.__init__(self, timestep)
 
+        self.temperature = temperature
+        self.steps_per_hmc = steps_per_hmc
+        self.steps_per_extra_hmc = steps_per_extra_hmc
+        self.timestep = timestep
+        self.extra_chances = extra_chances
+        self.collision_rate = collision_rate
+
+        self.create()
 
     @property
     def all_counts(self):
@@ -493,47 +507,14 @@ class XCMixin(object):
         self.addComputeGlobal("nflip", "nflip + flip")
 
 
-class XCGHMCIntegrator(XCMixin, GHMCIntegrator):
-    """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
-
-    Notes
-    -----
-    This integrator attempts to circumvent rejections by propagating
-    additional dynamics and performing a second metropolization step.
-
-    References
-    ----------
-    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
-    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-
-    """
-    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
-        """CURRENTLY BROKEN!!!!!
-        """
-        mm.CustomIntegrator.__init__(self, timestep)
-
-        self.temperature = temperature
-        self.steps_per_hmc = steps_per_hmc
-        self.steps_per_extra_hmc = steps_per_extra_hmc
-        self.timestep = timestep
-        self.extra_chances = extra_chances
-
-        self.create()
-
-
     def initialize_variables(self):
 
         self.addGlobalVariable("accept", 1.0) # accept or reject
-        self.addGlobalVariable("s", 0.0)
-        self.addGlobalVariable("l", 0.0)
         self.addGlobalVariable("r", 0.0) # Metropolis ratio: ratio probabilities
 
         self.addGlobalVariable("extra_chances", self.extra_chances)  # Maximum number of rounds of dynamics
-        self.addGlobalVariable("k", 0)  # Current number of rounds of dynamics
-        self.addGlobalVariable("kold", 0)  # Previous value of k stored for debugging purposes
         self.addGlobalVariable("flip", 0.0)  # Indicator variable whether this iteration was a flip
 
-        self.addGlobalVariable("rho", 0.0)  # temporary variables for acceptance criterion
         self.addGlobalVariable("mu", 0.0)  #
         self.addGlobalVariable("mu1", 0.0)  # XCGHMC Fig. 3 O1
 
