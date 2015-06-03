@@ -416,7 +416,7 @@ def main():
                             force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
                             force_rms = units.sqrt(force_ms)
 
-                            print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
+                            print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol/nm %16.6f kcal/mol/nm" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
 
                     except Exception as e:
                         print(e)
