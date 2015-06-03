@@ -46,6 +46,7 @@ def guess_force_groups(system, nonbonded=1, fft=1, others=0, multipole=1):
 
 
 class GHMCBase(mm.CustomIntegrator):
+
     """Generalized hybrid Monte Carlo integrator base class.
 
     Notes
@@ -206,12 +207,14 @@ class GHMCBase(mm.CustomIntegrator):
     def b(self):
         """The scaling factor for preserving versus randomizing velocities."""
         return np.exp(-self.collision_rate * self.timestep)
-    
+
     @property
     def is_GHMC(self):
         return self.collision_rate is not None
 
+
 class GHMCIntegrator(GHMCBase):
+
     """Generalized hybrid Monte Carlo (GHMC) integrator.
 
     Notes
@@ -221,7 +224,7 @@ class GHMCIntegrator(GHMCBase):
     several steps of hamiltonian dynamics are performed, and then
     an accept / reject move is taken.  If collision_rate is set to None, however,
     we will do non-generalized HMC, where the velocities information is discarded
-    at each iteration.  
+    at each iteration.
 
     This class is the base class for a number of more specialized versions
     of GHMC.
@@ -233,7 +236,7 @@ class GHMCIntegrator(GHMCBase):
 
     """
 
-    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, collision_rate=None):
+    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=None):
         """
         Parameters
         ----------
@@ -246,8 +249,8 @@ class GHMCIntegrator(GHMCBase):
            The integration timestep.  The total time taken per iteration
            will equal timestep * steps_per_hmc
         collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
-           The collision rate for the langevin velocity corruption (GHMC).  If None,
-           velocities information will be discarded after each round (HMC).  
+           The collision rate for the velocity corruption (GHMC).  If None,
+           velocities information will be discarded after each round (HMC).
         """
 
         mm.CustomIntegrator.__init__(self, timestep)
@@ -259,33 +262,33 @@ class GHMCIntegrator(GHMCBase):
         self.create()
 
     def initialize_variables(self):
-        self.addGlobalVariable("naccept", 0) # number accepted
-        self.addGlobalVariable("ntrials", 0) # number of Metropolization trials
+        self.addGlobalVariable("naccept", 0)  # number accepted
+        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
-        self.addGlobalVariable("kT", self.kT) # thermal energy
+        self.addGlobalVariable("kT", self.kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
-        self.addGlobalVariable("ke", 0) # kinetic energy
-        self.addPerDofVariable("xold", 0) # old positions
-        self.addPerDofVariable("vold", 0) # old velocities
-        self.addGlobalVariable("Eold", 0) # old energy
-        self.addGlobalVariable("Enew", 0) # new energy
-        self.addGlobalVariable("accept", 0) # accept or reject
-        self.addPerDofVariable("x1", 0) # for constraints
-        
+        self.addGlobalVariable("ke", 0)  # kinetic energy
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addPerDofVariable("vold", 0)  # old velocities
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("accept", 0)  # accept or reject
+        self.addPerDofVariable("x1", 0)  # for constraints
+
         if self.is_GHMC:
-            self.addGlobalVariable("b", self.b) # velocity mixing parameter
+            self.addGlobalVariable("b", self.b)  # velocity mixing parameter
 
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         self.addUpdateContextState()
 
     def add_draw_velocities_step(self):
         """Draw perturbed velocities."""
-        
+
         if self.is_GHMC:
             self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         else:
             self.addComputePerDof("v", "sigma*gaussian")
-        
+
         self.addConstrainVelocities()
 
     def add_cache_variables_step(self):
@@ -302,12 +305,13 @@ class GHMCIntegrator(GHMCBase):
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
 
         self.addComputePerDof("x", "select(accept, x, xold)")
-        
+
         if self.is_GHMC:
             self.addComputePerDof("v", "select(accept, v, -1*vold)")
 
 
 class RESPAMixIn(object):
+
     def add_hamiltonian_step(self):
         """Add a single step of hamiltonian integration.
 
@@ -330,7 +334,7 @@ class RESPAMixIn(object):
         if stepsPerParentStep < 1 or stepsPerParentStep != int(stepsPerParentStep):
             raise ValueError("The number for substeps for each group must be a multiple of the number for the previous group")
 
-        stepsPerParentStep = int(stepsPerParentStep) # needed for Python 3.x
+        stepsPerParentStep = int(stepsPerParentStep)  # needed for Python 3.x
 
         if group < 0 or group > 31:
             raise ValueError("Force group must be between 0 and 31")
@@ -348,6 +352,7 @@ class RESPAMixIn(object):
 
 
 class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
+
     """Generalized Hamiltonian Monte Carlo (GHMC) with a rRESPA multiple
     time step integration algorithm.  Combines GHMCIntegrator with
     MTSIntegrator.
@@ -386,7 +391,7 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
     Tuckerman et al., J. Chem. Phys. 97(3) pp. 1990-2001 (1992)
     """
 
-    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, collision_rate=1.0/u.picoseconds, groups=None):
+    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=1.0 / u.picoseconds, groups=None):
         """Create a generalized hamiltonian Monte Carlo (HMC) integrator with linearly ramped non-uniform timesteps.
 
         Parameters
@@ -400,8 +405,8 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
             The integration timestep.  The total time taken per iteration
             will equal timestep * steps_per_hmc
         collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
-           The collision rate for the langevin velocity corruption (GHMC).  If None,
-           velocities information will be discarded after each round (HMC). 
+           The collision rate for the velocity corruption (GHMC).  If None,
+           velocities information will be discarded after each round (HMC).
         groups : list of tuples, optional, default=(0,1)
             A list of tuples defining the force groups.  The first element
             of each tuple is the force group index, and the second element
@@ -421,15 +426,39 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
         self.create()
 
 
-
-
-
 class XCGHMCIntegrator(GHMCIntegrator):
+
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
+
+
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+            The temperature.
+        steps_per_hmc : int, default: 10
+            The number of velocity Verlet steps to take per round of hamiltonian dynamics
+            This must be an even number!
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+            The integration timestep.  The total time taken per iteration
+            will equal timestep * steps_per_hmc
+        extra_chances : int, optional, default=2
+            The number of extra chances.  If the initial move is rejected, up to
+            `extra_chances` rounds of additional moves will be attempted to find
+            an accepted proposal.  `extra_chances=0` correponds to vanilla (G)HMC.
+        steps_per_extra_hmc : int, optional, default=1
+            During each extra chance, do this many steps of hamiltonian dynamics.
+        collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+           The collision rate for the velocity corruption (GHMC).  If None,
+           velocities information will be discarded after each round (HMC).
+        groups : list of tuples, optional, default=(0,1)
+            A list of tuples defining the force groups.  The first element
+            of each tuple is the force group index, and the second element
+            is the number of times that force group should be evaluated in
+            one time step.
 
     Notes
     -----
-    This integrator attempts to circumvent rejections by propagating up to 
+    This integrator attempts to circumvent rejections by propagating up to
     `extra_chances` steps of additional dynamics.
 
     References
@@ -438,9 +467,8 @@ class XCGHMCIntegrator(GHMCIntegrator):
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
 
     """
-    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
-        """CURRENTLY BROKEN!!!!!
-        """
+
+    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.temperature = temperature
@@ -488,7 +516,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
         """
         return self.steps_accepted / self.steps_taken
 
-
     def create(self):
         self.initialize_variables()
         self.add_draw_velocities_step()
@@ -496,20 +523,19 @@ class XCGHMCIntegrator(GHMCIntegrator):
         for i in range(1 + self.extra_chances):
             self.add_hmc_iterations(i)
             self.add_accept_or_reject_step(i)
-        
+
         self.addComputeGlobal("flip", "(1 - done)")
         self.addComputePerDof("x", "select(flip, xold, xfinal)")
-        
+
         if self.is_GHMC:
             self.addComputePerDof("v", "select(flip, -vold, vfinal)")  # Requires OMM Build on May 6, 2015
 
         self.addComputeGlobal("nflip", "nflip + flip")
 
-
     def initialize_variables(self):
 
-        self.addGlobalVariable("accept", 1.0) # accept or reject
-        self.addGlobalVariable("r", 0.0) # Metropolis ratio: ratio probabilities
+        self.addGlobalVariable("accept", 1.0)  # accept or reject
+        self.addGlobalVariable("r", 0.0)  # Metropolis ratio: ratio probabilities
 
         self.addGlobalVariable("extra_chances", self.extra_chances)  # Maximum number of rounds of dynamics
         self.addGlobalVariable("flip", 0.0)  # Indicator variable whether this iteration was a flip
@@ -520,32 +546,31 @@ class XCGHMCIntegrator(GHMCIntegrator):
         for i in range(1 + self.extra_chances):
             self.addGlobalVariable("n%d" % i, 0.0)  # Number of times accepted when k = i
 
-        self.addGlobalVariable("nflip", 0) # number of momentum flips (e.g. complete rejections)
-        self.addGlobalVariable("nrounds", 0) # number of "rounds" of XHMC, e.g. the number of times k = 0
+        self.addGlobalVariable("nflip", 0)  # number of momentum flips (e.g. complete rejections)
+        self.addGlobalVariable("nrounds", 0)  # number of "rounds" of XHMC, e.g. the number of times k = 0
 
         # Below this point is possible base class material
 
-        self.addGlobalVariable("kT", self.kT) # thermal energy
+        self.addGlobalVariable("kT", self.kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
-        self.addGlobalVariable("ke", 0) # kinetic energy
-        self.addPerDofVariable("xold", 0) # old positions
-        self.addGlobalVariable("Eold", 0) # old energy
-        self.addGlobalVariable("Enew", 0) # new energy
-        
-        self.addGlobalVariable("done", 0) # Becomes true once we find a good value of (x, p)
+        self.addGlobalVariable("ke", 0)  # kinetic energy
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
 
-        self.addPerDofVariable("x1", 0) # for constraints
-        
+        self.addGlobalVariable("done", 0)  # Becomes true once we find a good value of (x, p)
+
+        self.addPerDofVariable("x1", 0)  # for constraints
+
         self.addPerDofVariable("xfinal", 0)
         self.addPerDofVariable("vfinal", 0)
-        
+
         self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
-        
 
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         if self.is_GHMC:
-            self.addGlobalVariable("b", self.b) # velocity mixing parameter        
+            self.addGlobalVariable("b", self.b)  # velocity mixing parameter
         self.addUpdateContextState()
 
     def add_draw_velocities_step(self):
@@ -574,15 +599,14 @@ class XCGHMCIntegrator(GHMCIntegrator):
     def add_hmc_iterations(self, i):
         """Add self.steps_per_hmc or self.steps_per_extra_hmc iterations of symplectic hamiltonian dynamics."""
         logger.debug("Adding XCGHMCIntegrator steps.")
-        
+
         steps = self.steps_per_hmc
-        
+
         if i > 0:
             steps = self.steps_per_extra_hmc
-        
+
         for step in range(steps):
             self.add_hamiltonian_step()
-                
 
     def add_accept_or_reject_step(self, i):
         logger.debug("XCGHMC: add_accept_or_reject_step()")
@@ -593,34 +617,59 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addComputeGlobal("mu", "min(1, r)")  # XCGHMC paper version
         self.addComputeGlobal("mu1", "max(mu1, mu)")
         self.addComputeGlobal("accept", "step(mu1 - uniform) * (1 - done)")
-        
+
         if i == 0:
             steps = self.steps_per_hmc
         else:
             steps = self.steps_per_extra_hmc
-        
+
         cumulative_steps = self.steps_per_hmc + i * self.steps_per_extra_hmc
-        
+
         self.addComputeGlobal("n%d" % i, "n%d + accept" % (i))
-        
+
         self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (cumulative_steps))
         self.addComputeGlobal("steps_taken", "steps_taken + %d" % (steps))
 
         self.addComputePerDof("xfinal", "select(accept, x, xfinal)")
-        
-        if self.is_GHMC:        
+
+        if self.is_GHMC:
             self.addComputePerDof("vfinal", "select(accept, v, vfinal)")
 
         self.addComputeGlobal("done", "max(done, accept)")
-        #self.addConditionalTermination("done")  #  Conditional termination here would avoid additional force+energy evaluations.
+        # self.addConditionalTermination("done")  #  Conditional termination here would avoid additional force+energy evaluations.
 
 
 class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
-    """Extra Chance Generalized hybrid Monte Carlo RESPA integrator.
+
+    """Extra Chance Generalized Hybrid Monte Carlo RESPA Integrator.
+
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+            The temperature.
+        steps_per_hmc : int, default: 10
+            The number of velocity Verlet steps to take per round of hamiltonian dynamics
+            This must be an even number!
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+            The integration timestep.  The total time taken per iteration
+            will equal timestep * steps_per_hmc
+        extra_chances : int, optional, default=2
+            The number of extra chances.  If the initial move is rejected, up to
+            `extra_chances` rounds of additional moves will be attempted to find
+            an accepted proposal.  `extra_chances=0` correponds to vanilla (G)HMC.
+        steps_per_extra_hmc : int, optional, default=1
+            During each extra chance, do this many steps of hamiltonian dynamics.
+        collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+           The collision rate for the velocity corruption (GHMC).  If None,
+           velocities information will be discarded after each round (HMC).
+        groups : list of tuples, optional, default=(0,1)
+            A list of tuples defining the force groups.  The first element
+            of each tuple is the force group index, and the second element
+            is the number of times that force group should be evaluated in
+            one time step.
     """
-    def __init__(self, temperature=298.0*u.kelvin, steps_per_hmc=10, timestep=1*u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None, groups=None):
-        """
-        """
+
+    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None, groups=None):
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.groups = check_groups(groups)
