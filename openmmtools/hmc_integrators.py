@@ -46,13 +46,12 @@ def guess_force_groups(system, nonbonded=1, fft=1, others=0, multipole=1):
 
 
 class GHMCBase(mm.CustomIntegrator):
-
     """Generalized hybrid Monte Carlo integrator base class.
 
     Notes
     -----
     This loosely follows the definition of GHMC given in the two below
-    references.  Specifically, the velocities are corrupted,
+    references.  Specifically, the velocities are corrupted (partially or completely),
     several steps of hamiltonian dynamics are performed, and then
     an accept / reject move is taken.
 
@@ -63,7 +62,6 @@ class GHMCBase(mm.CustomIntegrator):
     ----------
     C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-
     """
 
     def step(self, n_steps):
@@ -214,8 +212,21 @@ class GHMCBase(mm.CustomIntegrator):
 
 
 class GHMCIntegrator(GHMCBase):
-
     """Generalized hybrid Monte Carlo (GHMC) integrator.
+
+    Parameters
+    ----------
+    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+       The temperature.
+    steps_per_hmc : int, default: 10
+       The number of velocity Verlet steps to take per round of hamiltonian dynamics
+       This must be an even number!
+    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+       The integration timestep.  The total time taken per iteration
+       will equal timestep * steps_per_hmc
+    collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+       The collision rate for the velocity corruption (GHMC).  If None,
+       velocities information will be discarded after each round (HMC).
 
     Notes
     -----
@@ -233,26 +244,9 @@ class GHMCIntegrator(GHMCBase):
     ----------
     C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=None):
-        """
-        Parameters
-        ----------
-        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
-           The temperature.
-        steps_per_hmc : int, default: 10
-           The number of velocity Verlet steps to take per round of hamiltonian dynamics
-           This must be an even number!
-        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-           The integration timestep.  The total time taken per iteration
-           will equal timestep * steps_per_hmc
-        collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
-           The collision rate for the velocity corruption (GHMC).  If None,
-           velocities information will be discarded after each round (HMC).
-        """
-
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.steps_per_hmc = steps_per_hmc
@@ -311,14 +305,10 @@ class GHMCIntegrator(GHMCBase):
 
 
 class RESPAMixIn(object):
+    """Mixin object to provide RESPA timestepping for an HMC integrator."""
 
     def add_hamiltonian_step(self):
-        """Add a single step of hamiltonian integration.
-
-        Notes
-        -----
-        This function will be overwritten in RESPA subclasses!
-        """
+        """Add a single step of RESPA hamiltonian integration."""
         logger.debug("Adding step of RESPA hamiltonian dynamics.""")
         self._create_substeps(1, self.groups)
         self.addConstrainVelocities()
@@ -352,10 +342,31 @@ class RESPAMixIn(object):
 
 
 class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
-
     """Generalized Hamiltonian Monte Carlo (GHMC) with a rRESPA multiple
     time step integration algorithm.  Combines GHMCIntegrator with
     MTSIntegrator.
+
+    Parameters
+    ----------
+    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+        The temperature.
+    steps_per_hmc : int, default: 10
+        The number of velocity Verlet steps to take per round of hamiltonian dynamics
+        This must be an even number!
+    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+        The integration timestep.  The total time taken per iteration
+        will equal timestep * steps_per_hmc
+    collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+       The collision rate for the velocity corruption (GHMC).  If None,
+       velocities information will be discarded after each round (HMC).
+    groups : list of tuples, optional, default=(0,1)
+        A list of tuples defining the force groups.  The first element
+        of each tuple is the force group index, and the second element
+        is the number of times that force group should be evaluated in
+        one time step.
+
+    Notes
+    -----
 
     This integrator allows different forces to be evaluated at different frequencies,
     for example to evaluate the expensive, slowly changing forces less frequently than
@@ -374,13 +385,6 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
     once per time step, force group 1 should be evaluated twice per time step (every 2 fs),
     and force group 2 should be evaluated eight times per time step (every 0.5 fs).
 
-    Notes
-    -----
-    This loosely follows the definition of GHMC given in the two below
-    references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then
-    an accept / reject move is taken.
-
     The RESPA multiple timestep splitting should closely follow the code
     in MTSIntegrator.
 
@@ -392,28 +396,6 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=1.0 / u.picoseconds, groups=None):
-        """Create a generalized hamiltonian Monte Carlo (HMC) integrator with linearly ramped non-uniform timesteps.
-
-        Parameters
-        ----------
-        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
-            The temperature.
-        steps_per_hmc : int, default: 10
-            The number of velocity Verlet steps to take per round of hamiltonian dynamics
-            This must be an even number!
-        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-            The integration timestep.  The total time taken per iteration
-            will equal timestep * steps_per_hmc
-        collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
-           The collision rate for the velocity corruption (GHMC).  If None,
-           velocities information will be discarded after each round (HMC).
-        groups : list of tuples, optional, default=(0,1)
-            A list of tuples defining the force groups.  The first element
-            of each tuple is the force group index, and the second element
-            is the number of times that force group should be evaluated in
-            one time step.
-        """
-
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.groups = check_groups(groups)
@@ -427,9 +409,7 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
 
 
 class XCGHMCIntegrator(GHMCIntegrator):
-
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
-
 
         Parameters
         ----------
@@ -450,11 +430,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
         collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
            The collision rate for the velocity corruption (GHMC).  If None,
            velocities information will be discarded after each round (HMC).
-        groups : list of tuples, optional, default=(0,1)
-            A list of tuples defining the force groups.  The first element
-            of each tuple is the force group index, and the second element
-            is the number of times that force group should be evaluated in
-            one time step.
 
     Notes
     -----
@@ -465,7 +440,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
     ----------
     C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
-
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
@@ -640,7 +614,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
 
 class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
-
     """Extra Chance Generalized Hybrid Monte Carlo RESPA Integrator.
 
         Parameters
@@ -667,6 +640,16 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
             of each tuple is the force group index, and the second element
             is the number of times that force group should be evaluated in
             one time step.
+
+    Notes
+    -----
+    This integrator attempts to circumvent rejections by propagating up to
+    `extra_chances` steps of additional dynamics.
+
+    References
+    ----------
+    C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
+    J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None, groups=None):
