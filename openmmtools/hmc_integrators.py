@@ -1,12 +1,11 @@
 import time
+import logging
 import pandas as pd
 import numpy as np
 
-import logging
- 
 import simtk.unit as u
-
 import simtk.openmm as mm
+
 from .constants import kB
 
 logging.basicConfig(level=logging.INFO)
