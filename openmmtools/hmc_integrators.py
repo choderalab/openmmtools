@@ -66,8 +66,6 @@ class GHMCBase(mm.CustomIntegrator):
 
     def step(self, n_steps):
 
-        if not hasattr(self, "elapsed_steps"):
-            self.elapsed_steps = 0.0
         if not hasattr(self, "elapsed_time"):
             self.elapsed_time = 0.0
 
@@ -76,17 +74,18 @@ class GHMCBase(mm.CustomIntegrator):
         dt = time.time() - t0
 
         self.elapsed_time += dt
-        self.elapsed_steps += self.steps_per_hmc * n_steps
 
     def reset_time(self):
         """Do this before using any benchmark timing info."""
         self.step(1)
-        self.elapsed_steps = 0.0
         self.elapsed_time = 0.0
+        self.setGlobalVariableByName("steps_taken", 0.0)
+        self.setGlobalVariableByName("steps_accepted", 0.0)
+        # Note: XCHMC has additional counters n_i that are not reset here.  This should not be a problem as they aren't used in benchmarking
 
     @property
     def time_per_step(self):
-        return (self.elapsed_time / self.elapsed_steps)
+        return (self.elapsed_time / self.steps_taken)
 
     @property
     def days_per_step(self):
@@ -210,6 +209,16 @@ class GHMCBase(mm.CustomIntegrator):
     def is_GHMC(self):
         return self.collision_rate is not None
 
+    @property
+    def steps_taken(self):
+        """Total number of hamiltonian steps taken."""
+        return self.getGlobalVariableByName("steps_taken")
+
+    @property
+    def steps_accepted(self):
+        """Total number of hamiltonian steps accepted."""
+        return self.getGlobalVariableByName("steps_accepted")
+
 
 class GHMCIntegrator(GHMCBase):
     """Generalized hybrid Monte Carlo (GHMC) integrator.
@@ -269,6 +278,9 @@ class GHMCIntegrator(GHMCBase):
         self.addGlobalVariable("accept", 0)  # accept or reject
         self.addPerDofVariable("x1", 0)  # for constraints
 
+        self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
+        self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
+
         if self.is_GHMC:
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
 
@@ -302,6 +314,9 @@ class GHMCIntegrator(GHMCBase):
 
         if self.is_GHMC:
             self.addComputePerDof("v", "select(accept, v, -1*vold)")
+
+        self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (self.steps_per_hmc))
+        self.addComputeGlobal("steps_taken", "steps_taken + %d" % (self.steps_per_hmc))
 
 
 class RESPAMixIn(object):
@@ -475,14 +490,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
     def n_flip(self):
         """The total number of momentum flips."""
         return self.getGlobalVariableByName("nflip")
-
-    @property
-    def steps_taken(self):
-        return self.getGlobalVariableByName("steps_taken")
-
-    @property
-    def steps_accepted(self):
-        return self.getGlobalVariableByName("steps_accepted")
 
     @property
     def acceptance_rate(self):
