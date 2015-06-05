@@ -71,7 +71,7 @@ class GHMCBase(mm.CustomIntegrator):
     """
 
     def step(self, n_steps):
-
+        """Do n_steps of dynamics while accumulating some timing information."""
         if not hasattr(self, "elapsed_time"):
             self.elapsed_time = 0.0
 
@@ -82,7 +82,7 @@ class GHMCBase(mm.CustomIntegrator):
         self.elapsed_time += dt
 
     def reset_time(self):
-        """Do this before using any benchmark timing info."""
+        """Resets benchmark timing counters, avoids counting the CustomIntegrator setup time."""
         self.step(1)
         self.elapsed_time = 0.0
         self.setGlobalVariableByName("steps_taken", 0.0)
@@ -126,17 +126,12 @@ class GHMCBase(mm.CustomIntegrator):
         self.add_cache_variables_step()
         self.add_hmc_iterations()
         self.add_accept_or_reject_step()
-        self.add_accumulate_statistics_step()
 
     def add_hmc_iterations(self):
         """Add self.steps_per_hmc iterations of symplectic hamiltonian dynamics."""
         logger.debug("Adding (G)HMCIntegrator steps.")
         for step in range(self.steps_per_hmc):
             self.add_hamiltonian_step()
-
-    def add_accumulate_statistics_step(self):
-        self.addComputeGlobal("naccept", "naccept + accept")
-        self.addComputeGlobal("ntrials", "ntrials + 1")
 
     def add_hamiltonian_step(self):
         """Add a single step of hamiltonian integration.
@@ -159,19 +154,16 @@ class GHMCBase(mm.CustomIntegrator):
         return kB * self.temperature
 
     @property
-    def n_accept(self):
-        """The number of accepted HMC moves."""
-        return self.getGlobalVariableByName("naccept")
-
-    @property
-    def n_trials(self):
-        """The total number of attempted HMC moves."""
-        return self.getGlobalVariableByName("ntrials")
-
-    @property
     def acceptance_rate(self):
-        """The acceptance rate: n_accept  / n_trials."""
-        return self.n_accept / float(self.n_trials)
+        """The acceptance rate, evaluated via the number of force evaluations.
+
+        Notes
+        -----
+        This should be sufficiently general to apply to both XCGHMC and GHMC.
+        In the latter case, the number of force evaluations taken (and accepted)
+        are both proportional to the number of MC moves taken.
+        """
+        return self.steps_accepted / self.steps_taken
 
     @property
     def effective_timestep(self):
@@ -270,8 +262,6 @@ class GHMCIntegrator(GHMCBase):
         self.create()
 
     def initialize_variables(self):
-        self.addGlobalVariable("naccept", 0)  # number accepted
-        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
         self.addGlobalVariable("kT", self.kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
@@ -493,12 +483,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
     def n_flip(self):
         """The total number of momentum flips."""
         return self.getGlobalVariableByName("nflip")
-
-    @property
-    def acceptance_rate(self):
-        """The acceptance rate, in terms of number of force evaluations.
-        """
-        return self.steps_accepted / self.steps_taken
 
     def create(self):
         self.initialize_variables()
