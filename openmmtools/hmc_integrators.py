@@ -15,7 +15,7 @@ import simtk.openmm as mm
 from .constants import kB
 
 logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("ex")
+logger = logging.getLogger(__name__)
 
 
 def check_groups(groups, guess=True):
