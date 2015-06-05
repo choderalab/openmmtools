@@ -71,7 +71,7 @@ class GHMCBase(mm.CustomIntegrator):
     """
 
     def step(self, n_steps):
-        """Do n_steps of dynamics while accumulating some timing information."""
+        """Do `n_steps` of dynamics while accumulating some timing information."""
         if not hasattr(self, "elapsed_time"):
             self.elapsed_time = 0.0
 
@@ -149,9 +149,47 @@ class GHMCBase(mm.CustomIntegrator):
         self.addConstrainVelocities()
 
     @property
+    def b(self):
+        """The scaling factor for preserving versus randomizing velocities."""
+        return np.exp(-self.collision_rate * self.timestep)
+
+    @property
     def kT(self):
         """The thermal energy."""
         return kB * self.temperature
+
+    def summary(self):
+        """Return a dictionary of relevant state variables for XHMC, useful for debugging.
+        Append self.summary() to a list and print out as a dataframe.
+        """
+        d = {}
+        d["arate"] = self.acceptance_rate
+        d["effective_timestep"] = self.effective_timestep / u.femtoseconds
+        d["effective_ns_per_day"] = self.effective_ns_per_day
+        d["ns_per_day"] = self.ns_per_day
+        keys = ["accept", "ke", "Enew", "Eold"]
+
+        for key in keys:
+            d[key] = self.getGlobalVariableByName(key)
+
+        d["deltaE"] = d["Enew"] - d["Eold"]
+
+        return d
+
+    @property
+    def steps_taken(self):
+        """Total number of hamiltonian steps taken."""
+        return self.getGlobalVariableByName("steps_taken")
+
+    @property
+    def steps_accepted(self):
+        """Total number of hamiltonian steps accepted."""
+        return self.getGlobalVariableByName("steps_accepted")
+
+    @property
+    def accept(self):
+        """Return True if the last step taken was accepted."""
+        return bool(self.getGlobalVariableByName("accept"))
 
     @property
     def acceptance_rate(self):
@@ -170,53 +208,9 @@ class GHMCBase(mm.CustomIntegrator):
         """The acceptance rate times the timestep."""
         return self.acceptance_rate * self.timestep
 
-    def summary(self):
-        """Return a dictionary of relevant state variables for XHMC, useful for debugging.
-        Append self.summary() to a list and print out as a dataframe.
-        """
-        d = {}
-        d["arate"] = self.acceptance_rate
-        d["effective_timestep"] = self.effective_timestep / u.femtoseconds
-        d["effective_ns_per_day"] = self.effective_ns_per_day
-        d["ns_per_day"] = self.ns_per_day
-        d["r"] = self.accept_factor
-        keys = ["accept", "ke", "Enew", "Eold"]
-
-        for key in keys:
-            d[key] = self.getGlobalVariableByName(key)
-
-        d["deltaE"] = d["Enew"] - d["Eold"]
-
-        return d
-
-    @property
-    def accept_factor(self):
-        return np.exp(-(self.getGlobalVariableByName("Enew") - self.getGlobalVariableByName("Eold")) / self.getGlobalVariableByName("kT"))
-
-    @property
-    def accept(self):
-        """Return True if the last step taken was accepted."""
-        return bool(self.getGlobalVariableByName("accept"))
-
-    @property
-    def b(self):
-        """The scaling factor for preserving versus randomizing velocities."""
-        return np.exp(-self.collision_rate * self.timestep)
-
     @property
     def is_GHMC(self):
         return self.collision_rate is not None
-
-    @property
-    def steps_taken(self):
-        """Total number of hamiltonian steps taken."""
-        return self.getGlobalVariableByName("steps_taken")
-
-    @property
-    def steps_accepted(self):
-        """Total number of hamiltonian steps accepted."""
-        return self.getGlobalVariableByName("steps_accepted")
-
 
 class GHMCIntegrator(GHMCBase):
     """Generalized hybrid Monte Carlo (GHMC) integrator.
