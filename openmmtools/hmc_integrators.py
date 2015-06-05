@@ -1,3 +1,9 @@
+"""Hamiltonian Monte Carlo Integrators
+
+Notes
+-----
+The code in this module is considered EXPERIMENTAL until further notice.
+"""
 import time
 import logging
 import pandas as pd
@@ -229,7 +235,6 @@ class GHMCIntegrator(GHMCBase):
        The temperature.
     steps_per_hmc : int, default: 10
        The number of velocity Verlet steps to take per round of hamiltonian dynamics
-       This must be an even number!
     timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
        The integration timestep.  The total time taken per iteration
        will equal timestep * steps_per_hmc
@@ -367,18 +372,17 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
         The temperature.
     steps_per_hmc : int, default: 10
         The number of velocity Verlet steps to take per round of hamiltonian dynamics
-        This must be an even number!
     timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
         The integration timestep.  The total time taken per iteration
         will equal timestep * steps_per_hmc
     collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
        The collision rate for the velocity corruption (GHMC).  If None,
        velocities information will be discarded after each round (HMC).
-    groups : list of tuples, optional, default=(0,1)
+    groups : list of tuples, optional, default=None
         A list of tuples defining the force groups.  The first element
         of each tuple is the force group index, and the second element
         is the number of times that force group should be evaluated in
-        one time step.
+        one time step.  If None, a default choice of [(0, 1)] will be used!!!
 
     Notes
     -----
@@ -432,7 +436,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
             The temperature.
         steps_per_hmc : int, default: 10
             The number of velocity Verlet steps to take per round of hamiltonian dynamics
-            This must be an even number!
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
             The integration timestep.  The total time taken per iteration
             will equal timestep * steps_per_hmc
@@ -629,7 +632,6 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
             The temperature.
         steps_per_hmc : int, default: 10
             The number of velocity Verlet steps to take per round of hamiltonian dynamics
-            This must be an even number!
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
             The integration timestep.  The total time taken per iteration
             will equal timestep * steps_per_hmc
@@ -642,16 +644,17 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
         collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
            The collision rate for the velocity corruption (GHMC).  If None,
            velocities information will be discarded after each round (HMC).
-        groups : list of tuples, optional, default=(0,1)
+        groups : list of tuples, optional, default=None
             A list of tuples defining the force groups.  The first element
             of each tuple is the force group index, and the second element
             is the number of times that force group should be evaluated in
-            one time step.
+            one time step.  If None, a default choice of [(0, 1)] will be used!!!
 
     Notes
     -----
     This integrator attempts to circumvent rejections by propagating up to
-    `extra_chances` steps of additional dynamics.
+    `extra_chances` steps of additional dynamics.  During each extra chance,
+    `steps_per_extra_hmc` steps of hamiltonian dynamics are taken.
 
     References
     ----------
