@@ -517,6 +517,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
+        self.addPerDofVariable("vold", 0)  # old velocities        
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
 
