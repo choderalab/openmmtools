@@ -1,10 +1,9 @@
 package:
-  name: openmmtools
-  version: !!str 0.0.0
+  name: openmmtools-dev
+  version: !!str dev
 
-#source:
-#  fn: master.zip
-#  url: https://github.com/choderalab/openmmtools/archive/master.zip
+source:
+  path: ../../
 
 build:
   preserve_egg_dir: True
