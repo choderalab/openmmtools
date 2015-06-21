@@ -21,7 +21,7 @@ env:
     - CONDA_PY=34
   global:
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
-  - secure: "RMyNnsH1n7y8S+jJeYTdu3Lu4GF0NMERBCbf7yMf7ptTVvJx7+bOz/l9+/Ap+tEdXomow6i8Lrk/uG9+DOYHl3WBhYqIywtv10anP83opkUlOAcrIBDpf4B72dBgNJ5Oc5evEsf9hkMcdYrqI/GkcKFUYq2knEJtDGP6TsDHJic="
+    - secure: "YIpTwysOxPT1XLKgddr3lZmBoL8UleB4Gk3eDI+mgt4GOcfI2U/xdx+0053wh1KpkoxRulK/1mA7oX3v5zTDMwCHRjZ8VAuCwUPBhkFbJ35IgFQP/P0nDkW5odyGTZ0V7JNFaC07KyzSQWRaTNGsPPjas3lprdQawrpP0PNLzao="
 
 after_success:
   - echo "after_success"
