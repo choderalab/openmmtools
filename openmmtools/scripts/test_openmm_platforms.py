@@ -132,8 +132,6 @@ def config_root_logger(verbose, log_file_path=None, mpicomm=None):
     else:
         logging.root.setLevel(terminal_handler.level)
 
-config_root_logger(True, log_file_path='test-openmm-platforms.log')
-
 #=============================================================================================
 # GLOBAL IMPORTS
 #=============================================================================================
@@ -338,15 +336,26 @@ def get_all_subclasses(cls):
 
 def main():
     import doctest
+    import argparse
 
-    debug = False # Don't display extra debug information.
+    parser = argparse.ArgumentParser(description="Check OpenMM computed energies and forces across all platforms for a suite of test systems.")
+    parser.add_argument('-o', '--outfile', dest='logfile', action='store', type=str, default=None)
+    parser.add_argument('-v', dest='verbose', action='store_true')
+    args = parser.parse_args()
+
+    verbose = args.verbose # Don't display extra debug information.
+    config_root_logger(verbose, log_file_path=args.logfile)
+
+    # Print version.
+    logger.info("OpenMM version: %s" % openmm.version.version)
+    logger.info("")
 
     # List all available platforms
-    print("Available platforms:")
+    logger.info("Available platforms:")
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
-        print("%5d %s" % (platform_index, platform.getName()))
-    print("")
+        logger.info("%5d %s" % (platform_index, platform.getName()))
+    logger.info("")
 
     # Test all systems on Reference platform.
     platform = openmm.Platform.getPlatformByName("Reference")
@@ -422,7 +431,7 @@ def main():
                     if abs(force_rmse) > FORCE_RMSE_TOLERANCE:
                         test_success = False
                         logger.info("%32s WARNING: Force RMS error (%.6f kcal/mol/nm) exceeds tolerance (%.6f kcal/mol/nm).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit))
-                        if debug:
+                        if verbose:
                             for atom_index in range(natoms):
                                 for k in range(3):
                                     logger.info("%12.6f" % (reference_force[atom_index,k]/force_unit), end="")
