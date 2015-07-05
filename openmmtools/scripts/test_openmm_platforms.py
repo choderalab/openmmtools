@@ -317,7 +317,7 @@ def main():
                     force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
                     force_rms = units.sqrt(force_ms)
 
-                    print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
+                    print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol/nm %16.6f kcal/mol/nm" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
 
                     # Mark whether tolerance is exceeded or not.
                     if abs(potential_error) > ENERGY_TOLERANCE:
@@ -325,7 +325,7 @@ def main():
                         print("%32s WARNING: Potential energy error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", potential_error/units.kilocalories_per_mole, ENERGY_TOLERANCE/units.kilocalories_per_mole))
                     if abs(force_rmse) > FORCE_RMSE_TOLERANCE:
                         test_success = False
-                        print("%32s WARNING: Force RMS error (%.6f kcal/mol) exceeds tolerance (%.6f kcal/mol).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit))
+                        print("%32s WARNING: Force RMS error (%.6f kcal/mol/nm) exceeds tolerance (%.6f kcal/mol/nm).  Test failed." % ("", force_rmse/force_unit, FORCE_RMSE_TOLERANCE/force_unit))
                         if debug:
                             for atom_index in range(natoms):
                                 for k in range(3):
@@ -416,7 +416,7 @@ def main():
                             force_ms = ((platform_force / force_unit)**2).sum() / natoms * force_unit**2
                             force_rms = units.sqrt(force_ms)
 
-                            print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
+                            print("%16s%16s %16.6f kcal/mol %16.6f kcal/mol %16.6f kcal/mol/nm %16.6f kcal/mol/nm" % (platform_name, precision_model, platform_potential / units.kilocalories_per_mole, potential_error / units.kilocalories_per_mole, force_rms / force_unit, force_rmse / force_unit))
 
                     except Exception as e:
                         print(e)

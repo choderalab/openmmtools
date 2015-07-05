@@ -78,14 +78,19 @@ def check_bitwise_reversible_velocity_verlet(testsystem):
                print "v2   " + bitrepr(v2[index][k])
                print "vr   " + bitrepr(vr[index][k])
                print "v1r  " + bitrepr(v1r[index][k])
-               print "x1r  " + bitrepr(x1r[index][k])
                print "v2r  " + bitrepr(v2r[index][k])
+               print "x1r  " + bitrepr(x1r[index][k])
                print "-v2r " + bitrepr(-v2r[index][k])
 
                print ""
 
                print "-v1r - v1 : " + bitrepr(-v1r[index][k] - v1[index][k])
+
                print "-v2r - v0 : " + bitrepr(-v2r[index][k] - v0[index][k])
+
+               print ""
+               print "x1r  " + bitrepr(x1r[index][k])
+               print "x0   " + bitrepr(x0[index][k])
                print "x1r - x0  : " + bitrepr(x1r[index][k] - x0[index][k])
                print "x1r - x0  : " + str(x1r[index][k] - x0[index][k])
 

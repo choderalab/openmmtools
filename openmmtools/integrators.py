@@ -234,7 +234,10 @@ class BitwiseReversibleVelocityVerletIntegrator(mm.CustomIntegrator):
     """Bitwise-reversible Verlocity Verlet integrator.
 
     The Velocity Verlet integrator [1] is implemented using forces truncated to fewer digits of precision so that the
-    resulting position and velocity updates will not lose any precision to rounding, using concepts from [2] and [3].
+    resulting position and velocity updates will not lose any precision to rounding, using concepts from [2].
+
+    Note that a patent [3] purports to describe a bitwise-reversible integrator, but fails to actually describe a
+    valid mathematical algorithm that can be implemented.
 
     The number of bits of precision to maintain and the maximum magnitude of positions and velocities for which the
     integrator will be bitwise-reversible in OpenMM units (nm and nm/ps) are user-adjustable parameters.  If these are
@@ -340,6 +343,9 @@ class BitwiseReversibleVelocityVerletIntegrator(mm.CustomIntegrator):
 
         self.addGlobalVariable("scale", self.scale)
 
+        self.addPerDofVariable('fix_arg', 0)
+        self.addPerDofVariable('fix', 0)
+
         # DEBUG
         self.addPerDofVariable('v0', 0)
         self.addPerDofVariable('x0', 0)
@@ -356,49 +362,71 @@ class BitwiseReversibleVelocityVerletIntegrator(mm.CustomIntegrator):
         self.addUpdateContextState()
 
         # Truncate x and v to desired precision.
-        self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
-        self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+        self.addComputePerDof("fix_arg", "x")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("x", "fix")
+
+        self.addComputePerDof("fix_arg", "v")
+        self.addComputePerDof("fix", "select(step(fix), (floor(scale * fix_arg + 0.5)/scale), (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("v", "fix")
 
         # DEBUG
         self.addComputePerDof("v0", "v") # DEBUG
         self.addComputePerDof("x0", "x") # DEBUG
 
         # TODO: Use a different scheme than floor(scale*a+0.5)/scale since this may lead to inaccurate rounding
-        self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
-        self.addComputePerDof("v1", "v") # DEBUG
-        self.addComputePerDof("x", "x+floor(scale * dt*v + 0.5)/scale") # WARNING: This scheme recommended by Ref [3], but does not seem to work.
-        #self.addComputePerDof("x", "x+dt*v")
-        self.addComputePerDof("x1", "x") # DEBUG
-        #self.addComputePerDof("x", "x+dt*v") # WARNING: This scheme may lead to the accumulation of additional digits of precision, which could destroy reversibility
-        self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
-        self.addComputePerDof("v2", "v") # DEBUG
+        self.addComputePerDof("fix_arg", "dt*f/m/2")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("v", "v+fix")
 
-        # DEBUG
-        self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
-        self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+        self.addComputePerDof("v1", "v") # DEBUG
+
+        self.addComputePerDof("fix_arg", "dt*v")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("x", "x+fix")
+
+        self.addComputePerDof("x1", "x") # DEBUG
+
+        self.addComputePerDof("fix_arg", "dt*f/m/2")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("v", "v+fix")
+
+        self.addComputePerDof("v2", "v") # DEBUG
 
         if test:
             # DEBUG: Back up.
             self.addComputePerDof("v", "-v")
 
-            self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
-            self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
+            # Truncate
+            self.addComputePerDof("fix_arg", "x")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("x", "fix")
+
+            self.addComputePerDof("fix_arg", "v")
+            self.addComputePerDof("fix", "select(step(fix), (floor(scale * fix_arg + 0.5)/scale), (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("v", "fix")
 
             self.addComputePerDof("vr", "v") # DEBUG
-            self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
+
+            self.addComputePerDof("fix_arg", "dt*f/m/2")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("v", "v+fix")
+
             self.addComputePerDof("v1r", "v") # DEBUG
-            self.addComputePerDof("x", "x+floor(scale * dt*v + 0.5)/scale")
-            #self.addComputePerDof("x", "x+dt*v")
+
+            self.addComputePerDof("fix_arg", "dt*v")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("x", "x+fix")
+
             self.addComputePerDof("x1r", "x") # DEBUG
-            self.addComputePerDof("v", "v+floor(scale * (dt*f/m/2) + 0.5)/scale")
+
+            self.addComputePerDof("fix_arg", "dt*f/m/2")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("v", "v+fix")
+
             self.addComputePerDof("v2r", "v") # DEBUG
 
-            self.addComputePerDof("x", "floor(scale * x + 0.5)/scale")
-            self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
-
             self.addComputePerDof("v", "-v")
-
-            self.addComputePerDof("v", "floor(scale * v + 0.5)/scale")
 
     def truncatePrecision(self, context):
         """Truncate precision of stored positions and velocities.
@@ -415,8 +443,8 @@ class BitwiseReversibleVelocityVerletIntegrator(mm.CustomIntegrator):
         positions = in_openmm_units(state.getPositions(asNumpy=True))
         velocities = in_openmm_units(state.getVelocities(asNumpy=True))
         # Truncate precision.
-        positions = np.floor(positions*self.scale+0.5)/self.scale
-        velocities = np.floor(velocities*self.scale+0.5)/self.scale
+        positions = np.sign(positions) * np.floor(np.abs(positions)*self.scale+0.5)/self.scale
+        velocities = np.sign(velocities) * np.floor(np.abs(velocities)*self.scale+0.5)/self.scale
         # Store updated positions and velocities.
         context.setPositions(positions)
         context.setVelocities(velocities)
