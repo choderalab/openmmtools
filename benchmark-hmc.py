@@ -19,7 +19,7 @@ def benchmark_hmc(testsystem):
    timestep = 1.0 * unit.femtoseconds
    integrator = integrators.HMCIntegrator(timestep, nsteps=1)
    # Demonstrate bitwise reversibility for a simple harmonic oscillator.
-   platform = openmm.Platform.getPlatformByName('CUDA')
+   platform = openmm.Platform.getPlatformByName('OpenCL')
    context = openmm.Context(testsystem.system, integrator, platform)
    context.setPositions(testsystem.positions)
    # Select velocity.

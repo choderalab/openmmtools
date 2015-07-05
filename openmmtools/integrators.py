@@ -671,7 +671,7 @@ class HMCIntegrator(mm.CustomIntegrator):
         # Store old position and energy.
         #
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputeGlobal("Eold", "ke + energy") # DEBUG
         self.addComputePerDof("xold", "x")
 
         #
@@ -692,6 +692,7 @@ class HMCIntegrator(mm.CustomIntegrator):
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
         self.addComputePerDof("x", "x*accept + xold*(1-accept)")
+        #self.addComputeGlobal("Eold", "Enew*accept + Eold*(1-accept)") # DEBUG
 
         #
         # Accumulate statistics.
