@@ -2870,9 +2870,9 @@ class DHFRExplicit(TestSystem):
         TestSystem.__init__(self, **kwargs)
 
         try:
-            from chemistry.amber import AmberParm
+            from parmed.amber import AmberParm
         except ImportError as e:
-            print("DHFR test system requires Parmed (`import chemistry`).")
+            print("DHFR test system requires Parmed (`import parmed`).")
             raise(e)
 
         prmtop_filename = get_data_filename("data/dhfr/prmtop")
