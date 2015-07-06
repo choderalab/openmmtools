@@ -19,6 +19,7 @@ requirements:
     - setuptools
     - openmm
     - jinja2
+    - parmed
 
   run:
     - python
@@ -28,6 +29,7 @@ requirements:
     - setuptools
     - jinja2
     - six
+    - parmed
 
 
 test:
