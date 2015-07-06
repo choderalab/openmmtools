@@ -379,10 +379,13 @@ def main():
             logger.info("Skipping %s due to missing dependency" % class_name)
             continue
 
-        logger.info("%s" % class_name)
-
+        # Create test system instance.
         testsystem = testsystem_class()
         [system, positions] = [testsystem.system, testsystem.positions]
+
+        logger.info("%s (%d atoms)" % (class_name, testsystem.system.getNumParticles()))
+
+        # Compute reference potential and force
         [reference_potential, reference_force] = compute_potential_and_force(system, positions, reference_platform)
 
         # Test all platforms.
