@@ -18,7 +18,6 @@ requirements:
     - nose
     - setuptools
     - openmm
-    - jinja2
     - parmed
 
   run:
@@ -27,7 +26,6 @@ requirements:
     - openmm
     - nose
     - setuptools
-    - jinja2
     - six
     - parmed
 

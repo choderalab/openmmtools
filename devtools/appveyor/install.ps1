@@ -60,7 +60,7 @@ function InstallMiniconda ($python_version, $architecture, $python_home) {
     $install_log = $python_home + ".log"
     $args = "/S /D=$python_home"
     Write-Host $filepath $args
-    Start-Process -FilePath $filepath -ArgumentList $args -Wait
+    Start-Process -FilePath $filepath -ArgumentList $args -Wait -Passthru
     if (Test-Path $python_home) {
         Write-Host "Python $python_version ($architecture) installation complete"
     } else {
@@ -73,17 +73,17 @@ function InstallMiniconda ($python_version, $architecture, $python_home) {
 
 function InstallCondaPackages ($python_home, $spec) {
     $conda_path = $python_home + "\Scripts\conda.exe"
-    $args = "install --yes --quiet $spec"
+    $args = "install --yes " + $spec
     Write-Host ("conda " + $args)
-    Start-Process -FilePath "$conda_path" -ArgumentList $args -Wait
+    Start-Process -FilePath "$conda_path" -ArgumentList $args -Wait -Passthru
 }
 
 function UpdateConda ($python_home) {
     $conda_path = $python_home + "\Scripts\conda.exe"
     Write-Host "Updating conda..."
-    $args = "update --yes --quiet conda"
+    $args = "update --yes conda"
     Write-Host $conda_path $args
-    Start-Process -FilePath "$conda_path" -ArgumentList $args -Wait
+    Start-Process -FilePath "$conda_path" -ArgumentList $args -Wait -Passthru
 }
 
 
