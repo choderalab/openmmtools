@@ -2959,7 +2959,7 @@ class SrcImplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-implicit/2src-minimized.pdb")
+        pdb_filename = get_data_filename("data/src-implicit/1yi6-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
@@ -2997,7 +2997,7 @@ class SrcExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        pdb_filename = get_data_filename("data/src-explicit/2src-minimized.pdb")
+        pdb_filename = get_data_filename("data/src-explicit/1yi6-minimized.pdb")
         pdbfile = app.PDBFile(pdb_filename)
 
         # Construct system.
