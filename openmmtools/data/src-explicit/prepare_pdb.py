@@ -18,7 +18,7 @@ from pdbfixer import PDBFixer
 # OPTIONS
 ################################################################################
 
-pdbid = '2src' # PDB ID to retrieve
+pdbid = '1yi6' # PDB ID to retrieve
 chain_ids_to_keep = ['A'] # chains to keep
 pH = 7.0 # pH
 forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml'] # list of forcefields to use in parameterization
@@ -52,7 +52,7 @@ print('Removing all chains but %s' % chain_ids_to_keep)
 all_chains = list(fixer.topology.chains())
 chain_id_list = [c.chain_id for c in fixer.structure.models[0].chains]
 chain_ids_to_remove = set(chain_id_list) - set(chain_ids_to_keep)
-fixer.removeChains(chain_ids_to_remove)
+fixer.removeChains(chainIds=chain_ids_to_remove)
 
 # Find missing residues.
 print('Finding missing residues...')
