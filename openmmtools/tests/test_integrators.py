@@ -101,7 +101,7 @@ def test_integrator_decorators():
     integrator = integrators.HMCIntegrator(timestep=0.05 * unit.femtoseconds)
     testsystem = testsystems.IdealGas()
     nsteps = 25
-    
+
     context = openmm.Context(testsystem.system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(300 * unit.kelvin)
@@ -111,3 +111,23 @@ def test_integrator_decorators():
     assert integrator.n_accept == nsteps
     assert integrator.n_trials == nsteps
     assert integrator.acceptance_rate == 1.0
+
+def test_fire_minimization():
+    integrator = integrators.FIREMinimizationIntegrator()
+    testsystem = testsystems.LennardJonesFluid()
+    nsteps = 100
+
+    context = openmm.Context(testsystem.system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(300 * unit.kelvin)
+
+    initial_energy = context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole
+
+    integrator.step(nsteps)
+
+    final_energy = context.getState(getEnergy=True).getPotentialEnergy() / unit.kilocalories_per_mole
+
+    print "FIRE minimizer"
+    print "Initial energy: %12.3f kcal/mol" % initial_energy
+    print "Final energy:   %12.3f kcal/mol" % final_energy
+
