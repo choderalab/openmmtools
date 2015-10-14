@@ -367,6 +367,7 @@ def main():
     tests_passed = 0 # number of times tolerance is not exceeded
     #logger.info("%16s%16s %16s          %16s          %16s          %16s" % ("platform", "precision", "potential", "error", "force mag", "rms error"))
     testsystem_classes = get_all_subclasses(testsystems.TestSystem)
+    testsystem_classes = [getattr(testsystems, name) for name in ('LysozymeImplicit', 'AMOEBAProteinBox', 'SrcImplicit', 'SrcExplicit')]
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
         logger.info(class_name)
@@ -383,15 +384,17 @@ def main():
 
         logger.info("%s (%d atoms)" % (class_name, testsystem.system.getNumParticles()))
 
-        maxits = 500
+        maxits = 100
         forcetol = 1.0 * unit.kilojoules_per_mole / unit.angstrom
 
         # Create integrator.
         from openmmtools import integrators
+        logger.info('Creating FIRE integrator...')
         integrator = integrators.FIREMinimizationIntegrator(tolerance=forcetol)
+        logger.info('Done.')
 
         # Build list of parameters.
-        global_variables = { integrator.getGlobalVariableName(index) : index for index in range(integrator.getNumGlobalVariables()) }
+        #global_variables = { integrator.getGlobalVariableName(index) : index for index in range(integrator.getNumGlobalVariables()) }
 
         # Create context.
         if platform:
@@ -411,7 +414,7 @@ def main():
         logger.info("FIRE                 %8.3f s" % elapsed_time)
         logger.info("initial energy = %12.3f kcal/mol" % fire_initial_energy)
         logger.info("final energy   = %12.3f kcal/mol" % fire_final_energy)
-        logger.info("converged = %f" % integrator.getGlobalVariable(global_variables['converged']))
+        #logger.info("converged = %f" % integrator.getGlobalVariable(global_variables['converged']))
 
         # Time LocalEnergyMinimizer
         from simtk.openmm import LocalEnergyMinimizer
