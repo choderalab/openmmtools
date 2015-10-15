@@ -2576,6 +2576,30 @@ class FlexiblePMEWaterBox(WaterBox):
         """
         super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
 
+class PMEWaterBox(WaterBox):
+
+    """
+    Water box using PME electrostatics and tight PME error tolerance.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box using PME electrostatics and tight PME error tolerance.
+
+        Parameters are inherited from WaterBox (except for `nonbondedMethod`).
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexiblePMEWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+
 class GiantFlexibleWaterBox(WaterBox):
 
     """
