@@ -2528,6 +2528,54 @@ class FlexibleWaterBox(WaterBox):
         """
         super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
 
+class FlexibleReactionFieldWaterBox(WaterBox):
+
+    """
+    Flexible water box using reaction field electrostatics.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible water box using reaction field electrostatics.
+
+        Parameters are inherited from WaterBox (except for `constrained` or `nonbondedMethod`).
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexibleReactionFieldWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(FlexibleReactionFieldWaterBox, self).__init__(constrained=False, nonbonedMethod=app.CutoffPeriodic, *args, **kwargs)
+
+class FlexiblePMEWaterBox(WaterBox):
+
+    """
+    Flexible water box using PME electrostatics and tight PME error tolerance.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible water box using PME electrostatics and tight PME error tolerance.
+
+        Parameters are inherited from WaterBox (except for `constrained` or `nonbondedMethod`).
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexiblePMEWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+
 class GiantFlexibleWaterBox(WaterBox):
 
     """
