@@ -47,6 +47,7 @@ logger = logging.getLogger(__name__)
 #=============================================================================================
 
 ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
+                          # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
 #=============================================================================================
 # MODULE UTILITIES
