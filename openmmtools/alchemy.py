@@ -598,15 +598,7 @@ class AbsoluteAlchemicalFactory(object):
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilon") # Lennard-Jones epsilon
 
         # Set parameters to match reference force.
-        # DEBUG
-        try:
-            sterics_custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
-        except Exception as e:
-            s = str(nonbonded_force) + '\n'
-            s += str(dir(nonbonded_force)) + '\n'
-            s += nonbonded_force.__class__.__name__ + '\n'
-            s += str(e) + '\n'
-            raise Exception(s)
+        sterics_custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
         electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
         sterics_custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
         electrostatics_custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
