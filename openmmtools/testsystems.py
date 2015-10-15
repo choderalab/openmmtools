@@ -2394,7 +2394,7 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=2.5 * unit.nanometers, cutoff=0.9 * unit.nanometers, model='tip3p', switch_width=0.5 * unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=9*unit.angstroms, model='tip3p', switch_width=1.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
         """
         Create a water box test system.
 
@@ -2586,7 +2586,6 @@ class FiveSiteWaterBox(WaterBox):
         """
         super(FiveSiteWaterBox, self).__init__(model='tip5p', *args, **kwargs)
 
-
 class DischargedWaterBox(WaterBox):
 
     """
@@ -2628,6 +2627,46 @@ class DischargedWaterBox(WaterBox):
 
         return
 
+class FlexibleDischargedWaterBox(FlexibleWaterBox):
+
+    """
+    Water box test system with zeroed charges.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible, discharged water box.
+
+        Parameters are inherited from WaterBox (except for `constraints`).
+
+        Examples
+        --------
+
+        Create a default waterbox.
+
+        >>> waterbox = FlexibleDischargedWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        Control the cutoff.
+
+        >>> waterbox = FlexibleDischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+
+        """
+        super(FlexibleDischargedWaterBox, self).__init__(*args, **kwargs)
+
+        # Zero charges.
+        system = self.system
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        force = forces['NonbondedForce']
+        for index in range(force.getNumParticles()):
+            [charge, sigma, epsilon] = force.getParticleParameters(index)
+            force.setParticleParameters(index, 0 * charge, sigma, epsilon)
+        for index in range(force.getNumExceptions()):
+            [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
+            force.setExceptionParameters(index, particle1, particle2, 0 * chargeProd, sigma, epsilon)
+
+        return
 
 class DischargedWaterBoxHsites(WaterBox):
 
