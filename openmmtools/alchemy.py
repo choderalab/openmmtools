@@ -602,10 +602,11 @@ class AbsoluteAlchemicalFactory(object):
         try:
             sterics_custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
         except Exception as e:
-            print nonbonded_force
-            print dir(nonbonded_force)
-            print nonbonded_force.__class__.__name__
-            raise e
+            s = str(nonbonded_force) + '\n'
+            s += str(dir(nonbonded_force)) + '\n'
+            s += nonbonded_force.__class__.__name__ + '\n'
+            s += str(e) + '\n'
+            raise Exception(s)
         electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
         sterics_custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
         electrostatics_custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
