@@ -2528,6 +2528,29 @@ class FlexibleWaterBox(WaterBox):
         """
         super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
 
+class GiantFlexibleWaterBox(WaterBox):
+
+    """
+    Flexible water box.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a large flexible water box (50A x 50A x 50A).
+
+        Parameters are inherited from WaterBox (except for 'constrained').
+
+        Examples
+        --------
+
+        Create a default giant flexible waterbox.
+
+        >>> waterbox = GiantFlexibleWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(GiantFlexibleWaterBox, self).__init__(constrained=False, box_edge=50.0*unit.angstroms, *args, **kwargs)
 
 class FourSiteWaterBox(WaterBox):
 
