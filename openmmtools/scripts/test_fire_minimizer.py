@@ -362,11 +362,14 @@ def main():
         logger.info("Using platform '%s'..." % args.platformname)
         platform = openmm.Platform.getPlatformByName(args.platformname)
 
+    # TODO: Try minimizing pdbfixer-retrieved systems
+
     # Test performance on a variety of testsystems.
     tests_failed = 0 # number of times tolerance is exceeded
     tests_passed = 0 # number of times tolerance is not exceeded
     #logger.info("%16s%16s %16s          %16s          %16s          %16s" % ("platform", "precision", "potential", "error", "force mag", "rms error"))
     testsystem_classes = get_all_subclasses(testsystems.TestSystem)
+    testsystem_classes = [ getattr(testsystems, name) for name in ('SrcImplicit', 'SrcExplicit') ]
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
         logger.info(class_name)

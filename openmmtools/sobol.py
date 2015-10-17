@@ -236,21 +236,24 @@ def i4_sobol ( dim_num, seed ):
 #
 #    Output, real QUASI(DIM_NUM), the next quasirandom vector.
 #
-	global atmost
-	global dim_max
-	global dim_num_save
-	global initialized
-	global lastq
-	global log_max
-	global maxcol
-	global poly
-	global recipd
-	global seed_save
-	global v
+#	global atmost
+#	global dim_max
+#	global dim_num_save
+#	global initialized
+#	global lastq
+#	global log_max
+#	global maxcol
+#	global poly
+#	global recipd
+#	global seed_save
+#	global v
 
-	if ( not 'initialized' in globals().keys() ):
-		initialized = 0
-		dim_num_save = -1
+#	if ( not 'initialized' in globals().keys() ):
+#		initialized = 0
+#		dim_num_save = -1
+
+	initialized = 0
+	dim_num_save = -1
 
 	if ( not initialized or dim_num != dim_num_save ):
 		initialized = 1

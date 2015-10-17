@@ -155,7 +155,7 @@ def halton_sequence(p, n):
     return u
 
 
-def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
+def subrandom_particle_positions(nparticles, box_vectors, method='random'):
     """Generate a deterministic list of subrandom particle positions.
 
     Parameters
@@ -205,6 +205,12 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
             l = box_vectors[dim][dim]
             positions[:, dim] = unit.Quantity(x[dim, :] * l / l.unit, l.unit)
 
+    elif method == 'random':
+        # Generate random sequence.
+        x = np.random.uniform(size=[nparticles])
+        for dim in range(3):
+            l = box_vectors[dim][dim]
+            positions[:, dim] = unit.Quantity(x * l / l.unit, l.unit)
     else:
         raise Exception("method '%s' must be 'halton' or 'sobol'" % method)
 
