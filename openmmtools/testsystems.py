@@ -2394,7 +2394,7 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=2.5 * unit.nanometers, cutoff=0.9 * unit.nanometers, model='tip3p', switch_width=0.5 * unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=9*unit.angstroms, model='tip3p', switch_width=1.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
         """
         Create a water box test system.
 
@@ -2528,6 +2528,101 @@ class FlexibleWaterBox(WaterBox):
         """
         super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
 
+class FlexibleReactionFieldWaterBox(WaterBox):
+
+    """
+    Flexible water box using reaction field electrostatics.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible water box using reaction field electrostatics.
+
+        Parameters are inherited from WaterBox (except for `constrained` or `nonbondedMethod`).
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexibleReactionFieldWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(FlexibleReactionFieldWaterBox, self).__init__(constrained=False, nonbonedMethod=app.CutoffPeriodic, *args, **kwargs)
+
+class FlexiblePMEWaterBox(WaterBox):
+
+    """
+    Flexible water box using PME electrostatics and tight PME error tolerance.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible water box using PME electrostatics and tight PME error tolerance.
+
+        Parameters are inherited from WaterBox (except for `constrained` or `nonbondedMethod`).
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexiblePMEWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+
+class PMEWaterBox(WaterBox):
+
+    """
+    Water box using PME electrostatics and tight PME error tolerance.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box using PME electrostatics and tight PME error tolerance.
+
+        Parameters are inherited from WaterBox (except for `nonbondedMethod`).
+
+        Examples
+        --------
+
+        Create a default flexible waterbox.
+
+        >>> waterbox = FlexiblePMEWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+
+class GiantFlexibleWaterBox(WaterBox):
+
+    """
+    Flexible water box.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a large flexible water box (50A x 50A x 50A).
+
+        Parameters are inherited from WaterBox (except for 'constrained').
+
+        Examples
+        --------
+
+        Create a default giant flexible waterbox.
+
+        >>> waterbox = GiantFlexibleWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(GiantFlexibleWaterBox, self).__init__(constrained=False, box_edge=50.0*unit.angstroms, *args, **kwargs)
 
 class FourSiteWaterBox(WaterBox):
 
@@ -2586,7 +2681,6 @@ class FiveSiteWaterBox(WaterBox):
         """
         super(FiveSiteWaterBox, self).__init__(model='tip5p', *args, **kwargs)
 
-
 class DischargedWaterBox(WaterBox):
 
     """
@@ -2628,6 +2722,70 @@ class DischargedWaterBox(WaterBox):
 
         return
 
+class FlexibleDischargedWaterBox(FlexibleWaterBox):
+
+    """
+    Water box test system with zeroed charges.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a flexible, discharged water box.
+
+        Parameters are inherited from WaterBox (except for `constraints`).
+
+        Examples
+        --------
+
+        Create a default waterbox.
+
+        >>> waterbox = FlexibleDischargedWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        Control the cutoff.
+
+        >>> waterbox = FlexibleDischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
+
+        """
+        super(FlexibleDischargedWaterBox, self).__init__(*args, **kwargs)
+
+        # Zero charges.
+        system = self.system
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        force = forces['NonbondedForce']
+        for index in range(force.getNumParticles()):
+            [charge, sigma, epsilon] = force.getParticleParameters(index)
+            force.setParticleParameters(index, 0 * charge, sigma, epsilon)
+        for index in range(force.getNumExceptions()):
+            [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
+            force.setExceptionParameters(index, particle1, particle2, 0 * chargeProd, sigma, epsilon)
+
+        return
+
+class GiantFlexibleDischargedWaterBox(FlexibleDischargedWaterBox):
+
+    """
+    Flexible water box.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a large flexible discharged water box (50A x 50A x 50A).
+
+        Parameters are inherited from WaterBox (except for 'constrained').
+
+        Examples
+        --------
+
+        Create a default giant flexible discharged waterbox.
+
+        >>> waterbox = GiantFlexibleDischargedWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(GiantFlexibleDischargedWaterBox, self).__init__(box_edge=50.0*unit.angstroms, *args, **kwargs)
 
 class DischargedWaterBoxHsites(WaterBox):
 
@@ -2681,7 +2839,6 @@ class DischargedWaterBoxHsites(WaterBox):
 # Alanine dipeptide in vacuum.
 #=============================================================================================
 
-
 class AlanineDipeptideVacuum(TestSystem):
 
     """Alanine dipeptide ff96 in vacuum.
@@ -2723,7 +2880,6 @@ class AlanineDipeptideVacuum(TestSystem):
 #=============================================================================================
 # Alanine dipeptide in implicit solvent.
 #=============================================================================================
-
 
 class AlanineDipeptideImplicit(TestSystem):
 
@@ -2767,7 +2923,6 @@ class AlanineDipeptideImplicit(TestSystem):
 #=============================================================================================
 # Alanine dipeptide in explicit solvent
 #=============================================================================================
-
 
 class AlanineDipeptideExplicit(TestSystem):
 
@@ -2831,6 +2986,89 @@ class AlanineDipeptideExplicit(TestSystem):
 
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Toluene in vacuum.
+#=============================================================================================
+
+class TolueneVacuum(TestSystem):
+
+    """Toluene GAFF/AM1-BCC in vacuum.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+
+    Examples
+    --------
+
+    Create toluene with constraints on bonds to hydrogen
+    >>> testsystem = TolueneVacuum()
+    >>> [system, positions, topology] = [testsystem.system, testsystem.positions, testsystem.topology]
+    """
+
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/benzene-toluene-implicit/solvent.prmtop")
+        inpcrd_filename = get_data_filename("data/benzene-toluene-implicit/solvent.inpcrd")
+
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(inpcrd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
+
+#=============================================================================================
+# Toluene in implicit solvent.
+#=============================================================================================
+
+class TolueneImplicit(TestSystem):
+
+    """Toluene GAFF/AM1-BCC in implicit solvent.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+
+    Examples
+    --------
+
+    Create toluene with constraints on bonds to hydrogen
+    >>> testsystem = TolueneImplicit()
+    >>> [system, positions, topology] = [testsystem.system, testsystem.positions, testsystem.topology]
+    """
+
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/benzene-toluene-implicit/solvent.prmtop")
+        inpcrd_filename = get_data_filename("data/benzene-toluene-implicit/solvent.inpcrd")
+
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(inpcrd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Alanine dipeptide in explicit solvent
