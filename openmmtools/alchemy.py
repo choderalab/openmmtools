@@ -322,7 +322,7 @@ class AbsoluteAlchemicalFactory(object):
         """
         bonds = [ set() for particle_index in range(system.getNumParticles()) ]
 
-        forces = { system.getForce(index).__class__.__name__ for index in range(system.getNumForces()) }
+        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
 
         # Process HarmonicBondForce
         bond_force = forces['HarmonicBondForce']
@@ -373,7 +373,7 @@ class AbsoluteAlchemicalFactory(object):
         for torsion_index in range(force.getNumTorsions()):
             [particle1, particle2, particle3, particle4, periodicity, phase, k] = force.getTorsionParameters(torsion_index)
             if set([particle1,particle2,particle3,particle4]).intersection(alchemical_atomset):
-                if is_proper_torsion(particle1,particle2particle3,particle4):
+                if is_proper_torsion(particle1,particle2,particle3,particle4):
                     torsion_list.append(torsion_index)
 
         return torsion_list
