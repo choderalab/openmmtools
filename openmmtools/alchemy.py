@@ -192,8 +192,7 @@ class AbsoluteAlchemicalFactory(object):
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
     >>> from alchemy import AbsoluteAlchemicalFactory
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=Tr\
-ue
+    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
 
@@ -203,8 +202,7 @@ ue
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.TolueneImplicit()
     >>> from alchemy import AbsoluteAlchemicalFactory
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=Tr\
-ue
+    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
 
@@ -259,7 +257,7 @@ ue
         self.reference_system = copy.deepcopy(reference_system)
 
         # Store reference forces.
-        self.reference_forces = { self.reference_system.getForce(index).__class__.__name__ for index in range(self.reference_system.getNumForces()) }
+        self.reference_forces = { self.reference_system.getForce(index).__class__.__name__ : self.reference_system.getForce(index) for index in range(self.reference_system.getNumForces()) }
 
         # Store copy of atom sets.
         self.ligand_atoms = copy.deepcopy(ligand_atoms)
@@ -342,7 +340,7 @@ ue
 
         return bonds
 
-    def _buildTorsionList(self, alchemical_atomset, torsion_list=True):
+    def _buildAlchemicalTorsionList(self, alchemical_atomset):
         """
         Build a list of proper torsion indices that involve any alchemical atom.
 
@@ -400,7 +398,7 @@ ue
         for angle_index in range(force.getNumAngles()):
             [particle1, particle2, particle3, theta0, K] = force.getAngleParameters(angle_index)
             if set([particle1,particle2,particle3]).intersection(alchemical_atomset):
-                angle_list.append(torsion_index)
+                angle_list.append(angle_index)
 
         return angle_list
 
@@ -424,7 +422,7 @@ ue
         for bond_index in range(force.getNumBonds()):
             [particle1, particle2, r, K] = force.getBondParameters(bond_index)
             if set([particle1,particle2]).intersection(alchemical_atomset):
-                bond_list.append(torsion_index)
+                bond_list.append(bond_index)
 
         return bond_list
 
@@ -661,7 +659,7 @@ ue
         if self.alchemical_torsions is None:
             return
 
-        # Create PeriodicTorsionForce to handle normal torsions.
+        # Create PeriodicTorsionForce to handle unmodified torsions.
         force = openmm.PeriodicTorsionForce()
 
         # Create CustomTorsionForce to handle alchemically modified torsions.
@@ -704,8 +702,8 @@ ue
         if self.alchemical_angles is None:
             return
 
-        # Create PeriodicTorsionForce to handle normal torsions.
-        force = openmm.CustomAngleForce()
+        # Create standard HarmonicAngleForce to handle unmodified angles.
+        force = openmm.HarmonicAngleForce()
 
         # Create CustomAngleForce to handle alchemically modified angles.
         energy_function = "lambda_angles*(K/2)*(theta-theta0)**2)"
@@ -718,7 +716,7 @@ ue
             # Retrieve parameters.
             [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
             if angle_index in self.alchemical_angles:
-                # Alchemically modified torsion.
+                # Alchemically modified angle.
                 custom_force.addAngle(particle1, particle2, particle3, [theta0, K])
             else:
                 # Standard torsion.
@@ -745,8 +743,8 @@ ue
         if self.alchemical_bonds is None:
             return
 
-        # Create PeriodicTorsionForce to handle normal torsions.
-        force = openmm.CustomBondForce()
+        # Create standard HarmonicBondForce to handle unmodified bonds.
+        force = openmm.HarmonicBondForce()
 
         # Create CustomBondForce to handle alchemically modified bonds.
         energy_function = "lambda_bonds*(K/2)*(r-r0)**2)"
