@@ -2839,7 +2839,6 @@ class DischargedWaterBoxHsites(WaterBox):
 # Alanine dipeptide in vacuum.
 #=============================================================================================
 
-
 class AlanineDipeptideVacuum(TestSystem):
 
     """Alanine dipeptide ff96 in vacuum.
@@ -2881,7 +2880,6 @@ class AlanineDipeptideVacuum(TestSystem):
 #=============================================================================================
 # Alanine dipeptide in implicit solvent.
 #=============================================================================================
-
 
 class AlanineDipeptideImplicit(TestSystem):
 
@@ -2925,7 +2923,6 @@ class AlanineDipeptideImplicit(TestSystem):
 #=============================================================================================
 # Alanine dipeptide in explicit solvent
 #=============================================================================================
-
 
 class AlanineDipeptideExplicit(TestSystem):
 
@@ -2989,6 +2986,89 @@ class AlanineDipeptideExplicit(TestSystem):
 
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Toluene in vacuum.
+#=============================================================================================
+
+class TolueneVacuum(TestSystem):
+
+    """Toluene GAFF/AM1-BCC in vacuum.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+
+    Examples
+    --------
+
+    Create toluene with constraints on bonds to hydrogen
+    >>> testsystem = TolueneVacuum()
+    >>> [system, positions, topology] = [testsystem.system, testsystem.positions, testsystem.topology]
+    """
+
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/benzene-toluene-implicit/solvent.prmtop")
+        inpcrd_filename = get_data_filename("data/benzene-toluene-implicit/solvent.inpcrd")
+
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(inpcrd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
+
+#=============================================================================================
+# Toluene in implicit solvent.
+#=============================================================================================
+
+class TolueneImplicit(TestSystem):
+
+    """Toluene GAFF/AM1-BCC in implicit solvent.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+
+    Examples
+    --------
+
+    Create toluene with constraints on bonds to hydrogen
+    >>> testsystem = TolueneImplicit()
+    >>> [system, positions, topology] = [testsystem.system, testsystem.positions, testsystem.topology]
+    """
+
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/benzene-toluene-implicit/solvent.prmtop")
+        inpcrd_filename = get_data_filename("data/benzene-toluene-implicit/solvent.inpcrd")
+
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(inpcrd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Alanine dipeptide in explicit solvent
