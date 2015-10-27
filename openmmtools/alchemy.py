@@ -885,8 +885,8 @@ class AbsoluteAlchemicalFactory(object):
 
         # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
         # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
-        sterics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
-        electrostatics_custom_nonbonded_force.addInteractionGroup(atomset1, atomset2)
+        sterics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
+        electrostatics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
 
         # Add custom forces.
         system.addForce(sterics_custom_nonbonded_force)
