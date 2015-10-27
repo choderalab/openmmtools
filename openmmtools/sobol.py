@@ -236,32 +236,21 @@ def i4_sobol ( dim_num, seed ):
 #
 #    Output, real QUASI(DIM_NUM), the next quasirandom vector.
 #
-	global atmost
-	global dim_max
-	global dim_num_save
-	global initialized
-	global lastq
-	global log_max
-	global maxcol
-	global poly
-	global recipd
-	global seed_save
-	global v
+        self = i4_sobol
+	if not hasattr(self, 'initialized'):
+                self.initialized = False
+		self.dim_num_save = -1
 
-	if ( not 'initialized' in globals().keys() ):
-		initialized = 0
-		dim_num_save = -1
-
-	if ( not initialized or dim_num != dim_num_save ):
-		initialized = 1
-		dim_max = 40
-		dim_num_save = -1
-		log_max = 30
-		seed_save = -1
+	if ( not self.initialized or dim_num != self.dim_num_save ):
+		self.initialized = True
+		self.dim_max = 40
+		self.dim_num_save = -1
+		self.log_max = 30
+		self.seed_save = -1
 #
 #	Initialize (part of) V.
 #
-		v = zeros((dim_max,log_max))
+		v = zeros((self.dim_max,self.log_max))
 		v[0:40,0] = transpose([ \
 			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, \
 			1, 1, 1, 1, 1, 1, 1, 1, 1, 1, \
@@ -304,40 +293,41 @@ def i4_sobol ( dim_num, seed ):
 
 		v[37:40,7] = transpose([ \
 			7, 23, 39 ])
+                self.v = v
 #
 #	Set POLY.
 #
-		poly= [ \
+		self.poly= [ \
 			1,	 3,	 7,	11,	13,	19,	25,	37,	59,	47, \
 			61,	55,	41,	67,	97,	91, 109, 103, 115, 131, \
 			193, 137, 145, 143, 241, 157, 185, 167, 229, 171, \
 			213, 191, 253, 203, 211, 239, 247, 285, 369, 299 ]
 
-		atmost = 2**log_max - 1
+		self.atmost = 2**self.log_max - 1
 #
 #	Find the number of bits in ATMOST.
 #
-		maxcol = i4_bit_hi1 ( atmost )
+		self.maxcol = i4_bit_hi1 ( self.atmost )
 #
 #	Initialize row 1 of V.
 #
-		v[0,0:maxcol] = 1
+		self.v[0,0:self.maxcol] = 1
 
 #
 #	Things to do only if the dimension changed.
 #
-	if ( dim_num != dim_num_save ):
+	if ( dim_num != self.dim_num_save ):
 #
 #	Check parameters.
 #
-		if ( dim_num < 1 or dim_max < dim_num ):
+		if ( dim_num < 1 or self.dim_max < dim_num ):
 			print('I4_SOBOL - Fatal error!')
 			print('	The spatial dimension DIM_NUM should satisfy:')
 			print('		1 <= DIM_NUM <= %d'%dim_max)
 			print('	But this input value is DIM_NUM = %d'%dim_num)
 			return
 
-		dim_num_save = dim_num
+		self.dim_num_save = dim_num
 #
 #	Initialize the remaining rows of V.
 #
@@ -347,7 +337,7 @@ def i4_sobol ( dim_num, seed ):
 #
 #	Find the degree of polynomial I from binary encoding.
 #
-			j = poly[i-1]
+			j = self.poly[i-1]
 			m = 0
 			while ( 1 ):
 				j = math.floor ( j / 2. )
@@ -357,7 +347,7 @@ def i4_sobol ( dim_num, seed ):
 #
 #	Expand this bit pattern to separate components of the logical array INCLUD.
 #
-			j = poly[i-1]
+			j = self.poly[i-1]
 			includ=zeros(m)
 			for k in xrange(m, 0, -1):
 				j2 = math.floor ( j / 2. )
@@ -367,26 +357,26 @@ def i4_sobol ( dim_num, seed ):
 #	Calculate the remaining elements of row I as explained
 #	in Bratley and Fox, section 2.
 #
-			for j in xrange( m+1, maxcol+1 ):
-				newv = v[i-1,j-m-1]
+			for j in xrange( m+1, self.maxcol+1 ):
+				newv = self.v[i-1,j-m-1]
 				l = 1
 				for k in xrange(1, m+1):
 					l = 2 * l
 					if ( includ[k-1] ):
-						newv = bitwise_xor ( int(newv), int(l * v[i-1,j-k-1]) )
-				v[i-1,j-1] = newv
+						newv = bitwise_xor ( int(newv), int(l * self.v[i-1,j-k-1]) )
+				self.v[i-1,j-1] = newv
 #
 #	Multiply columns of V by appropriate power of 2.
 #
 		l = 1
-		for j in xrange( maxcol-1, 0, -1):
+		for j in xrange( self.maxcol-1, 0, -1):
 			l = 2 * l
-			v[0:dim_num,j-1] = v[0:dim_num,j-1] * l
+			self.v[0:dim_num,j-1] = self.v[0:dim_num,j-1] * l
 #
 #	RECIPD is 1/(common denominator of the elements in V).
 #
-		recipd = 1.0 / ( 2 * l )
-		lastq=zeros(dim_num)
+		self.recipd = 1.0 / ( 2 * l )
+		self.lastq=zeros(dim_num)
 
 	seed = int(math.floor ( seed ))
 
@@ -395,42 +385,42 @@ def i4_sobol ( dim_num, seed ):
 
 	if ( seed == 0 ):
 		l = 1
-		lastq=zeros(dim_num)
+		self.lastq=zeros(dim_num)
 
-	elif ( seed == seed_save + 1 ):
+	elif ( seed == self.seed_save + 1 ):
 #
 #	Find the position of the right-hand zero in SEED.
 #
 		l = i4_bit_lo0 ( seed )
 
-	elif ( seed <= seed_save ):
+	elif ( seed <= self.seed_save ):
 
-		seed_save = 0
+		self.seed_save = 0
 		l = 1
-		lastq=zeros(dim_num)
+		self.lastq=zeros(dim_num)
 
-		for seed_temp in xrange( int(seed_save), int(seed)):
+		for seed_temp in xrange( int(self.seed_save), int(seed)):
 			l = i4_bit_lo0 ( seed_temp )
 			for i in xrange(1 , dim_num+1):
-				lastq[i-1] = bitwise_xor ( int(lastq[i-1]), int(v[i-1,l-1]) )
+				self.lastq[i-1] = bitwise_xor ( int(self.lastq[i-1]), int(self.v[i-1,l-1]) )
 
 		l = i4_bit_lo0 ( seed )
 
-	elif ( seed_save + 1 < seed ):
+	elif ( self.seed_save + 1 < seed ):
 
-		for seed_temp in xrange( int(seed_save + 1), int(seed) ):
+		for seed_temp in xrange( int(self.seed_save + 1), int(seed) ):
 			l = i4_bit_lo0 ( seed_temp )
 			for i in xrange(1, dim_num+1):
-				lastq[i-1] = bitwise_xor ( int(lastq[i-1]), int(v[i-1,l-1]) )
+				self.lastq[i-1] = bitwise_xor ( int(self.lastq[i-1]), int(self.v[i-1,l-1]) )
 
 		l = i4_bit_lo0 ( seed )
 #
 #	Check that the user is not calling too many times!
 #
-	if ( maxcol < l ):
+	if ( self.maxcol < l ):
 		print('I4_SOBOL - Fatal error!')
 		print('	Too many calls!')
-		print('	MAXCOL = %d\n'%maxcol)
+		print('	MAXCOL = %d\n'%self.maxcol)
 		print('	L =			%d\n'%l)
 		return
 #
@@ -438,10 +428,10 @@ def i4_sobol ( dim_num, seed ):
 #
 	quasi=zeros(dim_num)
 	for i in xrange( 1, dim_num+1):
-		quasi[i-1] = lastq[i-1] * recipd
-		lastq[i-1] = bitwise_xor ( int(lastq[i-1]), int(v[i-1,l-1]) )
+		quasi[i-1] = self.lastq[i-1] * self.recipd
+		self.lastq[i-1] = bitwise_xor ( int(self.lastq[i-1]), int(self.v[i-1,l-1]) )
 
-	seed_save = seed
+	self.seed_save = seed
 	seed = seed + 1
 
 	return [ quasi, seed ]
