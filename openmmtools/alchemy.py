@@ -260,6 +260,11 @@ class AbsoluteAlchemicalFactory(object):
         self.reference_forces = { self.reference_system.getForce(index).__class__.__name__ : self.reference_system.getForce(index) for index in range(self.reference_system.getNumForces()) }
 
         # Store copy of atom sets.
+        all_particles_set = set(range(reference_system.getNumParticles()))
+        if not (set(ligand_atoms).issubset(all_particles_set)):
+            msg  = 'Some specified ligand atom indices >= number of particles (%d)\n' % reference_system.getNumParticles()
+            msg += 'These specified atoms are not in the system: %s\n' % str(set(ligand_atoms).difference(all_particles_set))
+            raise Exception(msg)
         self.ligand_atoms = copy.deepcopy(ligand_atoms)
 
         # Store atom sets
@@ -887,7 +892,7 @@ class AbsoluteAlchemicalFactory(object):
         custom_bond_force.addPerBondParameter("epsilon") # Lennard-Jones effective epsilon
         system.addForce(custom_bond_force)
 
-        # Fix any NonbondedForce issues with Lennard-Jones sigma = 0
+        # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0), which should have sigma > 0.
         for particle_index in range(nonbonded_force.getNumParticles()):
             # Retrieve parameters.
             [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
@@ -916,7 +921,7 @@ class AbsoluteAlchemicalFactory(object):
             electrostatics_custom_nonbonded_force.addParticle([charge])
             # Turn off Lennard-Jones contribution from alchemically-modified particles.
             if particle_index in alchemical_atom_indices:
-                nonbonded_force.setParticleParameters(particle_index, 0*charge, sigma, 0*epsilon)
+                nonbonded_force.setParticleParameters(particle_index, abs(0*charge), sigma, abs(0*epsilon))
 
         # Move NonbondedForce exception terms for alchemically-modified particles to CustomNonbondedForce/CustomBondForce.
         for exception_index in range(nonbonded_force.getNumExceptions()):
@@ -930,10 +935,10 @@ class AbsoluteAlchemicalFactory(object):
                 # Add special CustomBondForce term to handle alchemically-modified Lennard-Jones exception.
                 custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma, epsilon])
                 # Zero terms in NonbondedForce.
-                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, 0*chargeprod, sigma, 0*epsilon)
+                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, abs(0*chargeprod), sigma, abs(0*epsilon))
 
         # TODO: Add back NonbondedForce terms for alchemical system needed in case of decoupling electrostatics or sterics via second CustomBondForce.
-        # TODO: Also need to change current CustomBondForce to not alchemically disappear system.
+        # TODO: Also need to change current CustomBondForce to not alchemically disappearing system.
 
         return
 
