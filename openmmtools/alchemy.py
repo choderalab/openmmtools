@@ -655,10 +655,6 @@ class AbsoluteAlchemicalFactory(object):
 
         """
 
-        # Do nothing if no alchemically-modified terms are specified.
-        if self.alchemical_torsions is None:
-            return
-
         # Create PeriodicTorsionForce to handle unmodified torsions.
         force = openmm.PeriodicTorsionForce()
 
@@ -698,10 +694,6 @@ class AbsoluteAlchemicalFactory(object):
 
         """
 
-        # Do nothing if no alchemically-modified terms are specified.
-        if self.alchemical_angles is None:
-            return
-
         # Create standard HarmonicAngleForce to handle unmodified angles.
         force = openmm.HarmonicAngleForce()
 
@@ -738,10 +730,6 @@ class AbsoluteAlchemicalFactory(object):
             The reference copy of the HarmonicBondForce to be alchemically-modified.
 
         """
-
-        # Do nothing if no alchemically-modified terms are specified.
-        if self.alchemical_bonds is None:
-            return
 
         # Create standard HarmonicBondForce to handle unmodified bonds.
         force = openmm.HarmonicBondForce()
@@ -821,8 +809,8 @@ class AbsoluteAlchemicalFactory(object):
             electrostatics_energy_expression += "U_electrostatics = lambda_electrostatics*ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
             k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
             c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
-            electrostatics_energy_expression += "k_rf = %f;" % (k_rf / k_rf.in_unit_system(unit.md_unit_system).unit)
-            electrostatics_energy_expression += "c_rf = %f;" % (c_rf / c_rf.in_unit_system(unit.md_unit_system).unit)
+            electrostatics_energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
+            electrostatics_energy_expression += "c_rf = %f;" % (c_rf.value_in_unit_system(unit.md_unit_system))
         elif method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             # soft-core Lennard-Jones
             sterics_energy_expression += "U_sterics = lambda_sterics*4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
@@ -830,12 +818,10 @@ class AbsoluteAlchemicalFactory(object):
             [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
             if alpha_ewald == 0.0:
                 # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                delta = reference_force.getEwaldErrorTolerance()
-                r_cutoff = reference_force.getCutoffDistance()
-                alpha_ewald = np.sqrt(-np.log(2*delta)) / r_cutoff
+                [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
             electrostatics_energy_expression += "U_electrostatics = lambda_electrostatics*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-            electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald / alpha_ewald.in_unit_system(unit.md_unit_system).unit)
-            # TODO: Handle reciprocal-space electrostatics
+            electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
+            # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(method))
 
@@ -847,7 +833,7 @@ class AbsoluteAlchemicalFactory(object):
         #sterics_energy_expression += "reff_sterics = r;" # effective softcore distance for sterics # DEBUG
         sterics_energy_expression += "softcore_alpha = %f;" % softcore_alpha
         electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*(1.-lambda_electrostatics) + r^2);" # effective softcore distance for electrostatics
-        electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta / softcore_beta.in_unit_system(unit.md_unit_system).unit)
+        electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta.value_in_unit_system(unit.md_unit_system))
         electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
 
         # Define mixing rules.
@@ -868,12 +854,12 @@ class AbsoluteAlchemicalFactory(object):
 
         # Set parameters to match reference force.
         sterics_custom_nonbonded_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
-        electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False)
+        electrostatics_custom_nonbonded_force.setUseSwitchingFunction(False) # no switch for electrostatics, since NonbondedForce doesn't use a switch
         sterics_custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
         electrostatics_custom_nonbonded_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
         sterics_custom_nonbonded_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
         sterics_custom_nonbonded_force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
-        electrostatics_custom_nonbonded_force.setUseLongRangeCorrection(False)
+        electrostatics_custom_nonbonded_force.setUseLongRangeCorrection(False) # long-range dispersion correction is meaningless for electrostatics
 
         # Set periodicity and cutoff parameters corresponding to reference Force.
         if nonbonded_force.getNonbondedMethod() in [openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME, openmm.NonbondedForce.CutoffPeriodic]:
@@ -901,7 +887,7 @@ class AbsoluteAlchemicalFactory(object):
         custom_bond_force.addPerBondParameter("epsilon") # Lennard-Jones effective epsilon
         system.addForce(custom_bond_force)
 
-        # Move NonbondedForce particle terms for alchemically-modified particles to CustomNonbondedForce.
+        # Fix any NonbondedForce issues with Lennard-Jones sigma = 0
         for particle_index in range(nonbonded_force.getNumParticles()):
             # Retrieve parameters.
             [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
@@ -909,6 +895,22 @@ class AbsoluteAlchemicalFactory(object):
             if (sigma == 0.0 * unit.angstrom):
                 logger.warning("particle %d has Lennard-Jones sigma = 0 (charge=%s, sigma=%s, epsilon=%s); setting sigma=1A" % (particle_index, str(charge), str(sigma), str(epsilon)))
                 sigma = 1.0 * unit.angstrom
+                # Fix it.
+                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+        for exception_index in range(nonbonded_force.getNumExceptions()):
+            # Retrieve parameters.
+            [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
+            # Check particle sigma is not zero.
+            if (sigma == 0.0 * unit.angstrom):
+                logger.warning("exception %d has Lennard-Jones sigma = 0 (iatom=%d, jatom=%d, chargeprod=%s, sigma=%s, epsilon=%s); setting sigma=1A" % (exception_index, iatom, jatom, str(chargeprod), str(sigma), str(epsilon)))
+                sigma = 1.0 * unit.angstrom
+                # Fix it.
+                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
+
+        # Move NonbondedForce particle terms for alchemically-modified particles to CustomNonbondedForce.
+        for particle_index in range(nonbonded_force.getNumParticles()):
+            # Retrieve parameters.
+            [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
             # Add parameters to custom force handling interactions between alchemically-modified atoms and rest of system.
             sterics_custom_nonbonded_force.addParticle([sigma, epsilon])
             electrostatics_custom_nonbonded_force.addParticle([charge])
@@ -920,10 +922,6 @@ class AbsoluteAlchemicalFactory(object):
         for exception_index in range(nonbonded_force.getNumExceptions()):
             # Retrieve parameters.
             [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
-            # Check particle sigma is not zero.
-            if (sigma == 0.0 * unit.angstrom):
-                logger.warning("exception %d has Lennard-Jones sigma = 0 (iatom=%d, jatom=%d, chargeprod=%s, sigma=%s, epsilon=%s); setting sigma=1A" % (exception_index, iatom, jatom, str(chargeprod), str(sigma), str(epsilon)))
-                sigma = 1.0 * unit.angstrom
             # Exclude this atom pair in CustomNonbondedForce.
             sterics_custom_nonbonded_force.addExclusion(iatom, jatom)
             electrostatics_custom_nonbonded_force.addExclusion(iatom, jatom)
@@ -1102,20 +1100,20 @@ class AbsoluteAlchemicalFactory(object):
         nforces = reference_system.getNumForces()
         for force_index in range(nforces):
             reference_force = reference_system.getForce(force_index)
-            if isinstance(reference_force, openmm.PeriodicTorsionForce):
+            if isinstance(reference_force, openmm.PeriodicTorsionForce) and (self.alchemical_torsions is not None):
                 self._alchemicallyModifyPeriodicTorsionForce(system, reference_force)
-            elif isinstance(reference_force, openmm.HarmonicAngleForce):
+            elif isinstance(reference_force, openmm.HarmonicAngleForce) and (self.alchemical_angles is not None):
                 self._alchemicallyModifyHarmonicAngleForce(system, reference_force)
-            elif isinstance(reference_force, openmm.HarmonicBondForce):
+            elif isinstance(reference_force, openmm.HarmonicBondForce) and (self.alchemical_bonds is not None):
                 self._alchemicallyModifyHarmonicBondForce(system, reference_force)
             elif isinstance(reference_force, openmm.NonbondedForce):
                 self._alchemicallyModifyNonbondedForce(system, reference_force)
-            elif isinstance(reference_force, openmm.GBSAOBCForce):
-                self._alchemicallyModifyGBSAOBCForce(system, reference_force)
-            elif isinstance(reference_force, openmm.AmoebaMultipoleForce):
-                self._alchemicallyModifyAmoebaMultipoleForce(system, reference_force)
-            elif isinstance(reference_force, openmm.AmoebaVdwForce):
-                self._alchemicallyModifyAmoebaVdwForce(system, reference_force)
+#            elif isinstance(reference_force, openmm.GBSAOBCForce):
+#                self._alchemicallyModifyGBSAOBCForce(system, reference_force)
+#            elif isinstance(reference_force, openmm.AmoebaMultipoleForce):
+#                self._alchemicallyModifyAmoebaMultipoleForce(system, reference_force)
+#            elif isinstance(reference_force, openmm.AmoebaVdwForce):
+#                self._alchemicallyModifyAmoebaVdwForce(system, reference_force)
             else:
                 # Copy force without modification.
                 force = copy.deepcopy(reference_force)
