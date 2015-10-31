@@ -827,15 +827,12 @@ class AbsoluteAlchemicalFactory(object):
             electrostatics_energy_expression += "U_electrostatics = lambda_electrostatics*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
             electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
             # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
+            # NOTE: There is currently no way to do this in OpenMM.
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(method))
 
         # Add additional definitions common to all methods.
         sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*(1.-lambda_sterics) + (r/sigma)^6))^(1/6);" # effective softcore distance for sterics
-        #sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*(1.-lambda_sterics) + r_over_sigma2^3))^(1/6); r_over_sigma2 = (r/sigma)^2;" # effective softcore distance for sterics
-        #sterics_energy_expression += "reff_sterics = r*(1 + softcore_alpha*(1-lambda_sterics)*(sigma/r)^6)^(1/6);" # effective softcore distance for sterics - seems to work!
-        #sterics_energy_expression += "reff_sterics = select(step(r-sigma), r*(1 + softcore_alpha*(1-lambda_sterics)*(sigma/r)^6)^(1/6), sigma*((softcore_alpha*(1.-lambda_sterics) + (r/sigma)^6))^(1/6));" # effective softcore distance for sterics - added 'select' for numerical stability
-        #sterics_energy_expression += "reff_sterics = r;" # effective softcore distance for sterics # DEBUG
         sterics_energy_expression += "softcore_alpha = %f;" % softcore_alpha
         electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*(1.-lambda_electrostatics) + r^2);" # effective softcore distance for electrostatics
         electrostatics_energy_expression += "softcore_beta = %f;" % (softcore_beta.value_in_unit_system(unit.md_unit_system))
@@ -1014,6 +1011,10 @@ class AbsoluteAlchemicalFactory(object):
         sasa_model : str, optional, default='ACE'
             Solvent accessible surface area model.
 
+        TODO
+        ----
+        * Can we more generally modify any CustomGBSAForce?
+
         """
 
         custom_force = openmm.CustomGBForce()
@@ -1113,12 +1114,12 @@ class AbsoluteAlchemicalFactory(object):
                 self._alchemicallyModifyHarmonicBondForce(system, reference_force)
             elif isinstance(reference_force, openmm.NonbondedForce):
                 self._alchemicallyModifyNonbondedForce(system, reference_force)
-#            elif isinstance(reference_force, openmm.GBSAOBCForce):
-#                self._alchemicallyModifyGBSAOBCForce(system, reference_force)
-#            elif isinstance(reference_force, openmm.AmoebaMultipoleForce):
-#                self._alchemicallyModifyAmoebaMultipoleForce(system, reference_force)
-#            elif isinstance(reference_force, openmm.AmoebaVdwForce):
-#                self._alchemicallyModifyAmoebaVdwForce(system, reference_force)
+            elif isinstance(reference_force, openmm.GBSAOBCForce):
+                self._alchemicallyModifyGBSAOBCForce(system, reference_force)
+            elif isinstance(reference_force, openmm.AmoebaMultipoleForce):
+                self._alchemicallyModifyAmoebaMultipoleForce(system, reference_force)
+            elif isinstance(reference_force, openmm.AmoebaVdwForce):
+                self._alchemicallyModifyAmoebaVdwForce(system, reference_force)
             else:
                 # Copy force without modification.
                 force = copy.deepcopy(reference_force)
