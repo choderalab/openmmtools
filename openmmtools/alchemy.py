@@ -874,11 +874,6 @@ class AbsoluteAlchemicalFactory(object):
             sterics_custom_nonbonded_force.setNonbondedMethod( nonbonded_force.getNonbondedMethod() )
             electrostatics_custom_nonbonded_force.setNonbondedMethod( nonbonded_force.getNonbondedMethod() )
 
-        # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
-        # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
-        sterics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
-        electrostatics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
-
         # Add custom forces.
         system.addForce(sterics_custom_nonbonded_force)
         system.addForce(electrostatics_custom_nonbonded_force)
@@ -939,6 +934,11 @@ class AbsoluteAlchemicalFactory(object):
 
         # TODO: Add back NonbondedForce terms for alchemical system needed in case of decoupling electrostatics or sterics via second CustomBondForce.
         # TODO: Also need to change current CustomBondForce to not alchemically disappearing system.
+
+        # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
+        # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
+        sterics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
+        electrostatics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
 
         return
 
