@@ -75,13 +75,13 @@ def _is_periodic(system):
     Periodic water box.
 
     >>> waterbox = testsystems.WaterBox()
-    >>> print _is_periodic(waterbox.system)
+    >>> print(_is_periodic(waterbox.system))
     True
 
     Non-periodic Lennard-Jones cluster.
 
     >>> cluster = testsystems.LennardJonesCluster()
-    >>> print _is_periodic(cluster.system)
+    >>> print(_is_periodic(cluster.system))
     False
 
     Notes
@@ -973,7 +973,6 @@ class AbsoluteAlchemicalFactory(object):
 
             # Deal with exclusions.
             excluded_atoms = force.getParticleExclusions(particle_index)
-            #print str(particle_index) + ' : ' + str(excluded_atoms)
             for jatom in excluded_atoms:
                 if (particle_index < jatom):
                     softcore_force.addExclusion(particle_index, jatom)
