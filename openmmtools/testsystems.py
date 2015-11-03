@@ -155,7 +155,7 @@ def halton_sequence(p, n):
     return u
 
 
-def subrandom_particle_positions(nparticles, box_vectors, method='random'):
+def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
     """Generate a deterministic list of subrandom particle positions.
 
     Parameters
