@@ -155,7 +155,7 @@ def halton_sequence(p, n):
     return u
 
 
-def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
+def subrandom_particle_positions(nparticles, box_vectors, method='halton'):
     """Generate a deterministic list of subrandom particle positions.
 
     Parameters
@@ -185,6 +185,7 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
     >>> positions = subrandom_particle_positions(nparticles, box_vectors, method='halton')
 
     """
+
     # Create positions array.
     positions = unit.Quantity(np.zeros([nparticles, 3], np.float32), unit.nanometers)
 
@@ -194,7 +195,7 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
         for dim in range(3):
             x = halton_sequence(primes[dim], nparticles)
             l = box_vectors[dim][dim]
-            positions[:, dim] = unit.Quantity(x * l / l.unit, l.unit)
+            positions[:, dim] = unit.Quantity(x * (l / l.unit), l.unit)
 
     elif method == 'sobol':
         # Generate Sobol' sequence.
@@ -265,6 +266,52 @@ def build_lattice(n_particles):
 
     return xyz, n
 
+def dummy_positions(nparticles, box_vectors):
+    return unit.Quantity( [ [0,0,0] for index in range(nparticles) ], unit.angstroms )
+
+def build_grid(nparticles, box_vectors):
+    """Build a grid (with potential vacancies if number of particle is not a cube).
+
+    Parameters
+    ----------
+    nparticles : int
+        The number of particles.
+    box_vectors : simtk.unit.Quantity of (3,3) with units compatible with nanometer
+        Periodic box vectors in which particles should lie.
+
+    Returns
+    -------
+    positions : simtk.unit.Quantity of (natoms,3) with units compatible with nanometer
+        The particle positions.
+
+    Examples
+    --------
+    >>> nparticles = 216
+    >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
+    >>> positions = build_grid(nparticles, box_vectors)
+
+    >>> nparticles = 500
+    >>> box_vectors = openmm.System().getDefaultPeriodicBoxVectors()
+    >>> positions = build_grid(nparticles, box_vectors)
+
+    """
+    positions = unit.Quantity(np.zeros([nparticles, 3], np.float32), unit.nanometers)
+
+    # Compute number of particles in each dimension
+    n = int(np.ceil(nparticles ** (1. / 3.)))
+
+    dx = box_vectors[0][0] / float(n)
+    dy = box_vectors[1][1] / float(n)
+    dz = box_vectors[2][2] / float(n)
+
+    for atom, (i, j, k) in enumerate(itertools.product(np.arange(n), repeat=3)):
+        if (atom >= nparticles):
+            break
+        positions[atom,0] = i * dx
+        positions[atom,1] = j * dy
+        positions[atom,2] = k * dz
+
+    return positions
 
 def generate_dummy_trajectory(xyz, box):
     """Convert xyz coordinates and box vectors into an MDTraj Trajectory (with Topology)."""
@@ -2177,7 +2224,6 @@ class WCAFluid(TestSystem):
 # Ideal gas
 #=============================================================================================
 
-
 class IdealGas(TestSystem):
 
     """Create an 'ideal gas' of noninteracting particles in a periodic box.
@@ -2208,7 +2254,6 @@ class IdealGas(TestSystem):
     """
 
     def __init__(self, nparticles=216, mass=39.9 * unit.amu, temperature=298.0 * unit.kelvin, pressure=1.0 * unit.atmosphere, volume=None, **kwargs):
-
         TestSystem.__init__(self, **kwargs)
 
         if volume is None:
@@ -2229,7 +2274,14 @@ class IdealGas(TestSystem):
             system.addParticle(mass)
 
         # Create initial coordinates using subrandom positions.
-        positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
+        #positions = subrandom_particle_positions(nparticles, system.getDefaultPeriodicBoxVectors())
+        #positions = build_grid(nparticles, system.getDefaultPeriodicBoxVectors())
+        #def my_dummy_positions(nparticles, box_vectors):
+        #    return unit.Quantity( [ [0,0,0] for index in range(nparticles) ], unit.angstroms )
+        #positions = dummy_positions(nparticles, system.getDefaultPeriodicBoxVectors())
+        #positions = my_dummy_positions(nparticles, system.getDefaultPeriodicBoxVectors())
+        box_vectors = system.getDefaultPeriodicBoxVectors()
+        positions = unit.Quantity( [ [0,0,0] for index in range(nparticles) ], unit.angstroms )
 
         # Create topology.
         topology = app.Topology()
