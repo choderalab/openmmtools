@@ -703,7 +703,7 @@ class AbsoluteAlchemicalFactory(object):
         force = openmm.HarmonicAngleForce()
 
         # Create CustomAngleForce to handle alchemically modified angles.
-        energy_function = "lambda_angles*(K/2)*(theta-theta0)**2)"
+        energy_function = "lambda_angles*(K/2)*(theta-theta0)^2)"
         custom_force = openmm.CustomAngleForce(energy_function)
         custom_force.addGlobalParameter('lambda_angles', 1.0)
         custom_force.addPerAngleParameter('theta0')
@@ -740,7 +740,7 @@ class AbsoluteAlchemicalFactory(object):
         force = openmm.HarmonicBondForce()
 
         # Create CustomBondForce to handle alchemically modified bonds.
-        energy_function = "lambda_bonds*(K/2)*(r-r0)**2)"
+        energy_function = "lambda_bonds*(K/2)*(r-r0)^2)"
         custom_force = openmm.CustomBondForce(energy_function)
         custom_force.addGlobalParameter('lambda_bonds', 1.0)
         custom_force.addPerBondParameter('r0')
