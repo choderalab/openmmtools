@@ -195,6 +195,10 @@ class AbsoluteAlchemicalFactory(object):
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
+    >>> # Create a Context to make sure this works.
+    >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtosecond)
+    >>> context = openmm.Context(alchemical_system, integrator)
+    >>> del context
 
     Alchemically modify a bond, angles, and torsions in toluene by automatically selecting bonds involving alchemical atoms.
 
@@ -205,6 +209,10 @@ class AbsoluteAlchemicalFactory(object):
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
+    >>> # Create a Context to make sure this works.
+    >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtosecond)
+    >>> context = openmm.Context(alchemical_system, integrator)
+    >>> del context
 
     """
 
@@ -703,7 +711,7 @@ class AbsoluteAlchemicalFactory(object):
         force = openmm.HarmonicAngleForce()
 
         # Create CustomAngleForce to handle alchemically modified angles.
-        energy_function = "lambda_angles*(K/2)*(theta-theta0)^2)"
+        energy_function = "lambda_angles*(K/2)*(theta-theta0)^2;"
         custom_force = openmm.CustomAngleForce(energy_function)
         custom_force.addGlobalParameter('lambda_angles', 1.0)
         custom_force.addPerAngleParameter('theta0')
@@ -734,13 +742,15 @@ class AbsoluteAlchemicalFactory(object):
         reference_force : simtk.openmm.HarmonicBondForec
             The reference copy of the HarmonicBondForce to be alchemically-modified.
 
+
+
         """
 
         # Create standard HarmonicBondForce to handle unmodified bonds.
         force = openmm.HarmonicBondForce()
 
         # Create CustomBondForce to handle alchemically modified bonds.
-        energy_function = "lambda_bonds*(K/2)*(r-r0)^2)"
+        energy_function = "lambda_bonds*(K/2)*(r-r0)^2;"
         custom_force = openmm.CustomBondForce(energy_function)
         custom_force.addGlobalParameter('lambda_bonds', 1.0)
         custom_force.addPerBondParameter('r0')
