@@ -1,0 +1,31 @@
+# Create a benzene-toluene system.
+
+source leaprc.ff12SB
+source leaprc.gaff
+
+# Create receptor.
+receptor = loadmol2 benzene.gaff.mol2
+receptor_params = loadamberparams benzene.frcmod
+
+# Create ligand.
+ligand = loadmol2 toluene.gaff.mol2
+translate ligand { 1.5 1.5 0 }
+#translate ligand { 0.01 0.01 0 }
+ligand_params = loadamberparams toluene.frcmod
+
+# Write vacuum phase.
+saveamberparm ligand vacuum.prmtop vacuum.inpcrd
+savepdb ligand vacuum.pdb
+
+# Create complex.
+complex = combine { receptor ligand }
+
+# Save ligand in solvent.
+saveamberparm ligand solvent.prmtop solvent.inpcrd
+savepdb ligand solvent.pdb
+
+# Save ligand in complex
+saveamberparm complex complex.prmtop complex.inpcrd
+savepdb complex complex.pdb
+
+quit
