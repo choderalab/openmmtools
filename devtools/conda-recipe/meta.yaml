@@ -35,8 +35,6 @@ test:
     - nose
   imports:
     - openmmtools
-  commands:
-    - nosetests openmmtools --with-doctest --verbosity=2 --nocapture
 
 about:
   home: https://github.com/choderalab/openmmtools
