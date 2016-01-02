@@ -16,6 +16,6 @@ inpcrd = app.AmberInpcrdFile(crd_filename)
 
 # Write PDB.
 outfile = open(pdb_filename, 'w')
-app.PDBFile.writeFile(prmtop.topology, inpcrd.positions, file=outfile, keepIds=True)
+app.PDBFile.writeFile(prmtop.topology, inpcrd.positions, file=outfile, keepIds=False)
 outfile.close()
 
