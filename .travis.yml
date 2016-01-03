@@ -1,28 +1,32 @@
 language: c
-
-branches:
-  only:
-    - master
+sudo: false
+addons:
+  apt:
+    sources:
+    - ubuntu-toolchain-r-test
 
 install:
-  - source devtools/ci/install.sh
+  - bash -x devtools/travis-ci/install.sh
   - export PYTHONUNBUFFERED=true
+  - export PATH=$HOME/miniconda/bin:$PATH
 
 script:
-  # Set package name for downstream devtools.
-  - export PACKAGENAME="openmmtools"
-  # this builds the binary, unpacks it, and runs the tests
+  - conda config --add channels $ORGNAME
   - conda build devtools/conda-recipe
-
+  - source activate _test
+  - conda install --yes --quiet nose nose-timer
+  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-doctest --with-timer && cd ..
 env:
   matrix:
-    - CONDA_PY=27
-    - CONDA_PY=33
-    - CONDA_PY=34
+    - python=2.7  CONDA_PY=27
+    - python=3.4  CONDA_PY=34
+    - python=3.5  CONDA_PY=35
   global:
+    - ORGNAME="omnia" # the name of the organization
+    - PACKAGENAME="openmmtools" # the name of your package
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "YIpTwysOxPT1XLKgddr3lZmBoL8UleB4Gk3eDI+mgt4GOcfI2U/xdx+0053wh1KpkoxRulK/1mA7oX3v5zTDMwCHRjZ8VAuCwUPBhkFbJ35IgFQP/P0nDkW5odyGTZ0V7JNFaC07KyzSQWRaTNGsPPjas3lprdQawrpP0PNLzao="
 
 after_success:
   - echo "after_success"
-  - source devtools/ci/after_sucess.sh
+  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then source devtools/travis-ci/after_success.sh; fi

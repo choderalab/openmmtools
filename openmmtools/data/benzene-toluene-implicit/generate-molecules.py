@@ -16,7 +16,7 @@ from openeye import oequacpac
 # Create molecules.
 for resname in molecules:
     name = molecules[resname]
-    print name
+    print(name)
 
     # Create molecule from IUPAC name.
     molecule = oechem.OEMol()
@@ -39,7 +39,7 @@ for resname in molecules:
 
     # Write molecule.
     filename = '%s.tripos.mol2' % name
-    print filename
+    print(filename)
     ofs = oechem.oemolostream()
     ofs.open(filename)
     oechem.OEWriteMolecule(ofs, molecule)

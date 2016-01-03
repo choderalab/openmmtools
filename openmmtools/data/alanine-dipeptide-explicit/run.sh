@@ -10,5 +10,6 @@ rm -f leap.log ${SYSTEM}.{crd,prmtop,pdb}
 tleap -f setup.leap.in
 
 # Create PDB file.
-cat ${SYSTEM}.crd | ambpdb -p ${SYSTEM}.prmtop > ${SYSTEM}.pdb
+#cat ${SYSTEM}.crd | ambpdb -p ${SYSTEM}.prmtop > ${SYSTEM}.pdb
+python generate-pdb.py
 
