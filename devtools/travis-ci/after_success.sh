@@ -20,12 +20,15 @@ pushd .
 cd $HOME/miniconda/conda-bld
 FILES=*/${PACKAGENAME}-dev-*.tar.bz2
 for filename in $FILES; do
+    echo "********************************************************************************"
     echo "Removing $filename from anaconda cloud..."
-    echo "anaconda remove --force ${ORGNAME}/${PACKAGENAME}-dev/${filename}"
-    anaconda -t $BINSTAR_TOKEN remove --force ${ORGNAME}/${PACKAGENAME}-dev/${filename}
+    echo "anaconda remove --force ${ORGNAME}/${PACKAGENAME}-dev/dev/${filename}"
+    anaconda -t $BINSTAR_TOKEN remove --force ${ORGNAME}/${PACKAGENAME}-dev/dev/${filename}
+    echo "********************************************************************************"
     echo "Uploading $filename to anaconda cloud..."
     echo "anaconda upload --force -u ${ORGNAME} -p ${PACKAGENAME}-dev ${filename}"
     anaconda -t $BINSTAR_TOKEN upload --force -u ${ORGNAME} -p ${PACKAGENAME}-dev ${filename}
+    echo "********************************************************************************"
 done
 popd
 
