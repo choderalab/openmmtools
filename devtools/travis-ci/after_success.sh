@@ -20,7 +20,7 @@ pushd .
 cd $HOME/miniconda/conda-bld
 FILES=*/${PACKAGENAME}-dev-*.tar.bz2
 for filename in $FILES; do
-    anaconda -t $BINSTAR_TOKEN remove ${ORGNAME}/${PACKAGENAME}-dev/${filename}
+    anaconda -t $BINSTAR_TOKEN remove --force ${ORGNAME}/${PACKAGENAME}-dev/${filename}
     anaconda -t $BINSTAR_TOKEN upload -u ${ORGNAME} -p ${PACKAGENAME}-dev ${filename}
 done
 popd
