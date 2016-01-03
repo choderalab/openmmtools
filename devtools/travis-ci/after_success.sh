@@ -16,7 +16,7 @@ fi
 
 # Deploy to binstar
 conda install --yes anaconda-client jinja2
-binstar -t $BINSTAR_TOKEN upload --force -u ${ORGNAME} -p ${PACKAGENAME}-dev $HOME/miniconda/conda-bld/*/${PACKAGENAME}-dev-*.tar.bz2
+anaconda -t $BINSTAR_TOKEN upload -u ${ORGNAME} -p ${PACKAGENAME}-dev --force $HOME/miniconda/conda-bld/*/${PACKAGENAME}-dev-*.tar.bz2
 
 if [ $PUSH_DOCS_TO_S3 = true ]; then
    # Create the docs and push them to S3
