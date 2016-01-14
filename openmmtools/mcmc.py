@@ -704,7 +704,7 @@ class LangevinDynamicsMove(MCMCMove):
         >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
         >>> # Create a thermodynamic state.
         >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
+        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin, pressure=1.0*u.atmospheres)
         >>> # Create a LangevinDynamicsMove
         >>> move = LangevinDynamicsMove(nsteps=500, timestep=0.5*u.femtoseconds, collision_rate=20.0/u.picoseconds)
         >>> # Perform one update of the sampler state.
@@ -722,6 +722,8 @@ class LangevinDynamicsMove(MCMCMove):
             barostat = forces['MonteCarloBarostat']
             barostat.setTemperature(thermodynamic_state.temperature)
             parameter_name = barostat.Pressure()
+            if thermodynamic_state.pressure == None:
+                raise Exception('MonteCarloBarostat is present but no pressure specified in thermodynamic state.')
 
         # Create integrator.
         integrator = mm.LangevinIntegrator(thermodynamic_state.temperature, self.collision_rate, self.timestep)
