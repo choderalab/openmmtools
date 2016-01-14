@@ -61,7 +61,7 @@ version.
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
 PARTICULAR PURPOSE.  See the GNU General Public License for more details.
- 
+
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
 
@@ -88,7 +88,7 @@ from openmmtools import integrators
 from openmmmcmc import thermodynamics
 from openmmmcmc.timing import Timer
 
-from abc import abstractmethod 
+from abc import abstractmethod
 
 import logging
 logger = logging.getLogger(__name__)
@@ -110,8 +110,8 @@ class SamplerState(object):
 
     Parameters
     ----------
-    system : simtk.openmm.System 
-       Current system specifying force calculations.    
+    system : simtk.openmm.System
+       Current system specifying force calculations.
     positions : array of simtk.unit.Quantity compatible with nanometers
        Particle positions.
     velocities : optional, array of simtk.unit.Quantity compatible with nanometers/picoseconds
@@ -121,8 +121,8 @@ class SamplerState(object):
 
     Fields
     ------
-    system : simtk.openmm.System 
-       Current system specifying force calculations.    
+    system : simtk.openmm.System
+       Current system specifying force calculations.
     positions : array of simtk.unit.Quantity compatible with nanometers
        Particle positions.
     velocities : optional, array of simtk.unit.Quantity compatible with nanometers/picoseconds
@@ -170,10 +170,10 @@ class SamplerState(object):
 
         # Create Context.
         context = self.createContext(platform=platform)
-        
+
         # Get state.
         openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True)
-        
+
         # Populate context.
         self.positions = openmm_state.getPositions(asNumpy=True)
         self.velocities = openmm_state.getVelocities(asNumpy=True)
@@ -185,17 +185,17 @@ class SamplerState(object):
 
         # Clean up.
         del context
-        
+
     @classmethod
     def createFromContext(cls, context):
         """
         Create an SamplerState object from the information in a current OpenMM Context object.
-        
+
         Parameters
         ----------
         context : simtk.openmm.Context
            The Context object from which to create a sampler state.
-           
+
         Returns
         -------
         sampler_state : SamplerState
@@ -224,7 +224,7 @@ class SamplerState(object):
         """
         # Get state.
         openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True)
-        
+
         # Create new object, bypassing init.
         self = SamplerState.__new__(cls)
 
@@ -237,7 +237,7 @@ class SamplerState(object):
         self.kinetic_energy = openmm_state.getKineticEnergy()
         self.total_energy = self.potential_energy + self.kinetic_energy
         self.volume = thermodynamics.volume(self.box_vectors)
-        
+
         return self
 
     def createContext(self, integrator=None, platform=None):
@@ -259,13 +259,13 @@ class SamplerState(object):
 
         Notes
         -----
-        If the selected or default platform fails, the CPU and Reference platforms will be tried, in that order.        
+        If the selected or default platform fails, the CPU and Reference platforms will be tried, in that order.
 
         Examples
         --------
 
         Create a context for a system with periodic box vectors.
-        
+
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.LennardJonesFluid()
@@ -313,9 +313,9 @@ class SamplerState(object):
             context = mm.Context(self.system, integrator, platform)
         else:
             context = mm.Context(self.system, integrator)
-        
+
         # Set box vectors, if specified.
-        if (self.box_vectors is not None): 
+        if (self.box_vectors is not None):
             try:
                 # try tuple of box vectors
                 context.setPeriodicBoxVectors(self.box_vectors[0], self.box_vectors[1], self.box_vectors[2])
@@ -327,7 +327,7 @@ class SamplerState(object):
         context.setPositions(self.positions)
 
         # Set velocities, if specified.
-        if (self.velocities is not None): 
+        if (self.velocities is not None):
             context.setVelocities(self.velocities)
 
         return context
@@ -349,7 +349,7 @@ class SamplerState(object):
 
         Examples
         --------
-        
+
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
@@ -392,14 +392,14 @@ class SamplerState(object):
 
     def has_nan(self):
         """Return True if any of the generalized coordinates are nan.
-        
+
         Notes
         -----
-        
+
         Currently checks only the positions.
         """
         x = self.positions / u.nanometers
-        
+
         if np.any(np.isnan(x)):
             return True
         else:
@@ -415,7 +415,7 @@ class MCMCMove(object):
     Markov chain Monte Carlo (MCMC) move abstract base class.
 
     Markov chain Monte Carlo (MCMC) simulations are constructed from a set of derived objects.
-    
+
     """
 
     @abstractmethod
@@ -439,7 +439,7 @@ class MCMCMove(object):
 
 
         """
-        pass    
+        pass
 
 #=============================================================================================
 # Markov chain Monte Carlo sampler
@@ -464,7 +464,7 @@ class MCMCSampler(object):
     >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
     >>> # Run a number of iterations of the sampler.
     >>> updated_sampler_state = sampler.run(sampler_state, 10)
-    
+
     """
 
     def __init__(self, thermodynamic_state, move_set=None, platform=None):
@@ -531,7 +531,7 @@ class MCMCSampler(object):
             The current state of the sampler.
         niterations : int
             Number of iterations of the sampler to run.
-        
+
         Examples
         --------
 
@@ -570,16 +570,16 @@ class MCMCSampler(object):
             weights = np.array([self.move_set[move] for move in moves])
             weights /= weights.sum() # normalize
             move_sequence = np.random.choice(moves, size=niterations, p=weights)
-        
+
         sampler_state.system = self.thermodynamic_state.system  # HACK!
-        
+
         # Apply move sequence.
         for move in move_sequence:
             sampler_state = move.apply(self.thermodynamic_state, sampler_state, platform=self.platform)
-                
+
         # Return the updated sampler state.
         return sampler_state
-    
+
 #=============================================================================================
 # Langevin dynamics move
 #=============================================================================================
@@ -626,11 +626,11 @@ class LangevinDynamicsMove(MCMCMove):
             The timestep to use for Langevin integration.
         collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, optional, default = 10/simtk.unit.picoseconds
             The collision rate with fictitious bath particles.
-        nsteps : int, optional, default = 1000 
+        nsteps : int, optional, default = 1000
             The number of integration timesteps to take each time the move is applied.
         reassign_velocities : bool, optional, default = False
             If True, the velocities will be reassigned from the Maxwell-Boltzmann distribution at the beginning of the move.
-       
+
         Note
         ----
         The temperature of the thermodynamic state is used in Langevin dynamics.
@@ -638,7 +638,7 @@ class LangevinDynamicsMove(MCMCMove):
 
         Examples
         --------
-        
+
         Create a Langevin move with default parameters.
 
         >>> move = LangevinDynamicsMove()
@@ -713,14 +713,14 @@ class LangevinDynamicsMove(MCMCMove):
         """
 
         timer = Timer()
-        
+
         # Check if the system contains a barostat.
         system = sampler_state.system
         forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
         barostat = None
         if 'MonteCarloBarostat' in forces:
             barostat = forces['MonteCarloBarostat']
-            barostat.setTemperature(thermodynamic_state.temperature)            
+            barostat.setTemperature(thermodynamic_state.temperature)
             parameter_name = barostat.Pressure()
 
         # Create integrator.
@@ -738,12 +738,12 @@ class LangevinDynamicsMove(MCMCMove):
 
         # Set pressure, if barostat is included.
         if barostat is not None:
-            context.setParameter(parameter_name, thermodynamic_state.pressure)
+            context.setParameter(parameter_name, thermodynamic_state.pressure.value_in_unit_system(u.md_unit_system))
 
         if self.reassign_velocities:
-            # Assign Maxwell-Boltzmann velocities.        
+            # Assign Maxwell-Boltzmann velocities.
             context.setVelocitiesToTemperature(thermodynamic_state.temperature)
-        
+
         # Run dynamics.
         timer.start("step()")
         integrator.step(self.nsteps)
@@ -760,7 +760,7 @@ class LangevinDynamicsMove(MCMCMove):
         timer.report_timing()
 
         return updated_sampler_state
-    
+
 #=============================================================================================
 # Genaralized Hybrid Monte Carlo (GHMC, a form of Metropolized Langevin dynamics) move
 #=============================================================================================
@@ -805,7 +805,7 @@ class GHMCMove(MCMCMove):
             The timestep to use for Langevin integration.
         collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, optional, default = 10/simtk.unit.picoseconds
             The collision rate with fictitious bath particles.
-        nsteps : int, optional, default = 1000 
+        nsteps : int, optional, default = 1000
             The number of integration timesteps to take each time the move is applied.
 
         Note
@@ -814,7 +814,7 @@ class GHMCMove(MCMCMove):
 
         Examples
         --------
-        
+
         Create a GHMC move with default parameters.
 
         >>> move = GHMCMove()
@@ -828,7 +828,7 @@ class GHMCMove(MCMCMove):
         self.timestep = timestep
         self.collision_rate = collision_rate
         self.nsteps = nsteps
-                
+
         self.reset_statistics()
 
         return
@@ -839,7 +839,7 @@ class GHMCMove(MCMCMove):
 
         Examples
         --------
-        
+
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
@@ -854,7 +854,7 @@ class GHMCMove(MCMCMove):
         >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
 
         Reset statistics.
-        
+
         >>> move.reset_statistics()
 
         """
@@ -863,7 +863,7 @@ class GHMCMove(MCMCMove):
         self.nattempted = 0 # number of attempted steps
 
         return
-    
+
     def get_statistics(self):
         """
         Return the current acceptance/rejection statistics of the sampler.
@@ -879,7 +879,7 @@ class GHMCMove(MCMCMove):
 
         Examples
         --------
-        
+
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
@@ -894,12 +894,12 @@ class GHMCMove(MCMCMove):
         >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
 
         Get statistics.
-        
+
         >>> [naccepted, nattempted, fraction_accepted] = move.get_statistics()
 
         """
         return (self.naccepted, self.nattempted, float(self.naccepted) / float(self.nattempted))
-        
+
 
     def apply(self, thermodynamic_state, sampler_state, platform=None):
         """
@@ -921,7 +921,7 @@ class GHMCMove(MCMCMove):
 
         Examples
         --------
-        
+
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
@@ -936,9 +936,9 @@ class GHMCMove(MCMCMove):
         >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
 
         """
-        
+
         timer = Timer()
-        
+
         # Create integrator.
         integrator = integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
 
@@ -960,12 +960,12 @@ class GHMCMove(MCMCMove):
         timer.start("step()")
         integrator.step(self.nsteps)
         timer.stop("step()")
-        
+
         # Get updated sampler state.
         timer.start("update_sampler_state")
         updated_sampler_state = SamplerState.createFromContext(context)
         timer.start("update_sampler_state")
-        
+
         # Accumulate acceptance statistics.
         ghmc_global_variables = { integrator.getGlobalVariableName(index) : index for index in range(integrator.getNumGlobalVariables()) }
         naccepted = integrator.getGlobalVariable(ghmc_global_variables['naccept'])
@@ -978,11 +978,11 @@ class GHMCMove(MCMCMove):
 
         # Clean up.
         del context
-        
+
         timer.report_timing()
-        
+
         return updated_sampler_state
-    
+
 #=============================================================================================
 # Hybrid Monte Carlo move
 #=============================================================================================
@@ -992,7 +992,7 @@ class HMCMove(MCMCMove):
     Hybrid Monte Carlo dynamics.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution and executes a number
-    of velocity Verlet steps to propagate dynamics.  
+    of velocity Verlet steps to propagate dynamics.
 
     Examples
     --------
@@ -1059,7 +1059,7 @@ class HMCMove(MCMCMove):
 
         Examples
         --------
-        
+
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1074,7 +1074,7 @@ class HMCMove(MCMCMove):
         >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
 
         """
-        
+
         timer = Timer()
 
         # Create integrator.
@@ -1094,7 +1094,7 @@ class HMCMove(MCMCMove):
         timer.start("HMC integration")
         integrator.step(1)
         timer.stop("HMC integration")
-        
+
         # Get sampler state.
         timer.start("updated_sampler_state")
         updated_sampler_state = SamplerState.createFromContext(context)
@@ -1104,7 +1104,7 @@ class HMCMove(MCMCMove):
         del context
 
         timer.report_timing()
-        
+
         # Return updated sampler state.
         return updated_sampler_state
 
@@ -1136,7 +1136,7 @@ class MonteCarloBarostatMove(MCMCMove):
     >>> platform = mm.Platform.getPlatformByName('Reference')
     >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set, platform=platform)
     >>> # Run a number of iterations of the sampler.
-    >>> updated_sampler_state = sampler.run(sampler_state, 10)    
+    >>> updated_sampler_state = sampler.run(sampler_state, 10)
 
     """
 
@@ -1158,7 +1158,7 @@ class MonteCarloBarostatMove(MCMCMove):
 
         >>> move = MonteCarloBarostatMove(nattempts=10)
 
-        """        
+        """
         self.nattempts = nattempts
 
         return
@@ -1198,7 +1198,7 @@ class MonteCarloBarostatMove(MCMCMove):
         >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
 
         """
-        
+
         timer = Timer()
 
         # Make sure system contains a barostat.
@@ -1207,7 +1207,7 @@ class MonteCarloBarostatMove(MCMCMove):
         old_barostat_frequency = None
         if 'MonteCarloBarostat' in forces:
             force = forces['MonteCarloBarostat']
-            force.setTemperature(thermodynamic_state.temperature)            
+            force.setTemperature(thermodynamic_state.temperature)
             old_barostat_frequency = force.getFrequency()
             force.setFrequency(1)
             parameter_name = force.Pressure()
@@ -1237,7 +1237,7 @@ class MonteCarloBarostatMove(MCMCMove):
         timer.start("step(1)")
         integrator.step(self.nattempts)
         timer.stop("step(1)")
-        
+
         # Get sampler state.
         timer.start("update_sampler_state")
         updated_sampler_state = SamplerState.createFromContext(context)
@@ -1245,7 +1245,7 @@ class MonteCarloBarostatMove(MCMCMove):
 
         # DEBUG
         #print thermodynamics.volume(updated_sampler_state.box_vectors)
-        
+
         # Clean up.
         del context
 
@@ -1257,7 +1257,7 @@ class MonteCarloBarostatMove(MCMCMove):
 
         # Return updated sampler state.
         return updated_sampler_state
-    
+
 #=============================================================================================
 # MAIN AND TESTS
 #=============================================================================================
