@@ -566,7 +566,7 @@ class MCMCSampler(object):
                     move_sequence.append(move)
         elif type(self.move_set) == dict:
             # Random moves.
-            moves = self.move_set.keys()
+            moves = list(self.move_set)
             weights = np.array([self.move_set[move] for move in moves])
             weights /= weights.sum() # normalize
             move_sequence = np.random.choice(moves, size=niterations, p=weights)
