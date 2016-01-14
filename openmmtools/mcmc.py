@@ -1138,7 +1138,7 @@ class MonteCarloBarostatMove(MCMCMove):
     >>> platform = mm.Platform.getPlatformByName('Reference')
     >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set, platform=platform)
     >>> # Run a number of iterations of the sampler.
-    >>> updated_sampler_state = sampler.run(sampler_state, 10)
+    >>> updated_sampler_state = sampler.run(sampler_state, 2)
 
     """
 
