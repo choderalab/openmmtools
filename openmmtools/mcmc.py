@@ -580,6 +580,44 @@ class MCMCSampler(object):
         # Return the updated sampler state.
         return sampler_state
 
+    def update_thermodynamic_state(self, thermodynamic_state):
+        """
+        Update the thermodynamic state.
+
+        Parameters
+        ----------
+        thermodynamic_state : ThermodynamicState
+            Thermodynamic state to sample during MCMC run.
+
+        Examples
+        --------
+
+        >>> # Create a test system
+        >>> from openmmtools import testsystems
+        >>> test = testsystems.AlanineDipeptideVacuum()
+        >>> # Create a thermodynamic state.
+        >>> import simtk.unit as u
+        >>> from openmmmcmc.thermodynamics import ThermodynamicState
+        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
+        >>> # Create a sampler state.
+        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+        >>> # Create a move set specifying probabilities fo each type of move.
+        >>> move_set = { HMCMove(nsteps=10) : 0.5, LangevinDynamicsMove(nsteps=10) : 0.5 }
+        >>> # Create MCMC sampler
+        >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
+        >>> # Run a number of iterations of the sampler.
+        >>> updated_sampler_state = sampler.run(sampler_state, 10)
+
+        Update the thermodynamic state.
+
+        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=310*u.kelvin)
+        >>> sampler.update_thermodynamic_state(thermodynamic_state)
+
+        """
+
+        # Store thermodynamic state.
+        self.thermodynamic_state = thermodynamic_state
+
 #=============================================================================================
 # Langevin dynamics move
 #=============================================================================================
