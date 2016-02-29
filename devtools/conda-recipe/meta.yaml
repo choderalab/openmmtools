@@ -1,10 +1,9 @@
 package:
-  name: openmmtools
-  version: !!str 0.0.0
+  name: openmmtools-dev
+  version: 0.0.0
 
-#source:
-#  fn: master.zip
-#  url: https://github.com/choderalab/openmmtools/archive/master.zip
+source:
+  path: ../../
 
 build:
   preserve_egg_dir: True
@@ -19,7 +18,7 @@ requirements:
     - nose
     - setuptools
     - openmm
-    - jinja2
+    - parmed
 
   run:
     - python
@@ -27,8 +26,8 @@ requirements:
     - openmm
     - nose
     - setuptools
-    - jinja2
     - six
+    - parmed
 
 
 test:
@@ -36,8 +35,6 @@ test:
     - nose
   imports:
     - openmmtools
-  commands:
-    - nosetests openmmtools --with-doctest --verbosity=2 --nocapture
 
 about:
   home: https://github.com/choderalab/openmmtools
