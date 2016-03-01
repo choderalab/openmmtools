@@ -761,10 +761,10 @@ class AbsoluteAlchemicalFactory(object):
             [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
             if bond_index in self.alchemical_bonds:
                 # Alchemically modified torsion.
-                custom_force.addBond(particle1, particle2, particle3, [theta0, K])
+                custom_force.addBond(particle1, particle2, [theta0, K])
             else:
                 # Standard torsion.
-                force.addBond(particle1, particle2, particle3, theta0, K)
+                force.addBond(particle1, particle2, theta0, K)
 
         # Add newly-populated forces to system.
         system.addForce(force)
