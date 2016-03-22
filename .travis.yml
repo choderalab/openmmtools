@@ -25,7 +25,7 @@ env:
     - ORGNAME="omnia" # the name of the organization
     - PACKAGENAME="openmmtools" # the name of your package
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
-    - secure: "YIpTwysOxPT1XLKgddr3lZmBoL8UleB4Gk3eDI+mgt4GOcfI2U/xdx+0053wh1KpkoxRulK/1mA7oX3v5zTDMwCHRjZ8VAuCwUPBhkFbJ35IgFQP/P0nDkW5odyGTZ0V7JNFaC07KyzSQWRaTNGsPPjas3lprdQawrpP0PNLzao="
+    - secure: "DP5heLvW3wnHvw6d2tinSHcyAxe0EWEsoL4X3lrGC+BSSy3Fd60pb90zSibK/hcxzV7Cb/x4mC4C7KPgGZEXzvVFH/iF7tg2Yy41XgyuZ5vxacfXICdryoTAlGxrbwACvO/ak+OHEYTtkX3OyFM/f8zV0z7Shz/rOSbSvcEKmpQ="
 
 after_success:
   - echo "after_success"
