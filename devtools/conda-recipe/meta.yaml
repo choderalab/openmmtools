@@ -17,17 +17,19 @@ requirements:
     - scipy
     - nose
     - setuptools
-    - openmm
-    - parmed
+    - openmm-dev
+    - parmed-dev
 
   run:
     - python
+    - cython
+    - numpy
     - scipy
-    - openmm
     - nose
     - setuptools
     - six
-    - parmed
+    - openmm-dev
+    - parmed-dev
 
 
 test:
