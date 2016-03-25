@@ -816,10 +816,6 @@ class AbsoluteAlchemicalFactory(object):
 
         alchemical_atom_indices = self.ligand_atoms
 
-        # Promote to empty list
-        if software_context_parameters is None:
-            software_context_parameters = list()
-
         # Create a copy of the NonbondedForce to handle non-alchemical interactions.
         nonbonded_force = copy.deepcopy(reference_force)
         system.addForce(nonbonded_force)
