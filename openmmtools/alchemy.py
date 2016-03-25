@@ -973,7 +973,7 @@ class AbsoluteAlchemicalFactory(object):
             force.addGlobalParameter('softcore_c', softcore_c)
         add_global_parameters(sterics_custom_nonbonded_force)
         add_global_parameters(electrostatics_custom_nonbonded_force)
-        add_gloabl_parameters(custom_bond_force)
+        add_global_parameters(custom_bond_force)
 
         return
 
