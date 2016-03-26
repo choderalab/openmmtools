@@ -232,7 +232,10 @@ class AbsoluteAlchemicalFactory(object):
     # Factory initialization.
     def __init__(self, reference_system, ligand_atoms=list(), receptor_atoms=list(),
                  alchemical_torsions=None, alchemical_angles=None, alchemical_bonds=None,
-                 annihilate_electrostatics=True, annihilate_sterics=False, test_positions=None, platform=None):
+                 annihilate_electrostatics=True, annihilate_sterics=False,
+                 softcore_alpha=0.5, softcore_beta=12*unit.angstrom**2, softcore_a=1, softcore_b=1, softcore_c=1,
+                 alchemical_functions=None,
+                 test_positions=None, platform=None):
         """
         Initialize absolute alchemical intermediate factory with reference system.
 
@@ -257,6 +260,18 @@ class AbsoluteAlchemicalFactory(object):
             If True, electrostatics should be annihilated, rather than decoupled.
         annihilateSterics : bool
             If True, sterics (Lennard-Jones or Halgren potential) will be annihilated, rather than decoupled.
+        softcore_alpha : float, optional, default = 0.5
+            Alchemical softcore parameter for Lennard-Jones.
+        softcore_beta : simtk.unit.Quantity with units compatible with angstroms**2, optional, default = 12*angstrom**2
+            Alchemical softcore parameter for electrostatics.
+            Set this to zero to recover standard electrostatic scaling.
+        softcore_a, softcore_b, softcore_c : float, optional, default=1
+            Parameters modifying softcore Lennard-Jones form.
+            Introduced in Eq. 13 of Ref. [1]
+        alchemical_slave_functions : dict, optional, default=None
+            If not None, this dict specifies a mapping from context parameters to one or more globally-controlled parameters.
+            This allows groups of alchemical parameters to be slaved to one or more global context parameters.
+            default_functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda', 'lambda_bonds' : 'lambda', 'lambda_angles' : 'lambda', 'lambda_torsions' : 'lambda' }
         test_positions : simtk.unit.Quantity of dimension (natoms,3) with units compatible with nanometers, optional, default=None
             If provided, these coordinates will be used to test alchemically-modified system to ensure the potential energy is finite.
             If the potential energy is NaN, the energy for each force component will be computed for the Reference platform to aid in debugging.
@@ -267,12 +282,23 @@ class AbsoluteAlchemicalFactory(object):
         * Can we use a Topology object to simplify this?
         * Can we replace ligand_atoms and receptor_atoms with just alchemical_atoms?
         * Can we specify multiple groups of alchemically-modified atoms that have different alchemical parameters associated with them, like `lambda_sterics_[groupname]`?
+        * Can we collect related parameters (e.g. softcore parameters) into a dict?
 
         """
 
         # Store annihilation/decoupling information.
         self.annihilate_electrostatics = annihilate_electrostatics
         self.annihilate_sterics = annihilate_sterics
+        self.softcore_alpha = softcore_alpha
+        self.softcore_beta = softcore_beta
+        if hasattr(softcore_beta, 'value_in_unit_system'):
+            self.softcore_beta = softcore_beta.value_in_unit_system(unit.md_unit_system)
+        self.softcore_a = softcore_a
+        self.softcore_b = softcore_b
+        self.softcore_c = softcore_c
+        self.alchemical_functions = alchemical_functions
+        if self.alchemical_functions == None:
+            self.alchemical_functions = dict()
 
         # Store serialized form of reference system.
         self.reference_system = copy.deepcopy(reference_system)
@@ -783,7 +809,7 @@ class AbsoluteAlchemicalFactory(object):
         system.addForce(force)
         system.addForce(custom_force)
 
-    def _alchemicallyModifyNonbondedForce(self, system, reference_force, softcore_alpha=0.5, softcore_beta=12*unit.angstrom**2, softcore_a=1, softcore_b=1, softcore_c=1):
+    def _alchemicallyModifyNonbondedForce(self, system, reference_force):
         """
         Create alchemically-modified version of NonbondedForce.
 
@@ -793,14 +819,6 @@ class AbsoluteAlchemicalFactory(object):
             Alchemically-modified system being built.  This object will be modified.
         nonbonded_force : simtk.openmm.NonbondedForce
             The NonbondedForce used as a template.
-        softcore_alpha : float, optional, default = 0.5
-            Alchemical softcore parameter for Lennard-Jones.
-        softcore_beta : simtk.unit.Quantity with units compatible with angstroms**2, optional, default = 12*angstrom**2
-            Alchemical softcore parameter for electrostatics.
-            Set this to zero to recover standard electrostatic scaling.
-        softcore_a, softcore_b, softcore_c : float, optional, default=1
-            Parameters modifying softcore Lennard-Jones form.
-            Introduced in Eq. 13 of Ref. [1]
 
         TODO
         ----
@@ -830,6 +848,12 @@ class AbsoluteAlchemicalFactory(object):
         # CustomNonbondedForce energy expression.
         sterics_energy_expression = ""
         electrostatics_energy_expression = ""
+
+        # Form energy expression for slaved context parameters.
+        alchemical_function_expression = ""
+        for variable in self.alchemical_functions:
+            expression = self.alchemical_functions[variable]
+            alchemical_function_expression = " %s = %s;" % (variable, expression)
 
         # Select functional form based on nonbonded method.
         method = reference_force.getNonbondedMethod()
@@ -873,10 +897,10 @@ class AbsoluteAlchemicalFactory(object):
         electrostatics_mixing_rules += "chargeprod = charge1*charge2;" # mixing rule for charges
 
         # Create CustomNonbondedForce to handle interactions between alchemically-modified atoms and rest of system.
-        electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules)
+        electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_electrostatics;" + electrostatics_energy_expression + electrostatics_mixing_rules + alchemical_function_expression)
         electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 1.0);
         electrostatics_custom_nonbonded_force.addPerParticleParameter("charge") # partial charge
-        sterics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules)
+        sterics_custom_nonbonded_force = openmm.CustomNonbondedForce("U_sterics;" + sterics_energy_expression + sterics_mixing_rules + alchemical_function_expression)
         sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 1.0);
         sterics_custom_nonbonded_force.addPerParticleParameter("sigma") # Lennard-Jones sigma
         sterics_custom_nonbonded_force.addPerParticleParameter("epsilon") # Lennard-Jones epsilon
@@ -903,7 +927,7 @@ class AbsoluteAlchemicalFactory(object):
         system.addForce(electrostatics_custom_nonbonded_force)
 
         # Create CustomBondForce to handle exceptions for both kinds of interactions.
-        custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression)
+        custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression + alchemical_function_expression)
         custom_bond_force.addGlobalParameter("lambda_electrostatics", 1.0);
         custom_bond_force.addGlobalParameter("lambda_sterics", 1.0);
         custom_bond_force.addPerBondParameter("chargeprod") # charge product
@@ -966,14 +990,19 @@ class AbsoluteAlchemicalFactory(object):
 
         # Add global parameters to forces.
         def add_global_parameters(force):
-            force.addGlobalParameter('softcore_alpha', softcore_alpha)
-            force.addGlobalParameter('softcore_beta', softcore_beta.value_in_unit_system(unit.md_unit_system))
-            force.addGlobalParameter('softcore_a', softcore_a)
-            force.addGlobalParameter('softcore_b', softcore_b)
-            force.addGlobalParameter('softcore_c', softcore_c)
-        add_global_parameters(sterics_custom_nonbonded_force)
-        add_global_parameters(electrostatics_custom_nonbonded_force)
-        add_global_parameters(custom_bond_force)
+            force.addGlobalParameter('softcore_alpha', self.softcore_alpha)
+            force.addGlobalParameter('softcore_beta', self.softcore_beta)
+            force.addGlobalParameter('softcore_a', self.softcore_a)
+            force.addGlobalParameter('softcore_b', self.softcore_b)
+            force.addGlobalParameter('softcore_c', self.softcore_c)
+
+            # Add control variables.
+            control_variables = set(self.alchemical_functions.values())
+            for variable in control_variables:
+                force.addGlobalParameter(variable, 1.0)
+
+        for force in [sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, custom_bond_force]:
+            add_global_parameters(force)
 
         return
 
