@@ -271,7 +271,10 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_slave_functions : dict, optional, default=None
             If not None, this dict specifies a mapping from context parameters to one or more globally-controlled parameters.
             This allows groups of alchemical parameters to be slaved to one or more global context parameters.
-            default_functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda', 'lambda_bonds' : 'lambda', 'lambda_angles' : 'lambda', 'lambda_torsions' : 'lambda' }
+            To slave everything to a single lambda:
+              default_functions = { 'lambda_sterics' : 'lambda', 'lambda_electrostatics' : 'lambda', 'lambda_bonds' : 'lambda', 'lambda_angles' : 'lambda', 'lambda_torsions' : 'lambda' }
+            For a two-stage function:
+              default_functions = { 'lambda_sterics' : '2*lambda * step(0.5 - lambda)', 'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)' }
         test_positions : simtk.unit.Quantity of dimension (natoms,3) with units compatible with nanometers, optional, default=None
             If provided, these coordinates will be used to test alchemically-modified system to ensure the potential energy is finite.
             If the potential energy is NaN, the energy for each force component will be computed for the Reference platform to aid in debugging.
