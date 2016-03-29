@@ -236,7 +236,7 @@ class AbsoluteAlchemicalFactory(object):
     def __init__(self, reference_system, ligand_atoms=list(), receptor_atoms=list(),
                  alchemical_torsions=None, alchemical_angles=None, alchemical_bonds=None,
                  annihilate_electrostatics=True, annihilate_sterics=False,
-                 softcore_alpha=0.5, softcore_beta=0.5, softcore_a=1, softcore_b=1, softcore_c=6, softcore_d=1, softcore_e=1, softcore_f=2,
+                 softcore_alpha=0.5, softcore_beta=0.5, softcore_a=1, softcore_b=1, softcore_c=6, softcore_d=2, softcore_e=2, softcore_f=1,
                  alchemical_functions=None,
                  test_positions=None, platform=None):
         """
