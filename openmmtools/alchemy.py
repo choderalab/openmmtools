@@ -13,7 +13,6 @@ This module contains enumerative factories for generating alchemically-modified 
 usable for the calculation of free energy differences of hydration or ligand binding.
 
 * `AbsoluteAlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
-* `LegacyAbsoluteAlchemicalFactory` uses charge scaling and softcore Lennard-Jones alchemical modifications.
 
 TODO
 
