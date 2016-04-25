@@ -35,7 +35,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 #=============================================================================================
 
-import numpy
+import numpy as np
+import math
 
 import simtk.unit
 
@@ -229,9 +230,227 @@ class VelocityVerletIntegrator(mm.CustomIntegrator):
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
+class BitwiseReversibleVelocityVerletIntegrator(mm.CustomIntegrator):
+    """Bitwise-reversible Verlocity Verlet integrator.
+
+    The Velocity Verlet integrator [1] is implemented using forces truncated to fewer digits of precision so that the
+    resulting position and velocity updates will not lose any precision to rounding, using concepts from [2].
+
+    Note that a patent [3] purports to describe a bitwise-reversible integrator, but fails to actually describe a
+    valid mathematical algorithm that can be implemented.
+
+    The number of bits of precision to maintain and the maximum magnitude of positions and velocities for which the
+    integrator will be bitwise-reversible in OpenMM units (nm and nm/ps) are user-adjustable parameters.  If these are
+    not correctly set, the integrator may become no longer bitwise-reversible as the simulation proceeds, but integration
+    accuracy will gracefully degrade [3].
+
+    Notes
+    -----
+    * This integrator requires the use of a deterministic Platform (Reference or OpenCL) to be bitwise-reversible.
+    * This integrator cannot handle constraints.
+    * Use of the center-of-mass-motion remover will destroy bitwise reversibility.
+    * updateContextState *is* called in this integrator, but be warned that other forces (e.g. MonteCarloBarostat) can also destroy bitwise reversibility
+    * No special handling of NaNs is performed.  If any force components become NaN, bitwise-reversibility is lost.
+    * Because the magnitude of positions and velocities must be smaller than the maximum magnitude for bitwise reversibility
+      it is recommended that the system first be shifted to its center of geometry.
+
+    References
+    ----------
+    [1] W. C. Swope, H. C. Andersen, P. H. Berens, and K. R. Wilson, J. Chem. Phys. 76, 637 (1982)
+    [2] https://qed.princeton.edu/main/User:Hammett/physics_notes/Time_Reversible_Algorithms
+    [3] Kevin J. Bowers. US Patent publication US7809535 B2. Publication date 5 Oct 2010. https://www.google.com/patents/US7809535
+
+    Examples
+    --------
+
+    Create a bitwise-reversible velocity Verlet integrator.
+
+    >>> timestep = 1.0 * simtk.unit.femtoseconds
+    >>> integrator = BitwiseReversibleVelocityVerletIntegrator(timestep)
+
+    Demonstrate bitwise reversibility for a simple harmonic oscillator.
+
+    >>> from simtk import openmm, unit
+    >>> platform = openmm.Platform.getPlatformByName('Reference')
+    >>> from openmmtools import testsytems
+    >>> testsystem = testsystems.LennardJonesCluster()
+    >>> context = openmm.Context(testsystem.system, integrator, platform)
+    >>> context.setPositions(testsystem.positions)
+    >>> # Select velocity.
+    >>> context.setVelocitiesToTemperature(300*unit.kelvin)
+    >>> # Truncate accuracy and store initial positions.
+    >>> integrator.truncatePrecision(context)
+    >>> initial_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    >>> # Integrate forward in time.
+    >>> nsteps = 20
+    >>> integrator.step(nsteps)
+    >>> # Negate velocity and integrate backwards
+    >>> context.setVelocities(-context.getState(getVelocities=True).getVelocities(asNumpy=True))
+    >>> integrator.step(nsteps)
+    >>> # Compare positions.
+    >>> final_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    >>> initial_positions - final_positions
+
+    """
+
+    def __init__(self, timestep=1.0*simtk.unit.femtoseconds, precision_nbits=22, max_magnitude_nbits=5, precision_mode='single', timestep_precision_nbits=5, test=False):
+        """Construct a velocity Verlet integrator.
+
+        Parameters
+        ----------
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+            The integration timestep.
+        precision : str, optional, default='single'
+            Precision of forces ['single', 'double'].
+        precision_nbits : int, optional, default=20
+            Number of bits of precision to maintain.
+        max_magnitude_nbits : int, optional, default=5
+            The maximum magnitude of positions or velocities in natural OpenMM units (nm, nm/ps) for which
+            integration will still be bitwise reversible is `2**max_magnitude_nbits`.
+        precision_mode : str, optional, default='single'
+            Precision mode used by context for position and velocity accumulation ['single', 'mixed', 'double']
+        timestep_precision_nbits : int, optional, default=5
+            Number of bits of precision to keep in significand of timestep.
+
+        """
+
+        # Sanity check of number of bits to retain.
+        if (precision_mode == 'single') and (precision_nbits > 22):
+            raise Exception("'precision_nbits' must be <= 22 for platforms that use 'single' precision mode.")
+        if (precision_mode in ['mixed', 'double']) and (precision_nbits > 52):
+            raise Exception("'precision_nbits' must be <= 52 for platforms that use 'mixed' or 'double' precision mode.")
+
+        # Store number of bits of precision.
+        self.precision_nbits = precision_nbits
+        self.max_magnitude_nbits = max_magnitude_nbits
+        self.scale = 2**(precision_nbits - max_magnitude_nbits + 1)
+
+        # Degrade precision of timestep to `timestep_precision_nbits`
+        # significant bits in the mantissa.
+        # This will ensure we don't accumulate too much error in the `x = x  dt*v` part of integration to lose precision.
+        from testsystems import in_openmm_units
+        old_timestep = in_openmm_units(timestep)
+        [x,i] = math.frexp(old_timestep)
+        timestep_scale = 2**timestep_precision_nbits
+        x = np.floor(x*timestep_scale + 0.5)/timestep_scale
+        new_timestep = math.ldexp(x, i)
+        timestep = new_timestep
+        if (timestep == 0.0):
+            raise Exception("Timestep is too small to be represented by %d bits of fixed-point precision." % self.precision_nbits)
+
+        # Initialize integrator.
+        super(BitwiseReversibleVelocityVerletIntegrator, self).__init__(timestep)
+
+        self.addGlobalVariable("scale", self.scale)
+
+        self.addPerDofVariable('fix_arg', 0)
+        self.addPerDofVariable('fix', 0)
+
+        # DEBUG
+        self.addPerDofVariable('v0', 0)
+        self.addPerDofVariable('x0', 0)
+        self.addPerDofVariable('v1', 0)
+        self.addPerDofVariable('x1', 0)
+        self.addPerDofVariable('v2', 0)
+        self.addPerDofVariable('vr', 0)
+        self.addPerDofVariable('v1r', 0)
+        self.addPerDofVariable('x1r', 0)
+        self.addPerDofVariable('v2r', 0)
+
+
+        # We cannot update Context state since this could destroy bitwise reversibility.
+        self.addUpdateContextState()
+
+        # Truncate x and v to desired precision.
+        self.addComputePerDof("fix_arg", "x")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("x", "fix")
+
+        self.addComputePerDof("fix_arg", "v")
+        self.addComputePerDof("fix", "select(step(fix), (floor(scale * fix_arg + 0.5)/scale), (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("v", "fix")
+
+        # DEBUG
+        self.addComputePerDof("v0", "v") # DEBUG
+        self.addComputePerDof("x0", "x") # DEBUG
+
+        # TODO: Use a different scheme than floor(scale*a+0.5)/scale since this may lead to inaccurate rounding
+        self.addComputePerDof("fix_arg", "dt*f/m/2")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("v", "v+fix")
+
+        self.addComputePerDof("v1", "v") # DEBUG
+
+        self.addComputePerDof("fix_arg", "dt*v")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("x", "x+fix")
+
+        self.addComputePerDof("x1", "x") # DEBUG
+
+        self.addComputePerDof("fix_arg", "dt*f/m/2")
+        self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+        self.addComputePerDof("v", "v+fix")
+
+        self.addComputePerDof("v2", "v") # DEBUG
+
+        if test:
+            # DEBUG: Back up.
+            self.addComputePerDof("v", "-v")
+
+            # Truncate
+            self.addComputePerDof("fix_arg", "x")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("x", "fix")
+
+            self.addComputePerDof("fix_arg", "v")
+            self.addComputePerDof("fix", "select(step(fix), (floor(scale * fix_arg + 0.5)/scale), (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("v", "fix")
+
+            self.addComputePerDof("vr", "v") # DEBUG
+
+            self.addComputePerDof("fix_arg", "dt*f/m/2")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("v", "v+fix")
+
+            self.addComputePerDof("v1r", "v") # DEBUG
+
+            self.addComputePerDof("fix_arg", "dt*v")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("x", "x+fix")
+
+            self.addComputePerDof("x1r", "x") # DEBUG
+
+            self.addComputePerDof("fix_arg", "dt*f/m/2")
+            self.addComputePerDof("fix", "select(step(fix), floor(scale * fix_arg + 0.5)/scale, (-1*floor(-scale*fix_arg + 0.5)/scale))")
+            self.addComputePerDof("v", "v+fix")
+
+            self.addComputePerDof("v2r", "v") # DEBUG
+
+            self.addComputePerDof("v", "-v")
+
+    def truncatePrecision(self, context):
+        """Truncate precision of stored positions and velocities.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The Context object whose which positions and velocities are to be truncated in significant bit accuracy.
+
+        """
+        from testsystems import in_openmm_units
+        # Retrieve positions and velocities in natural openmm units.
+        state = context.getState(getPositions=True, getVelocities=True)
+        positions = in_openmm_units(state.getPositions(asNumpy=True))
+        velocities = in_openmm_units(state.getVelocities(asNumpy=True))
+        # Truncate precision.
+        positions = np.sign(positions) * np.floor(np.abs(positions)*self.scale+0.5)/self.scale
+        velocities = np.sign(velocities) * np.floor(np.abs(velocities)*self.scale+0.5)/self.scale
+        # Store updated positions and velocities.
+        context.setPositions(positions)
+        context.setVelocities(velocities)
+        return
 
 class AndersenVelocityVerletIntegrator(mm.CustomIntegrator):
-
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
     References
@@ -480,7 +699,7 @@ class HMCIntegrator(mm.CustomIntegrator):
         # Store old position and energy.
         #
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputeGlobal("Eold", "ke + energy") # DEBUG
         self.addComputePerDof("xold", "x")
 
         #
@@ -501,6 +720,7 @@ class HMCIntegrator(mm.CustomIntegrator):
         self.addComputeGlobal("Enew", "ke + energy")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
         self.addComputePerDof("x", "x*accept + xold*(1-accept)")
+        #self.addComputeGlobal("Eold", "Enew*accept + Eold*(1-accept)") # DEBUG
 
         #
         # Accumulate statistics.
@@ -583,8 +803,8 @@ class GHMCIntegrator(mm.CustomIntegrator):
         #
         # Integrator initialization.
         #
-        self.addGlobalVariable("kT", kT)  # thermal energy
-        self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
+        self.addGlobalVariable("kT", kT) # thermal energy
+        self.addGlobalVariable("b", np.exp(-gamma*timestep)) # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("vold", 0)  # old velocities
@@ -712,8 +932,8 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         # Integrator initialization.
         #
-        self.addGlobalVariable("kT", kT)  # thermal energy
-        self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
+        self.addGlobalVariable("kT", kT) # thermal energy
+        self.addGlobalVariable("b", np.exp(-gamma*timestep)) # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addPerDofVariable("x1", 0)  # position before application of constraints
 

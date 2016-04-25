@@ -2846,6 +2846,9 @@ class AlanineDipeptideVacuum(TestSystem):
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
+        Type of constraints to use.
+    removeCMMotion : bool, optional, default=False
+        If True, will remove center of mass motion periodically.
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -2856,9 +2859,10 @@ class AlanineDipeptideVacuum(TestSystem):
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideVacuum()
     >>> (system, positions) = alanine.system, alanine.positions
+
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, constraints=app.HBonds, removeCMMotion=False, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2866,7 +2870,7 @@ class AlanineDipeptideVacuum(TestSystem):
         crd_filename = get_data_filename("data/alanine-dipeptide-gbsa/alanine-dipeptide.crd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, removeCMMotion=removeCMMotion, hydrogenMass=hydrogenMass)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -2888,6 +2892,9 @@ class AlanineDipeptideImplicit(TestSystem):
     Parameters
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
+        Type of constraints to use.
+    removeCMMotion : bool, optional, default=False
+        If True, will remove center of mass motion periodically.
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -2898,9 +2905,10 @@ class AlanineDipeptideImplicit(TestSystem):
     Create alanine dipeptide with constraints on bonds to hydrogen
     >>> alanine = AlanineDipeptideImplicit()
     >>> (system, positions) = alanine.system, alanine.positions
+
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, constraints=app.HBonds, removeCMMotion=False, hydrogenMass=None, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2909,7 +2917,7 @@ class AlanineDipeptideImplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, removeCMMotion=removeCMMotion, hydrogenMass=hydrogenMass)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -2940,6 +2948,8 @@ class AlanineDipeptideExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
+    removeCMMotion : bool, optional, default=False
+        If True, will remove center of mass motion periodically.
     switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
@@ -2951,9 +2961,10 @@ class AlanineDipeptideExplicit(TestSystem):
 
     >>> alanine = AlanineDipeptideExplicit()
     >>> (system, positions) = alanine.system, alanine.positions
+
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, removeCMMotion=False, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -2962,7 +2973,7 @@ class AlanineDipeptideExplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass, removeCMMotion=removeCMMotion)
 
         # Extract topology
         self.topology = prmtop.topology
