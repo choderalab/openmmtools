@@ -11,7 +11,8 @@ install:
   - export PATH=$HOME/miniconda/bin:$PATH
 
 script:
-  - conda config --add channels $ORGNAME
+  - conda config --add channels $ORGNAME # main channel
+  - conda config --add channels $ORGNAME/label/rc # release candidate
   - conda build devtools/conda-recipe
   - source activate _test
   - conda install --yes --quiet nose nose-timer

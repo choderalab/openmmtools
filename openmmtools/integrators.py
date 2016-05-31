@@ -49,7 +49,6 @@ from .constants import kB
 
 from openmmtools import respa
 
-
 class MTSIntegrator(respa.MTSIntegrator):
 
     """
