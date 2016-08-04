@@ -1,0 +1,23 @@
+remark goes here
+MASS
+
+BOND
+
+ANGLE
+
+DIHE
+
+IMPROPER
+cc-cd-cc-ha         1.1          180.0         2.0          Using default value
+cc-cd-cd-ha         1.1          180.0         2.0          Using default value
+cc-h4-cd-na         1.1          180.0         2.0          Using default value
+cd-h4-cc-na         1.1          180.0         2.0          Using default value
+cc-cc-cc-cd         1.1          180.0         2.0          Using default value
+cc-cd-cd-cd         1.1          180.0         2.0          Using default value
+c3-cd-na-cd         1.1          180.0         2.0          Using default value
+c3-cc-na-cc         1.1          180.0         2.0          Using default value
+
+NONBON
+
+
+
