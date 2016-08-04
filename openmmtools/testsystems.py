@@ -650,6 +650,10 @@ class HarmonicOscillator(TestSystem):
         # Set the positions.
         positions = unit.Quantity(np.zeros([1, 3], np.float32), unit.angstroms)
 
+        # Enlarge periodic box vectors, just in case
+        edge = 1000 * unit.nanometers
+        system.setDefaultPeriodicBoxVectors([edge,0,0], [0,edge,0], [0,0,edge])
+
         # Add a restrining potential centered at the origin.
         energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
         energy_expression += 'K = testsystems_HarmonicOscillator_K;'
@@ -3067,6 +3071,157 @@ class TolueneImplicit(TestSystem):
         # Read positions.
         inpcrd = app.AmberInpcrdFile(inpcrd_filename)
         positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
+
+#=============================================================================================
+# Host-guest in vacuum
+#=============================================================================================
+
+class HostGuestVacuum(TestSystem):
+
+    """CB7:B2 host-guest system in vacuum.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+
+    Examples
+    --------
+
+    Create host:guest system with constraints on bonds to hydrogen
+    >>> testsystem = HostGuestVacuum()
+    >>> (system, positions) = testsystem.system, testsystem.positions
+    """
+
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/cb7-b2/complex-vacuum.prmtop")
+        crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
+
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(crd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
+
+#=============================================================================================
+# Host guest system in implicit solvent.
+#=============================================================================================
+
+class HostGuestImplicit(TestSystem):
+
+    """CB7:B2 host-guest system implicit solvent.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+
+    Examples
+    --------
+
+    Create host-guest system with constraints on bonds to hydrogen
+    >>> testsystem = HostGuestImplicit()
+    >>> (system, positions) = testsystem.system, testsystem.positions
+    """
+
+    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/cb7-b2/complex-vacuum.prmtop")
+        crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
+
+        # Initialize system.
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(crd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        self.system, self.positions = system, positions
+
+#=============================================================================================
+# Host-guest system in explicit solvent
+#=============================================================================================
+
+class HostGuestExplicit(TestSystem):
+
+    """CB7:B2 host-guest system in TIP3P explicit solvent.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    rigid_water : bool, optional, default=True
+    nonbondedCutoff : Quantity, optional, default=9.0 * unit.angstroms
+    use_dispersion_correction : bool, optional, default=True
+        If True, the long-range disperson correction will be used.
+    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+       Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+        switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).
+    ewaldErrorTolerance : float, optional, default=5E-4
+           The Ewald or PME tolerance.
+
+    Examples
+    --------
+
+    >>> testsystem = HostGuestExplicit()
+    >>> (system, positions) = testsystem.system, testsystem.positions
+    """
+
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0*unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=1.5*angstroms, ewaldErrorTolerance=1.0e-6, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        prmtop_filename = get_data_filename("data/cb7-b2/complex-explicit.prmtop")
+        crd_filename = get_data_filename("data/cb7-b2/complex-explicit.inpcrd")
+
+        # Initialize system.
+        prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = prmtop.topology
+
+        # Set dispersion correction use.
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
+
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(crd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
+
+        # Set box vectors.
+        box_vectors = inpcrd.getBoxVectors(asNumpy=True)
+        system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
         self.system, self.positions = system, positions
 

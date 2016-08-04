@@ -17,8 +17,8 @@ requirements:
     - scipy
     - nose
     - setuptools
-    - openmm-dev
-    - parmed-dev
+    - openmm
+    - parmed
 
   run:
     - python
@@ -28,8 +28,8 @@ requirements:
     - nose
     - setuptools
     - six
-    - openmm-dev
-    - parmed-dev
+    - openmm
+    - parmed
 
 
 test:

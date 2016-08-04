@@ -1,0 +1,36 @@
+# Create a benzene-toluene system.
+
+source leaprc.ff12SB
+
+# Load GAFF parameters.
+source leaprc.gaff
+
+# Create receptor.
+receptor = loadmol2 CB7.gaff.mol2
+receptor_params = loadamberparams CB7.frcmod
+
+# Create ligand.
+ligand = loadmol2 viologen.gaff.mol2
+#translate ligand { 1.5 1.5 0 }
+#translate ligand { 0.01 0.01 0 }
+ligand_params = loadamberparams viologen.frcmod
+
+# Create complex
+complex = combine { receptor ligand }
+
+# Write vacuum phase.
+saveamberparm ligand ligand.prmtop ligand.inpcrd
+savepdb ligand ligand.pdb
+saveamberparm receptor receptor.prmtop receptor.inpcrd
+savepdb receptor receptor.pdb
+saveamberparm complex complex-vacuum.prmtop complex-vacuum.inpcrd
+savepdb complex complex-vacuum.pdb
+
+# Solvante complex.
+solvatebox complex TIP3PBOX 10.0 iso
+
+# Write complex phase.
+saveamberparm complex complex-explicit.prmtop complex-explicit.inpcrd
+savepdb complex complex-explicit.pdb
+
+quit
