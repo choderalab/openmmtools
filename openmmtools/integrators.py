@@ -523,7 +523,6 @@ class HMCIntegrator(mm.CustomIntegrator):
         """The acceptance rate: n_accept  / n_trials."""
         return self.n_accept / float(self.n_trials)
 
-
 class GHMCIntegrator(mm.CustomIntegrator):
 
     """
@@ -537,11 +536,11 @@ class GHMCIntegrator(mm.CustomIntegrator):
 
         Parameters
         ----------
-        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+        temperature : simtk.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
            The temperature.
-        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+        collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
            The collision rate.
-        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+        timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            The integration timestep.
 
         Notes
@@ -554,7 +553,8 @@ class GHMCIntegrator(mm.CustomIntegrator):
 
         TODO
         ----
-        Move initialization of 'sigma' to setting the per-particle variables.
+        * Move initialization of 'sigma' to setting the per-particle variables.
+        * Generalize to use MTS inner integrator.
 
         Examples
         --------
@@ -585,7 +585,7 @@ class GHMCIntegrator(mm.CustomIntegrator):
         #
         self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
-        self.addPerDofVariable("sigma", 0)
+        self.addPerDofVariable("sigma", 0) # velocity standard deviation
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("vold", 0)  # old velocities
         self.addPerDofVariable("xold", 0)  # old positions
@@ -598,23 +598,13 @@ class GHMCIntegrator(mm.CustomIntegrator):
 
         #
         # Pre-computation.
-        # This only needs to be done once, but it needs to be done for each degree of freedom.
-        # Could move this to initialization?
+        # This only needs to be done once.
+        # TODO: Change this to setPerDofVariableByName("sigma", unit.sqrt(kT / mass).value_in_unit_system(unit.md_unit_system))
         #
         self.addComputePerDof("sigma", "sqrt(kT/m)")
 
         #
-        # Allow context updating here.
-        #
-        self.addUpdateContextState()
-
-        #
-        # Constrain positions.
-        #
-        self.addConstrainPositions()
-
-        #
-        # Velocity perturbation.
+        # Velocity randomization
         #
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
@@ -622,21 +612,30 @@ class GHMCIntegrator(mm.CustomIntegrator):
         #
         # Metropolized symplectic step.
         #
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+
+        # Compute initial total energy
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Eold", "ke + energy")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
+        # Velocity Verlet step
         self.addComputePerDof("v", "v + 0.5*dt*f/m")
         self.addComputePerDof("x", "x + v*dt")
         self.addComputePerDof("x1", "x")
         self.addConstrainPositions()
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
+        # Compute final total energy
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Enew", "ke + energy")
+        # Accept/reject, ensuring rejection if energy is NaN
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
-        self.addComputePerDof("x", "x*accept + xold*(1-accept)")
-        self.addComputePerDof("v", "v*accept - vold*(1-accept)")
+        self.beginIfBlock("accept != 1")
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "-vold")
+        self.endBlock()
 
         #
         # Velocity randomization
@@ -649,7 +648,6 @@ class GHMCIntegrator(mm.CustomIntegrator):
         #
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
-
 
 class VVVRIntegrator(mm.CustomIntegrator):
 
