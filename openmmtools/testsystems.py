@@ -3080,7 +3080,7 @@ class TolueneImplicit(TestSystem):
 
 class HostGuestVacuum(TestSystem):
 
-    """CB7:viologen host-guest system in vacuum.
+    """CB7:B2 host-guest system in vacuum.
 
     Parameters
     ----------
@@ -3101,8 +3101,8 @@ class HostGuestVacuum(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        prmtop_filename = get_data_filename("data/cb7-viologen/leap/complex-vacuum.prmtop")
-        crd_filename = get_data_filename("data/cb7-viologen/leap/complex-vacuum.inpcrd")
+        prmtop_filename = get_data_filename("data/cb7-b2/complex-vacuum.prmtop")
+        crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
@@ -3122,7 +3122,7 @@ class HostGuestVacuum(TestSystem):
 
 class HostGuestImplicit(TestSystem):
 
-    """CB7:viologen host-guest system implicit solvent.
+    """CB7:B2 host-guest system implicit solvent.
 
     Parameters
     ----------
@@ -3143,8 +3143,8 @@ class HostGuestImplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        prmtop_filename = get_data_filename("data/cb7-viologen/leap/complex-vacuum.prmtop")
-        crd_filename = get_data_filename("data/cb7-viologen/leap/complex-vacuum.inpcrd")
+        prmtop_filename = get_data_filename("data/cb7-b2/complex-vacuum.prmtop")
+        crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
@@ -3165,7 +3165,7 @@ class HostGuestImplicit(TestSystem):
 
 class HostGuestExplicit(TestSystem):
 
-    """CB7:viologen host-guest system in TIP3P explicit solvent..
+    """CB7:B2 host-guest system in TIP3P explicit solvent..
 
     Parameters
     ----------
@@ -3196,8 +3196,8 @@ class HostGuestExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        prmtop_filename = get_data_filename("data/cb7-viologen/leap/complex-explicit.prmtop")
-        crd_filename = get_data_filename("data/cb7-viologen/leap/complex-explicit.inpcrd")
+        prmtop_filename = get_data_filename("data/cb7-b2/complex-explicit.prmtop")
+        crd_filename = get_data_filename("data/cb7-b2/complex-explicit.inpcrd")
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
