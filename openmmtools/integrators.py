@@ -584,7 +584,7 @@ class GHMCIntegrator(mm.CustomIntegrator):
         # Integrator initialization.
         #
         self.addGlobalVariable("kT", kT)  # thermal energy
-        self.addGlobalVariable("b", np.exp(-gamma * timestep))  # velocity mixing parameter
+        self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
         self.addPerDofVariable("sigma", 0) # velocity standard deviation
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("vold", 0)  # old velocities
