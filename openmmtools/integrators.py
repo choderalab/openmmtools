@@ -523,24 +523,24 @@ class HMCIntegrator(mm.CustomIntegrator):
         """The acceptance rate: n_accept  / n_trials."""
         return self.n_accept / float(self.n_trials)
 
-class GHMCIntegrator(openmm.CustomIntegrator):
+class GHMCIntegrator(mm.CustomIntegrator):
 
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.
 
     """
 
-    def __init__(self, temperature=298.0 * unit.kelvin, collision_rate=91.0 / unit.picoseconds, timestep=1.0 * unit.femtoseconds):
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
         """
         Create a generalized hybrid Monte Carlo (GHMC) integrator.
 
         Parameters
         ----------
-        temperature : np.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
+        temperature : simtk.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
            The temperature.
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
+        collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
            The collision rate.
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
+        timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            The integration timestep.
 
         Notes
@@ -561,9 +561,9 @@ class GHMCIntegrator(openmm.CustomIntegrator):
 
         Create a GHMC integrator.
 
-        >>> temperature = 298.0 * unit.kelvin
-        >>> collision_rate = 91.0 / unit.picoseconds
-        >>> timestep = 1.0 * unit.femtoseconds
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = GHMCIntegrator(temperature, collision_rate, timestep)
 
         References
