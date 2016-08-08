@@ -123,7 +123,7 @@ def test_vvvr_shadow_work_accumulation():
    system, topology = testsystem.system, testsystem.topology
    temperature = 298.0 * unit.kelvin
    integrator = integrators.VVVRIntegrator(temperature, monitor_work=True)
-   context = mm.Context(system, integrator)
+   context = openmm.Context(system, integrator)
    context.setPositions(testsystem.positions)
    context.setVelocitiesToTemperature(temperature)
    assert(integrator.getGlobalVariableByName('shadow_work') == 0)
@@ -132,7 +132,7 @@ def test_vvvr_shadow_work_accumulation():
    
    # test default (`monitor_work=False`, `monitor_heat=False`) --> absence of a global `shadow_work`
    integrator = integrators.VVVRIntegrator(temperature)
-   context = mm.Context(system, integrator)
+   context = openmm.Context(system, integrator)
    context.setPositions(testsystem.positions)
    context.setVelocitiesToTemperature(temperature)
    integrator.step(25)
