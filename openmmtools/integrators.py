@@ -670,22 +670,21 @@ class VVVRIntegrator(mm.CustomIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            The integration timestep.
         monitor_heat : boolean, default: False
-           Compute the heat exchanged with the bath in each step, in the global `d_heat`.
+           Compute the heat exchanged with the bath in each step, in the global `heat`.
         monitor_work : boolean, default: False
-           Accumulate the pseudowork of each step in the global `pseudowork`.
+           Accumulate the shadow work of each step in the global `shadow_work`.
 
         Notes
         -----
         This integrator is equivalent to a Langevin integrator in the velocity Verlet discretization with a
         timestep correction to ensure that the field-free diffusion constant is timestep invariant.
 
-        The global 'pseudowork' keeps track of the pseudowork accumulated during integration, and can be
+        The global 'shadow_work' keeps track of the shadow_work accumulated during integration, and can be
         used to correct the sampled statistics or in a Metropolization scheme.
 
         TODO
         ----
         Move initialization of 'sigma' to setting the per-particle variables.
-        We can ditch pseudowork and instead use total energy difference - heat.
 
         References
         ----------
@@ -724,14 +723,14 @@ class VVVRIntegrator(mm.CustomIntegrator):
             monitor_heat = True
         
         if monitor_heat:
-            self.addGlobalVariable("d_heat", 0)
+            self.addGlobalVariable("heat", 0)
             self.addGlobalVariable("kinetic_energy_0", 0)
             self.addGlobalVariable("kinetic_energy_1", 0)
             self.addGlobalVariable("kinetic_energy_2", 0)
             self.addGlobalVariable("kinetic_energy_3", 0)
             self.addGlobalVariable("old_energy", 0)
             self.addGlobalVariable("new_energy", 0)
-            self.addGlobalVariable("pseudowork", 0)
+            self.addGlobalVariable("shadow_work", 0)
 
         #
         # Allow context updating here.
@@ -782,9 +781,9 @@ class VVVRIntegrator(mm.CustomIntegrator):
             self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
         
         if monitor_heat:
-            self.addComputeGlobal("d_heat", "(kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
+            self.addComputeGlobal("heat", "(kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
         
         if monitor_work:
-            # accumulate pseudowork, where W_step = ∆E_step - Q_step
+            # accumulate shadow_work, where W_step = ∆E_step - Q_step
             self.addComputeGlobal("new_energy", "kinetic_energy_3 + energy")
-            self.addComputeGlobal("pseudowork", "pseudowork + (new_energy - old_energy) - d_heat")
+            self.addComputeGlobal("shadow_work", "shadow_work + (new_energy - old_energy) - heat")
