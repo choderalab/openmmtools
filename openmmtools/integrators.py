@@ -770,7 +770,7 @@ class VVVRIntegrator(mm.CustomIntegrator):
             self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0)")
         
         if monitor_work:
-            self.addComputeGlobal("energy_before_sympletic", "energy + kinetic_energy_1")
+            self.addComputeGlobal("energy_before_symplectic", "energy + kinetic_energy_1")
         
         #
         # Symplectic steps
