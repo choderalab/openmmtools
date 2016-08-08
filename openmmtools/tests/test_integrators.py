@@ -131,7 +131,7 @@ def test_vvvr_shadow_work_accumulation():
    assert(integrator.getGlobalVariableByName('shadow_work') != 0)
    
    # test default (`monitor_work=False`, `monitor_heat=False`) --> absence of a global `shadow_work`
-   integrator = VVVRIntegrator(temperature)
+   integrator = integrators.VVVRIntegrator(temperature)
    context = mm.Context(system, integrator)
    context.setPositions(testsystem.positions)
    context.setVelocitiesToTemperature(temperature)
