@@ -656,7 +656,8 @@ class VVVRIntegrator(mm.CustomIntegrator):
 
     """
 
-    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds, monitor_heat = False, monitor_work = False):
         """
         Create a velocity verlet with velocity randomization (VVVR) integrator.
 
@@ -668,6 +669,10 @@ class VVVRIntegrator(mm.CustomIntegrator):
            The collision rate.
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            The integration timestep.
+        monitor_heat : boolean, default: False
+           Compute the heat exchanged with the bath in each step, in the global `d_heat`.
+        monitor_work : boolean, default: False
+           Accumulate the pseudowork of each step in the global `pseudowork`.
 
         Notes
         -----
@@ -699,7 +704,6 @@ class VVVRIntegrator(mm.CustomIntegrator):
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
 
         """
-
         # Compute constants.
         kT = kB * temperature
         gamma = collision_rate
@@ -716,14 +720,18 @@ class VVVRIntegrator(mm.CustomIntegrator):
         self.addPerDofVariable("x1", 0)  # position before application of constraints
         
         # book-keeping variables
-        self.addGlobalVariable("d_heat", 0)
-        self.addGlobalVariable("kinetic_energy_0", 0)
-        self.addGlobalVariable("kinetic_energy_1", 0)
-        self.addGlobalVariable("kinetic_energy_2", 0)
-        self.addGlobalVariable("kinetic_energy_3", 0)
-        self.addGlobalVariable("old_energy", 0)
-        self.addGlobalVariable("new_energy", 0)
-        self.addGlobalVariable("pseudowork", 0)
+        if monitor_work:
+            monitor_heat = True
+        
+        if monitor_heat:
+            self.addGlobalVariable("d_heat", 0)
+            self.addGlobalVariable("kinetic_energy_0", 0)
+            self.addGlobalVariable("kinetic_energy_1", 0)
+            self.addGlobalVariable("kinetic_energy_2", 0)
+            self.addGlobalVariable("kinetic_energy_3", 0)
+            self.addGlobalVariable("old_energy", 0)
+            self.addGlobalVariable("new_energy", 0)
+            self.addGlobalVariable("pseudowork", 0)
 
         #
         # Allow context updating here.
@@ -740,13 +748,16 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         # Velocity perturbation.
         #
-        self.addComputeSum("kinetic_energy_0", "0.5 * m * v * v")
-        self.addComputeGlobal("old_energy", "energy + kinetic_energy_0")
+        if monitor_heat:
+            self.addComputeSum("kinetic_energy_0", "0.5 * m * v * v")
+        if monitor_work:
+            self.addComputeGlobal("old_energy", "energy + kinetic_energy_0")
         
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
         
-        self.addComputeSum("kinetic_energy_1", "0.5 * m * v * v")
+        if monitor_heat:
+            self.addComputeSum("kinetic_energy_1", "0.5 * m * v * v")
 
         #
         # Metropolized symplectic step.
@@ -761,15 +772,19 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         # Velocity randomization
         #
-        self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
+        if monitor_heat:
+            self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
         
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
         
-        self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
+        if monitor_heat:
+            self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
         
-        self.addComputeGlobal("new_energy", "kinetic_energy_3 + energy")
-        self.addComputeGlobal("d_heat", "(kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
+        if monitor_heat:
+            self.addComputeGlobal("d_heat", "(kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
         
-        # accumulate pseudowork, where W_step = ∆E_step - Q_step
-        self.addComputeGlobal("pseudowork", "pseudowork + (new_energy - old_energy) - d_heat")
+        if monitor_work:
+            # accumulate pseudowork, where W_step = ∆E_step - Q_step
+            self.addComputeGlobal("new_energy", "kinetic_energy_3 + energy")
+            self.addComputeGlobal("pseudowork", "pseudowork + (new_energy - old_energy) - d_heat")
