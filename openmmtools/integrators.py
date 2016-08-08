@@ -748,3 +748,85 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
+
+class LangevinSplittingIntegrator(mm.CustomIntegrator):
+    '''
+    Integrates Langevin dynamics with a prescribed splitting.
+
+    One way to divide the Langevin system is into three parts which can each be solved "exactly:"
+        - A: Linear "drift" -- Deterministic update of positions
+        - B: Linear "kick" -- Deterministic update of momenta
+        - O: Ornstein-Uhlenbeck -- Stochastic update of momenta
+
+    We can then construct integrators by solving each part for a certain timestep in sequence.
+
+    Examples
+    --------
+    >>> ABO_integrator = LangevinSplittingIntegrator("ABO")
+    >>> BAOAB_integrator = LangevinSplittingIntegrator("BAOAB")
+    >>> ABOBA_integrator = LangevinSplittingIntegrator("ABOBA")
+
+    TODO
+    -----
+    - Efficiency: For simplicity, this makes a new force call in each 'B' step.
+        Sometimes this isn't necessary.
+        We can save a force call whenver the positions haven't been updated since the last force call.
+    - Expressiveness: Currently doesn't allow the user to split up the 'O' step.
+    - Constraints: Currently doesn't apply position or velocity constraints
+    - Bookkeeping: Can accumulate shadow work and heat in each step
+
+    References
+    ----------
+    Benedict Leimkuhler, Charles Matthews, 2012
+    Rational Construction of Stochastic Numerical Methods for Molecular Sampling
+    https://arxiv.org/abs/1203.5428
+    '''
+
+    def __init__(self, splitting='BAOAB', temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
+        '''
+        Parameters
+        ----------
+        splitting : string
+            Sequence of A, B, O steps executed each timestep
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+           Fictitious "bath" temperature
+        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+           Collision rate
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+           Integration timestep
+        '''
+        # Compute constants
+        kT = kB * temperature
+        gamma = collision_rate
+
+        # make sure `splitting` string is uppercase, for convenience
+        splitting = splitting.upper()
+
+        # assert it contains at least one each of A,B,O, and no other characters
+        assert (set(splitting) == set('ABO'))
+
+        # count how many times each step appears, so we know how big of a timestep to use
+        n_A = sum([letter == 'A' for letter in splitting])
+        n_B = sum([letter == 'B' for letter in splitting])
+        n_O = sum([letter == 'O' for letter in splitting])
+
+        # for now, don't split up the O step -- will relax this later!
+        assert (n_O == 1)
+
+        # get strings to pass to self.addComputePerDof(variable, expression)
+        update_equations = dict()
+        update_equations['A'] = ("x", "x + (dt / {n_A}) * v".format(n_A=n_A))
+        update_equations['B'] = ("v", "v + (dt / {n_B}) * f".format(n_B=n_B))
+        update_equations['O'] = ("v", "b * v + sqrt( kT * (1 - b*b)) * gaussian / sqrt(m)")
+
+        # Create a new custom integrator
+        super(LangevinSplittingIntegrator, self).__init__(timestep)
+
+        # Initialize
+        self.addGlobalVariable("kT", kT)  # thermal energy
+        self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
+
+        # Integrate
+        for step in splitting:
+            self.addComputePerDof(*update_equations[step])
