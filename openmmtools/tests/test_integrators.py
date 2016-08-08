@@ -119,7 +119,7 @@ def test_vvvr_shadow_work_accumulation():
    By default (`monitor_work=False`), assert that there is no global name for `shadow_work`. '''
    
    # test `monitor_work=True` --> accumulation of a nonzero value in global `shadow_work`
-   testsystem = openmmtools.testsystems.HarmonicOscillator()
+   testsystem = testsystems.HarmonicOscillator()
    system, topology = testsystem.system, testsystem.topology
    temperature = 298.0 * unit.kelvin
    integrator = VVVRIntegrator(temperature, monitor_work=True)
