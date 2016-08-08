@@ -714,6 +714,16 @@ class VVVRIntegrator(mm.CustomIntegrator):
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addPerDofVariable("x1", 0)  # position before application of constraints
+        
+        # book-keeping variables
+        self.addGlobalVariable("d_heat", 0)
+        self.addGlobalVariable("kinetic_energy_0", 0)
+        self.addGlobalVariable("kinetic_energy_1", 0)
+        self.addGlobalVariable("kinetic_energy_2", 0)
+        self.addGlobalVariable("kinetic_energy_3", 0)
+        self.addGlobalVariable("old_energy", 0)
+        self.addGlobalVariable("new_energy", 0)
+        self.addGlobalVariable("pseudowork", 0)
 
         #
         # Allow context updating here.
@@ -730,8 +740,13 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         # Velocity perturbation.
         #
+        self.addComputeSum("kinetic_energy_0", "0.5 * m * v * v")
+        self.addComputeGlobal("old_energy", "energy + kinetic_energy_0")
+        
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
+        
+        self.addComputeSum("kinetic_energy_1", "0.5 * m * v * v")
 
         #
         # Metropolized symplectic step.
@@ -746,5 +761,15 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         # Velocity randomization
         #
+        self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
+        
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
+        
+        self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
+        
+        self.addComputeGlobal("new_energy", "kinetic_energy_3 + energy")
+        self.addComputeGlobal("d_heat", "(kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
+        
+        # accumulate pseudowork, where W_step = ∆E_step - Q_step
+        self.addComputeGlobal("pseudowork", "pseudowork + (new_energy - old_energy) - d_heat")
