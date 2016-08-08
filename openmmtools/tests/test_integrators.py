@@ -122,7 +122,7 @@ def test_vvvr_shadow_work_accumulation():
    testsystem = testsystems.HarmonicOscillator()
    system, topology = testsystem.system, testsystem.topology
    temperature = 298.0 * unit.kelvin
-   integrator = VVVRIntegrator(temperature, monitor_work=True)
+   integrator = integrators.VVVRIntegrator(temperature, monitor_work=True)
    context = mm.Context(system, integrator)
    context.setPositions(testsystem.positions)
    context.setVelocitiesToTemperature(temperature)
