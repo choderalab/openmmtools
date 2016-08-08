@@ -670,9 +670,9 @@ class VVVRIntegrator(mm.CustomIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            The integration timestep.
         monitor_heat : boolean, default: False
-           Compute the heat exchanged with the bath in each step, in the global `heat`.
+           Accumulate the heat exchanged with the bath in each step, in the global `heat`.
         monitor_work : boolean, default: False
-           Accumulate the shadow work of each step in the global `shadow_work`.
+           Accumulate the shadow work of each step, in the global `shadow_work`.
 
         Notes
         -----
@@ -718,18 +718,27 @@ class VVVRIntegrator(mm.CustomIntegrator):
         self.addPerDofVariable("sigma", 0)
         self.addPerDofVariable("x1", 0)  # position before application of constraints
         
-        # book-keeping variables
-        if monitor_work:
-            monitor_heat = True
-        
-        if monitor_heat:
+        # bookkeeping variables        
+        if monitor_heat and monitor_work:
             self.addGlobalVariable("heat", 0)
             self.addGlobalVariable("kinetic_energy_0", 0)
             self.addGlobalVariable("kinetic_energy_1", 0)
             self.addGlobalVariable("kinetic_energy_2", 0)
             self.addGlobalVariable("kinetic_energy_3", 0)
-            self.addGlobalVariable("old_energy", 0)
-            self.addGlobalVariable("new_energy", 0)
+            self.addGlobalVariable("energy_before_symplectic", 0)
+            self.addGlobalVariable("energy_after_symplectic", 0)
+            self.addGlobalVariable("shadow_work", 0)
+        elif monitor_heat:
+            self.addGlobalVariable("heat", 0)
+            self.addGlobalVariable("kinetic_energy_0", 0)
+            self.addGlobalVariable("kinetic_energy_1", 0)
+            self.addGlobalVariable("kinetic_energy_2", 0)
+            self.addGlobalVariable("kinetic_energy_3", 0)
+        elif monitor_work:
+            self.addGlobalVariable("kinetic_energy_1", 0)
+            self.addGlobalVariable("kinetic_energy_2", 0)
+            self.addGlobalVariable("energy_before_symplectic", 0)
+            self.addGlobalVariable("energy_after_symplectic", 0)
             self.addGlobalVariable("shadow_work", 0)
 
         #
@@ -747,19 +756,24 @@ class VVVRIntegrator(mm.CustomIntegrator):
         #
         # Velocity perturbation.
         #
+
         if monitor_heat:
             self.addComputeSum("kinetic_energy_0", "0.5 * m * v * v")
-        if monitor_work:
-            self.addComputeGlobal("old_energy", "energy + kinetic_energy_0")
         
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
         
-        if monitor_heat:
+        if monitor_heat or monitor_work:
             self.addComputeSum("kinetic_energy_1", "0.5 * m * v * v")
-
+        
+        if monitor_heat:
+            self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0)")
+        
+        if monitor_work:
+            self.addComputeGlobal("energy_before_sympletic", "energy + kinetic_energy_1")
+        
         #
-        # Metropolized symplectic step.
+        # Symplectic steps
         #
         self.addComputePerDof("v", "v + 0.5*dt*f/m")
         self.addComputePerDof("x", "x + v*dt")
@@ -767,23 +781,21 @@ class VVVRIntegrator(mm.CustomIntegrator):
         self.addConstrainPositions()
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
-
+        
+        if monitor_heat or monitor_work:
+            self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
+        
+        if monitor_work:
+            self.addComputeGlobal("energy_after_symplectic", "energy + kinetic_energy_2")
+            self.addComputeGlobal("shadow_work", "shadow_work + (energy_after_symplectic - energy_before_symplectic)")
+        
         #
         # Velocity randomization
         #
-        if monitor_heat:
-            self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
         
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
         
         if monitor_heat:
             self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
-        
-        if monitor_heat:
-            self.addComputeGlobal("heat", "(kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
-        
-        if monitor_work:
-            # accumulate shadow_work, where W_step = ∆E_step - Q_step
-            self.addComputeGlobal("new_energy", "kinetic_energy_3 + energy")
-            self.addComputeGlobal("shadow_work", "shadow_work + (new_energy - old_energy) - heat")
+            self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
