@@ -768,12 +768,7 @@ class LangevinSplittingIntegrator(mm.CustomIntegrator):
 
     TODO
     -----
-    - Efficiency: For simplicity, this makes a new force call in each 'B' step.
-        Sometimes this isn't necessary.
-        We can save a force call whenver the positions haven't been updated since the last force call.
-    - Expressiveness: Currently doesn't allow the user to split up the 'O' step.
-    - Constraints: Currently doesn't apply position or velocity constraints
-    - Bookkeeping: Can accumulate shadow work and heat in each step
+    - Expressiveness: Currently doesn't allow the user to split up the 'O' step
 
     References
     ----------
@@ -783,7 +778,8 @@ class LangevinSplittingIntegrator(mm.CustomIntegrator):
     '''
 
     def __init__(self, splitting='BAOAB', temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
+                 collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds,
+                 monitor_work=False, monitor_heat=False, position_constraints=True, velocity_constraints=True):
         '''
         Parameters
         ----------
@@ -795,38 +791,101 @@ class LangevinSplittingIntegrator(mm.CustomIntegrator):
            Collision rate
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
+        monitor_heat : boolean, default: False
+           Accumulate the heat exchanged with the bath in each step, in the global `heat`
+        monitor_work : boolean, default: False
+           Accumulate the shadow work of each step, in the global `shadow_work`
+        position_constraints : boolean, default: True
+           Apply position constraints after every 'A' step
+        velocity_constraints : boolean, default: True
+           Apply velocity constraints after every 'O' or 'B' step
         '''
         # Compute constants
         kT = kB * temperature
         gamma = collision_rate
 
-        # make sure `splitting` string is uppercase, for convenience
+        # Make sure `splitting` string is uppercase, for convenience
         splitting = splitting.upper()
 
-        # assert it contains at least one each of A,B,O, and no other characters
+        # Assert it contains at least one each of A,B,O, and no other characters
         assert (set(splitting) == set('ABO'))
 
-        # count how many times each step appears, so we know how big of a timestep to use
+        # Count how many times each step appears, so we know how big each A/B/O substep will be
         n_A = sum([letter == 'A' for letter in splitting])
         n_B = sum([letter == 'B' for letter in splitting])
         n_O = sum([letter == 'O' for letter in splitting])
 
-        # for now, don't split up the O step -- will relax this later!
+        # For now, don't split up the O step -- will relax this later!
         assert (n_O == 1)
 
-        # get strings to pass to self.addComputePerDof(variable, expression)
+        # get strings to pass to self.addComputePerDof(variable, expression) during each A/B/O step
         update_equations = dict()
         update_equations['A'] = ("x", "x + (dt / {n_A}) * v".format(n_A=n_A))
         update_equations['B'] = ("v", "v + (dt / {n_B}) * f".format(n_B=n_B))
         update_equations['O'] = ("v", "b * v + sqrt( kT * (1 - b*b)) * gaussian / sqrt(m)")
 
-        # Create a new custom integrator
+        # Define bookkeeping and constraint-application functions
+        if monitor_work or monitor_heat:
+            kinetic_energy = "0.5 * m * v * v"
+
+        def compute_pre_step_energies():
+            if monitor_work or monitor_heat:
+                if step in 'OB':
+                    self.addComputeSum('old_ke', kinetic_energy)
+                if monitor_work and step == 'A':
+                    self.addComputeGlobal('old_pe', 'energy')
+
+        def apply_constraints():
+            if position_constraints and step == 'A':
+                self.addConstrainPositions()
+            if velocity_constraints and step in 'OB':
+                self.addConstrainVelocities()
+
+        def compute_post_step_energies():
+            if step == 'O' and (monitor_work or monitor_heat):
+                self.addComputeSum('new_ke', kinetic_energy)
+            if monitor_work:
+                if step == 'A':
+                    self.addComputeGlobal('new_pe', 'energy')
+
+        def accumulate_heat_or_work():
+            if monitor_work:
+                if step == 'A':
+                    self.addComputeGlobal('shadow_work', 'shadow_work + (new_pe - old_pe)')
+                if step == 'B':
+                    self.addComputeGlobal('shadow_work', 'shadow_work + (new_ke - old_ke)')
+
+            if monitor_heat:
+                if step == 'O':
+                    self.addComputeGlobal('heat', 'heat + (new_ke - old_ke)')
+
+        # Create a new CustomIntegrator
         super(LangevinSplittingIntegrator, self).__init__(timestep)
 
         # Initialize
         self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
 
-        # Integrate
+        # Add bookkeeping variables
+        if monitor_work or monitor_heat:
+            self.addGlobalVariable("old_ke", 0)
+            self.addGlobalVariable("new_ke", 0)
+
+            if monitor_work:
+                self.addGlobalVariable("shadow_work", 0)
+                self.addGlobalVariable("old_pe", 0)
+                self.addGlobalVariable("new_pe", 0)
+
+            if monitor_heat:
+                self.addGlobalVariable("heat", 0)
+
+        # Integrate, applying constraints or bookkeeping as necessary
         for step in splitting:
+            compute_pre_step_energies()
+
             self.addComputePerDof(*update_equations[step])
+            apply_constraints()
+
+            compute_post_step_energies()
+
+            accumulate_heat_or_work()
