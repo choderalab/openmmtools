@@ -145,6 +145,10 @@ class AlchemicalState(dict):
         self['lambda_bonds'] = 1.0
 
         for key in kwargs.keys():
+            # Raise an exception if we don't know how to handle a specified parameter.
+            if key not in self:
+                raise Exception("AlchemicalState parameter '%s' unknown" % key)
+
             self[key] = kwargs[key]
 
 #=============================================================================================
