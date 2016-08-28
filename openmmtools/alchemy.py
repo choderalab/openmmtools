@@ -16,13 +16,16 @@ usable for the calculation of free energy differences of hydration or ligand bin
 
 TODO
 
+* Remove default protocol class methods, since these are no longer needed.
+* Generalize treatment of nonbonded sterics/electrostatics intra-alchemical forces to support arbitrary mixing rules.
+  Can we eliminate decoupling to something simpler?
+* Add support for other GBSA models.
 * Add functions for the automatic optimization of alchemical states?
 * Can we store serialized form of Force objects so that we can save time in reconstituting
   Force objects when we make copies?  We can even manipulate the XML representation directly.
 * Allow protocols to automatically be resized to arbitrary number of states, to
   allow number of states to be enlarged to be an integral multiple of number of GPUs.
-* Add GBVI support to AlchemicalFactory.
-* Test AMOEBA support.
+* Finish AMOEBA support.
 * Can alchemically-modified System objects share unmodified Force objects to avoid overhead
   of duplicating Forces that are not modified?
 
@@ -344,7 +347,10 @@ class AbsoluteAlchemicalFactory(object):
             self.alchemical_torsions = self._buildAlchemicalTorsionList(self.ligand_atomset)
 
         # Create an alchemically-modified system to cache
-        self.alchemically_modified_system = self._createAlchemicallyModifiedSystem(self.reference_system)
+        [self.alchemically_modified_system, self.force_labels] = self._createAlchemicallyModifiedSystem(self.reference_system)
+
+        # Build a list of all alchemical parameters available in this system.
+        self.alchemical_parameters = [ parameter for parameter in context.getState(getParameters=True).getParameters().keys() if parameter.startswith('lambda_') ]
 
         # Store information for use in aiding debugging of alchemical factory
         self.test_positions = test_positions
@@ -365,6 +371,20 @@ class AbsoluteAlchemicalFactory(object):
             write_file(system_filename, openmm.XmlSerializer.serialize(self.alchemically_modified_system))
 
         return
+
+    def NoninteractingAlchemicalState(self):
+        """
+        Return a noninteracting alchemical state where all alchemical parmeters are set to zero.
+        """
+        kwargs = { parameter : 0 for parameter in self.alchemical_parameters }
+        return AlchmemicalState(**kwargs)
+
+    def FullyInteractingAlchemicalState(self):
+        """
+        Return a noninteracting alchemical state where all alchemical parmeters are set to unity.
+        """
+        kwargs = { parameter : 1 for parameter in self.alchemical_parameters }
+        return AlchmemicalState(**kwargs)
 
     @classmethod
     def _tabulateBonds(cls, system):
@@ -707,7 +727,7 @@ class AbsoluteAlchemicalFactory(object):
 
         return alchemical_states
 
-    def _alchemicallyModifyPeriodicTorsionForce(self, system, reference_force):
+    def _alchemicallyModifyPeriodicTorsionForce(self, system, reference_force, force_labels):
         """
         Create alchemically-modified version of PeriodicTorsionForce.
 
@@ -717,6 +737,8 @@ class AbsoluteAlchemicalFactory(object):
             The new alchemically-modified System object being built.  This object will be modified.
         reference_force : simtk.openmm.PeriodicTorsionForce
             The reference copy of the PeriodicTorsionForce to be alchemically-modified.
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
 
         """
 
@@ -743,10 +765,13 @@ class AbsoluteAlchemicalFactory(object):
                 force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
 
         # Add newly-populated forces to system.
-        system.addForce(force)
-        system.addForce(custom_force)
+        force_index = system.addForce(force)
+        force_labels[force_index] = 'unmodified PeriodicTorsionForce'
 
-    def _alchemicallyModifyHarmonicAngleForce(self, system, reference_force):
+        force_index = system.addForce(custom_force)
+        force_labels[force_index] = 'alchemically modified PeriodicTorsionForce'
+
+    def _alchemicallyModifyHarmonicAngleForce(self, system, reference_force, force_labels):
         """
         Create alchemically-modified version of HarmonicAngleForce
 
@@ -756,6 +781,8 @@ class AbsoluteAlchemicalFactory(object):
             The new alchemically-modified System object being built.  This object will be modified.
         reference_force : simtk.openmm.HarmonicAngleForec
             The reference copy of the HarmonicAngleForce to be alchemically-modified.
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
 
         """
 
@@ -780,10 +807,13 @@ class AbsoluteAlchemicalFactory(object):
                 force.addAngle(particle1, particle2, particle3, theta0, K)
 
         # Add newly-populated forces to system.
-        system.addForce(force)
-        system.addForce(custom_force)
+        force_index = system.addForce(force)
+        force_labels[force_index] = 'unmodified HarmonicAngleForce'
 
-    def _alchemicallyModifyHarmonicBondForce(self, system, reference_force):
+        force_index = system.addForce(custom_force)
+        force_labels[force_index] = 'alchemically modified HarmonicAngleForce'
+
+    def _alchemicallyModifyHarmonicBondForce(self, system, reference_force, force_labels):
         """
         Create alchemically-modified version of HarmonicBondForce
 
@@ -793,8 +823,8 @@ class AbsoluteAlchemicalFactory(object):
             The new alchemically-modified System object being built.  This object will be modified.
         reference_force : simtk.openmm.HarmonicBondForec
             The reference copy of the HarmonicBondForce to be alchemically-modified.
-
-
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
 
         """
 
@@ -819,10 +849,13 @@ class AbsoluteAlchemicalFactory(object):
                 force.addBond(particle1, particle2, theta0, K)
 
         # Add newly-populated forces to system.
-        system.addForce(force)
-        system.addForce(custom_force)
+        force_index = system.addForce(force)
+        force_labels['unmodified HarmonicBondForce'] = force_index
 
-    def _alchemicallyModifyNonbondedForce(self, system, reference_force):
+        force_index = system.addForce(custom_force)
+        force_labels['alchemically modified HarmonicBondForce'] = force_index
+
+    def _alchemicallyModifyNonbondedForce(self, system, reference_force, force_labels):
         """
         Create alchemically-modified version of NonbondedForce.
 
@@ -832,6 +865,8 @@ class AbsoluteAlchemicalFactory(object):
             Alchemically-modified system being built.  This object will be modified.
         nonbonded_force : simtk.openmm.NonbondedForce
             The NonbondedForce used as a template.
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
 
         TODO
         ----
@@ -849,14 +884,10 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create a copy of the NonbondedForce to handle non-alchemical interactions.
         nonbonded_force = copy.deepcopy(reference_force)
-        system.addForce(nonbonded_force)
+        force_index = system.addForce(nonbonded_force)
+        force_labels['unmodified NonbondedForce'] = force_index
 
         # Create CustomNonbondedForce objects to handle softcore interactions between alchemically-modified system and rest of system.
-
-        # Create atom groups.
-        natoms = system.getNumParticles()
-        atomset1 = set(alchemical_atom_indices) # only alchemically-modified atoms
-        atomset2 = set(range(system.getNumParticles())) # all atoms, including alchemical region
 
         # CustomNonbondedForce energy expression.
         sterics_energy_expression = ""
@@ -890,6 +921,7 @@ class AbsoluteAlchemicalFactory(object):
             if alpha_ewald == 0.0:
                 # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
                 [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
+                assert (alpha_ewald != 0.0) # we can't have alpha be zero
             electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
             electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
             # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
@@ -899,7 +931,6 @@ class AbsoluteAlchemicalFactory(object):
 
         # Add additional definitions common to all methods.
         sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*(1.-lambda_sterics)^softcore_b + (r/sigma)^softcore_c))^(1/softcore_c);" # effective softcore distance for sterics
-        #electrostatics_energy_expression += "reff_electrostatics = sqrt(softcore_beta*(1.-lambda_electrostatics) + r^2);" # effective softcore distance for electrostatics # OLD FORM
         electrostatics_energy_expression += "reff_electrostatics = sigma*((softcore_beta*(1.-lambda_electrostatics)^softcore_e + (r/sigma)^softcore_f))^(1/softcore_f);" # effective softcore distance for electrostatics
         electrostatics_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
 
@@ -939,17 +970,37 @@ class AbsoluteAlchemicalFactory(object):
             electrostatics_custom_nonbonded_force.setNonbondedMethod( nonbonded_force.getNonbondedMethod() )
 
         # Add custom forces.
-        system.addForce(sterics_custom_nonbonded_force)
-        system.addForce(electrostatics_custom_nonbonded_force)
+        force_index = system.addForce(sterics_custom_nonbonded_force)
+        force_labels['alchemically modified NonbondedForce for sterics'] = force_index
 
-        # Create CustomBondForce to handle exceptions for both kinds of interactions.
-        custom_bond_force = openmm.CustomBondForce("U_sterics + U_electrostatics;" + sterics_energy_expression + electrostatics_energy_expression + alchemical_function_expression)
-        custom_bond_force.addGlobalParameter("lambda_electrostatics", 1.0);
-        custom_bond_force.addGlobalParameter("lambda_sterics", 1.0);
-        custom_bond_force.addPerBondParameter("chargeprod") # charge product
-        custom_bond_force.addPerBondParameter("sigma") # Lennard-Jones effective sigma
-        custom_bond_force.addPerBondParameter("epsilon") # Lennard-Jones effective epsilon
-        system.addForce(custom_bond_force)
+        force_index = system.addForce(electrostatics_custom_nonbonded_force)
+        force_labels['alchemically modified NonbondedForce for electrostatics'] = force_index
+
+        # Create CustomBondForce to handle exceptions for sterics
+        if self.annihilate_sterics:
+            sterics_custom_bond_force = openmm.CustomBondForce("U_sterics;" + sterics_energy_expression + alchemical_function_expression)
+            sterics_custom_bond_force.addGlobalParameter("lambda_sterics", 1.0);
+        else:
+            # Decoupling will require intra-alchemical interactions be preserved, so lambda is fixed to 1.0
+            sterics_custom_bond_force = openmm.CustomBondForce("U_sterics;" + sterics_energy_expression + 'lambda_sterics = 1.0;')
+        sterics_custom_bond_force.addPerBondParameter("sigma") # Lennard-Jones effective sigma
+        sterics_custom_bond_force.addPerBondParameter("epsilon") # Lennard-Jones effective epsilon
+
+        force_index = system.addForce(sterics_custom_bond_force)
+        force_labels['alchemically modified NonbondedForce for sterics exceptions'] = force_index
+
+        # Create CustomBondForce to handle exceptions for electrostatics
+        if self.annihilate_electrostatics:
+            electrostatics_custom_bond_force = openmm.CustomBondForce("U_electrostatics;" + electrostatics_energy_expression + alchemical_function_expression)
+            electrostatics_custom_bond_force.addGlobalParameter("lambda_electrostatics", 1.0);
+        else:
+            # Decoupling will require intra-alchemical interactions be preserved, so lambda is fixed to 1.0
+            electrostatics_custom_bond_force = openmm.CustomBondForce("U_electrostatics;" + electrostatics_energy_expression + 'lambda_electrostatics = 1.0;')
+        electrostatics_custom_bond_force.addPerBondParameter("chargeprod") # charge product
+        electrostatics_custom_bond_force.addPerBondParameter("sigma") # Lennard-Jones effective sigma
+
+        force_index = system.addForce(electrostatics_custom_bond_force)
+        force_labels['alchemically modified NonbondedForce for electrostatics exceptions'] = force_index
 
         # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0), which should have sigma > 0.
         for particle_index in range(nonbonded_force.getNumParticles()):
@@ -985,26 +1036,77 @@ class AbsoluteAlchemicalFactory(object):
                 nonbonded_force.setParticleParameters(particle_index, abs(0*charge), sigma, abs(0*epsilon))
 
         # Move NonbondedForce exception terms for alchemically-modified particles to CustomNonbondedForce/CustomBondForce.
+        exception_pairs = set()
         for exception_index in range(nonbonded_force.getNumExceptions()):
             # Retrieve parameters.
             [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
+            # Record exception/exclusion pairs.
+            exception_pairs.add( (iatom, jatom) )
+            exception_pairs.add( (jatom, iatom) )
             # Exclude this atom pair in CustomNonbondedForce.
             sterics_custom_nonbonded_force.addExclusion(iatom, jatom)
             electrostatics_custom_nonbonded_force.addExclusion(iatom, jatom)
-            # Move exceptions involving alchemically-modified atoms to CustomBondForce.
-            if self.annihilate_sterics and (iatom in alchemical_atom_indices) and (jatom in alchemical_atom_indices):
-                # Add special CustomBondForce term to handle alchemically-modified Lennard-Jones exception.
-                custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma, epsilon])
-                # Zero terms in NonbondedForce.
-                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, abs(0*chargeprod), sigma, abs(0*epsilon))
+            # Move exceptions involving the annihilation of alchemically-modified atoms to CustomBondForce.
+            # For decoupled sterics or electrostatics, exceptions are retained.
+            if self.annihilate_sterics and ((iatom in alchemical_atom_indices) or (jatom in alchemical_atom_indices)):
+                # If exception (and not exclusion), add special CustomBondForce term to handle alchemically-modified Lennard-Jones exception.
+                if abs(epsilon / unit.kilojoules_per_mole) > 0.0:
+                    sterics_custom_bond_force.addBond(iatom, jatom, [sigma, epsilon])
+                # Zero out epsilon in NonbondedForce exception
+                epsilon *= 0.0
+            if self.annihilate_electrostatics and ((iatom in alchemical_atom_indices) or (jatom in alchemical_atom_indices)):
+                # If exception (and not exclusion), add special CustomBondForce term to handle alchemically-modified electrostatics exclusion
+                if abs(chargeprod / unit.elementary_charge**2) > 0.0:
+                    electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
+                # Zero out chargeprod in NonbondedForce exception
+                chargeprod *= 0.0
 
-        # TODO: Add back NonbondedForce terms for alchemical system needed in case of decoupling electrostatics or sterics via second CustomBondForce.
-        # TODO: Also need to change current CustomBondForce to not alchemically disappearing system.
+            # Update exceptions in NonbondedForce.
+            nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
+
+        # Create atom groups.
+        natoms = system.getNumParticles()
+        # Create sets
+        alchemical_atomset = set(alchemical_atom_indices) # only alchemically-modified atoms
+        all_atomset = set(range(system.getNumParticles())) # all atoms, including alchemical region
+        nonalchemical_atomset = all_atomset.difference(alchemical_atomset)
+        # Create lists
+        alchemical_atomlist = list(alchemical_atomset)
+        all_atomlist = list(all_atomset)
+        nonalchemical_atomlist = list(nonalchemical_atomset)
+
+        # Add back intra-alchemical sterics for decoupled sterics or electrostatics via CustomBondForce terms.
+        # TODO: Is there a better way to do this?
+        for iatom in alchemical_atomlist:
+            [charge1, sigma1, epsilon1] = nonbonded_force.getParticleParameters(iatom)
+            for jatom in alchemical_atomlist:
+                [charge2, sigma2, epsilon2] = nonbonded_force.getParticleParameters(jatom)
+                if (iatom < jatom) and ((iatom,jatom) not in exception_pairs):
+                    # Combining rules.
+                    # TODO: Generalize these for other mixing rules.
+                    chargeprod = charge1*charge2
+                    epsilon = unit.sqrt(epsilon1*epsilon2)
+                    sigma = 0.5*(sigma1 + sigma2)
+                    # Add decoupled terms.
+                    if not self.annihilate_sterics:
+                        sterics_custom_bond_force.addBond(iatom, jatom, [sigma, epsilon])
+                    if not self.annihilate_electrostatics:
+                        electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
 
         # Restrict interaction evaluation to be between alchemical atoms and rest of environment.
-        # TODO: Exclude intra-alchemical region if we are separately handling that through a separate CustomNonbondedForce for decoupling.
-        sterics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
-        electrostatics_custom_nonbonded_force.addInteractionGroup(list(atomset1), list(atomset2))
+        if self.annihilate_sterics:
+            # Interactions include intra-alchemical region.
+            sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, all_atomset)
+        else:
+            # Interactions exclude intra-alchemical region, which are handled by CustomBondForce.
+            sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, nonalchemical_atomset)
+
+        if self.annihilate_electrostatics:
+            # Interactions include intra-alchemical region.
+            electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, all_atomset)
+        else:
+            # Interactions exclude intra-alchemical region, which are handled by CustomBondForce.
+            electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, nonalchemical_atomset)
 
         # Add global parameters to forces.
         def add_global_parameters(force):
@@ -1032,7 +1134,25 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_atom_indices = self.ligand_atoms
 
 
-    def _alchemicallyModifyAmoebaVdwForce(self, system, reference_force):
+    def _alchemicallyModifyAmoebaVdwForce(self, system, reference_force, force_labels):
+        """
+        Create alchemically-modified version of AmoebaVdwForce
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            Alchemically-modified system being built.  This object will be modified.
+        nonbonded_force : simtk.openmm.NonbondedForce
+            The NonbondedForce used as a template.
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
+
+        TODO
+        ----
+        * Supported periodic boundary conditions need to be handled correctly.
+        * Exceptions/exclusions need to be dealt with.
+
+        """
         # This feature is incompletely implemented, so raise an exception.
         raise Exception("Not implemented")
 
@@ -1071,7 +1191,8 @@ class AbsoluteAlchemicalFactory(object):
         softcore_force.setCutoffDistance( force.getCutoff() )
 
         # Add the softcore force.
-        system.addForce( softcore_force )
+        force_index = system.addForce( softcore_force )
+        force_labels['alchemically modified AmoebaVdwForce'] = force_index
 
         # Turn off vdW interactions for alchemically-modified atoms.
         for particle_index in ligand_atoms:
@@ -1085,7 +1206,7 @@ class AbsoluteAlchemicalFactory(object):
 
         return system
 
-    def _alchemicallyModifyGBSAOBCForce(self, system, reference_force, sasa_model='ACE'):
+    def _alchemicallyModifyGBSAOBCForce(self, system, reference_force, force_labels, sasa_model='ACE'):
         """
         Create alchemically-modified version of GBSAOBCForce.
 
@@ -1095,11 +1216,14 @@ class AbsoluteAlchemicalFactory(object):
             Alchemically-modified System object being built.  This object will be modified.
         reference_force : simtk.openmm.GBSAOBCForce
             Reference force to use for template.
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
         sasa_model : str, optional, default='ACE'
             Solvent accessible surface area model.
 
         TODO
         ----
+        * Add support for all types of GBSA forces supported by OpenMM.
         * Can we more generally modify any CustomGBSAForce?
 
         """
@@ -1151,11 +1275,19 @@ class AbsoluteAlchemicalFactory(object):
             custom_force.addParticle(parameters)
 
         # Add alchemically-modified GBSAOBCForce to system.
-        system.addForce(custom_force)
+        force_index = system.addForce(custom_force)
+        force_labels['alchemically modified GBSAOBCForce'] = force_index
 
     def _createAlchemicallyModifiedSystem(self, mm=None):
         """
         Create an alchemically modified version of the reference system with global parameters encoding alchemical parameters.
+
+        Returns
+        -------
+        system : simtk.openmm.System
+            Alchemically-modified version of self.reference_system
+        force_labels : dict of int : str
+            force_labels[name] is the force index in the alchemically modified system of the modified force `name`
 
         TODO
         ----
@@ -1188,36 +1320,43 @@ class AbsoluteAlchemicalFactory(object):
             [iatom, jatom, r0] = reference_system.getConstraintParameters(constraint_index)
             system.addConstraint(iatom, jatom, r0)
 
+        # Keep track of which force indices of alchemically-modifed system arise from which contributions.
+        # e.g. force_labels['alchemically modified HarmonicBondForce'] is force index of alchemically-modified HarmonicBondForce
+        from collections import OrderedDict
+        force_labels = OrderedDict()
+
         # Modify forces as appropriate, copying other forces without modification.
         # TODO: Use introspection to automatically dispatch registered modifiers?
         nforces = reference_system.getNumForces()
         for force_index in range(nforces):
             reference_force = reference_system.getForce(force_index)
             if isinstance(reference_force, openmm.PeriodicTorsionForce) and (self.alchemical_torsions is not None):
-                self._alchemicallyModifyPeriodicTorsionForce(system, reference_force)
+                self._alchemicallyModifyPeriodicTorsionForce(system, reference_force, force_labels)
             elif isinstance(reference_force, openmm.HarmonicAngleForce) and (self.alchemical_angles is not None):
-                self._alchemicallyModifyHarmonicAngleForce(system, reference_force)
+                self._alchemicallyModifyHarmonicAngleForce(system, reference_force, force_labels)
             elif isinstance(reference_force, openmm.HarmonicBondForce) and (self.alchemical_bonds is not None):
-                self._alchemicallyModifyHarmonicBondForce(system, reference_force)
+                self._alchemicallyModifyHarmonicBondForce(system, reference_force, force_labels)
             elif isinstance(reference_force, openmm.NonbondedForce):
-                self._alchemicallyModifyNonbondedForce(system, reference_force)
+                self._alchemicallyModifyNonbondedForce(system, reference_force, force_labels)
             elif isinstance(reference_force, openmm.GBSAOBCForce):
-                self._alchemicallyModifyGBSAOBCForce(system, reference_force)
+                self._alchemicallyModifyGBSAOBCForce(system, reference_force, force_labels)
             elif isinstance(reference_force, openmm.AmoebaMultipoleForce):
-                self._alchemicallyModifyAmoebaMultipoleForce(system, reference_force)
+                self._alchemicallyModifyAmoebaMultipoleForce(system, reference_force, force_labels)
             elif isinstance(reference_force, openmm.AmoebaVdwForce):
-                self._alchemicallyModifyAmoebaVdwForce(system, reference_force)
+                self._alchemicallyModifyAmoebaVdwForce(system, reference_force, force_labels)
             else:
                 # Copy force without modification.
                 force = copy.deepcopy(reference_force)
-                system.addForce(force)
+                force_index = system.addForce(force)
+                force_name = force.__class__.__name__
+                force_labels[force_index] = 'unmodified %s' % force_name
 
         # Record timing statistics.
         final_time = time.time()
         elapsed_time = final_time - initial_time
         logger.debug("Elapsed time %.3f s." % (elapsed_time))
 
-        return system
+        return [system, force_labels]
 
     @classmethod
     def perturbSystem(cls, system, alchemical_state):
@@ -1261,6 +1400,54 @@ class AbsoluteAlchemicalFactory(object):
                         force.setGlobalParameterDefaultValue(parameter_index, alchemical_state[parameter_name])
 
         return
+
+    def getEnergyComponents(alchemical_state, positions, box_vectors=None, use_all_parameters=True):
+        """
+        Compute potential energy by Force component for the corresponding alchemically-modified system.
+
+        Parameters
+        ----------
+        alchemical_state : AlchemicalState
+            The alchemical state to est the Context to.
+        use_all_parameters : bool, optional, default=False
+            If True, will ensure that all parameters are used or raise an Exception if not.
+
+        """
+        if not hasattr(self, 'alchemically_modified_system_with_force_groups'):
+            # Create deep copy of alchemical system.
+            import copy
+            system = copy.deepcopy(alchemically_modified_system)
+            # Separate all forces into separate force groups.
+            assert (system.getNumForces() < 16) "self.alchemically_modified_system has more than 16 force groups; can't compute individual force component energies."
+            force_names = list()
+            for force_index in range(system.getNumForces()):
+                force_index = force_labels[force_label]
+                system.getForce(force_index).setForceGroup(force_index)
+            # Store system
+            self.alchemically_modified_system_with_force_groups = system
+
+        # Retrieve system with distinct force groups
+        system = self.alchemically_modified_system_with_force_groups
+
+        # Create a Context
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(alchemical_system_copy, integrator)
+        # Set alchemical state
+        AbsoluteAlchemicalFactory.perturbContext(context, alchemical_state, use_all_parameters=use_all_parameters)
+        # Set positions and box vectors
+        if box_vectors is not None:
+            context.setDefaultPeriodicBoxVectors(*box_vectors)
+        context.setPositions(positions)
+        # Get energy component  s
+        from collections import OrderedDict
+        energy_components = OderedDict()
+        for force_label in force_labels:
+            force_index = force_labels[force_label]
+            energy_components[force_label] = context.getState(getEnergy=True,groups=2**force_index).getPotentialEnergy()
+        # Clean up
+        del context, integrator
+        # Return energy components
+        return energy_components
 
     @classmethod
     def perturbContext(cls, context, alchemical_state, use_all_parameters=False):
