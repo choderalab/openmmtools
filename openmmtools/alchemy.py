@@ -350,7 +350,7 @@ class AbsoluteAlchemicalFactory(object):
         [self.alchemically_modified_system, self.force_labels] = self._createAlchemicallyModifiedSystem(self.reference_system)
 
         # Build a list of all alchemical parameters available in this system.
-        self.alchemical_parameters = [ parameter for parameter in context.getState(getParameters=True).getParameters().keys() if parameter.startswith('lambda_') ]
+        self.alchemical_parameters = self._getSystemGlobalParameters(self.alchemically_modified_system, prefix='lambda_')
 
         # Store information for use in aiding debugging of alchemical factory
         self.test_positions = test_positions
@@ -371,6 +371,24 @@ class AbsoluteAlchemicalFactory(object):
             write_file(system_filename, openmm.XmlSerializer.serialize(self.alchemically_modified_system))
 
         return
+
+    @classmethod
+    def _getSystemGlobalParameters(cls, system, prefix='lambda_'):
+        """
+        Get a list of available alchemical parameters beginning with 'prefix'
+
+        Parameters
+        ----------
+        prefix : str, optional, default='lambda_'
+            The prefix that all Context parameters found must begin with.
+
+        """
+        platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(system, integrator, platform)
+        alchemical_parameters = [ parameter for parameter in context.getState(getParameters=True).getParameters().keys() if parameter.startswith(prefix) ]
+        del context, integrator
+        return alchemical_parameters
 
     def NoninteractingAlchemicalState(self):
         """
@@ -1124,7 +1142,7 @@ class AbsoluteAlchemicalFactory(object):
             for variable in control_variables:
                 force.addGlobalParameter(variable, 1.0)
 
-        for force in [sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, custom_bond_force]:
+        for force in [sterics_custom_nonbonded_force, electrostatics_custom_nonbonded_force, sterics_custom_bond_force, electrostatics_custom_bond_force]:
             add_global_parameters(force)
 
         return
@@ -1418,7 +1436,7 @@ class AbsoluteAlchemicalFactory(object):
             import copy
             system = copy.deepcopy(alchemically_modified_system)
             # Separate all forces into separate force groups.
-            assert (system.getNumForces() < 16) "self.alchemically_modified_system has more than 16 force groups; can't compute individual force component energies."
+            assert (system.getNumForces() < 16), "self.alchemically_modified_system has more than 16 force groups; can't compute individual force component energies."
             force_names = list()
             for force_index in range(system.getNumForces()):
                 force_index = force_labels[force_label]
