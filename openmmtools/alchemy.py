@@ -789,10 +789,10 @@ class AbsoluteAlchemicalFactory(object):
 
         # Add newly-populated forces to system.
         force_index = system.addForce(force)
-        force_labels[force_index] = 'unmodified PeriodicTorsionForce'
+        force_labels['unmodified PeriodicTorsionForce'] = force_index
 
         force_index = system.addForce(custom_force)
-        force_labels[force_index] = 'alchemically modified PeriodicTorsionForce'
+        force_labels['alchemically modified PeriodicTorsionForce'] = force_index
 
     def _alchemicallyModifyHarmonicAngleForce(self, system, reference_force, force_labels):
         """
@@ -831,10 +831,10 @@ class AbsoluteAlchemicalFactory(object):
 
         # Add newly-populated forces to system.
         force_index = system.addForce(force)
-        force_labels[force_index] = 'unmodified HarmonicAngleForce'
+        force_labels['unmodified HarmonicAngleForce'] = force_index
 
         force_index = system.addForce(custom_force)
-        force_labels[force_index] = 'alchemically modified HarmonicAngleForce'
+        force_labels['alchemically modified HarmonicAngleForce'] = force_index
 
     def _alchemicallyModifyHarmonicBondForce(self, system, reference_force, force_labels):
         """
@@ -1377,7 +1377,7 @@ class AbsoluteAlchemicalFactory(object):
                 force = copy.deepcopy(reference_force)
                 force_index = system.addForce(force)
                 force_name = force.__class__.__name__
-                force_labels[force_index] = 'unmodified %s' % force_name
+                force_labels['unmodified %s' % force_name] = force_index
 
         # Record timing statistics.
         final_time = time.time()
@@ -1466,7 +1466,7 @@ class AbsoluteAlchemicalFactory(object):
         context.setPositions(positions)
         # Get energy component  s
         from collections import OrderedDict
-        energy_components = OderedDict()
+        energy_components = OrderedDict()
         for (force_label, force_index) in self.force_labels.items():
             energy_components[force_label] = context.getState(getEnergy=True,groups=2**force_index).getPotentialEnergy()
         # Clean up
