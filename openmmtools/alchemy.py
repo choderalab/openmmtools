@@ -395,7 +395,7 @@ class AbsoluteAlchemicalFactory(object):
         Return a noninteracting alchemical state where all alchemical parmeters are set to zero.
         """
         kwargs = { parameter : 0 for parameter in self.alchemical_parameters }
-        return AlchmemicalState(**kwargs)
+        return AlchemicalState(**kwargs)
 
     def FullyInteractingAlchemicalState(self):
         """
@@ -572,8 +572,10 @@ class AbsoluteAlchemicalFactory(object):
 
             # Assign all forces to separate components.
             system = self.alchemically_modified_system
-            for force_index in range(system.getNumForces()):
-                system.getForce(force_index).setForceGroup(force_index)
+            force_groups = list()
+            for (force_index, force) in enumerate(system.getForces()):
+                force_groups.append(force.getForceGroup())
+                force.setForceGroup(force_index)
 
             # Compute potential energy for each force using Reference platform.
             reference_platform = openmm.Platform.getPlatformByName('Reference')
@@ -582,6 +584,9 @@ class AbsoluteAlchemicalFactory(object):
                 potential = compute_potential_energy(system, positions, reference_platform, groups)
                 force_classname = system.getForce(force_index).__class__.__name__
                 logger.debug("Force %5d / %5d [%24s] %12.3f kcal/mol" % (force_index, system.getNumForces(), force_classname, potential / unit.kilocalories_per_mole))
+
+            for (force, force_group) in zip(system.getForces(), force_groups):
+                force.setForceGroup(force_index)
 
             # Clean up
             del context, integrator
@@ -1419,7 +1424,7 @@ class AbsoluteAlchemicalFactory(object):
 
         return
 
-    def getEnergyComponents(alchemical_state, positions, box_vectors=None, use_all_parameters=True):
+    def getEnergyComponents(self, alchemical_state, positions, box_vectors=None, use_all_parameters=True):
         """
         Compute potential energy by Force component for the corresponding alchemically-modified system.
 
@@ -1434,13 +1439,11 @@ class AbsoluteAlchemicalFactory(object):
         if not hasattr(self, 'alchemically_modified_system_with_force_groups'):
             # Create deep copy of alchemical system.
             import copy
-            system = copy.deepcopy(alchemically_modified_system)
+            system = copy.deepcopy(self.alchemically_modified_system)
             # Separate all forces into separate force groups.
             assert (system.getNumForces() < 16), "self.alchemically_modified_system has more than 16 force groups; can't compute individual force component energies."
-            force_names = list()
-            for force_index in range(system.getNumForces()):
-                force_index = force_labels[force_label]
-                system.getForce(force_index).setForceGroup(force_index)
+            for (force_index, force) in enumerate(system.getForces()):
+                force.setForceGroup(force_index)
             # Store system
             self.alchemically_modified_system_with_force_groups = system
 
@@ -1449,7 +1452,7 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create a Context
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(alchemical_system_copy, integrator)
+        context = openmm.Context(system, integrator)
         # Set alchemical state
         AbsoluteAlchemicalFactory.perturbContext(context, alchemical_state, use_all_parameters=use_all_parameters)
         # Set positions and box vectors
@@ -1459,8 +1462,7 @@ class AbsoluteAlchemicalFactory(object):
         # Get energy component  s
         from collections import OrderedDict
         energy_components = OderedDict()
-        for force_label in force_labels:
-            force_index = force_labels[force_label]
+        for (force_label, force_index) in self.force_labels.items():
             energy_components[force_label] = context.getState(getEnergy=True,groups=2**force_index).getPotentialEnergy()
         # Clean up
         del context, integrator
