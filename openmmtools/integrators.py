@@ -591,17 +591,26 @@ class GHMCIntegrator(mm.CustomIntegrator):
         self.addPerDofVariable("xold", 0)  # old positions
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("potential_old", 0)  # old potential energy
+        self.addGlobalVariable("potential_new", 0)  # new potential energy
         self.addGlobalVariable("accept", 0)  # accept or reject
         self.addGlobalVariable("naccept", 0)  # number accepted
         self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
         self.addPerDofVariable("x1", 0)  # position before application of constraints
 
         #
-        # Pre-computation.
-        # This only needs to be done once.
-        # TODO: Change this to setPerDofVariableByName("sigma", unit.sqrt(kT / mass).value_in_unit_system(unit.md_unit_system))
+        # Initialization.
         #
+        self.beginIfBlock("ntrials == 0")
         self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+        self.endBlock()
+
+        #
+        # Allow context updating here.
+        #
+        self.addUpdateContextState()
 
         #
         # Velocity randomization
@@ -609,15 +618,10 @@ class GHMCIntegrator(mm.CustomIntegrator):
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
 
-        #
-        # Metropolized symplectic step.
-        #
-        self.addConstrainPositions()
-        self.addConstrainVelocities()
-
         # Compute initial total energy
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
+        self.addComputeGlobal("potential_old", "energy")
+        self.addComputeGlobal("Eold", "ke + potential_old")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
         # Velocity Verlet step
@@ -629,12 +633,14 @@ class GHMCIntegrator(mm.CustomIntegrator):
         self.addConstrainVelocities()
         # Compute final total energy
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "ke + energy")
+        self.addComputeGlobal("potential_new", "energy")
+        self.addComputeGlobal("Enew", "ke + potential_new")
         # Accept/reject, ensuring rejection if energy is NaN
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
         self.beginIfBlock("accept != 1")
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "-vold")
+        self.addComputeGlobal("potential_new", "potential_old")
         self.endBlock()
 
         #
@@ -717,8 +723,8 @@ class VVVRIntegrator(mm.CustomIntegrator):
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addPerDofVariable("x1", 0)  # position before application of constraints
-        
-        # bookkeeping variables        
+
+        # bookkeeping variables
         if monitor_heat and monitor_work:
             self.addGlobalVariable("heat", 0)
             self.addGlobalVariable("kinetic_energy_0", 0)
@@ -759,19 +765,19 @@ class VVVRIntegrator(mm.CustomIntegrator):
 
         if monitor_heat:
             self.addComputeSum("kinetic_energy_0", "0.5 * m * v * v")
-        
+
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
-        
+
         if monitor_heat or monitor_work:
             self.addComputeSum("kinetic_energy_1", "0.5 * m * v * v")
-        
+
         if monitor_heat:
             self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0)")
-        
+
         if monitor_work:
             self.addComputeGlobal("energy_before_symplectic", "energy + kinetic_energy_1")
-        
+
         #
         # Symplectic steps
         #
@@ -781,21 +787,21 @@ class VVVRIntegrator(mm.CustomIntegrator):
         self.addConstrainPositions()
         self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
         self.addConstrainVelocities()
-        
+
         if monitor_heat or monitor_work:
             self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
-        
+
         if monitor_work:
             self.addComputeGlobal("energy_after_symplectic", "energy + kinetic_energy_2")
             self.addComputeGlobal("shadow_work", "shadow_work + (energy_after_symplectic - energy_before_symplectic)")
-        
+
         #
         # Velocity randomization
         #
-        
+
         self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
         self.addConstrainVelocities()
-        
+
         if monitor_heat:
             self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
             self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
