@@ -601,7 +601,7 @@ class GHMCIntegrator(mm.CustomIntegrator):
         #
         # Initialization.
         #
-        self.beginIfBlock("ntrials == 0")
+        self.beginIfBlock("ntrials = 0")
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         self.addConstrainPositions()
         self.addConstrainVelocities()
