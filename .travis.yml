@@ -11,11 +11,23 @@ install:
   - export PATH=$HOME/miniconda/bin:$PATH
 
 script:
-  - conda config --add channels $ORGNAME
+  # Create a test environment
+  - conda create --yes -n test python=$python
+  # Activate the test environment
+  - source activate test
+  # Add org channel
+  - conda config --add channels ${ORGNAME}
+  # Add omnia dev channels
+  - conda config --add channels https://conda.anaconda.org/omnia/label/dev
+  # Build the recipe
   - conda build devtools/conda-recipe
-  - source activate _test
+  # Install the package
+  - conda install --yes --use-local ${PACKAGENAME}-dev
+  # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
-  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-doctest --with-timer && cd ..
+  # Test the package
+  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-timer --with-doctest-a '!slow' && cd ..
+
 env:
   matrix:
     - python=2.7  CONDA_PY=27
