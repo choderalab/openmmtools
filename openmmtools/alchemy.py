@@ -402,7 +402,7 @@ class AbsoluteAlchemicalFactory(object):
         Return a noninteracting alchemical state where all alchemical parmeters are set to unity.
         """
         kwargs = { parameter : 1 for parameter in self.alchemical_parameters }
-        return AlchmemicalState(**kwargs)
+        return AlchemicalState(**kwargs)
 
     @classmethod
     def _tabulateBonds(cls, system):
