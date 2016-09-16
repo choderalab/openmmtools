@@ -38,6 +38,7 @@ TODO
 import numpy as np
 import copy
 import time
+import itertools
 
 import simtk.openmm as openmm
 import simtk.unit as unit
@@ -1038,12 +1039,6 @@ class AbsoluteAlchemicalFactory(object):
         # Distribute interactions and exceptions contributions in appropriate forces
         # ---------------------------------------------------------------------------
 
-        # Create atom groups.
-        alchemical_atomlist = copy.copy(self.ligand_atoms)
-        alchemical_atomset = self.ligand_atomset.copy()
-        all_atomset = set(range(system.getNumParticles()))  # all atoms, including alchemical region
-        nonalchemical_atomset = all_atomset.difference(alchemical_atomset)
-
         # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0), which should have sigma > 0.
         for particle_index in range(nonbonded_force.getNumParticles()):
             # Retrieve parameters.
@@ -1065,6 +1060,7 @@ class AbsoluteAlchemicalFactory(object):
                 nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
 
         # Copy NonbondedForce particle terms for alchemically-modified particles to CustomNonbondedForces.
+        # For efficiency reasons, all nonbonded forces (Custom and not) must have the same particles.
         for particle_index in range(nonbonded_force.getNumParticles()):
             # Retrieve parameters.
             [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
@@ -1074,17 +1070,57 @@ class AbsoluteAlchemicalFactory(object):
             sterics_custom_nonbonded_force.addParticle([sigma, epsilon])
             electrostatics_custom_nonbonded_force.addParticle([charge, sigma])
 
-        # Move NonbondedForce exception terms for alchemically-modified particles to CustomBondForce.
+        # Create atom groups.
+        alchemical_atomlist = copy.copy(self.ligand_atoms)
+        alchemical_atomset = self.ligand_atomset.copy()
+        all_atomset = set(range(system.getNumParticles()))  # all atoms, including alchemical region
+        nonalchemical_atomset = all_atomset.difference(alchemical_atomset)
+
+        # Find all exceptions in alchemically-unmodified NonbondedForce
         exception_pairs = set()
+        for exception_index in range(nonbonded_force.getNumExceptions()):
+            [iatom, jatom, _, _, _] = nonbonded_force.getExceptionParameters(exception_index)
+            exception_pairs.add((iatom, jatom))
+            exception_pairs.add((jatom, iatom))
+
+        # For decoupling, intra-alchemical sterics and/or electrostatics must not be alchemically
+        # modified, so we keep them in the unmodified NonbondedForce as exceptions. We need them
+        # as exception because later we'll turn off particle parameters (epsilon and/or charge) to 0.
+        # This must be done before exception treatment (below) because all NonbondedForces and
+        # CustomNonbondedForces must have the same exceptions/exclusions.
+        if not (self.annihilate_electrostatics and self.annihilate_sterics):  # decoupling
+            for iatom, jatom in itertools.combinations(alchemical_atomlist, r=2):  # all pairs, no repeat
+                # We don't want to overwrite existing exceptions
+                if (iatom, jatom) in exception_pairs:
+                    continue
+                # Get particle parameters
+                [charge1, sigma1, epsilon1] = nonbonded_force.getParticleParameters(iatom)
+                [charge2, sigma2, epsilon2] = nonbonded_force.getParticleParameters(jatom)
+                # Combining rules.
+                # TODO: Generalize these for other mixing rules.
+                chargeprod = charge1*charge2
+                epsilon = unit.sqrt(epsilon1*epsilon2)
+                sigma = 0.5*(sigma1 + sigma2)
+                # Convenience variables
+                decouple_sterics = not self.annihilate_sterics
+                decouple_electrostatics = not self.annihilate_electrostatics
+                valid_epsilon = epsilon.value_in_unit_system(unit.md_unit_system) != 0
+                valid_chargeprod = chargeprod.value_in_unit_system(unit.md_unit_system) != 0
+                # Add decoupled terms.
+                if decouple_sterics and decouple_electrostatics and (valid_epsilon or valid_chargeprod):
+                    nonbonded_force.addException(iatom, jatom, chargeprod, sigma, epsilon)
+                elif decouple_electrostatics and valid_chargeprod:
+                    nonbonded_force.addException(iatom, jatom, chargeprod, sigma, abs(0.0*epsilon))
+                elif decouple_sterics and valid_epsilon:
+                    nonbonded_force.addException(iatom, jatom, abs(0.0*chargeprod), sigma, epsilon)
+
+        # Move all NonbondedForce exception terms for alchemically-modified particles to CustomBondForce.
         for exception_index in range(nonbonded_force.getNumExceptions()):
             # Retrieve parameters.
             [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
 
-            # Record exception/exclusion pairs.
-            exception_pairs.add( (iatom, jatom) )
-            exception_pairs.add( (jatom, iatom) )
-
-            # Exclude this atom pair in CustomNonbondedForce.
+            # Exclude this atom pair in CustomNonbondedForce. All nonbonded forces
+            # must have the same number of exceptions/exclusions on CUDA platform
             sterics_custom_nonbonded_force.addExclusion(iatom, jatom)
             electrostatics_custom_nonbonded_force.addExclusion(iatom, jatom)
 
@@ -1093,10 +1129,9 @@ class AbsoluteAlchemicalFactory(object):
             only_one_alchemical = (iatom in alchemical_atomset) != (jatom in alchemical_atomset)
 
             # Determine whether we need to handle the exception with a CustomBondForce or
-            # we don't need to alchemically modify them and we can let NonbondedForce handle it
-            handle_sterics_exception = False
-            handle_electrostatics_exception = False
-            # alchemical-alchemical atoms exceptions must be turned off only if annihilated
+            # we don't need to alchemically modify them and we can let NonbondedForce handle it.
+            # Alchemical-alchemical atoms exceptions must be turned off only if annihilated,
+            # and left in the unmodified NonbondedForce if decoupled.
             if both_alchemical:
                 handle_sterics_exception = self.annihilate_sterics
                 handle_electrostatics_exception = self.annihilate_electrostatics
@@ -1104,6 +1139,8 @@ class AbsoluteAlchemicalFactory(object):
             elif only_one_alchemical:
                 handle_sterics_exception = True
                 handle_electrostatics_exception = True
+            else:  # no alchemical atoms in this pair, leave it in NonbondedForce
+                continue
 
             # If exception (and not exclusion), add special CustomBondForce terms to
             # handle alchemically-modified Lennard-Jones and electrostatics exceptions
@@ -1125,32 +1162,8 @@ class AbsoluteAlchemicalFactory(object):
                 nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
                                                        chargeprod, sigma, abs(0.0*epsilon))
 
-        # For decoupling, we let the unmodified NonbondedForce take care of intra-alchemical
-        # sterics and/or electrostatics as exceptions and we turn off particle parameters later
-        for iatom in alchemical_atomlist:
-            for jatom in alchemical_atomlist:
-                if (iatom < jatom) and ((iatom, jatom) not in exception_pairs):
-                    [charge1, sigma1, epsilon1] = nonbonded_force.getParticleParameters(iatom)
-                    [charge2, sigma2, epsilon2] = nonbonded_force.getParticleParameters(jatom)
-                    # Combining rules.
-                    # TODO: Generalize these for other mixing rules.
-                    chargeprod = charge1*charge2
-                    epsilon = unit.sqrt(epsilon1*epsilon2)
-                    sigma = 0.5*(sigma1 + sigma2)
-                    # Convenience variables
-                    decouple_sterics = not self.annihilate_sterics
-                    decouple_electrostatics = not self.annihilate_electrostatics
-                    valid_epsilon = epsilon.value_in_unit_system(unit.md_unit_system) != 0
-                    valid_chargeprod = chargeprod.value_in_unit_system(unit.md_unit_system) != 0
-                    # Add decoupled terms.
-                    if decouple_sterics and decouple_electrostatics and (valid_epsilon or valid_chargeprod):
-                        nonbonded_force.addException(iatom, jatom, chargeprod, sigma, epsilon)
-                    elif decouple_sterics and valid_epsilon:
-                        nonbonded_force.addException(iatom, jatom, abs(0.0*chargeprod), sigma, epsilon)
-                    elif decouple_electrostatics and valid_chargeprod:
-                        nonbonded_force.addException(iatom, jatom, chargeprod, sigma, abs(0.0*epsilon))
-
-        # Turn off interactions contribution from alchemically-modified particles
+        # Turn off interactions contribution from alchemically-modified particles.
+        # Decoupled intra-alchemical interactions remain as exceptions.
         for particle_index in range(nonbonded_force.getNumParticles()):
             # Retrieve parameters.
             [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
