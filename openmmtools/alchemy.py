@@ -920,9 +920,9 @@ class AbsoluteAlchemicalFactory(object):
         # ------------------------------------------------------------------------------------------------------------------------------------------------
         # electrostatics_custom_nonbonded_force | electrostatics interactions alchemical-allatoms | electrostatics interactions alchemical-nonalchemical |
         # ------------------------------------------------------------------------------------------------------------------------------------------------
-        # sterics_custom_bond_force             | sterics exceptions alchemical-allatoms          | sterics interactions alchemical-nonalchemical        |
+        # sterics_custom_bond_force             | sterics exceptions alchemical-allatoms          | sterics exceptions alchemical-nonalchemical        |
         # ------------------------------------------------------------------------------------------------------------------------------------------------
-        # electrostatics_custom_bond_force      | electrostatics interactions alchemical-allatoms | electrostatics interactions alchemical-nonalchemical |
+        # electrostatics_custom_bond_force      | electrostatics exceptions alchemical-allatoms   | electrostatics exceptions alchemical-nonalchemical |
         # ------------------------------------------------------------------------------------------------------------------------------------------------
 
         # Create a copy of the NonbondedForce to handle non-alchemical interactions.
