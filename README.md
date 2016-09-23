@@ -1,8 +1,7 @@
 [![Linux Build Status](https://travis-ci.org/choderalab/openmmtools.png?branch=master)](https://travis-ci.org/choderalab/openmmtools)
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/70knpvcgvmah2qin?svg=true)](https://ci.appveyor.com/project/jchodera/openmmtools)
-[![Binstar Badge](https://binstar.org/omnia/openmmtools/badges/version.svg)](https://binstar.org/omnia/openmmtools)
-<!--- [![PyPI Version](https://badge.fury.io/py/openmmtools.png)](https://pypi.python.org/pypi/openmmtools) -->
-<!--- [![Downloads](https://pypip.in/d/mdtraj/badge.png)](https://pypi.python.org/pypi/openmmtools) -->
+[![Anaconda Badge](https://anaconda.org/omnia/openmmtools/badges/version.svg)](https://anaconda.org/omnia/openmmtools)
+[![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
 
 # Various Python tools for OpenMM
 

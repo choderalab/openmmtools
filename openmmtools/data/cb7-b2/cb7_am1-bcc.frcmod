@@ -1,0 +1,17 @@
+Remark line goes here
+MASS
+
+BOND
+
+ANGLE
+
+DIHE
+
+IMPROPER
+c -c3-n -c3         1.1          180.0         2.0          Using general improper torsional angle  X-c3- n-c3, penalty score=  3.0)
+n -n -c -o         10.5          180.0         2.0          Using general improper torsional angle  X- X- c- o, penalty score=  6.0)
+
+NONBON
+
+
+

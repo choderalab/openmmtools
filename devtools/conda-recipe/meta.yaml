@@ -22,11 +22,13 @@ requirements:
 
   run:
     - python
+    - cython
+    - numpy
     - scipy
-    - openmm
     - nose
     - setuptools
     - six
+    - openmm
     - parmed
 
 

@@ -11,11 +11,23 @@ install:
   - export PATH=$HOME/miniconda/bin:$PATH
 
 script:
-  - conda config --add channels $ORGNAME
+  # Create a test environment
+  - conda create --yes -n test python=$python
+  # Activate the test environment
+  - source activate test
+  # Add org channel
+  - conda config --add channels ${ORGNAME}
+  # Add omnia dev channels
+  - conda config --add channels https://conda.anaconda.org/omnia/label/dev
+  # Build the recipe
   - conda build devtools/conda-recipe
-  - source activate _test
+  # Install the package
+  - conda install --yes --use-local ${PACKAGENAME}-dev
+  # Install testing dependencies
   - conda install --yes --quiet nose nose-timer
-  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-doctest --with-timer && cd ..
+  # Test the package
+  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow' && cd ..
+
 env:
   matrix:
     - python=2.7  CONDA_PY=27
@@ -25,7 +37,7 @@ env:
     - ORGNAME="omnia" # the name of the organization
     - PACKAGENAME="openmmtools" # the name of your package
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
-    - secure: "YIpTwysOxPT1XLKgddr3lZmBoL8UleB4Gk3eDI+mgt4GOcfI2U/xdx+0053wh1KpkoxRulK/1mA7oX3v5zTDMwCHRjZ8VAuCwUPBhkFbJ35IgFQP/P0nDkW5odyGTZ0V7JNFaC07KyzSQWRaTNGsPPjas3lprdQawrpP0PNLzao="
+    - secure: "DP5heLvW3wnHvw6d2tinSHcyAxe0EWEsoL4X3lrGC+BSSy3Fd60pb90zSibK/hcxzV7Cb/x4mC4C7KPgGZEXzvVFH/iF7tg2Yy41XgyuZ5vxacfXICdryoTAlGxrbwACvO/ak+OHEYTtkX3OyFM/f8zV0z7Shz/rOSbSvcEKmpQ="
 
 after_success:
   - echo "after_success"
