@@ -1555,7 +1555,6 @@ class AbsoluteAlchemicalFactory(object):
         """
         if not hasattr(self, 'alchemically_modified_system_with_force_groups'):
             # Create deep copy of alchemical system.
-            import copy
             system = copy.deepcopy(self.alchemically_modified_system)
             # Separate all forces into separate force groups.
             assert system.getNumForces() <= 32, "self.alchemically_modified_system has more than 32 force groups; " \
