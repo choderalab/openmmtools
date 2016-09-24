@@ -1558,7 +1558,8 @@ class AbsoluteAlchemicalFactory(object):
             import copy
             system = copy.deepcopy(self.alchemically_modified_system)
             # Separate all forces into separate force groups.
-            assert (system.getNumForces() < 16), "self.alchemically_modified_system has more than 16 force groups; can't compute individual force component energies."
+            assert system.getNumForces() <= 32, "self.alchemically_modified_system has more than 32 force groups; " \
+                                                "can't compute individual force component energies."
             for (force_index, force) in enumerate(system.getForces()):
                 force.setForceGroup(force_index)
             # Store system
