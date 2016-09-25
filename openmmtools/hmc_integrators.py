@@ -70,6 +70,9 @@ class GHMCBase(mm.CustomIntegrator):
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
     """
 
+    def nan_to_inf(self, outkey, inkey):
+        self.addComputeGlobal(outkey, "select(step(exp(%s)), %s, 1/0)" % (inkey, inkey))
+
     def step(self, n_steps):
         """Do `n_steps` of dynamics while accumulating some timing information."""
         if not hasattr(self, "elapsed_time"):
@@ -274,6 +277,10 @@ class GHMCIntegrator(GHMCBase):
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
 
         self.addComputePerDof("sigma", "sqrt(kT/m)")
+
+        # Some integrators need a user-modifiable timestep
+        self.addComputeGlobal("dti", "dt")
+
         self.addUpdateContextState()
 
     def add_draw_velocities_step(self):
@@ -289,14 +296,14 @@ class GHMCIntegrator(GHMCBase):
     def add_cache_variables_step(self):
         """Store old positions and energies."""
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Eold", "ke + energy")
+        self.nan_to_inf("Eold", "ke + energy")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
 
     def add_accept_or_reject_step(self):
         logger.debug("GHMC: add_accept_or_reject_step()")
         self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "ke + energy")
+        self.nan_to_inf("Enew", "energy + ke")
         self.addComputeGlobal("accept", "step(exp(-(Enew-Eold)/kT) - uniform)")
 
         self.addComputePerDof("x", "select(accept, x, xold)")
@@ -479,20 +486,30 @@ class XCGHMCIntegrator(GHMCIntegrator):
         return self.getGlobalVariableByName("nflip")
 
     def create(self):
+        """The key flow control logic for XCHMC."""
         self.initialize_variables()
         self.add_draw_velocities_step()
         self.add_cache_variables_step()
         for i in range(1 + self.extra_chances):
-            self.add_hmc_iterations(i)
-            self.add_accept_or_reject_step(i)
+            self.beginIfBlock("uni > mu1")
+            #self.add_hmc_iterations(i)
+            self.add_hmc_iterations()
+            self.addComputeSum("ke", "0.5*m*v*v")
+            self.nan_to_inf("Enew", "ke + energy")
+            self.addComputeGlobal("r", "exp(-(Enew - Eold) / kT)")
+            self.addComputeGlobal("mu", "min(1, r)")  # XCGHMC paper version
+            self.addComputeGlobal("mu1", "max(mu1, mu)")
+            self.endBlock()
 
-        self.addComputeGlobal("flip", "(1 - done)")
-        self.addComputePerDof("x", "select(flip, xold, xfinal)")
-
+        self.beginIfBlock("uni > mu1")
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "vold")
         if self.is_GHMC:
-            self.addComputePerDof("v", "select(flip, -vold, vfinal)")  # Requires OMM Build on May 6, 2015
-
+            self.addComputePerDof("v", "v * -1")
         self.addComputeGlobal("nflip", "nflip + flip")
+        self.endBlock()
+
+
 
     def initialize_variables(self):
 
@@ -525,15 +542,16 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
         self.addPerDofVariable("x1", 0)  # for constraints
 
-        self.addPerDofVariable("xfinal", 0)
-        self.addPerDofVariable("vfinal", 0)
-
         self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
 
+        self.addGlobalVariable("uni", 0)  # Uniform random number draw in XCHMC
+
         self.addComputePerDof("sigma", "sqrt(kT/m)")
+
         if self.is_GHMC:
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
+
         self.addUpdateContextState()
 
     def add_draw_velocities_step(self):
@@ -558,6 +576,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addComputePerDof("xold", "x")
 
         self.addComputeGlobal("mu1", "0.0")  # XCGHMC Fig. 3 O1
+        self.addComputeGlobal("uni", "uniform")  # XCGHMC Fig. 3 O1
 
     def add_hmc_iterations(self, i):
         """Add self.steps_per_hmc or self.steps_per_extra_hmc iterations of symplectic hamiltonian dynamics."""
@@ -570,36 +589,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
         for step in range(steps):
             self.add_hamiltonian_step()
-
-    def add_accept_or_reject_step(self, i):
-        logger.debug("XCGHMC: add_accept_or_reject_step()")
-        self.addComputeSum("ke", "0.5*m*v*v")
-        self.addComputeGlobal("Enew", "ke + energy")
-
-        self.addComputeGlobal("r", "exp(-(Enew - Eold) / kT)")
-        self.addComputeGlobal("mu", "min(1, r)")  # XCGHMC paper version
-        self.addComputeGlobal("mu1", "max(mu1, mu)")
-        self.addComputeGlobal("accept", "step(mu1 - uniform) * (1 - done)")
-
-        if i == 0:
-            steps = self.steps_per_hmc
-        else:
-            steps = self.steps_per_extra_hmc
-
-        cumulative_steps = self.steps_per_hmc + i * self.steps_per_extra_hmc
-
-        self.addComputeGlobal("n%d" % i, "n%d + accept" % (i))
-
-        self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (cumulative_steps))
-        self.addComputeGlobal("steps_taken", "steps_taken + %d" % (steps))
-
-        self.addComputePerDof("xfinal", "select(accept, x, xfinal)")
-
-        if self.is_GHMC:
-            self.addComputePerDof("vfinal", "select(accept, v, vfinal)")
-
-        self.addComputeGlobal("done", "max(done, accept)")
-        # self.addConditionalTermination("done")  #  Conditional termination here would avoid additional force+energy evaluations.
 
 
 class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
@@ -731,6 +720,7 @@ class MJHMCIntegrator(GHMCBase):
         self.addPerDofVariable("xLm", 0)
         self.addPerDofVariable("vLm", 0)
         self.addGlobalVariable("K", 0)  # Kinetic energy of current state
+        self.addGlobalVariable("E", 0)  # Potential energy of current state
         self.addGlobalVariable("K0", 0)  # Kinetic energy of starting state
         self.addGlobalVariable("E0", 0)  # Potential energy of starting state
         self.addGlobalVariable("ELm", 0)
@@ -745,8 +735,9 @@ class MJHMCIntegrator(GHMCBase):
 
 
         self.addComputeGlobal("dti", "dt")
+
         # If we're starting the first iteration, pre-compute some variables
-        self.beginIfBlock("last_move == -1")
+        self.beginIfBlock("last_move < 0")
         self.addComputePerDof("sigma", "sqrt(kT/m)")
         self.endBlock()
 
@@ -768,23 +759,25 @@ class MJHMCIntegrator(GHMCBase):
         # Store old position and energy.
         #
         self.addComputeSum("K0", "0.5*m*v*v")
-        self.addComputeGlobal("E0", "ke + energy")
+        self.addComputeGlobal("H0", "K0 + energy")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
 
         ########################################################################
         # If we previously accepted flip move or thermalization move
         # Go backwards for 1 round of leapfrog to determine xLm and vLm
-        self.beginIfBlock("last_move != 1")
-        #self.beginIfBlock("last_move == -10")
+        self.beginIfBlock("last_move != -5")
         # Reverse the timestep
         self.addComputeGlobal("dti", "dt * -1")
         self.add_hmc_iterations()
         self.addComputePerDof("xLm", "x")
         self.addComputePerDof("vLm", "v")
+
         # Store the potential and kinetic energies from the lower ladder position
         self.addComputeSum("KLm", "0.5*m*v*v")
         self.addComputeGlobal("ELm", "energy")
+        self.nan_to_inf("HLm", "energy + KLm")
+
         # Revert the timestep to forward direction and restore the cached coordinates
         self.addComputeGlobal("dti", "dt")
         self.addComputePerDof("x", "xold")
@@ -802,10 +795,14 @@ class MJHMCIntegrator(GHMCBase):
         #LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG#
 
         self.addComputeSum("K", "0.5*m*v*v")
+        # Check if energy is NAN.  If so, replace it with infinity.  Otherwise keep it as is.
+        self.addComputeGlobal("E", "energy")
+        self.nan_to_inf("H", "energy + K")
+
 
         # Eqn (9)
-        self.addComputeGlobal("gammaL", "exp(0.5 * ((energy - E0) + (K - K0)))")
-        self.addComputeGlobal("gammaLm", "exp(0.5 * ((ELm - E0) + (KLm - K0)))")
+        self.addComputeGlobal("gammaL", "exp(-0.5 * (H - H0) / kT)")
+        self.addComputeGlobal("gammaLm", "exp(-0.5 * (HLm - H0) / kT)")
         self.addComputeGlobal("gammaF", "max(0, gammaLm - gammaL)")
         self.addComputeGlobal("gammaR", "beta_mixing")
 
@@ -819,28 +816,31 @@ class MJHMCIntegrator(GHMCBase):
         self.addComputeGlobal("holding", "min(wF, min(wR, wL))")
 
         ########################################################################
-        # Leapfrog move
+        # Leapfrog move: coded as 1
         self.beginIfBlock("wL < min(wF, wR)")
         self.addComputePerDof("xLm", "xold")
         self.addComputePerDof("vLm", "vold")
+        self.addComputeGlobal("last_move", "1")
         self.endBlock()
         ########################################################################
 
         ########################################################################
-        # Flip Momenta move
+        # Flip Momenta move: coded as 2
         self.beginIfBlock("wF < min(wL, wR)")
         # x is already at at position L (x_{-1})
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "vold * -1")
+        self.addComputeGlobal("last_move", "2")
         self.endBlock()
         ########################################################################
 
         ########################################################################
-        # Thermalization Move
+        # Thermalization Move: coded as 3
         self.beginIfBlock("wR < min(wL, wF)")
         # x is already at at position L (x_{-1})
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "sigma*gaussian")
         self.addConstrainVelocities()
+        self.addComputeGlobal("last_move", "3")
         self.endBlock()
         ########################################################################
