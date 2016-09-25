@@ -71,6 +71,7 @@ class GHMCBase(mm.CustomIntegrator):
     """
 
     def nan_to_inf(self, outkey, inkey):
+        """Add a compute step that converts nan to positive infinity in `inkey` and ouputs in `outkey`."""
         self.addComputeGlobal(outkey, "select(step(exp(%s)), %s, 1/0)" % (inkey, inkey))
 
     def step(self, n_steps):
