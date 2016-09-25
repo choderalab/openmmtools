@@ -269,6 +269,7 @@ class GHMCIntegrator(GHMCBase):
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable("accept", 0)  # accept or reject
+        self.addGlobalVariable("dti", 0)  # accept or reject
         self.addPerDofVariable("x1", 0)  # for constraints
 
         self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
@@ -493,21 +494,23 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.add_cache_variables_step()
         for i in range(1 + self.extra_chances):
             self.beginIfBlock("uni > mu1")
-            #self.add_hmc_iterations(i)
             self.add_hmc_iterations()
             self.addComputeSum("ke", "0.5*m*v*v")
             self.nan_to_inf("Enew", "ke + energy")
             self.addComputeGlobal("r", "exp(-(Enew - Eold) / kT)")
             self.addComputeGlobal("mu", "min(1, r)")  # XCGHMC paper version
             self.addComputeGlobal("mu1", "max(mu1, mu)")
+            self.addComputeGlobal("terminal_chance", "%d" % i)
+            self.addComputeGlobal("n%d" % i, "n%d + step(uni - mu1)" % (i))
             self.endBlock()
 
         self.beginIfBlock("uni > mu1")
         self.addComputePerDof("x", "xold")
-        self.addComputePerDof("v", "vold")
         if self.is_GHMC:
-            self.addComputePerDof("v", "v * -1")
-        self.addComputeGlobal("nflip", "nflip + flip")
+            self.addComputePerDof("v", "-1 * vold")
+        else:
+            self.addComputePerDof("v", "vold")
+        self.addComputeGlobal("nflip", "nflip + 1")
         self.endBlock()
 
 
@@ -518,7 +521,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("r", 0.0)  # Metropolis ratio: ratio probabilities
 
         self.addGlobalVariable("extra_chances", self.extra_chances)  # Maximum number of rounds of dynamics
-        self.addGlobalVariable("flip", 0.0)  # Indicator variable whether this iteration was a flip
 
         self.addGlobalVariable("mu", 0.0)  #
         self.addGlobalVariable("mu1", 0.0)  # XCGHMC Fig. 3 O1
@@ -538,6 +540,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addPerDofVariable("vold", 0)  # old velocities
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
+        self.addGlobalVariable("terminal_chance", 0)
 
         self.addGlobalVariable("done", 0)  # Becomes true once we find a good value of (x, p)
 
@@ -547,8 +550,11 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
 
         self.addGlobalVariable("uni", 0)  # Uniform random number draw in XCHMC
+        self.addGlobalVariable("dti", 0)  # Uniform random number draw in XCHMC
 
         self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addComputeGlobal("dti", "dt")
+
 
         if self.is_GHMC:
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
@@ -578,18 +584,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
         self.addComputeGlobal("mu1", "0.0")  # XCGHMC Fig. 3 O1
         self.addComputeGlobal("uni", "uniform")  # XCGHMC Fig. 3 O1
-
-    def add_hmc_iterations(self, i):
-        """Add self.steps_per_hmc or self.steps_per_extra_hmc iterations of symplectic hamiltonian dynamics."""
-        logger.debug("Adding XCGHMCIntegrator steps.")
-
-        steps = self.steps_per_hmc
-
-        if i > 0:
-            steps = self.steps_per_extra_hmc
-
-        for step in range(steps):
-            self.add_hamiltonian_step()
 
 
 class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
@@ -693,23 +687,15 @@ class MJHMCIntegrator(GHMCBase):
         """
         mm.CustomIntegrator.__init__(self, timestep)
 
-        self.groups = check_groups(groups)
         self.temperature = temperature
         self.steps_per_hmc = steps_per_hmc
-        self.steps_per_extra_hmc = steps_per_extra_hmc
         self.timestep = timestep
-        self.extra_chances = extra_chances
-        self.collision_rate = collision_rate
 
         self.beta_mixing = beta_mixing
 
         self.add_compute_steps()
 
     def initialize_variables(self):
-        self.steps_per_hmc = steps_per_hmc
-        self.temperature = temperature
-        self.timestep = timestep
-
         # Compute the thermal energy.
         kT = kB * self.temperature
 
