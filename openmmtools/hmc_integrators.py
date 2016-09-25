@@ -123,7 +123,7 @@ class GHMCBase(mm.CustomIntegrator):
         print(data.to_string(formatters=[lambda x: "%.4g" % x for x in range(data.shape[1])]))
         return data
 
-    def create(self):
+    def add_compute_steps(self):
         self.initialize_variables()
         self.add_draw_velocities_step()
         self.add_cache_variables_step()
@@ -256,7 +256,7 @@ class GHMCIntegrator(GHMCBase):
         self.temperature = temperature
         self.collision_rate = collision_rate
         self.timestep = timestep
-        self.create()
+        self.add_compute_steps()
 
     def initialize_variables(self):
 
@@ -415,7 +415,7 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
         self.timestep = timestep
         self.temperature = temperature
 
-        self.create()
+        self.add_compute_steps()
 
 
 class XCGHMCIntegrator(GHMCIntegrator):
@@ -461,7 +461,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.extra_chances = extra_chances
         self.collision_rate = collision_rate
 
-        self.create()
+        self.add_compute_steps()
 
     @property
     def all_counts(self):
@@ -485,7 +485,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         """The total number of momentum flips."""
         return self.getGlobalVariableByName("nflip")
 
-    def create(self):
+    def add_compute_steps(self):
         """The key flow control logic for XCHMC."""
         self.initialize_variables()
         self.add_draw_velocities_step()
@@ -641,7 +641,7 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
         self.extra_chances = extra_chances
         self.collision_rate = collision_rate
 
-        self.create()
+        self.add_compute_steps()
 
 class MJHMCIntegrator(GHMCBase):
 
@@ -690,22 +690,34 @@ class MJHMCIntegrator(GHMCBase):
         >>> integrator = HMCIntegrator(temperature, nsteps, timestep)
 
         """
-
         mm.CustomIntegrator.__init__(self, timestep)
 
+        self.groups = check_groups(groups)
+        self.temperature = temperature
+        self.steps_per_hmc = steps_per_hmc
+        self.steps_per_extra_hmc = steps_per_extra_hmc
+        self.timestep = timestep
+        self.extra_chances = extra_chances
+        self.collision_rate = collision_rate
+
+        self.beta_mixing = beta_mixing
+
+        self.add_compute_steps()
+
+    def initialize_variables(self):
         self.steps_per_hmc = steps_per_hmc
         self.temperature = temperature
         self.timestep = timestep
 
         # Compute the thermal energy.
-        kT = kB * temperature
+        kT = kB * self.temperature
 
         # Integrator initialization.
 
         self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
         self.addGlobalVariable("kT", kT)  # thermal energy
-        self.addGlobalVariable("beta_mixing", beta_mixing)  # thermalization rate
+        self.addGlobalVariable("beta_mixing", self.beta_mixing)  # thermalization rate
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
@@ -734,35 +746,33 @@ class MJHMCIntegrator(GHMCBase):
         self.addGlobalVariable("wR", 0)
 
 
-        self.addComputeGlobal("dti", "dt")
+    def add_compute_steps(self):
+        self.initialize_variables()
 
-        # If we're starting the first iteration, pre-compute some variables
+        # Allow Context updating here, outside of inner loop only.  (KAB: CHECK THIS for NPT LATER!)
+        self.addUpdateContextState()
+        self.addComputeGlobal("dti", "dt")  # Add a user-modifiable version of the timestep
+
+        ########################################################################
+        # If we're starting the first iteration, pre-compute some variables and re-thermalize
+        ########################################################################
         self.beginIfBlock("last_move < 0")
         self.addComputePerDof("sigma", "sqrt(kT/m)")
-        self.endBlock()
-
-        ########################################################################
-        # Allow Context updating here, outside of inner loop only.  (KAB: CHECK THIS for NPT LATER!)
-        ########################################################################
-        self.addUpdateContextState()
-
-        #
-        # Draw new velocity.
-        #
         self.addComputePerDof("v", "sigma*gaussian")
         self.addConstrainVelocities()
-
-
+        self.endBlock()
         ########################################################################
 
-        #
+        ########################################################################
         # Store old position and energy.
-        #
+        ########################################################################
         self.addComputeSum("K0", "0.5*m*v*v")
         self.addComputeGlobal("H0", "K0 + energy")
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
 
+        ########################################################################
+        # Calculate Backwards step
         ########################################################################
         # If we previously accepted flip move or thermalization move
         # Go backwards for 1 round of leapfrog to determine xLm and vLm
@@ -787,12 +797,12 @@ class MJHMCIntegrator(GHMCBase):
         ########################################################################
 
 
-        #LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG#
         ########################################################################
-        # Generate Lx via leapfrog
+        # Generate Lx via leapfrog steps
+        ########################################################################
         self.add_hmc_iterations()
         ########################################################################
-        #LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG#
+
 
         self.addComputeSum("K", "0.5*m*v*v")
         # Check if energy is NAN.  If so, replace it with infinity.  Otherwise keep it as is.
