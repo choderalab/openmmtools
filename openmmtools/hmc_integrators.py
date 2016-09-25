@@ -141,11 +141,11 @@ class GHMCBase(mm.CustomIntegrator):
         This function will be overwritten in RESPA subclasses!
         """
         logger.debug("Adding step of hamiltonian dynamics.""")
-        self.addComputePerDof("v", "v+0.5*dt*f/m")
-        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("v", "v+0.5*dti*f/m")
+        self.addComputePerDof("x", "x+dti*v")
         self.addComputePerDof("x1", "x")
         self.addConstrainPositions()
-        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+        self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
         self.addConstrainVelocities()
 
     @property
@@ -334,15 +334,15 @@ class RESPAMixIn(object):
             raise ValueError("Force group must be between 0 and 31")
 
         for i in range(stepsPerParentStep):
-            self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
+            self.addComputePerDof("v", "v+0.5*(dti/%s)*f%s/m" % (str_sub, str_group))
             if len(groups) == 1:
                 self.addComputePerDof("x1", "x")
-                self.addComputePerDof("x", "x+(dt/%s)*v" % (str_sub))
+                self.addComputePerDof("x", "x+(dti/%s)*v" % (str_sub))
                 self.addConstrainPositions()
-                self.addComputePerDof("v", "(x-x1)/(dt/%s)" % (str_sub))
+                self.addComputePerDof("v", "(x-x1)/(dti/%s)" % (str_sub))
             else:
                 self._create_substeps(substeps, groups[1:])
-            self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
+            self.addComputePerDof("v", "v+0.5*(dti/%s)*f%s/m" % (str_sub, str_group))
 
 
 class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
@@ -458,7 +458,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
     @property
     def all_counts(self):
-        """Return a pandas series of moves accepted after step 0, 1, ... extra_chances - 1, and flip"""
+        """Return a pandas series of moves accepted after step 0, 1, . extra_chances - 1, and flip"""
         d = {}
         for i in range(1 + self.extra_chances):
             d[i] = self.getGlobalVariableByName("n%d" % i)
@@ -469,7 +469,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
     @property
     def all_probs(self):
-        """Return a pandas series of probabilities of moves accepted after step 0, 1, ... extra_chances - 1, and flip"""
+        """Return a pandas series of probabilities of moves accepted after step 0, 1,  extra_chances - 1, and flip"""
         d = self.all_counts
         return d / d.sum()
 
@@ -517,7 +517,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
-        self.addPerDofVariable("vold", 0)  # old velocities        
+        self.addPerDofVariable("vold", 0)  # old velocities
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
 
@@ -653,3 +653,194 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
         self.collision_rate = collision_rate
 
         self.create()
+
+class MJHMCIntegrator(GHMCBase):
+
+    """
+    Markov Jump Hybrid Monte Carlo (HMC) integrator.
+
+    """
+
+    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, beta_mixing=0.01):
+        """
+        Create a hybrid Monte Carlo (HMC) integrator.
+
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+           The temperature.
+        nsteps : int, default: 10
+           The number of velocity Verlet steps to take per HMC trial.
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+           The integration timestep.
+
+        Warning
+        -------
+        Because 'nsteps' sets the number of steps taken, a call to integrator.step(1) actually takes 'nsteps' steps.
+
+        Notes
+        -----
+        The velocity is drawn from a Maxwell-Boltzmann distribution, then 'nsteps' steps are taken,
+        and the new configuration is either accepted or rejected.
+
+        Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and
+        accepted, respectively.
+
+        TODO
+        ----
+        Currently, the simulation timestep is only advanced by 'timestep' each step, rather than timestep*nsteps.  Fix this.
+
+        Examples
+        --------
+
+        Create an HMC integrator.
+
+        >>> timestep = 1.0 * simtk.unit.femtoseconds # fictitious timestep
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> nsteps = 10 # number of steps per call
+        >>> integrator = HMCIntegrator(temperature, nsteps, timestep)
+
+        """
+
+        mm.CustomIntegrator.__init__(self, timestep)
+
+        self.steps_per_hmc = steps_per_hmc
+        self.temperature = temperature
+        self.timestep = timestep
+
+        # Compute the thermal energy.
+        kT = kB * temperature
+
+        # Integrator initialization.
+
+        self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
+
+        self.addGlobalVariable("kT", kT)  # thermal energy
+        self.addGlobalVariable("beta_mixing", beta_mixing)  # thermalization rate
+        self.addPerDofVariable("sigma", 0)
+        self.addGlobalVariable("ke", 0)  # kinetic energy
+        self.addPerDofVariable("xold", 0)  # old positions
+        self.addPerDofVariable("vold", 0)  # old velocities
+        self.addGlobalVariable("Eold", 0)  # old energy
+        self.addGlobalVariable("Enew", 0)  # new energy
+        self.addPerDofVariable("x1", 0)  # for constraints
+
+        # Add some MJHMC specific variables
+        self.addGlobalVariable("last_move", -2)  # Use integer coding to store the type of the last move.
+        self.addGlobalVariable("dti", 0)  # Use a variable to store the current timestep
+        self.addPerDofVariable("xLm", 0)
+        self.addPerDofVariable("vLm", 0)
+        self.addGlobalVariable("K", 0)  # Kinetic energy of current state
+        self.addGlobalVariable("K0", 0)  # Kinetic energy of starting state
+        self.addGlobalVariable("E0", 0)  # Potential energy of starting state
+        self.addGlobalVariable("ELm", 0)
+        self.addGlobalVariable("KLm", 0)
+        self.addGlobalVariable("gammaL", 0)
+        self.addGlobalVariable("gammaLm", 0)
+        self.addGlobalVariable("gammaF", 0)
+        self.addGlobalVariable("gammaR", 0)
+        self.addGlobalVariable("wL", 0)
+        self.addGlobalVariable("wF", 0)
+        self.addGlobalVariable("wR", 0)
+
+
+        self.addComputeGlobal("dti", "dt")
+        # If we're starting the first iteration, pre-compute some variables
+        self.beginIfBlock("last_move == -1")
+        self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.endBlock()
+
+        ########################################################################
+        # Allow Context updating here, outside of inner loop only.  (KAB: CHECK THIS for NPT LATER!)
+        ########################################################################
+        self.addUpdateContextState()
+
+        #
+        # Draw new velocity.
+        #
+        self.addComputePerDof("v", "sigma*gaussian")
+        self.addConstrainVelocities()
+
+
+        ########################################################################
+
+        #
+        # Store old position and energy.
+        #
+        self.addComputeSum("K0", "0.5*m*v*v")
+        self.addComputeGlobal("E0", "ke + energy")
+        self.addComputePerDof("xold", "x")
+        self.addComputePerDof("vold", "v")
+
+        ########################################################################
+        # If we previously accepted flip move or thermalization move
+        # Go backwards for 1 round of leapfrog to determine xLm and vLm
+        self.beginIfBlock("last_move != 1")
+        #self.beginIfBlock("last_move == -10")
+        # Reverse the timestep
+        self.addComputeGlobal("dti", "dt * -1")
+        self.add_hmc_iterations()
+        self.addComputePerDof("xLm", "x")
+        self.addComputePerDof("vLm", "v")
+        # Store the potential and kinetic energies from the lower ladder position
+        self.addComputeSum("KLm", "0.5*m*v*v")
+        self.addComputeGlobal("ELm", "energy")
+        # Revert the timestep to forward direction and restore the cached coordinates
+        self.addComputeGlobal("dti", "dt")
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "vold")
+        self.addComputeGlobal("last_move", "-1")  # For debug purposes, set to -1 so we can keep track of logic flow
+        self.endBlock()
+        ########################################################################
+
+
+        #LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG#
+        ########################################################################
+        # Generate Lx via leapfrog
+        self.add_hmc_iterations()
+        ########################################################################
+        #LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG##LEAPFROG#
+
+        self.addComputeSum("K", "0.5*m*v*v")
+
+        # Eqn (9)
+        self.addComputeGlobal("gammaL", "exp(0.5 * ((energy - E0) + (K - K0)))")
+        self.addComputeGlobal("gammaLm", "exp(0.5 * ((ELm - E0) + (KLm - K0)))")
+        self.addComputeGlobal("gammaF", "max(0, gammaLm - gammaL)")
+        self.addComputeGlobal("gammaR", "beta_mixing")
+
+        # From wikipedia + Algorithm 1
+        self.addComputeGlobal("wL", "-1 * log(uniform) / gammaL")
+        self.addComputeGlobal("wF", "-1 * log(uniform) / gammaF")
+        self.addComputeGlobal("wR", "-1 * log(uniform) / gammaR")
+        ########################################################################
+
+
+        self.addComputeGlobal("holding", "min(wF, min(wR, wL))")
+
+        ########################################################################
+        # Leapfrog move
+        self.beginIfBlock("wL < min(wF, wR)")
+        self.addComputePerDof("xLm", "xold")
+        self.addComputePerDof("vLm", "vold")
+        self.endBlock()
+        ########################################################################
+
+        ########################################################################
+        # Flip Momenta move
+        self.beginIfBlock("wF < min(wL, wR)")
+        # x is already at at position L (x_{-1})
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "vold * -1")
+        self.endBlock()
+        ########################################################################
+
+        ########################################################################
+        # Thermalization Move
+        self.beginIfBlock("wR < min(wL, wF)")
+        # x is already at at position L (x_{-1})
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "sigma*gaussian")
+        self.addConstrainVelocities()
+        self.endBlock()
+        ########################################################################
