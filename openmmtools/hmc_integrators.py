@@ -286,7 +286,10 @@ class GHMCIntegrator(GHMCBase):
         self.addUpdateContextState()
 
     def add_draw_velocities_step(self):
-        """Draw perturbed velocities."""
+        """Draw perturbed velocities using either partial or complete momentum thermalization."""
+
+        self.addUpdateContextState()
+        self.addConstrainPositions()
 
         if self.is_GHMC:
             self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
@@ -294,6 +297,7 @@ class GHMCIntegrator(GHMCBase):
             self.addComputePerDof("v", "sigma*gaussian")
 
         self.addConstrainVelocities()
+
 
     def add_cache_variables_step(self):
         """Store old positions and energies."""
@@ -542,8 +546,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable("terminal_chance", 0)
 
-        self.addGlobalVariable("done", 0)  # Becomes true once we find a good value of (x, p)
-
         self.addPerDofVariable("x1", 0)  # for constraints
 
         self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
@@ -560,20 +562,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
 
         self.addUpdateContextState()
-
-    def add_draw_velocities_step(self):
-        """Draw perturbed velocities."""
-
-        self.addUpdateContextState()
-        self.addConstrainPositions()
-
-        self.addComputeGlobal("done", "0.0")
-        if self.is_GHMC:
-            self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        else:
-            self.addComputePerDof("v", "sigma*gaussian")
-
-        self.addConstrainVelocities()
 
     def add_cache_variables_step(self):
         """Store old positions and energies."""
@@ -722,6 +710,9 @@ class MJHMCIntegrator(GHMCBase):
         self.addGlobalVariable("E", 0)  # Potential energy of current state
         self.addGlobalVariable("K0", 0)  # Kinetic energy of starting state
         self.addGlobalVariable("E0", 0)  # Potential energy of starting state
+        self.addGlobalVariable("H0", 0)  # Total Hamiltonial of starting state
+        self.addGlobalVariable("H", 0)  # Total Hamiltonial of current state
+        self.addGlobalVariable("HLm", 0)  # Total Hamiltonial of starting state
         self.addGlobalVariable("ELm", 0)
         self.addGlobalVariable("KLm", 0)
         self.addGlobalVariable("gammaL", 0)
@@ -731,7 +722,16 @@ class MJHMCIntegrator(GHMCBase):
         self.addGlobalVariable("wL", 0)
         self.addGlobalVariable("wF", 0)
         self.addGlobalVariable("wR", 0)
+        self.addGlobalVariable("calculated_xLm", 0)
 
+        # Keep track of the number of times each move type is accepted.
+        self.addGlobalVariable("n1", 0)
+        self.addGlobalVariable("n2", 0)
+        self.addGlobalVariable("n3", 0)
+        self.addGlobalVariable("holding", 0)
+
+    def reset_time(self):
+        pass  # Necessary to over-ride GHMC-specific version
 
     def add_compute_steps(self):
         self.initialize_variables()
@@ -763,7 +763,7 @@ class MJHMCIntegrator(GHMCBase):
         ########################################################################
         # If we previously accepted flip move or thermalization move
         # Go backwards for 1 round of leapfrog to determine xLm and vLm
-        self.beginIfBlock("last_move != -5")
+        self.beginIfBlock("last_move != 1")  # KAB NOTE: MAY NEED TO always force-recalculation if contextUpdate has occurred
         # Reverse the timestep
         self.addComputeGlobal("dti", "dt * -1")
         self.add_hmc_iterations()
@@ -779,7 +779,8 @@ class MJHMCIntegrator(GHMCBase):
         self.addComputeGlobal("dti", "dt")
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "vold")
-        self.addComputeGlobal("last_move", "-1")  # For debug purposes, set to -1 so we can keep track of logic flow
+        self.addComputeGlobal("calculated_xLm", "1")  # For debug purposes
+
         self.endBlock()
         ########################################################################
 
@@ -818,6 +819,7 @@ class MJHMCIntegrator(GHMCBase):
         self.addComputePerDof("xLm", "xold")
         self.addComputePerDof("vLm", "vold")
         self.addComputeGlobal("last_move", "1")
+        self.addComputeGlobal("n1", "n1 + 1")
         self.endBlock()
         ########################################################################
 
@@ -828,6 +830,7 @@ class MJHMCIntegrator(GHMCBase):
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "vold * -1")
         self.addComputeGlobal("last_move", "2")
+        self.addComputeGlobal("n2", "n2 + 1")
         self.endBlock()
         ########################################################################
 
@@ -839,5 +842,6 @@ class MJHMCIntegrator(GHMCBase):
         self.addComputePerDof("v", "sigma*gaussian")
         self.addConstrainVelocities()
         self.addComputeGlobal("last_move", "3")
+        self.addComputeGlobal("n3", "n3 + 1")
         self.endBlock()
         ########################################################################
