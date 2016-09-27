@@ -20,7 +20,7 @@ This repository contains a number of additional integrators for OpenMM in `openm
 
 ## Test system suite
 
-The `openmmtools.testsystems` module contains a large suite of test systems---including many with simple exactly-computable properties---that can be used to test molecular simulation algorith,s
+The `openmmtools.testsystems` module contains a large suite of test systems---including many with simple exactly-computable properties---that can be used to test molecular simulation algorithms
 
 ## OpenMM testing scripts
 
