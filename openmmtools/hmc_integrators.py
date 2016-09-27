@@ -145,11 +145,11 @@ class GHMCBase(mm.CustomIntegrator):
         This function will be overwritten in RESPA subclasses!
         """
         logger.debug("Adding step of hamiltonian dynamics.""")
-        self.addComputePerDof("v", "v+0.5*dti*f/m")
-        self.addComputePerDof("x", "x+dti*v")
+        self.addComputePerDof("v", "v+0.5*dt*f/m")
+        self.addComputePerDof("x", "x+dt*v")
         self.addComputePerDof("x1", "x")
         self.addConstrainPositions()
-        self.addComputePerDof("v", "v+0.5*dti*f/m+(x-x1)/dti")
+        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
 
     @property
@@ -269,7 +269,6 @@ class GHMCIntegrator(GHMCBase):
         self.addGlobalVariable("Eold", 0)  # old energy
         self.addGlobalVariable("Enew", 0)  # new energy
         self.addGlobalVariable("accept", 0)  # accept or reject
-        self.addGlobalVariable("dti", 0)  # accept or reject
         self.addPerDofVariable("x1", 0)  # for constraints
 
         self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
@@ -279,9 +278,6 @@ class GHMCIntegrator(GHMCBase):
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
 
         self.addComputePerDof("sigma", "sqrt(kT/m)")
-
-        # Some integrators need a user-modifiable timestep
-        self.addComputeGlobal("dti", "dt")
 
         self.addUpdateContextState()
 
@@ -347,15 +343,15 @@ class RESPAMixIn(object):
             raise ValueError("Force group must be between 0 and 31")
 
         for i in range(stepsPerParentStep):
-            self.addComputePerDof("v", "v+0.5*(dti/%s)*f%s/m" % (str_sub, str_group))
+            self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
             if len(groups) == 1:
                 self.addComputePerDof("x1", "x")
-                self.addComputePerDof("x", "x+(dti/%s)*v" % (str_sub))
+                self.addComputePerDof("x", "x+(dt/%s)*v" % (str_sub))
                 self.addConstrainPositions()
-                self.addComputePerDof("v", "(x-x1)/(dti/%s)" % (str_sub))
+                self.addComputePerDof("v", "(x-x1)/(dt/%s)" % (str_sub))
             else:
                 self._create_substeps(substeps, groups[1:])
-            self.addComputePerDof("v", "v+0.5*(dti/%s)*f%s/m" % (str_sub, str_group))
+            self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
 
 
 class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
@@ -552,10 +548,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
 
         self.addGlobalVariable("uni", 0)  # Uniform random number draw in XCHMC
-        self.addGlobalVariable("dti", 0)  # Uniform random number draw in XCHMC
-
         self.addComputePerDof("sigma", "sqrt(kT/m)")
-        self.addComputeGlobal("dti", "dt")
 
 
         if self.is_GHMC:
@@ -703,7 +696,6 @@ class MJHMCIntegrator(GHMCBase):
 
         # Add some MJHMC specific variables
         self.addGlobalVariable("last_move", -2)  # Use integer coding to store the type of the last move.
-        self.addGlobalVariable("dti", 0)  # Use a variable to store the current timestep
         self.addPerDofVariable("xLm", 0)
         self.addPerDofVariable("vLm", 0)
         self.addGlobalVariable("K", 0)  # Kinetic energy of current state
@@ -738,7 +730,6 @@ class MJHMCIntegrator(GHMCBase):
 
         # Allow Context updating here, outside of inner loop only.  (KAB: CHECK THIS for NPT LATER!)
         self.addUpdateContextState()
-        self.addComputeGlobal("dti", "dt")  # Add a user-modifiable version of the timestep
 
         ########################################################################
         # If we're starting the first iteration, pre-compute some variables and re-thermalize
@@ -765,7 +756,7 @@ class MJHMCIntegrator(GHMCBase):
         # Go backwards for 1 round of leapfrog to determine xLm and vLm
         self.beginIfBlock("last_move != 1")  # KAB NOTE: MAY NEED TO always force-recalculation if contextUpdate has occurred
         # Reverse the timestep
-        self.addComputeGlobal("dti", "dt * -1")
+        self.addComputeGlobal("dt", "dt * -1")
         self.add_hmc_iterations()
         self.addComputePerDof("xLm", "x")
         self.addComputePerDof("vLm", "v")
@@ -776,7 +767,7 @@ class MJHMCIntegrator(GHMCBase):
         self.nan_to_inf("HLm", "energy + KLm")
 
         # Revert the timestep to forward direction and restore the cached coordinates
-        self.addComputeGlobal("dti", "dt")
+        self.addComputeGlobal("dt", "dt * -1")
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "vold")
         self.addComputeGlobal("calculated_xLm", "1")  # For debug purposes
