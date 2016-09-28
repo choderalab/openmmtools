@@ -502,6 +502,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
             self.addComputeGlobal("mu1", "max(mu1, mu)")
             self.addComputeGlobal("terminal_chance", "%d" % i)
             self.addComputeGlobal("n%d" % i, "n%d + step(mu1 - uni)" % (i))
+            self.addComputeGlobal("steps_taken", "steps_taken + 1")
             self.endBlock()
 
         self.beginIfBlock("uni > mu1")
@@ -514,8 +515,9 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.endBlock()
 
         self.beginIfBlock("uni <= mu1")
-        self.addComputeGlobal("steps_taken", "steps_taken + terminal_chance + 1")
+        self.addComputeGlobal("steps_accepted", "steps_accepted + terminal_chance + 1")
         self.endBlock()
+
 
 
     def initialize_variables(self):
