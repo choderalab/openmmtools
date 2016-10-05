@@ -950,10 +950,10 @@ class AbsoluteAlchemicalFactory(object):
         elif nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
             # Ewald direct-space electrostatics
             [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
-            if alpha_ewald == 0.0:
+            if (alpha_ewald/alpha_ewald.unit) == 0.0:
                 # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
-                assert (alpha_ewald != 0.0) # we can't have alpha be zero
+                tol = reference_force.getEwaldErrorTolerance()
+                alpha_ewald = (1.0/reference_force.getCutoffDistance()) * np.sqrt(-np.log(2.0*tol))
             electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
             electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
             # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
