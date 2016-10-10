@@ -10,4 +10,5 @@ from openmmtools import version
 __version__ = version.version
 
 # Import modules.
-from openmmtools import testsystems, integrators, hmc_integrators
+from openmmtools import testsystems, integrators
+from . import hmc_integrators

@@ -12,7 +12,7 @@ import numpy as np
 import simtk.unit as u
 import simtk.openmm as mm
 
-from .constants import kB
+from ..constants import kB
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
