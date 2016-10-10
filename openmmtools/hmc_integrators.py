@@ -332,7 +332,7 @@ class RESPAMixIn(object):
 
         str_group, str_sub = str(group), str(substeps)
 
-        stepsPerParentStep = substeps / parentSubsteps
+        stepsPerParentStep = substeps // parentSubsteps
 
         if stepsPerParentStep < 1 or stepsPerParentStep != int(stepsPerParentStep):
             raise ValueError("The number for substeps for each group must be a multiple of the number for the previous group")
@@ -345,10 +345,11 @@ class RESPAMixIn(object):
         for i in range(stepsPerParentStep):
             self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
             if len(groups) == 1:
+                self.addComputePerDof("x", "x+(dt/%s)*v" % str_sub)
                 self.addComputePerDof("x1", "x")
-                self.addComputePerDof("x", "x+(dt/%s)*v" % (str_sub))
                 self.addConstrainPositions()
-                self.addComputePerDof("v", "(x-x1)/(dt/%s)" % (str_sub))
+                self.addComputePerDof("v", "v+(x-x1)/(dt/%s)" % str_sub)
+                self.addConstrainVelocities()
             else:
                 self._create_substeps(substeps, groups[1:])
             self.addComputePerDof("v", "v+0.5*(dt/%s)*f%s/m" % (str_sub, str_group))
