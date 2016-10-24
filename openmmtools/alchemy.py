@@ -308,6 +308,10 @@ class AbsoluteAlchemicalFactory(object):
         * Can we collect related parameters (e.g. softcore parameters) into a dict?
 
         """
+        # If no ligand atom set is specified, create an empty list.
+        if ligand_atoms is None:
+            ligand_atoms = list()
+        
         # Ligand atoms must be list of numpy int type
         ligand_atoms = [ int(index) for index in ligand_atoms ]
 
