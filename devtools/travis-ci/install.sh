@@ -1,19 +1,23 @@
+# Temporarily change directory to $HOME to install software
+pushd .
+cd $HOME
+
+# Install Miniconda
 MINICONDA=Miniconda2-latest-Linux-x86_64.sh
-MINICONDA_MD5=$(curl -s http://repo.continuum.io/miniconda/ | grep -A3 $MINICONDA | sed -n '4p' | sed -n 's/ *<td>\(.*\)<\/td> */\1/p')
-wget https://repo.continuum.io/miniconda/$MINICONDA
+MINICONDA_HOME=$HOME/miniconda
+MINICONDA_MD5=$(curl -s https://repo.continuum.io/miniconda/ | grep -A3 $MINICONDA | sed -n '4p' | sed -n 's/ *<td>\(.*\)<\/td> */\1/p')
+wget -q https://repo.continuum.io/miniconda/$MINICONDA
 if [[ $MINICONDA_MD5 != $(md5sum $MINICONDA | cut -d ' ' -f 1) ]]; then
     echo "Miniconda MD5 mismatch"
     exit 1
 fi
-bash $MINICONDA -b -p $HOME/miniconda
-PIP_ARGS="-U"
+bash $MINICONDA -b -p $MINICONDA_HOME
 
-export PATH=$HOME/miniconda/bin:$PATH
-
-sudo apt-get update
-sudo apt-get install -qq -y g++ gfortran csh g++-multilib gcc-multilib openbabel
-
+# Configure miniconda
+export PIP_ARGS="-U"
+export PATH=$MINICONDA_HOME/bin:$PATH
 conda update --yes conda
-conda config --add channels http://conda.binstar.org/omnia
-conda config --add channels https://conda.binstar.org/rdkit
-conda install --yes conda-build
+conda install --yes conda-build jinja2 anaconda-client pip
+
+# Restore original directory
+popd
