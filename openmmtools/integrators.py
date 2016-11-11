@@ -821,34 +821,38 @@ class LangevinSplittingIntegrator(mm.CustomIntegrator):
         # get strings to pass to self.addComputePerDof(variable, expression) during each A/B/O step
         update_equations = dict()
         update_equations['A'] = ("x", "x + (dt / {n_A}) * v".format(n_A=n_A))
-        update_equations['B'] = ("v", "v + (dt / {n_B}) * f".format(n_B=n_B))
+        update_equations['B'] = ("v", "v + (dt / {n_B}) * f/m".format(n_B=n_B))
         update_equations['O'] = ("v", "b * v + sqrt( kT * (1 - b*b)) * gaussian / sqrt(m)")
 
         # Define bookkeeping and constraint-application functions
         if monitor_work or monitor_heat:
             kinetic_energy = "0.5 * m * v * v"
 
-        def compute_pre_step_energies():
+        def compute_pre_step_energies(step):
             if monitor_work or monitor_heat:
                 if step in 'OB':
                     self.addComputeSum('old_ke', kinetic_energy)
                 if monitor_work and step == 'A':
                     self.addComputeGlobal('old_pe', 'energy')
 
-        def apply_constraints():
+        def apply_constraints(step):
             if position_constraints and step == 'A':
+                self.addComputePerDof("x1", "x")
                 self.addConstrainPositions()
+                self.addComputePerDof("dv", "(x-x1)/dt")
             if velocity_constraints and step in 'OB':
                 self.addConstrainVelocities()
+                self.addComputePerDof("v", "v+dv")
+                self.addComputePerDof("dv", "0")
 
-        def compute_post_step_energies():
+        def compute_post_step_energies(step):
             if step == 'O' and (monitor_work or monitor_heat):
                 self.addComputeSum('new_ke', kinetic_energy)
             if monitor_work:
                 if step == 'A':
                     self.addComputeGlobal('new_pe', 'energy')
 
-        def accumulate_heat_or_work():
+        def accumulate_heat_or_work(step):
             if monitor_work:
                 if step == 'A':
                     self.addComputeGlobal('shadow_work', 'shadow_work + (new_pe - old_pe)')
@@ -865,6 +869,8 @@ class LangevinSplittingIntegrator(mm.CustomIntegrator):
         # Initialize
         self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
+        self.addPerDofVariable('x1', 0) # positions before application of position constraints
+        self.addPerDofVariable('dv', 0) # velocity correction for RATTLE (arising from position constraints)
 
         # Add bookkeeping variables
         if monitor_work or monitor_heat:
@@ -881,11 +887,11 @@ class LangevinSplittingIntegrator(mm.CustomIntegrator):
 
         # Integrate, applying constraints or bookkeeping as necessary
         for step in splitting:
-            compute_pre_step_energies()
+            compute_pre_step_energies(step)
 
             self.addComputePerDof(*update_equations[step])
-            apply_constraints()
+            apply_constraints(step)
 
-            compute_post_step_energies()
+            compute_post_step_energies(step)
 
-            accumulate_heat_or_work()
+            accumulate_heat_or_work(step)
