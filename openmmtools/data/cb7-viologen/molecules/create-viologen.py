@@ -64,7 +64,7 @@ mol = OEMol()
 OESmilesToMol(mol, smiles)
 
 # Generate conformation.
-print "Generating conformation..."
+print("Generating conformation...")
 omega = OEOmega()
 omega.SetMaxConfs(1)
 omega(mol)
@@ -79,7 +79,7 @@ OEAddExplicitHydrogens(mol)
 mol.SetTitle('protonated viologen')
 
 # Assign charges.
-print "Assigning canonical AM1-BCC charges..."
+print("Assigning canonical AM1-BCC charges...")
 charged_mol = assign_am1bcc_charges(mol)
 
 # Write conformation.
@@ -87,4 +87,4 @@ ofs = oechem.oemolostream()
 ofs.open(output_filename)
 oechem.OEWriteMolecule(ofs, charged_mol)
 
-print "Done."
+print("Done.")
