@@ -141,7 +141,7 @@ class AlchemicalState(dict):
 
     """
     def __init__(self, **kwargs):
-        self['lambda_restraints'] = 0.0
+        self['lambda_restraints'] = 1.0
         self['lambda_electrostatics'] = 1.0
         self['lambda_sterics'] = 1.0
         self['lambda_torsions'] = 1.0
