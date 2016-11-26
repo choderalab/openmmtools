@@ -67,13 +67,13 @@ class ThermodynamicState(object):
         if pressure is not None:
             barostat = self._find_barostat(system)
             if barostat is None and force_system_state:
-                self._add_barostat(system)
+                self._add_barostat()
             elif barostat is None and not force_system_state:
                 raise ThermodynamicsException(ThermodynamicsException.NO_BAROSTAT)
             elif not force_system_state and not self._is_barostat_consistent(barostat):
                 raise ThermodynamicsException(ThermodynamicsException.INCONSISTENT_BAROSTAT)
             elif force_system_state:
-                self._configure_barostat(system)
+                self._configure_barostat()
 
     @property
     def system(self):
@@ -125,22 +125,21 @@ class ThermodynamicState(object):
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat_temperature = barostat.getTemperature()
         barostat_pressure = barostat.getDefaultPressure()
-
         is_consistent = barostat_temperature == self._temperature
         is_consistent = is_consistent and barostat_pressure == self._pressure
         return is_consistent
 
-    def _configure_barostat(self, system):
+    def _configure_barostat(self):
         """Configure the barostat to be consistent with this state."""
-        barostat = self._find_barostat(system)
+        barostat = self._find_barostat(self._system)
         try:
             barostat.setDefaultTemperature(self._temperature)
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat.setTemperature(self._temperature)
         barostat.setDefaultPressure(self._pressure)
 
-    def _add_barostat(self, system):
+    def _add_barostat(self):
         """Add a MonteCarloBarostat to the given system."""
-        assert self._find_barostat(system) is None  # pre-condition
+        assert self._find_barostat(self._system) is None  # pre-condition
         barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature)
-        system.addForce(barostat)
+        self._system.addForce(barostat)
