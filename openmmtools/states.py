@@ -23,7 +23,7 @@ from simtk import openmm
 # CUSTOM EXCEPTIONS
 # =============================================================================
 
-class ThermodynamicsException(Exception):
+class ThermodynamicsError(Exception):
 
     # TODO substitute this with enum when we drop Python 2.7 support
     (NO_BAROSTAT,
@@ -40,7 +40,7 @@ class ThermodynamicsException(Exception):
 
     def __init__(self, code, *args):
         error_message = self.error_messages[code].format(*args)
-        super(ThermodynamicsException, self).__init__(error_message)
+        super(ThermodynamicsError, self).__init__(error_message)
         self.code = code
 
 
@@ -65,13 +65,13 @@ class ThermodynamicState(object):
 
         # Check system compatibility
         if pressure is not None:
-            barostat = self._find_barostat(system)
+            barostat = self._barostat
             if barostat is None and force_system_state:
                 self._add_barostat()
             elif barostat is None and not force_system_state:
-                raise ThermodynamicsException(ThermodynamicsException.NO_BAROSTAT)
+                raise ThermodynamicsError(ThermodynamicsError.NO_BAROSTAT)
             elif not force_system_state and not self._is_barostat_consistent(barostat):
-                raise ThermodynamicsException(ThermodynamicsException.INCONSISTENT_BAROSTAT)
+                raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_BAROSTAT)
             elif force_system_state:
                 self._configure_barostat()
 
@@ -85,6 +85,11 @@ class ThermodynamicState(object):
 
     _SUPPORTED_BAROSTATS = {'MonteCarloBarostat'}
 
+    @property
+    def _barostat(self):
+        """Shortcut for _find_barostat(self._system)."""
+        return self._find_barostat(self._system)
+
     @classmethod
     def _find_barostat(cls, system):
         """Return the first barostat found in the system.
@@ -96,12 +101,12 @@ class ThermodynamicState(object):
 
         Returns
         -------
-        The barostat OpenMM Force object found in system or None if no
-        barostat Force is found.
+        barostat : OpenMM Force object
+            The barostat in system or None if no barostat is found.
 
         Raises
         ------
-        ThermodynamicsException
+        ThermodynamicsError
             If the system contains multiple or unsupported barostats.
 
         """
@@ -110,11 +115,11 @@ class ThermodynamicState(object):
         if len(barostat_forces) == 0:
             return None
         if len(barostat_forces) > 1:
-            raise ThermodynamicsException(ThermodynamicsException.MULTIPLE_BAROSTATS)
+            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
 
         barostat = barostat_forces[0]
         if barostat.__class__.__name__ not in cls._SUPPORTED_BAROSTATS:
-            raise ThermodynamicsException(ThermodynamicsException.UNSUPPORTED_BAROSTAT,
+            raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
                                           barostat.__class__.__name__)
         return barostat
 
@@ -131,7 +136,7 @@ class ThermodynamicState(object):
 
     def _configure_barostat(self):
         """Configure the barostat to be consistent with this state."""
-        barostat = self._find_barostat(self._system)
+        barostat = self._barostat
         try:
             barostat.setDefaultTemperature(self._temperature)
         except AttributeError:  # versions previous to OpenMM 7.1
@@ -140,6 +145,6 @@ class ThermodynamicState(object):
 
     def _add_barostat(self):
         """Add a MonteCarloBarostat to the given system."""
-        assert self._find_barostat(self._system) is None  # pre-condition
+        assert self._barostat is None  # pre-condition
         barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature)
         self._system.addForce(barostat)
