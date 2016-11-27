@@ -29,13 +29,15 @@ class ThermodynamicsError(Exception):
     (NO_BAROSTAT,
      MULTIPLE_BAROSTATS,
      UNSUPPORTED_BAROSTAT,
-     INCONSISTENT_BAROSTAT) = range(4)
+     INCONSISTENT_BAROSTAT,
+     BAROSTATED_NONPERIODIC) = range(5)
 
     error_messages = {
         NO_BAROSTAT: "System is incompatible with NPT ensemble: missing barostat.",
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
-        INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state."
+        INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
+        BAROSTATED_NONPERIODIC: "Cannot set pressure of non-periodic system."
     }
 
     def __init__(self, code, *args):
@@ -59,7 +61,6 @@ class ThermodynamicState(object):
         """Constructor."""
         system = copy.deepcopy(system)  # do not modify original system
 
-        self._pressure = pressure
         self._temperature = temperature
         self._system = system
 
@@ -67,17 +68,34 @@ class ThermodynamicState(object):
         if pressure is not None:
             barostat = self._barostat
             if barostat is None and force_system_state:
-                self._add_barostat()
+                self._add_barostat(pressure)
             elif barostat is None and not force_system_state:
                 raise ThermodynamicsError(ThermodynamicsError.NO_BAROSTAT)
             elif not force_system_state and not self._is_barostat_consistent(barostat):
                 raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_BAROSTAT)
             elif force_system_state:
-                self._configure_barostat()
+                self._configure_barostat(pressure)
 
     @property
     def system(self):
         return copy.deepcopy(self._system)
+
+    @property
+    def pressure(self):
+        barostat = self._barostat
+        if barostat is None:
+            return None
+        return barostat.getDefaultPressure()
+
+    @pressure.setter
+    def pressure(self, value):
+        if not self._system.usesPeriodicBoundaryConditions():
+            raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
+        barostat = self._barostat
+        if barostat is None:
+            self._add_barostat(value)
+        else:
+            self._configure_barostat(value)
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -131,20 +149,20 @@ class ThermodynamicState(object):
             barostat_temperature = barostat.getTemperature()
         barostat_pressure = barostat.getDefaultPressure()
         is_consistent = barostat_temperature == self._temperature
-        is_consistent = is_consistent and barostat_pressure == self._pressure
+        is_consistent = is_consistent and barostat_pressure == self.pressure
         return is_consistent
 
-    def _configure_barostat(self):
+    def _configure_barostat(self, pressure):
         """Configure the barostat to be consistent with this state."""
         barostat = self._barostat
         try:
             barostat.setDefaultTemperature(self._temperature)
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat.setTemperature(self._temperature)
-        barostat.setDefaultPressure(self._pressure)
+        barostat.setDefaultPressure(pressure)
 
-    def _add_barostat(self):
+    def _add_barostat(self, pressure):
         """Add a MonteCarloBarostat to the given system."""
         assert self._barostat is None  # pre-condition
-        barostat = openmm.MonteCarloBarostat(self._pressure, self._temperature)
+        barostat = openmm.MonteCarloBarostat(pressure, self._temperature)
         self._system.addForce(barostat)
