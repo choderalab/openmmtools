@@ -51,6 +51,10 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
       context = openmm.Context(test.system, integrator)
    context.setPositions(test.positions)
    context.setVelocitiesToTemperature(temperature) # TODO: Make deterministic.
+ 
+   # Set integrator temperature
+   if hasattr(integrator, 'setTemperature'):
+      integrator.setTemperature(temperature)
 
    # Take a number of steps.
    integrator.step(nsteps)

@@ -14,7 +14,7 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.8.2"
+VERSION = "0.8.3"
 ISRELEASED = False
 __version__ = VERSION
 ########################

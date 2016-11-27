@@ -654,6 +654,30 @@ class GHMCIntegrator(mm.CustomIntegrator):
         #
         self.addComputeGlobal("naccept", "naccept + accept")
         self.addComputeGlobal("ntrials", "ntrials + 1")
+    
+    def resetStatistics(self):
+        """
+        Reset the step counter and statistics
+
+        """
+        self.setGlobalVariableByName('ntrials', 0)
+        self.setGlobalVariableByName('naccept', 0)
+
+    def setTemperature(self, temperature):
+        """
+        Set the temperature.
+
+        This also resets the trial statistics.
+        
+        Parameters
+        ----------
+        temperature : simtk.unit.Quantity
+            The new temperature
+        """
+        kT = kB * temperature
+        self.setGlobalVariableByName('kT', kT)
+        # Reset statistics to ensure 'sigma' is updated on step 0
+        self.resetStatistics()
 
 class VVVRIntegrator(mm.CustomIntegrator):
 
