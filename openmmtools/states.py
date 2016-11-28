@@ -56,7 +56,22 @@ class ThermodynamicState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, system, temperature, pressure=None):
-        """Constructor."""
+        """Constructor.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            An OpenMM system in a particular thermodynamic state.
+        temperature : simtk.unit.Quantity
+            The temperature for the system at constant temperature. If
+            a MonteCarloBarostat is associated to the system, its
+            temperature will be set to this.
+        pressure : simtk.unit.Quantity, optional
+            The pressure for the system at constant pressure. If this
+            is specified, a MonteCarloBarostat is added to the system,
+            or just set to this pressure in case it already exists.
+
+        """
         system = copy.deepcopy(system)  # Do not modify original system.
         self._system = system
 
@@ -70,10 +85,12 @@ class ThermodynamicState(object):
 
     @property
     def system(self):
+        """A copy of the system in this thermodynamic state."""
         return copy.deepcopy(self._system)
 
     @property
     def temperature(self):
+        """Constant temperature of the thermodynamic state."""
         return self._temperature
 
     @temperature.setter
@@ -81,13 +98,18 @@ class ThermodynamicState(object):
         self._temperature = value
         barostat = self._barostat
         if barostat is not None:
-            try:
+            try:  # TODO drop this when we stop openmm7.0 support
                 barostat.setDefaultTemperature(value)
             except AttributeError:  # versions previous to OpenMM 7.1
                 barostat.setTemperature(value)
 
     @property
     def pressure(self):
+        """Constant pressure of the thermodynamic state.
+
+        If the pressure is allowed to fluctuate this is None.
+
+        """
         barostat = self._barostat
         if barostat is None:
             return None
@@ -99,7 +121,8 @@ class ThermodynamicState(object):
             raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
         barostat = self._barostat
         if barostat is None:
-            self._add_barostat(value)
+            barostat = openmm.MonteCarloBarostat(value, self._temperature)
+            self._system.addForce(barostat)
         else:
             barostat.setDefaultPressure(value)
 
@@ -111,6 +134,13 @@ class ThermodynamicState(object):
                                       openmm.NonbondedForce.CutoffNonPeriodic]
 
     def _check_internal_consistency(self):
+        """Checks for state's internal consistency.
+
+        Current check that there's only 1 barostat, that is supported,
+        that has the correct temperature, and that it is not associated
+        to a non-periodic system.
+
+        """
         TE = ThermodynamicsError  # shortcut
         barostat = self._barostat  # MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT
         if barostat is not None:
@@ -118,7 +148,9 @@ class ThermodynamicState(object):
                 # This should not happen!
                 raise TE(TE.INCONSISTENT_BAROSTAT)
 
-            # Check that barostat is not added to non-periodic system
+            # Check that barostat is not added to non-periodic system. We
+            # cannot use System.usesPeriodicBoundaryConditions() because
+            # that returns True when a barostat is added.
             for force in self._system.getForces():
                 if isinstance(force, openmm.NonbondedForce):
                     nonbonded_method = force.getNonbondedMethod()
@@ -179,9 +211,3 @@ class ThermodynamicState(object):
         is_consistent = barostat_temperature == self._temperature
         is_consistent = is_consistent and barostat_pressure == self.pressure
         return is_consistent
-
-    def _add_barostat(self, pressure):
-        """Add a MonteCarloBarostat to the given system."""
-        assert self._barostat is None  # pre-condition
-        barostat = openmm.MonteCarloBarostat(pressure, self._temperature)
-        self._system.addForce(barostat)
