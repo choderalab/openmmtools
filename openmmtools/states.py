@@ -26,18 +26,16 @@ from simtk import openmm
 class ThermodynamicsError(Exception):
 
     # TODO substitute this with enum when we drop Python 2.7 support
-    (NO_BAROSTAT,
-     MULTIPLE_BAROSTATS,
+    (MULTIPLE_BAROSTATS,
      UNSUPPORTED_BAROSTAT,
      INCONSISTENT_BAROSTAT,
-     BAROSTATED_NONPERIODIC) = range(5)
+     BAROSTATED_NONPERIODIC) = range(4)
 
     error_messages = {
-        NO_BAROSTAT: "System is incompatible with NPT ensemble: missing barostat.",
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
-        BAROSTATED_NONPERIODIC: "Cannot set pressure of non-periodic system."
+        BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat."
     }
 
     def __init__(self, code, *args):
@@ -67,6 +65,8 @@ class ThermodynamicState(object):
 
         if pressure is not None:
             self.pressure = pressure
+
+        self._check_internal_consistency()
 
     @property
     def system(self):
@@ -102,6 +102,28 @@ class ThermodynamicState(object):
             self._add_barostat(value)
         else:
             barostat.setDefaultPressure(value)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage: general utilities
+    # -------------------------------------------------------------------------
+
+    _NONPERIODIC_NONBONDED_METHODS = [openmm.NonbondedForce.NoCutoff,
+                                      openmm.NonbondedForce.CutoffNonPeriodic]
+
+    def _check_internal_consistency(self):
+        TE = ThermodynamicsError  # shortcut
+        barostat = self._barostat  # MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT
+        if barostat is not None:
+            if not self._is_barostat_consistent(barostat):
+                # This should not happen!
+                raise TE(TE.INCONSISTENT_BAROSTAT)
+
+            # Check that barostat is not added to non-periodic system
+            for force in self._system.getForces():
+                if isinstance(force, openmm.NonbondedForce):
+                    nonbonded_method = force.getNonbondedMethod()
+                    if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
+                        raise TE(TE.BAROSTATED_NONPERIODIC)
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
