@@ -57,28 +57,34 @@ class ThermodynamicState(object):
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, system, temperature, pressure=None, force_system_state=False):
+    def __init__(self, system, temperature, pressure=None):
         """Constructor."""
-        system = copy.deepcopy(system)  # do not modify original system
-
-        self._temperature = temperature
+        system = copy.deepcopy(system)  # Do not modify original system.
         self._system = system
 
-        # Check system compatibility
+        self._temperature = temperature  # Redundant, just for safety.
+        self.temperature = temperature  # Set barostat temperature.
+
         if pressure is not None:
-            barostat = self._barostat
-            if barostat is None and force_system_state:
-                self._add_barostat(pressure)
-            elif barostat is None and not force_system_state:
-                raise ThermodynamicsError(ThermodynamicsError.NO_BAROSTAT)
-            elif not force_system_state and not self._is_barostat_consistent(barostat):
-                raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_BAROSTAT)
-            elif force_system_state:
-                self._configure_barostat(pressure)
+            self.pressure = pressure
 
     @property
     def system(self):
         return copy.deepcopy(self._system)
+
+    @property
+    def temperature(self):
+        return self._temperature
+
+    @temperature.setter
+    def temperature(self, value):
+        self._temperature = value
+        barostat = self._barostat
+        if barostat is not None:
+            try:
+                barostat.setDefaultTemperature(value)
+            except AttributeError:  # versions previous to OpenMM 7.1
+                barostat.setTemperature(value)
 
     @property
     def pressure(self):
@@ -95,7 +101,7 @@ class ThermodynamicState(object):
         if barostat is None:
             self._add_barostat(value)
         else:
-            self._configure_barostat(value)
+            barostat.setDefaultPressure(value)
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -151,15 +157,6 @@ class ThermodynamicState(object):
         is_consistent = barostat_temperature == self._temperature
         is_consistent = is_consistent and barostat_pressure == self.pressure
         return is_consistent
-
-    def _configure_barostat(self, pressure):
-        """Configure the barostat to be consistent with this state."""
-        barostat = self._barostat
-        try:
-            barostat.setDefaultTemperature(self._temperature)
-        except AttributeError:  # versions previous to OpenMM 7.1
-            barostat.setTemperature(self._temperature)
-        barostat.setDefaultPressure(pressure)
 
     def _add_barostat(self, pressure):
         """Add a MonteCarloBarostat to the given system."""
