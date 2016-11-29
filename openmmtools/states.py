@@ -89,6 +89,11 @@ class ThermodynamicState(object):
         """A copy of the system in this thermodynamic state."""
         return copy.deepcopy(self._system)
 
+    @system.setter
+    def system(self, value):
+        self._check_system_consistency(value)
+        self._system = value
+
     @property
     def temperature(self):
         """Constant temperature of the thermodynamic state."""
@@ -156,15 +161,21 @@ class ThermodynamicState(object):
                                       openmm.NonbondedForce.CutoffNonPeriodic}
 
     def _check_internal_consistency(self):
-        """Checks for state's internal consistency.
+        """Shortcut self._check_system_consistency(self._system)."""
+        self._check_system_consistency(self._system)
+
+    def _check_system_consistency(self, system):
+        """Raise an error if the system is inconsistent.
 
         Current check that there's only 1 barostat, that is supported,
-        that has the correct temperature, and that it is not associated
-        to a non-periodic system.
+        that has the correct temperature and pressure, and that it is
+        not associated to a non-periodic system.
 
         """
         TE = ThermodynamicsError  # shortcut
-        barostat = self._barostat  # MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT
+
+        # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
+        barostat = self._find_barostat(system)
         if barostat is not None:
             if not self._is_barostat_consistent(barostat):
                 raise TE(TE.INCONSISTENT_BAROSTAT)
@@ -172,7 +183,7 @@ class ThermodynamicState(object):
             # Check that barostat is not added to non-periodic system. We
             # cannot use System.usesPeriodicBoundaryConditions() because
             # that returns True when a barostat is added.
-            for force in self._system.getForces():
+            for force in system.getForces():
                 if isinstance(force, openmm.NonbondedForce):
                     nonbonded_method = force.getNonbondedMethod()
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
