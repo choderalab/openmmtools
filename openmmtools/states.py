@@ -117,21 +117,27 @@ class ThermodynamicState(object):
 
     @pressure.setter
     def pressure(self, value):
-        if not self._system.usesPeriodicBoundaryConditions():
+        # If new pressure is None, remove barostat.
+        if value is None:
+            barostat_id = self._find_barostat_index(self._system)
+            if barostat_id is not None:
+                self._system.removeForce(barostat_id)
+        elif not self._system.usesPeriodicBoundaryConditions():
             raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
-        barostat = self._barostat
-        if barostat is None:
-            barostat = openmm.MonteCarloBarostat(value, self._temperature)
-            self._system.addForce(barostat)
-        else:
-            barostat.setDefaultPressure(value)
+        else:  # Add/configure barostat
+            barostat = self._barostat
+            if barostat is None:  # Add barostat
+                barostat = openmm.MonteCarloBarostat(value, self._temperature)
+                self._system.addForce(barostat)
+            else:  # Configure existing barostat
+                barostat.setDefaultPressure(value)
 
     # -------------------------------------------------------------------------
     # Internal-usage: general utilities
     # -------------------------------------------------------------------------
 
-    _NONPERIODIC_NONBONDED_METHODS = [openmm.NonbondedForce.NoCutoff,
-                                      openmm.NonbondedForce.CutoffNonPeriodic]
+    _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
+                                      openmm.NonbondedForce.CutoffNonPeriodic}
 
     def _check_internal_consistency(self):
         """Checks for state's internal consistency.
@@ -165,41 +171,56 @@ class ThermodynamicState(object):
 
     @property
     def _barostat(self):
-        """Shortcut for _find_barostat(self._system)."""
+        """Shortcut for self._find_barostat(self._system)."""
         return self._find_barostat(self._system)
 
     @classmethod
     def _find_barostat(cls, system):
-        """Return the first barostat found in the system.
-
-        Parameters
-        ----------
-        system : simtk.openmm.System
-            The OpenMM system containing the barostat.
+        """Shortcut for system.getForce(cls._find_barostat_index(system)).
 
         Returns
         -------
         barostat : OpenMM Force object
-            The barostat in system or None if no barostat is found.
+            The barostat in system, or None if no barostat is found.
 
         Raises
         ------
         ThermodynamicsError
-            If the system contains multiple or unsupported barostats.
+            If the system contains unsupported barostats.
 
         """
-        barostat_forces = [force for force in system.getForces()
-                           if 'Barostat' in force.__class__.__name__]
-        if len(barostat_forces) == 0:
+        barostat_id = cls._find_barostat_index(system)
+        if barostat_id is None:
             return None
-        if len(barostat_forces) > 1:
-            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
-
-        barostat = barostat_forces[0]
+        barostat = system.getForce(barostat_id)
         if barostat.__class__.__name__ not in cls._SUPPORTED_BAROSTATS:
             raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
-                                          barostat.__class__.__name__)
+                                      barostat.__class__.__name__)
         return barostat
+
+    @classmethod
+    def _find_barostat_index(cls, system):
+        """Return the index of the first barostat found in the system.
+
+        Returns
+        -------
+        barostat_id : int
+            The index of the barostat force in self._system or None if
+            no barostat is found.
+
+        Raises
+        ------
+        ThermodynamicsError
+            If the system contains multiple barostats.
+
+        """
+        barostat_ids = [i for i, force in enumerate(system.getForces())
+                        if 'Barostat' in force.__class__.__name__]
+        if len(barostat_ids) == 0:
+            return None
+        if len(barostat_ids) > 1:
+            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
+        return barostat_ids[0]
 
     def _is_barostat_consistent(self, barostat):
         """Check the barostat's temperature and pressure."""
