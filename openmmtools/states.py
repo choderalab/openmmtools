@@ -16,6 +16,7 @@ Classes that represent a portion of the state of an OpenMM context.
 
 import copy
 
+import numpy as np
 from simtk import openmm
 
 
@@ -107,7 +108,7 @@ class ThermodynamicState(object):
     def pressure(self):
         """Constant pressure of the thermodynamic state.
 
-        If the pressure is allowed to fluctuate this is None.
+        If the pressure is allowed to fluctuate, this is None.
 
         """
         barostat = self._barostat
@@ -132,6 +133,21 @@ class ThermodynamicState(object):
             else:  # Configure existing barostat
                 barostat.setDefaultPressure(value)
 
+    @property
+    def volume(self):
+        """Constant volume of the thermodynamic state.
+
+        If the volume is allowed to fluctuate, this is None.
+
+        """
+        if self.pressure is not None:  # Volume fluctuates.
+            return None
+        if not self._system.usesPeriodicBoundaryConditions():
+            return None
+        a, b, c = self._system.getDefaultPeriodicBoxVectors()
+        box_matrix = np.array([a/a.unit, b/a.unit, c/a.unit])
+        return np.linalg.det(box_matrix) * a.unit**3
+
     # -------------------------------------------------------------------------
     # Internal-usage: general utilities
     # -------------------------------------------------------------------------
@@ -151,7 +167,6 @@ class ThermodynamicState(object):
         barostat = self._barostat  # MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT
         if barostat is not None:
             if not self._is_barostat_consistent(barostat):
-                # This should not happen!
                 raise TE(TE.INCONSISTENT_BAROSTAT)
 
             # Check that barostat is not added to non-periodic system. We
