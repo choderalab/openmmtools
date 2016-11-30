@@ -30,13 +30,15 @@ class ThermodynamicsError(Exception):
     (MULTIPLE_BAROSTATS,
      UNSUPPORTED_BAROSTAT,
      INCONSISTENT_BAROSTAT,
-     BAROSTATED_NONPERIODIC) = range(4)
+     BAROSTATED_NONPERIODIC,
+     INCONSISTENT_INTEGRATOR) = range(5)
 
     error_messages = {
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
-        BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat."
+        BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat.",
+        INCONSISTENT_INTEGRATOR: "Integrator is coupled to a heat bath at a different temperature."
     }
 
     def __init__(self, code, *args):
@@ -92,7 +94,7 @@ class ThermodynamicState(object):
     @system.setter
     def system(self, value):
         self._check_system_consistency(value)
-        self._system = value
+        self._system = copy.deepcopy(value)
 
     @property
     def temperature(self):
@@ -153,8 +155,44 @@ class ThermodynamicState(object):
         box_matrix = np.array([a/a.unit, b/a.unit, c/a.unit])
         return np.linalg.det(box_matrix) * a.unit**3
 
+    def create_context(self, integrator, platform=None):
+        """Create a context in this ThermodynamicState.
+
+        The context contains a copy of the system. An exception is
+        raised if the integrator is coupled to a heat bath set at a
+        temperature different from the thermodynamic state's.
+
+        Parameters
+        ----------
+        integrator : simtk.openmm.Integrator
+           The integrator to use for Context creation. The eventual
+           heat bath temperature must be consistent with the
+           thermodynamic state.
+        platform : simtk.openmm.Platform, optional
+           Platform to use. If None, OpenMM tries to select the fastest
+           available platform. Default is None.
+
+        Returns
+        -------
+        context : simtk.openmm.Context
+           The created OpenMM Context object.
+
+        Raises
+        ------
+        ThermodynamicsError
+            If the integrator has an inconsistent temperature.
+
+        """
+        # Check that integrator is consistent
+        if not self._is_integrator_consistent(integrator):
+            raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_INTEGRATOR)
+        if platform is None:
+            return openmm.Context(self.system, integrator)
+        else:
+            return openmm.Context(self.system, integrator, platform)
+
     # -------------------------------------------------------------------------
-    # Internal-usage: general utilities
+    # Internal-usage: system consistency
     # -------------------------------------------------------------------------
 
     _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
@@ -182,12 +220,27 @@ class ThermodynamicState(object):
 
             # Check that barostat is not added to non-periodic system. We
             # cannot use System.usesPeriodicBoundaryConditions() because
-            # that returns True when a barostat is added.
+            # in OpenMM < 7.1 that returns True when a barostat is added.
+            # TODO just use usesPeriodicBoundaryConditions when drop openmm7.0
             for force in system.getForces():
                 if isinstance(force, openmm.NonbondedForce):
                     nonbonded_method = force.getNonbondedMethod()
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
                         raise TE(TE.BAROSTATED_NONPERIODIC)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage: integrator consistency
+    # -------------------------------------------------------------------------
+
+    def _is_integrator_consistent(self, integrator):
+        """False if integrator is coupled to a heat bath at different T."""
+        if isinstance(integrator, openmm.CompoundIntegrator):
+            integrator_id = integrator.getCurrentIntegrator()
+            integrator = integrator.getIntegrator(integrator_id)
+        try:
+            return integrator.getTemperature() == self.temperature
+        except AttributeError:
+            return True
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -255,6 +308,6 @@ class ThermodynamicState(object):
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat_temperature = barostat.getTemperature()
         barostat_pressure = barostat.getDefaultPressure()
-        is_consistent = barostat_temperature == self._temperature
+        is_consistent = barostat_temperature == self.temperature
         is_consistent = is_consistent and barostat_pressure == self.pressure
         return is_consistent
