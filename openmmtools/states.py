@@ -51,6 +51,7 @@ class ThermodynamicsError(Exception):
 # THERMODYNAMIC STATE
 # =============================================================================
 
+
 class ThermodynamicState(object):
     """The state of a Context that does not change with integration."""
 
@@ -75,12 +76,20 @@ class ThermodynamicState(object):
             or just set to this pressure in case it already exists.
 
         """
-        system = copy.deepcopy(system)  # Do not modify original system.
-        self._system = system
+        # The standard system hash is cached and computed on-demand.
+        self._cached_standard_system_hash = None
 
-        self._temperature = temperature  # Redundant, just for safety.
-        self.temperature = temperature  # Set barostat temperature.
+        # Do not modify original system.
+        self._system = copy.deepcopy(system)
 
+        # We cannot model the temperature as a pure property because
+        # if the system has no barostat, it doesn't contain any info
+        # on T, so we need to maintain consistency between this
+        # internal variable and the barostat/integrator.
+        self._temperature = temperature
+
+        # Set barostat temperature and pressure.
+        self.temperature = temperature
         if pressure is not None:
             self.pressure = pressure
 
@@ -89,12 +98,14 @@ class ThermodynamicState(object):
     @property
     def system(self):
         """A copy of the system in this thermodynamic state."""
+        # TODO wrap system in a CallBackable class to avoid copying it
         return copy.deepcopy(self._system)
 
     @system.setter
     def system(self, value):
         self._check_system_consistency(value)
         self._system = copy.deepcopy(value)
+        self._cached_standard_system_hash = None  # Invalidate cache.
 
     @property
     def temperature(self):
@@ -155,6 +166,62 @@ class ThermodynamicState(object):
         box_matrix = np.array([a/a.unit, b/a.unit, c/a.unit])
         return np.linalg.det(box_matrix) * a.unit**3
 
+    def is_state_compatible(self, thermodynamic_state):
+        """Check compatibility between ThermodynamicStates.
+
+        The state is compatible if a context created by state is
+        compatible.
+
+        Parameters
+        ----------
+        thermodynamic_state : IHashableState
+            A state implementing the IHashableState interface. Compatible
+            states must return the same hash.
+
+        Returns
+        -------
+        is_compatible : bool
+            True if the context created by thermodynamic_state can be
+            converted to this state with apply_to_context().
+
+        See Also
+        --------
+        ThermodynamicState.is_context_compatible
+
+        """
+        try:
+            state_system_hash = thermodynamic_state._standard_system_hash
+        except AttributeError:
+            state_system = thermodynamic_state.system
+            state_system_hash = self._get_standard_system_hash(state_system)
+        return self._standard_system_hash == state_system_hash
+
+    def is_context_compatible(self, context):
+        """Check compatibility of the given context.
+
+        The context is compatible if this ThermodynamicState can be
+        applied to it.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The OpenMM context to test.
+
+        Returns
+        -------
+        is_compatible : bool
+            True if this ThermodynamicState can be applied to context.
+
+        See Also
+        --------
+        ThermodynamicState.apply_to_context
+        ThermodynamicState.is_state_compatible
+
+        """
+        context_system_hash = self._get_standard_system_hash(context.getSystem())
+        is_compatible = self._standard_system_hash == context_system_hash
+        return is_compatible
+
     def create_context(self, integrator, platform=None):
         """Create a context in this ThermodynamicState.
 
@@ -192,7 +259,7 @@ class ThermodynamicState(object):
             return openmm.Context(self.system, integrator, platform)
 
     # -------------------------------------------------------------------------
-    # Internal-usage: system consistency
+    # Internal-usage: system handling
     # -------------------------------------------------------------------------
 
     _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
@@ -228,8 +295,38 @@ class ThermodynamicState(object):
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
                         raise TE(TE.BAROSTATED_NONPERIODIC)
 
+    @classmethod
+    def _get_standard_system(cls, system):
+        """Return a copy of the system in a standard representation.
+
+        The standard system can be used to test compatibility between
+        different ThermodynamicState objects. Here the standard system
+        simply removes the barostat, which makes the system instance
+        serialization independent from temperature and pressure.
+
+        """
+        system = copy.deepcopy(system)
+        barostat_id = cls._find_barostat_index(system)
+        if barostat_id is not None:
+            system.removeForce(barostat_id)
+        return system
+
+    @classmethod
+    def _get_standard_system_hash(cls, system):
+        """Return the serialization hash of the standard system."""
+        standard_system = cls._get_standard_system(system)
+        system_serialization = openmm.XmlSerializer.serialize(standard_system)
+        return system_serialization.__hash__()
+
+    @property
+    def _standard_system_hash(self):
+        """Shortcut for _get_standard_system_hash(self._system)."""
+        if self._cached_standard_system_hash is None:
+            self._cached_standard_system_hash = self._get_standard_system_hash(self._system)
+        return self._cached_standard_system_hash
+
     # -------------------------------------------------------------------------
-    # Internal-usage: integrator consistency
+    # Internal-usage: integrator handling
     # -------------------------------------------------------------------------
 
     def _is_integrator_consistent(self, integrator):
@@ -241,6 +338,13 @@ class ThermodynamicState(object):
             return integrator.getTemperature() == self.temperature
         except AttributeError:
             return True
+
+    def _set_integrator_temperature(self, integrator):
+        """Set heat bath temperature of the integrator."""
+        try:
+            integrator.setTemperature(self.temperature)
+        except AttributeError:
+            pass
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
