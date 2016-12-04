@@ -117,10 +117,7 @@ class ThermodynamicState(object):
         self._temperature = value
         barostat = self._barostat
         if barostat is not None:
-            try:  # TODO drop this when we stop openmm7.0 support
-                barostat.setDefaultTemperature(value)
-            except AttributeError:  # versions previous to OpenMM 7.1
-                barostat.setTemperature(value)
+            self._set_barostat_temperature(barostat)
 
     @property
     def pressure(self):
@@ -136,20 +133,7 @@ class ThermodynamicState(object):
 
     @pressure.setter
     def pressure(self, value):
-        # If new pressure is None, remove barostat.
-        if value is None:
-            barostat_id = self._find_barostat_index(self._system)
-            if barostat_id is not None:
-                self._system.removeForce(barostat_id)
-        elif not self._system.usesPeriodicBoundaryConditions():
-            raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
-        else:  # Add/configure barostat
-            barostat = self._barostat
-            if barostat is None:  # Add barostat
-                barostat = openmm.MonteCarloBarostat(value, self._temperature)
-                self._system.addForce(barostat)
-            else:  # Configure existing barostat
-                barostat.setDefaultPressure(value)
+        self._set_system_pressure(self._system, value)
 
     @property
     def volume(self):
@@ -174,9 +158,8 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        thermodynamic_state : IHashableState
-            A state implementing the IHashableState interface. Compatible
-            states must return the same hash.
+        thermodynamic_state : ThermodynamicState
+            The thermodynamic state to test.
 
         Returns
         -------
@@ -257,6 +240,32 @@ class ThermodynamicState(object):
             return openmm.Context(self.system, integrator)
         else:
             return openmm.Context(self.system, integrator, platform)
+
+    def apply_to_context(self, context):
+        """Apply this ThermodynamicState to the context.
+
+        The user is responsible to test if the context is compatible.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+           The OpenMM Context to be set to this ThermodynamicState.
+
+        See Also
+        --------
+        ThermodynamicState.is_state_compatible
+        ThermodynamicState.is_context_compatible
+
+        """
+        system = context.getSystem()
+        integrator = context.getIntegrator()
+        has_changed = self._set_system_pressure(system, self.pressure)
+        barostat = self._find_barostat(system)
+        if barostat is not None:
+            has_changed = self._set_barostat_temperature(barostat) or has_changed
+        has_changed = self._set_integrator_temperature(integrator) or has_changed
+        if has_changed:
+            context.reinitialize()
 
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
@@ -340,11 +349,22 @@ class ThermodynamicState(object):
             return True
 
     def _set_integrator_temperature(self, integrator):
-        """Set heat bath temperature of the integrator."""
+        """Set heat bath temperature of the integrator.
+
+        Returns
+        -------
+        has_changed : bool
+            True if the integrator temperature has changed.
+
+        """
+        has_changed = False
         try:
-            integrator.setTemperature(self.temperature)
+            if integrator.getTemperature() != self._temperature:
+                integrator.setTemperature(self.temperature)
+                has_changed = True
         except AttributeError:
             pass
+        return has_changed
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -415,3 +435,60 @@ class ThermodynamicState(object):
         is_consistent = barostat_temperature == self.temperature
         is_consistent = is_consistent and barostat_pressure == self.pressure
         return is_consistent
+
+    def _set_system_pressure(self, system, pressure):
+        """Add or configure the system barostat to the given pressure.
+
+        The barostat temperature is set to self._temperature.
+
+        Returns
+        -------
+        has_changed : bool
+            True if the system has changed, False if it was already
+            configured.
+
+        """
+        has_changed = False
+
+        if pressure is None: # If new pressure is None, remove barostat.
+            barostat_id = self._find_barostat_index(system)
+            if barostat_id is not None:
+                system.removeForce(barostat_id)
+                has_changed = True
+
+        elif not system.usesPeriodicBoundaryConditions():
+            raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
+
+        else:  # Add/configure barostat
+            barostat = self._find_barostat(system)
+            if barostat is None:  # Add barostat
+                barostat = openmm.MonteCarloBarostat(pressure, self._temperature)
+                system.addForce(barostat)
+                has_changed = True
+            elif barostat.getDefaultPressure() != pressure:  # Set existing barostat
+                barostat.setDefaultPressure(pressure)
+                has_changed = True
+
+        return has_changed
+
+    def _set_barostat_temperature(self, barostat):
+        """Shortcut to ensure OpenMM backwards compatibility.
+
+        Returns
+        -------
+        has_changed : bool
+            True if the barostat has changed, False if it was already
+            configured with the correct temperature.
+
+        """
+        has_changed = False
+        # TODO remove this when we OpenMM 7.0 drop support
+        try:
+            if barostat.getDefaultTemperature() != self._temperature:
+                barostat.setDefaultTemperature(self._temperature)
+                has_changed = True
+        except AttributeError:  # versions previous to OpenMM 7.1
+            if barostat.getTemperature() != self._temperature:
+                barostat.setTemperature(self._temperature)
+                has_changed = True
+        return has_changed
