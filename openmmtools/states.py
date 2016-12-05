@@ -21,6 +21,21 @@ from simtk import openmm
 
 
 # =============================================================================
+# MODULE FUNCTIONS
+# =============================================================================
+
+def _box_vectors_volume(box_vectors):
+    """Return the volume of the box vectors.
+
+    Support also triclinic boxes.
+
+    """
+    a, b, c = box_vectors
+    box_matrix = np.array([a/a.unit, b/a.unit, c/a.unit])
+    return np.linalg.det(box_matrix) * a.unit**3
+
+
+# =============================================================================
 # CUSTOM EXCEPTIONS
 # =============================================================================
 
@@ -44,6 +59,21 @@ class ThermodynamicsError(Exception):
     def __init__(self, code, *args):
         error_message = self.error_messages[code].format(*args)
         super(ThermodynamicsError, self).__init__(error_message)
+        self.code = code
+
+
+class SamplerStateError(Exception):
+
+    # TODO substitute this with enum when we drop Python 2.7 support
+    (INCONSISTENT_VELOCITIES) = range(1)
+
+    error_messages = {
+        INCONSISTENT_VELOCITIES: "Velocities have different length than positions.",
+    }
+
+    def __init__(self, code, *args):
+        error_message = self.error_messages[code].format(*args)
+        super(SamplerStateError, self).__init__(error_message)
         self.code = code
 
 
@@ -146,9 +176,8 @@ class ThermodynamicState(object):
             return None
         if not self._system.usesPeriodicBoundaryConditions():
             return None
-        a, b, c = self._system.getDefaultPeriodicBoxVectors()
-        box_matrix = np.array([a/a.unit, b/a.unit, c/a.unit])
-        return np.linalg.det(box_matrix) * a.unit**3
+        box_vectors = self._system.getDefaultPeriodicBoxVectors()
+        return _box_vectors_volume(box_vectors)
 
     def is_state_compatible(self, thermodynamic_state):
         """Check compatibility between ThermodynamicStates.
@@ -492,3 +521,98 @@ class ThermodynamicState(object):
                 barostat.setTemperature(self._temperature)
                 has_changed = True
         return has_changed
+
+
+# =============================================================================
+# SAMPLER STATE
+# =============================================================================
+
+class SamplerState(object):
+    """The state of a Context that change with integration."""
+
+    # -------------------------------------------------------------------------
+    # Public interface
+    # -------------------------------------------------------------------------
+
+    def __init__(self, positions, velocities=None, box_vectors=None,
+                 potential_energy=None, kinetic_energy=None):
+        self.positions = positions
+        self._velocities = None
+        self.velocities = velocities  # Property checks consistency.
+        self.box_vectors = box_vectors
+        self.potential_energy = potential_energy
+        self.kinetic_energy = kinetic_energy
+
+    @staticmethod
+    def from_context(context):
+        sampler_state = SamplerState([])
+        sampler_state._set_context_state(context, check_consistency=False)
+        return sampler_state
+
+    @property
+    def velocities(self):
+        return self._velocities
+
+    @velocities.setter
+    def velocities(self, value):
+        if value is not None and len(self.positions) != len(value):
+            raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
+        self._velocities = value
+
+    @property
+    def total_energy(self):
+        return self.potential_energy + self.kinetic_energy
+
+    @property
+    def volume(self):
+        return _box_vectors_volume(self.box_vectors)
+
+    def is_context_compatible(self, context):
+        openmm_state = context.getState(getPositions=True)
+        return len(self.positions) == len(openmm_state.getPositions())
+
+    def update_from_context(self, context):
+        """Update the state with the context.
+
+        The context must be compatible. Use SamplerState.from_context()
+        if you want to build a new sampler state from an incompatible.
+
+        Raises
+        ------
+        SamplerStateError
+            If the given context is not compatible.
+
+        """
+        self._set_context_state(context, check_consistency=True)
+
+    def apply_to_context(self, context):
+        """Set the context state.
+
+        If velocities and box vectors have not been specified, they are
+        not set.
+
+        """
+        context.setPositions(self.positions)
+        if self._velocities is not None:
+            context.setVelocities(self._velocities)
+        if self.box_vectors is not None:
+            context.setPeriodicBoxVectors(*self.box_vectors)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    def _set_context_state(self, context, check_consistency):
+        openmm_state = context.getState(getPositions=True, getVelocities=True,
+                                        getEnergy=True)
+        if check_consistency:
+            # We assign first the property velocities that perform a
+            # consistency check with the current positions and raise
+            # an error if the number of elements is different.
+            self.velocities = openmm_state.getVelocities(asNumpy=True)
+        else:
+            self._velocities = openmm_state.getVelocities(asNumpy=True)
+        self.positions = openmm_state.getPositions(asNumpy=True)
+        self.box_vectors = openmm_state.getPeriodicBoxVectors()
+        self.potential_energy = openmm_state.getPotentialEnergy()
+        self.kinetic_energy = openmm_state.getKineticEnergy()
