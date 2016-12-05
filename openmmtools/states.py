@@ -17,7 +17,7 @@ Classes that represent a portion of the state of an OpenMM context.
 import copy
 
 import numpy as np
-from simtk import openmm
+from simtk import openmm, unit
 
 
 # =============================================================================
@@ -179,6 +179,16 @@ class ThermodynamicState(object):
         box_vectors = self._system.getDefaultPeriodicBoxVectors()
         return _box_vectors_volume(box_vectors)
 
+    def reduced_potential(self, sampler_state):
+        """Compute reduced potential."""
+        beta = 1.0 / (unit.MOLAR_GAS_CONSTANT_R * self.temperature)
+        reduced_potential = sampler_state.potential_energy
+        pressure = self.pressure
+        if pressure is not None:
+            reduced_potential += (pressure * sampler_state.volume *
+                                  unit.AVOGADRO_CONSTANT_NA)
+        return beta * reduced_potential
+
     def is_state_compatible(self, thermodynamic_state):
         """Check compatibility between ThermodynamicStates.
 
@@ -295,6 +305,7 @@ class ThermodynamicState(object):
         has_changed = self._set_integrator_temperature(integrator) or has_changed
         if has_changed:
             context.reinitialize()
+        # TODO context.setVelocitiesToTemperature()?
 
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
