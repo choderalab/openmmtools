@@ -94,14 +94,16 @@ class ThermodynamicsError(Exception):
      UNSUPPORTED_BAROSTAT,
      INCONSISTENT_BAROSTAT,
      BAROSTATED_NONPERIODIC,
-     INCONSISTENT_INTEGRATOR) = range(5)
+     INCONSISTENT_INTEGRATOR,
+     INCOMPATIBLE_SAMPLER_STATE) = range(6)
 
     error_messages = {
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
         BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat.",
-        INCONSISTENT_INTEGRATOR: "Integrator is coupled to a heat bath at a different temperature."
+        INCONSISTENT_INTEGRATOR: "Integrator is coupled to a heat bath at a different temperature.",
+        INCOMPATIBLE_SAMPLER_STATE: "The sampler state has a different number of particles."
     }
 
     def __init__(self, code, *args):
@@ -351,6 +353,11 @@ class ThermodynamicState(object):
         box_vectors = self._system.getDefaultPeriodicBoxVectors()
         return _box_vectors_volume(box_vectors)
 
+    @property
+    def n_particles(self):
+        """Number of particles (read-only)."""
+        return self._system.getNumParticles()
+
     def reduced_potential(self, sampler_state):
         """Reduced potential in this thermodynamic state.
 
@@ -401,6 +408,14 @@ class ThermodynamicState(object):
         >>> sampler_state = SamplerState.from_context(context)
         >>> u = state.reduced_potential(sampler_state)
 
+        If the sampler state is incompatible, an error is raised
+
+        >>> sampler_state.positions = sampler_state.positions[:-1]
+        >>> state.reduced_potential(sampler_state)
+        Traceback (most recent call last):
+        ...
+        ThermodynamicsError: The sampler state has a different number of particles.
+
         References
         ----------
 
@@ -408,6 +423,10 @@ class ThermodynamicState(object):
         equilibrium states. J Chem Phys 129:124105, 2008.
 
         """
+        # Check SamplerState compatibility
+        if sampler_state.n_particles != self.n_particles:
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE)
+
         beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
         reduced_potential = sampler_state.potential_energy
         reduced_potential = reduced_potential / unit.AVOGADRO_CONSTANT_NA
@@ -540,8 +559,58 @@ class ThermodynamicState(object):
             context.reinitialize()
         # TODO context.setVelocitiesToTemperature()?
 
+    # -------------------------------------------------------------------------
+    # Internal-usage: system handling
+    # -------------------------------------------------------------------------
+
+    _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
+                                      openmm.NonbondedForce.CutoffNonPeriodic}
+
+    def _check_internal_consistency(self):
+        """Shortcut self._check_system_consistency(self._system)."""
+        self._check_system_consistency(self._system)
+
+    def _check_system_consistency(self, system):
+        """Check system consistency with this ThermodynamicState.
+
+        Raise an error if the system is inconsistent. Currently checks
+        that there's only 1 barostat (or none in case this is in NVT),
+        that the barostat is supported, has the correct temperature and
+        pressure, and that it is not associated to a non-periodic system.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to test.
+
+        Raises
+        ------
+        ThermodynamicsError
+            If the system is inconsistent with this state.
+
+        """
+        TE = ThermodynamicsError  # shortcut
+
+        # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
+        barostat = self._find_barostat(system)
+        if barostat is not None:
+            if not self._is_barostat_consistent(barostat):
+                raise TE(TE.INCONSISTENT_BAROSTAT)
+
+            # Check that barostat is not added to non-periodic system. We
+            # cannot use System.usesPeriodicBoundaryConditions() because
+            # in OpenMM < 7.1 that returns True when a barostat is added.
+            # TODO just use usesPeriodicBoundaryConditions when drop openmm7.0
+            for force in system.getForces():
+                if isinstance(force, openmm.NonbondedForce):
+                    nonbonded_method = force.getNonbondedMethod()
+                    if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
+                        raise TE(TE.BAROSTATED_NONPERIODIC)
+        elif self._barostat is not None:
+            raise TE(TE.BAROSTATED_NONPERIODIC)
+
     @classmethod
-    def turn_to_standard_system(cls, system):
+    def _standardize_system(cls, system):
         """Return a copy of the system in a standard representation.
 
         This effectively defines which ThermodynamicStates are compatible
@@ -570,51 +639,11 @@ class ThermodynamicState(object):
         if barostat_id is not None:
             system.removeForce(barostat_id)
 
-    # -------------------------------------------------------------------------
-    # Internal-usage: system handling
-    # -------------------------------------------------------------------------
-
-    _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
-                                      openmm.NonbondedForce.CutoffNonPeriodic}
-
-    def _check_internal_consistency(self):
-        """Shortcut self._check_system_consistency(self._system)."""
-        self._check_system_consistency(self._system)
-
-    def _check_system_consistency(self, system):
-        """Raise an error if the system is inconsistent.
-
-        Current check that there's only 1 barostat (or it has none in case
-        this ThermodynamicState is in NVT), that it is supported, that
-        it has the correct temperature and pressure, and that it is not
-        associated to a non-periodic system.
-
-        """
-        TE = ThermodynamicsError  # shortcut
-
-        # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
-        barostat = self._find_barostat(system)
-        if barostat is not None:
-            if not self._is_barostat_consistent(barostat):
-                raise TE(TE.INCONSISTENT_BAROSTAT)
-
-            # Check that barostat is not added to non-periodic system. We
-            # cannot use System.usesPeriodicBoundaryConditions() because
-            # in OpenMM < 7.1 that returns True when a barostat is added.
-            # TODO just use usesPeriodicBoundaryConditions when drop openmm7.0
-            for force in system.getForces():
-                if isinstance(force, openmm.NonbondedForce):
-                    nonbonded_method = force.getNonbondedMethod()
-                    if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
-                        raise TE(TE.BAROSTATED_NONPERIODIC)
-        elif self._barostat is not None:
-            raise TE(TE.BAROSTATED_NONPERIODIC)
-
     @classmethod
     def _get_standard_system_hash(cls, system):
         """Return the serialization hash of the standard system."""
         standard_system = copy.deepcopy(system)
-        cls.turn_to_standard_system(standard_system)
+        cls._standardize_system(standard_system)
         system_serialization = openmm.XmlSerializer.serialize(standard_system)
         return system_serialization.__hash__()
 
@@ -1104,14 +1133,14 @@ class IComposableState(utils.SubhookedABCMeta):
         pass
 
     @abc.abstractclassmethod
-    def turn_to_standard_system(cls, system):
+    def standardize_system(cls, system):
         """Standardize the given system.
 
         ThermodynamicState relies on this method to create a standard
         system that defines compatibility with another state or context.
         The definition of a standard system is tied to the implementation
         of apply_to_context. For example, if apply_to_context sets a
-        global parameter of the context, turn_to_standard_system should
+        global parameter of the context, standardize_system should
         set the default value of the parameter in the system to a
         standard value.
 
@@ -1119,6 +1148,11 @@ class IComposableState(utils.SubhookedABCMeta):
         ----------
         system : simtk.openmm.System
             The system to standardize.
+
+        Raises
+        ------
+        ValueError
+            If the system cannot be standardized.
 
         """
         pass
@@ -1202,21 +1236,34 @@ class CompoundThermodynamicState(ThermodynamicState):
         for s in self._composable_states:
             s.check_system_consistency(self._system)
 
-    @classmethod
-    def turn_to_standard_system(cls, system):
-        """Standardize the system.
+    def is_context_compatible(self, context):
+        """Check compatibility of the given context.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The OpenMM context to test.
+
+        Returns
+        -------
+        is_compatible : bool
+            True if this ThermodynamicState can be applied to context.
 
         See Also
         --------
-        ThermodynamicState.turn_to_standard_system
+        ThermodynamicState.is_context_compatible
 
         """
-        super(CompoundThermodynamicState, cls).turn_to_standard_system(system)
-        for composable_cls in cls._composable_bases:
-            composable_cls.turn_to_standard_system(system)
+        # We override ThermodynamicState.is_context_compatible to
+        # handle the case in which one of the composable states
+        # raises ValueError when standardizing the context system.
+        try:
+            return super(CompoundThermodynamicState, self).is_context_compatible(context)
+        except ValueError:
+            return False
 
     def apply_to_context(self, context):
-        """Apply this thermodynamic state to the context.
+        """Apply this compound thermodynamic state to the context.
 
         See Also
         --------
@@ -1257,6 +1304,27 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         # Monkey patching.
         super(CompoundThermodynamicState, self).__setattr__(name, value)
+
+    @classmethod
+    def _standardize_system(cls, system):
+        """Standardize the system.
+
+        Override ThermodynamicState._standardize_system to standardize
+        the system also with respect to all other composable states.
+
+        Raises
+        ------
+        ValueError
+            If it is impossible to standardize the system.
+
+        See Also
+        --------
+        ThermodynamicState._standardize_system
+
+        """
+        super(CompoundThermodynamicState, cls)._standardize_system(system)
+        for composable_cls in cls._composable_bases:
+            composable_cls.standardize_system(system)
 
 
 if __name__ == '__main__':
