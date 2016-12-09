@@ -20,7 +20,8 @@ import copy
 import numpy as np
 from simtk import openmm, unit
 
-from yank import utils
+from . import utils
+
 
 # =============================================================================
 # MODULE FUNCTIONS
@@ -30,6 +31,26 @@ def _box_vectors_volume(box_vectors):
     """Return the volume of the box vectors.
 
     Support also triclinic boxes.
+
+    Parameters
+    ----------
+    box_vectors : simtk.unit.Quantity
+        Vectors defining the box.
+
+    Returns
+    -------
+
+    volume : simtk.unit.Quantity
+        The box volume in units of length^3.
+
+    Examples
+    --------
+
+    Compute the volume of a Lennard-Jones fluid at 100 K and 1 atm.
+
+    >>> from openmmtools import testsystems
+    >>> system = testsystems.LennardJonesFluid(nparticles=100).system
+    >>> v = _box_vectors_volume(system.getDefaultPeriodicBoxVectors())
 
     """
     a, b, c = box_vectors
@@ -42,6 +63,31 @@ def _box_vectors_volume(box_vectors):
 # =============================================================================
 
 class ThermodynamicsError(Exception):
+    """Custom ThermodynamicState error.
+
+    The exception defines error codes as class constants. Currently
+    defined constants are MULTIPLE_BAROSTATS, UNSUPPORTED_BAROSTAT,
+    INCONSISTENT_BAROSTAT, BAROSTATED_NONPERIODIC, and
+    INCONSISTENT_INTEGRATOR.
+
+    Parameters
+    ----------
+    code : ThermodynamicsError.Code
+        The error code.
+
+    Attributes
+    ----------
+    code : ThermodynamicsError.Code
+        The code associated to this error.
+
+    Examples
+    --------
+    >>> raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
+    Traceback (most recent call last):
+    ...
+    ThermodynamicsError: System has multiple barostats.
+
+    """
 
     # TODO substitute this with enum when we drop Python 2.7 support
     (MULTIPLE_BAROSTATS,
@@ -65,6 +111,29 @@ class ThermodynamicsError(Exception):
 
 
 class SamplerStateError(Exception):
+    """Custom SamplerState error.
+
+    The exception defines error codes as class constants. The only
+    currently defined constant is INCONSISTENT_VELOCITIES.
+
+    Parameters
+    ----------
+    code : SamplerStateError.Code
+        The error code.
+
+    Attributes
+    ----------
+    code : SamplerStateError.Code
+        The code associated to this error.
+
+    Examples
+    --------
+    >>> raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
+    Traceback (most recent call last):
+    ...
+    SamplerStateError: Velocities have different length than positions.
+
+    """
 
     # TODO substitute this with enum when we drop Python 2.7 support
     (INCONSISTENT_VELOCITIES) = range(1)
@@ -85,29 +154,120 @@ class SamplerStateError(Exception):
 
 
 class ThermodynamicState(object):
-    """The state of a Context that does not change with integration."""
+    """Thermodynamic state of a system.
+
+    Represent the portion of the state of a Context that does not
+    change with integration. Its main objectives are to wrap an
+    OpenMM system object to easily maintain a consistent thermodynamic
+    state. It can be used to create new OpenMM Contexts, or to convert
+    an existing Contexts to this particular thermodynamic state.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+        An OpenMM system in a particular thermodynamic state.
+    temperature : simtk.unit.Quantity
+        The temperature for the system at constant temperature. If
+        a MonteCarloBarostat is associated to the system, its
+        temperature will be set to this.
+    pressure : simtk.unit.Quantity, optional
+        The pressure for the system at constant pressure. If this
+        is specified, a MonteCarloBarostat is added to the system,
+        or just set to this pressure in case it already exists.
+
+    Attributes
+    ----------
+    system
+    temperature
+    pressure
+    volume
+
+    Notes
+    -----
+    This state object cannot describe states obeying non-Boltzamnn
+    statistics, such as Tsallis statistics.
+
+    Examples
+    --------
+    Specify an NVT state for a water box at 298 K.
+
+    >>> from openmmtools import testsystems
+    >>> temperature = 298.0*unit.kelvin
+    >>> waterbox = testsystems.WaterBox(box_edge=10*unit.angstroms,
+    ...                                 cutoff=4*unit.angstroms).system
+    >>> state = ThermodynamicState(system=waterbox, temperature=temperature)
+
+    In an NVT ensemble volume is constant and pressure is None.
+
+    >>> state.volume
+    Quantity(value=1.0, unit=nanometer**3)
+    >>> state.pressure is None
+    True
+
+    Convert this to an NPT state at 298 K and 1 atm pressure. This
+    operation automatically adds a MonteCarloBarostat to the system.
+
+    >>> pressure = 1.0*unit.atmosphere
+    >>> state.pressure = pressure
+    >>> state.pressure
+    Quantity(value=1.01325, unit=bar)
+    >>> state.volume is None
+    True
+
+    You cannot set a non-periodic system at constant pressure
+
+    >>> nonperiodic_system = testsystems.TolueneVacuum().system
+    >>> state.system = nonperiodic_system
+    Traceback (most recent call last):
+    ...
+    ThermodynamicsError: Non-periodic systems cannot have a barostat.
+
+    The same error is raised in the constructor if the optional pressure
+    parameter is specified. To set this system you first need to change
+    the thermodynamic state.
+
+    >>> state.pressure = None
+    >>> state.system = nonperiodic_system
+    >>> state.pressure is None
+    True
+    >>> state.volume is None
+    True
+
+    Systems that differ between each other only by their pressure and
+    temperature are compatible to each other.
+
+    >>> nonbarostated_state = ThermodynamicState(waterbox, temperature)
+    >>> barostated_state = ThermodynamicState(waterbox, temperature, pressure)
+    >>> nonbarostated_state.pressure is None
+    True
+    >>> barostated_state.pressure
+    Quantity(value=1.01325, unit=bar)
+    >>> barostated_state.is_state_compatible(nonbarostated_state)
+    True
+
+    But systems that differ by any other property are not (e.g. different
+    number of particles, different forces and parameters).
+
+    >>> waterbox.setParticleMass(0, 2.0*unit.amus)
+    >>> incompatible_state = ThermodynamicState(waterbox, temperature)
+    >>> barostated_state.is_state_compatible(incompatible_state)
+    False
+
+    The context created from a state, can be converted to a compatible
+    state.
+
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> context = nonbarostated_state.create_context(integrator)
+    >>> if barostated_state.is_state_compatible(nonbarostated_state):
+    ...     barostated_state.apply_to_context(context)
+
+    """
 
     # -------------------------------------------------------------------------
     # Public interface
     # -------------------------------------------------------------------------
 
     def __init__(self, system, temperature, pressure=None):
-        """Constructor.
-
-        Parameters
-        ----------
-        system : simtk.openmm.System
-            An OpenMM system in a particular thermodynamic state.
-        temperature : simtk.unit.Quantity
-            The temperature for the system at constant temperature. If
-            a MonteCarloBarostat is associated to the system, its
-            temperature will be set to this.
-        pressure : simtk.unit.Quantity, optional
-            The pressure for the system at constant pressure. If this
-            is specified, a MonteCarloBarostat is added to the system,
-            or just set to this pressure in case it already exists.
-
-        """
         # The standard system hash is cached and computed on-demand.
         self._cached_standard_system_hash = None
 
@@ -129,7 +289,14 @@ class ThermodynamicState(object):
 
     @property
     def system(self):
-        """A copy of the system in this thermodynamic state."""
+        """The system in this thermodynamic state.
+
+        The returned system is a copy and can be modified without
+        altering the internal state of ThermodynamicState. It can
+        be set only to a system which is consistent with the current
+        thermodynamic state.
+
+        """
         # TODO wrap system in a CallBackable class to avoid copying it
         return copy.deepcopy(self._system)
 
@@ -155,7 +322,9 @@ class ThermodynamicState(object):
     def pressure(self):
         """Constant pressure of the thermodynamic state.
 
-        If the pressure is allowed to fluctuate, this is None.
+        If the pressure is allowed to fluctuate, this is None. Setting
+        this will automatically add/configure a barostat to the system.
+        If it is set to None, the barostat will be removed.
 
         """
         barostat = self._barostat
@@ -171,7 +340,8 @@ class ThermodynamicState(object):
     def volume(self):
         """Constant volume of the thermodynamic state.
 
-        If the volume is allowed to fluctuate, this is None.
+        Read-only. If the volume is allowed to fluctuate, or if the
+        system is not in a periodic box this is None.
 
         """
         if self.pressure is not None:  # Volume fluctuates.
@@ -182,20 +352,79 @@ class ThermodynamicState(object):
         return _box_vectors_volume(box_vectors)
 
     def reduced_potential(self, sampler_state):
-        """Compute reduced potential."""
-        beta = 1.0 / (unit.MOLAR_GAS_CONSTANT_R * self.temperature)
+        """Reduced potential in this thermodynamic state.
+
+        The reduced potential is defined as in Ref. [1]
+
+        u = \beta [U(x) + p V(x) + \mu N(x)]
+
+        where the thermodynamic parameters are
+
+        \beta = 1/(kB T) is the inverse temperature
+        p is the pressure
+        \mu is the chemical potential
+
+        and the configurational properties are
+
+        x the atomic positions
+        U(x) is the potential energy
+        V(x) is the instantaneous box volume
+        N(x) the numbers of various particle species (e.g. protons of
+             titratible groups)
+
+        Parameters
+        ----------
+
+        sampler_state : SamplerState
+            Carry the configurational properties of the system.
+
+        Returns
+        -------
+        u : float
+            The unit-less reduced potential, which can be considered
+            to have units of kT.
+
+        Examples
+        --------
+
+        Compute the reduced potential of a water box at 298 K and 1 atm.
+
+        >>> from openmmtools import testsystems
+        >>> waterbox = testsystems.WaterBox(box_edge=20.0*unit.angstroms)
+        >>> system, positions = waterbox.system, waterbox.positions
+        >>> state = ThermodynamicState(system=waterbox.system,
+        ...                            temperature=298.0*unit.kelvin,
+        ...                            pressure=1.0*unit.atmosphere)
+        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        >>> context = state.create_context(integrator)
+        >>> context.setPositions(waterbox.positions)
+        >>> sampler_state = SamplerState.from_context(context)
+        >>> u = state.reduced_potential(sampler_state)
+
+        References
+        ----------
+
+        [1] Shirts MR and Chodera JD. Statistically optimal analysis of
+        equilibrium states. J Chem Phys 129:124105, 2008.
+
+        """
+        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
         reduced_potential = sampler_state.potential_energy
+        reduced_potential = reduced_potential / unit.AVOGADRO_CONSTANT_NA
         pressure = self.pressure
         if pressure is not None:
-            reduced_potential += (pressure * sampler_state.volume *
-                                  unit.AVOGADRO_CONSTANT_NA)
+            reduced_potential += pressure * sampler_state.volume
         return beta * reduced_potential
 
     def is_state_compatible(self, thermodynamic_state):
         """Check compatibility between ThermodynamicStates.
 
-        The state is compatible if a context created by state is
-        compatible.
+        The state is compatible if Contexts created by thermodynamic_state
+        can be set to this ThermodynamicState through apply_to_context.
+
+        This is faster than checking compatibility of a Context object
+        through is_context_compatible since, and it should be preferred
+        when possible.
 
         Parameters
         ----------
@@ -206,25 +435,24 @@ class ThermodynamicState(object):
         -------
         is_compatible : bool
             True if the context created by thermodynamic_state can be
-            converted to this state with apply_to_context().
+            converted to this state through apply_to_context().
 
         See Also
         --------
+        ThermodynamicState.apply_to_context
         ThermodynamicState.is_context_compatible
 
         """
-        try:
-            state_system_hash = thermodynamic_state._standard_system_hash
-        except AttributeError:
-            state_system = thermodynamic_state.system
-            state_system_hash = self._get_standard_system_hash(state_system)
+        state_system_hash = thermodynamic_state._standard_system_hash
         return self._standard_system_hash == state_system_hash
 
     def is_context_compatible(self, context):
         """Check compatibility of the given context.
 
-        The context is compatible if this ThermodynamicState can be
-        applied to it.
+        The context is compatible if it can be set to this
+        ThermodynamicState through apply_to_context. This is generally
+        slower than is_state_compatible, and the latter should be
+        preferred when possible
 
         Parameters
         ----------
@@ -285,7 +513,10 @@ class ThermodynamicState(object):
     def apply_to_context(self, context):
         """Apply this ThermodynamicState to the context.
 
-        The user is responsible to test if the context is compatible.
+        The method apply_to_context does *not* check for the compatibility
+        of the context. The user is responsible for this. Depending on the
+        system size, is_context_compatible can be an expensive operation,
+        so is_state_compatible should be preferred when possible.
 
         Parameters
         ----------
@@ -313,10 +544,26 @@ class ThermodynamicState(object):
     def turn_to_standard_system(cls, system):
         """Return a copy of the system in a standard representation.
 
-        The standard system can be used to test compatibility between
-        different ThermodynamicState objects. Here the standard system
-        simply removes the barostat, which makes the system instance
-        serialization independent from temperature and pressure.
+        This effectively defines which ThermodynamicStates are compatible
+        between each other. Compatible ThermodynamicStates have the same
+        standard systems, and is_state_compatible will return True if
+        the (cached) serialization of the standard systems are identical.
+
+        Here, the standard system is simply the system with the barostat
+        removed, which effectively makes its serialization independent
+        from temperature and pressure. The method apply_to_context then
+        adds/configures the barostat in the Context's system.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to standardize.
+
+        See Also
+        --------
+        ThermodyncmicState.apply_to_context
+        ThermodynamicState.is_state_compatible
+        ThermodynamicState.is_context_compatible
 
         """
         barostat_id = cls._find_barostat_index(system)
@@ -337,9 +584,10 @@ class ThermodynamicState(object):
     def _check_system_consistency(self, system):
         """Raise an error if the system is inconsistent.
 
-        Current check that there's only 1 barostat, that is supported,
-        that has the correct temperature and pressure, and that it is
-        not associated to a non-periodic system.
+        Current check that there's only 1 barostat (or it has none in case
+        this ThermodynamicState is in NVT), that it is supported, that
+        it has the correct temperature and pressure, and that it is not
+        associated to a non-periodic system.
 
         """
         TE = ThermodynamicsError  # shortcut
@@ -359,6 +607,8 @@ class ThermodynamicState(object):
                     nonbonded_method = force.getNonbondedMethod()
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
                         raise TE(TE.BAROSTATED_NONPERIODIC)
+        elif self._barostat is not None:
+            raise TE(TE.BAROSTATED_NONPERIODIC)
 
     @classmethod
     def _get_standard_system_hash(cls, system):
@@ -482,11 +732,19 @@ class ThermodynamicState(object):
 
         The barostat temperature is set to self._temperature.
 
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system's barostat will be added/configured.
+        pressure : simtk.unit.Quantity or None
+            The pressure with units compatible to bars. If None, the
+            barostat of the system is removed.
+
         Returns
         -------
         has_changed : bool
             True if the system has changed, False if it was already
-            configured.
+            configured correctly.
 
         """
         has_changed = False
@@ -513,7 +771,7 @@ class ThermodynamicState(object):
         return has_changed
 
     def _set_barostat_temperature(self, barostat):
-        """Shortcut to ensure OpenMM backwards compatibility.
+        """Set barostat temperature to self._temperature.
 
         Returns
         -------
@@ -540,29 +798,132 @@ class ThermodynamicState(object):
 # =============================================================================
 
 class SamplerState(object):
-    """The state of a Context that change with integration."""
+    """State carrying the configurational properties of a system.
+
+    Represent the portion of the state of a Context that changes with
+    integration. When initialized through the normal constructor, the
+    object is only partially defined as the energy attributes are None
+    until the SamplerState is updated with update_from_context. The
+    state can still be applied to a newly created context to set its
+    positions, velocities and box vectors. To initialize all attributes,
+    use the alternative constructor from_context.
+
+    Parameters
+    ----------
+    positions : Nx3 array of simtk.unit.Quantity
+        Position vectors for N particles (length units).
+    velocities : Nx3 array of simtk.unit.Quantity, optional
+        Velocity vectors for N particles (velocity units).
+    box_vectors : 3x3 array of simtk.unit.Quantity
+        Current box vectors (length units).
+
+    Attributes
+    ----------
+    positions : Nx3 array of simtk.unit.Quantity
+        Position vectors for N particles (length units).
+    velocities
+    box_vectors : 3x3 array of simtk.unit.Quantity
+        Current box vectors (length units).
+    potential_energy : simtk.unit.Quantity or None
+        Potential energy of this configuration.
+    kinetic_energy : simtk.unit.Quantity
+        Kinetic energy of this configuration.
+    total_energy
+    volume
+    n_particles
+
+    Examples
+    --------
+
+    >>> from openmmtools import testsystems
+    >>> toluene_test = testsystems.TolueneVacuum()
+    >>> sampler_state = SamplerState(toluene_test.positions)
+
+    At this point only the positions are defined
+
+    >>> sampler_state.velocities is None
+    True
+    >>> sampler_state.total_energy is None
+    True
+
+    but it can still be used to set up a context
+
+    >>> temperature = 300.0*unit.kelvin
+    >>> thermodynamic_state = ThermodynamicState(toluene_test.system, temperature)
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> context = thermodynamic_state.create_context(integrator)
+    >>> sampler_state.apply_to_context(context)  # Set initial positions.
+
+    A SamplerState cannot be updated by an incompatible context
+    which here is defined as having the same number of particles
+
+    >>> hostguest_test = testsystems.HostGuestVacuum()
+    >>> incompatible_state = ThermodynamicState(hostguest_test.system, temperature)
+    >>> integrator2 = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> incompatible_context = incompatible_state.create_context(integrator2)
+    >>> incompatible_context.setPositions(hostguest_test.positions)
+    >>> sampler_state.update_from_context(incompatible_context)
+    Traceback (most recent call last):
+    ...
+    SamplerStateError: Velocities have different length than positions.
+
+    Create a new SamplerState instead
+
+    >>> sampler_state2 = SamplerState.from_context(context)
+    >>> sampler_state2.potential_energy is not None
+    True
+
+    """
 
     # -------------------------------------------------------------------------
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, positions, velocities=None, box_vectors=None,
-                 potential_energy=None, kinetic_energy=None):
+    def __init__(self, positions, velocities=None, box_vectors=None):
         self.positions = positions
         self._velocities = None
         self.velocities = velocities  # Property checks consistency.
         self.box_vectors = box_vectors
-        self.potential_energy = potential_energy
-        self.kinetic_energy = kinetic_energy
+        self.potential_energy = None
+        self.kinetic_energy = None
 
     @staticmethod
     def from_context(context):
+        """Alternative constructor.
+
+        Read all the configurational properties from a Context object.
+        This guarantees that all attributes (including energy attributes
+        are initialized.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to read.
+
+        Returns
+        -------
+        sampler_state : SamplerState
+            A new SamplerState object.
+
+        """
         sampler_state = SamplerState([])
-        sampler_state._set_context_state(context, check_consistency=False)
+        sampler_state._read_context_state(context, check_consistency=False)
         return sampler_state
 
     @property
     def velocities(self):
+        """Particle velocities.
+
+        An Nx3 array of simtk.unit.Quantity, where N is the number of
+        particles.
+
+        Raises
+        ------
+        SamplerStateError
+            If set to an array with a number of particles different
+            than positions.
+
+        """
         return self._velocities
 
     @velocities.setter
@@ -573,21 +934,55 @@ class SamplerState(object):
 
     @property
     def total_energy(self):
+        """The sum of potential and kinetic energy (read-only)."""
+        if self.potential_energy is None or self.kinetic_energy is None:
+            return None
         return self.potential_energy + self.kinetic_energy
 
     @property
     def volume(self):
+        """The volume of the box (read-only)"""
         return _box_vectors_volume(self.box_vectors)
 
+    @property
+    def n_particles(self):
+        """Number of particles (read-only)."""
+        return len(self.positions)
+
     def is_context_compatible(self, context):
-        openmm_state = context.getState(getPositions=True)
-        return len(self.positions) == len(openmm_state.getPositions())
+        """Check compatibility of the given context.
+
+        The context is compatible if this SamplerState can be applied
+        through apply_to_context.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to test.
+
+        Returns
+        -------
+        is_compatible : bool
+            True if this SamplerState can be applied to context.
+
+        See Also
+        --------
+        SamplerState.apply_to_context
+
+        """
+        is_compatible = self.n_particles == context.getSystem().getNumParticles()
+        return is_compatible
 
     def update_from_context(self, context):
-        """Update the state with the context.
+        """Read the state from the given context.
 
-        The context must be compatible. Use SamplerState.from_context()
+        The context must be compatible. Use SamplerState.from_context
         if you want to build a new sampler state from an incompatible.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to read.
 
         Raises
         ------
@@ -595,13 +990,18 @@ class SamplerState(object):
             If the given context is not compatible.
 
         """
-        self._set_context_state(context, check_consistency=True)
+        self._read_context_state(context, check_consistency=True)
 
     def apply_to_context(self, context):
         """Set the context state.
 
-        If velocities and box vectors have not been specified, they are
-        not set.
+        If velocities and box vectors have not been specified in the
+        constructor, they are not set.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to set.
 
         """
         context.setPositions(self.positions)
@@ -614,7 +1014,24 @@ class SamplerState(object):
     # Internal-usage
     # -------------------------------------------------------------------------
 
-    def _set_context_state(self, context, check_consistency):
+    def _read_context_state(self, context, check_consistency):
+        """Read the Context state.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to read.
+        check_consistency : bool
+            If True, raise an error if the context system have a
+            different number of particles than the current state.
+
+        Raises
+        ------
+        SamplerStateError
+            If the the context system have a different number of
+            particles than the current state.
+
+        """
         openmm_state = context.getState(getPositions=True, getVelocities=True,
                                         getEnergy=True)
         if check_consistency:
@@ -635,37 +1052,75 @@ class SamplerState(object):
 # =============================================================================
 
 class IComposableState(utils.SubhookedABCMeta):
-    """A state composable through CompoundThermodynamicState."""
+    """A state composable through CompoundThermodynamicState.
+
+    Define the interface that needs to be implemented to extend a
+    ThermodynamicState through CompoundThermodynamicState.
+
+    See Also
+    --------
+    CompoundThermodynamicState
+
+    """
 
     @abc.abstractmethod
     def set_system_state(self, system):
-        """This method is called everytime an attribute of the
-        composable state is called, and on init to update the
-        system with the stored new state. The system will be
-        used to create_context()."""
+        """Change the system properties to be consistent with this state.
+
+        This method is called on CompoundThermodynamicState init to update
+        the system stored in the main ThermodynamicState, and every time
+        an attribute/property of the composable state is set.
+
+        This is the system that will be used during context creation, so
+        it is important that it is up-to-date.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to modify.
+
+        """
         pass
 
     @abc.abstractmethod
     def check_system_consistency(self, system):
-        """Raise error if the system is not consistent with the state.
+        """Check if the system is consistent with the state.
 
-        This is called when the system of the ThermodynamicState is set.
+        It raises an Exception if the system is not consistent with the
+        state. This is called when the system of the ThermodynamicState
+        is set.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to test.
 
         """
         pass
 
     @abc.abstractmethod
     def apply_to_context(self, context):
-        """If the changes are only in system, this can be avoided."""
+        """Apply changes to the context to be consistent with the state."""
         pass
 
-    @classmethod
-    @abc.abstractmethod
+    @abc.abstractclassmethod
     def turn_to_standard_system(cls, system):
-        """ThermodynamicState relies on this method to create
-        a standard system hash used to check compatibility.
+        """Standardize the given system.
 
-        Raise ValueError if it cannot be standardized."""
+        ThermodynamicState relies on this method to create a standard
+        system that defines compatibility with another state or context.
+        The definition of a standard system is tied to the implementation
+        of apply_to_context. For example, if apply_to_context sets a
+        global parameter of the context, turn_to_standard_system should
+        set the default value of the parameter in the system to a
+        standard value.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to standardize.
+
+        """
         pass
 
 
@@ -675,46 +1130,70 @@ class CompoundThermodynamicState(ThermodynamicState):
     Allows to extend a ThermodynamicState through composition rather
     than inheritance.
 
+    The class dynamically inherits from the ThermodynamicState object
+    given in the constructor, and it preserves direct access to all its
+    methods and attributes. It is compatible also with subclasses of
+    ThermodynamicState, but it does not support objects which make use
+    of __slots__.
+
     It is the user's responsibility to check that IComposableStates are
-    compatible to each other (i.e. that they do not depend on and modify
-    the same properties of the system). If this is not the case
+    compatible to each other (i.e. that they do not depend on and/or
+    modify the same properties of the system). If this is not the case,
     consider merging them into a single IComposableStates. If an
     IComposableState needs to access properties of ThermodynamicState
-    (e.g. temperature, pressure) consider extending through normal
-    inheritance. CompoundThermodynamicState is compatible also with
-    subclasses of ThermodynamicState.
+    (e.g. temperature, pressure) consider extending it through normal
+    inheritance.
 
-    The class dynamically inherits from the given thermodynamic state.
-    It does not support thermodynamic state objects which make use of
-    __slots__.
+    It is not necessary to explicitly inherit from IComposableState for
+    compatibility as long as all abstract methods are implemented. All
+    its attributes and methods will still be directly accessible unless
+    they are masked by the main ThermodynamicState or by a IComposableState
+    that appeared before in the constructor argument composable_states.
 
-    It is not necessary to explicitly inherit from IComposableState to
-    be compatible. All attributes will still be accessible unless they
-    are hidden by ThermodynamicState or by a previous IComposableState.
+    After construction, changing the original thermodynamic_state or
+    any of the composable_states changes the state of the compound state.
 
-    IComposableState objects must be independent of each other, and
-    they don't normally have access to each other states.
+    Parameters
+    ----------
+    thermodynamic_state : ThermodynamicState
+        The main ThermodynamicState which holds the OpenMM system.
+    composable_states : list of IComposableState
+        Each element represent a portion of the overall thermodynamic
+        state.
 
     """
-
+    # TODO add examples to docs once AlchemicalState has been implemented
     def __init__(self, thermodynamic_state, composable_states):
         # Check that composable states expose the correct interface.
-        # for composable_state in composable_states:
-        #     assert isinstance(composable_state, IComposableState)
+        for composable_state in composable_states:
+            assert isinstance(composable_state, IComposableState)
 
-        # Dynamically inherit from thermodynamic_state class.
+        # Dynamically inherit from thermodynamic_state class and
+        # store the types of composable_states to be able to call
+        # class methods.
         composable_bases = [s.__class__ for s in composable_states]
         self.__class__ = type(self.__class__.__name__,
                               (self.__class__, thermodynamic_state.__class__),
                               {'_composable_bases': composable_bases})
         self.__dict__ = thermodynamic_state.__dict__
 
+        # Set the stored system to the given states. Setting
+        # self._composable_states signals __setattr__ to start
+        # searching in composable states as well, so this must
+        # be the last new attribute set in the constructor.
         self._composable_states = composable_states
         for s in self._composable_states:
             s.set_system_state(self._system)
 
     @property
     def system(self):
+        """The system in this thermodynamic state.
+
+        See Also
+        --------
+        ThermodynamicState.system
+
+        """
         return super(CompoundThermodynamicState, self).system
 
     @system.setter
@@ -725,18 +1204,32 @@ class CompoundThermodynamicState(ThermodynamicState):
 
     @classmethod
     def turn_to_standard_system(cls, system):
+        """Standardize the system.
+
+        See Also
+        --------
+        ThermodynamicState.turn_to_standard_system
+
+        """
         super(CompoundThermodynamicState, cls).turn_to_standard_system(system)
         for composable_cls in cls._composable_bases:
             composable_cls.turn_to_standard_system(system)
 
     def apply_to_context(self, context):
+        """Apply this thermodynamic state to the context.
+
+        See Also
+        --------
+        ThermodynamicState.apply_to_context
+
+        """
         super(CompoundThermodynamicState, self).apply_to_context(context)
         for s in self._composable_states:
             s.apply_to_context(context)
 
     def __getattr__(self, name):
         # Called only if the attribute couldn't be found in __dict__.
-        # In this case we fall back to composable state, in the order.
+        # In this case we fall back to composable state, in the given order.
         for s in self._composable_states:
             try:
                 return getattr(s, name)
@@ -749,14 +1242,23 @@ class CompoundThermodynamicState(ThermodynamicState):
         # Add new attribute to CompoundThermodynamicState.
         if '_composable_states' not in self.__dict__:
             super(CompoundThermodynamicState, self).__setattr__(name, value)
+
         # Update existing ThermodynamicState attribute (check ancestors).
         elif any(name in C.__dict__ for C in self.__class__.__mro__):
             super(CompoundThermodynamicState, self).__setattr__(name, value)
-        else:  # Update composable states attributes.
+
+        # Update composable states attributes (check ancestors).
+        else:
             for s in self._composable_states:
                 if any(name in C.__dict__ for C in s.__class__.__mro__):
                     s.__setattr__(name, value)
                     s.set_system_state(self._system)
                     break
+
         # Monkey patching.
         super(CompoundThermodynamicState, self).__setattr__(name, value)
+
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
