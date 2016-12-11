@@ -138,10 +138,12 @@ class SamplerStateError(Exception):
     """
 
     # TODO substitute this with enum when we drop Python 2.7 support
-    (INCONSISTENT_VELOCITIES) = range(1)
+    (INCONSISTENT_VELOCITIES,
+     INCONSISTENT_POSITIONS) = range(2)
 
     error_messages = {
         INCONSISTENT_VELOCITIES: "Velocities have different length than positions.",
+        INCONSISTENT_POSITIONS: "Specified positions for inconsistent number of particles."
     }
 
     def __init__(self, code, *args):
@@ -909,7 +911,7 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, positions, velocities=None, box_vectors=None):
-        self.positions = positions
+        self._positions = positions
         self._velocities = None
         self.velocities = velocities  # Property checks consistency.
         self.box_vectors = box_vectors
@@ -938,6 +940,16 @@ class SamplerState(object):
         sampler_state = SamplerState([])
         sampler_state._read_context_state(context, check_consistency=False)
         return sampler_state
+
+    @property
+    def positions(self):
+        return self._positions
+
+    @positions.setter
+    def positions(self, value):
+        if value is None or len(value) != self.n_particles:
+            raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
+        self._positions = value
 
     @property
     def velocities(self):
@@ -1064,14 +1076,14 @@ class SamplerState(object):
         openmm_state = context.getState(getPositions=True, getVelocities=True,
                                         getEnergy=True)
         if check_consistency:
-            # We assign first the property velocities that perform a
+            # We assign the property position which perform a
             # consistency check with the current positions and raise
             # an error if the number of elements is different.
-            self.velocities = openmm_state.getVelocities(asNumpy=True)
+            self.positions = openmm_state.getPositions(asNumpy=True)
         else:
-            self._velocities = openmm_state.getVelocities(asNumpy=True)
-        self.positions = openmm_state.getPositions(asNumpy=True)
-        self.box_vectors = openmm_state.getPeriodicBoxVectors()
+            self._positions = openmm_state.getPositions(asNumpy=True)
+        self.velocities = openmm_state.getVelocities(asNumpy=True)
+        self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
         self.potential_energy = openmm_state.getPotentialEnergy()
         self.kinetic_energy = openmm_state.getKineticEnergy()
 
