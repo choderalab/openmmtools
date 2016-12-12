@@ -1150,6 +1150,7 @@ class SamplerState(object):
         if check_consistency:
             self.positions = openmm_state.getPositions(asNumpy=True)
         else:
+            # The positions in md units cache is updated below.
             self._positions = openmm_state.getPositions(asNumpy=True)
 
         self.velocities = openmm_state.getVelocities(asNumpy=True)
