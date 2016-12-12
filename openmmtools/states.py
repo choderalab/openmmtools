@@ -852,7 +852,7 @@ class SamplerState(object):
     ----------
     positions
     velocities
-    box_vectors : 3x3 array of simtk.unit.Quantity
+    box_vectors : 3x3 simtk.unit.Quantity.
         Current box vectors (length units).
     potential_energy : simtk.unit.Quantity or None
         Potential energy of this configuration.
@@ -918,8 +918,10 @@ class SamplerState(object):
 
     def __init__(self, positions, velocities=None, box_vectors=None):
         self._positions = positions
+        self._cached_positions_in_md_units = None
         self._velocities = None
-        self.velocities = velocities  # Property checks consistency.
+        self._cached_velocities_in_md_units = None
+        self.velocities = velocities  # Checks consistency and units.
         self.box_vectors = box_vectors
         self.potential_energy = None
         self.kinetic_energy = None
@@ -929,7 +931,7 @@ class SamplerState(object):
         """Alternative constructor.
 
         Read all the configurational properties from a Context object.
-        This guarantees that all attributes (including energy attributes
+        This guarantees that all attributes (including energy attributes)
         are initialized.
 
         Parameters
@@ -968,6 +970,7 @@ class SamplerState(object):
         if value is None or len(value) != self.n_particles:
             raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
         self._positions = value
+        self._cached_positions_in_md_units = None  # Invalidate cache.
 
     @property
     def velocities(self):
@@ -987,9 +990,10 @@ class SamplerState(object):
 
     @velocities.setter
     def velocities(self, value):
-        if value is not None and len(self.positions) != len(value):
+        if value is not None and self.n_particles != len(value):
             raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
         self._velocities = value
+        self._cached_velocities_in_md_units = None  # Invalidate cache.
 
     @property
     def total_energy(self):
@@ -1063,9 +1067,9 @@ class SamplerState(object):
             The context to set.
 
         """
-        context.setPositions(self.positions)
+        context.setPositions(self._positions_in_md_units)
         if self._velocities is not None:
-            context.setVelocities(self._velocities)
+            context.setVelocities(self._velocities_in_md_units)
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
 
@@ -1092,6 +1096,34 @@ class SamplerState(object):
     # Internal-usage
     # -------------------------------------------------------------------------
 
+    @property
+    def _positions_in_md_units(self):
+        """Positions in md units system.
+
+        Handles a unitless cache that can reduce the time setting context
+        positions by more than half. The cache needs to be invalidated
+        when positions are changed.
+
+        """
+        if self._cached_positions_in_md_units is None:
+            temp_pos = self._positions.value_in_unit_system(unit.md_unit_system)
+            self._cached_positions_in_md_units = temp_pos
+        return self._cached_positions_in_md_units
+
+    @property
+    def _velocities_in_md_units(self):
+        """Velocities in md units system.
+
+        Handles a unitless cache that can reduce the time setting context
+        velocities by more than half. The cache needs to be invalidated
+        when velocities are changed.
+
+        """
+        if self._cached_velocities_in_md_units is None:
+            temp_vel = self._velocities.value_in_unit_system(unit.md_unit_system)
+            self._cached_velocities_in_md_units = temp_vel
+        return self._cached_velocities_in_md_units
+
     def _read_context_state(self, context, check_consistency):
         """Read the Context state.
 
@@ -1112,17 +1144,24 @@ class SamplerState(object):
         """
         openmm_state = context.getState(getPositions=True, getVelocities=True,
                                         getEnergy=True)
+
+        # We assign positions first, since the velocities
+        # property will check its length for consistency
         if check_consistency:
-            # We assign the property position which perform a
-            # consistency check with the current positions and raise
-            # an error if the number of elements is different.
             self.positions = openmm_state.getPositions(asNumpy=True)
         else:
             self._positions = openmm_state.getPositions(asNumpy=True)
+
         self.velocities = openmm_state.getVelocities(asNumpy=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
         self.potential_energy = openmm_state.getPotentialEnergy()
         self.kinetic_energy = openmm_state.getKineticEnergy()
+
+        # We need to set the cached positions and velocities at the end
+        # because every call to the properties invalidate the cache. I
+        # know this is ugly but it saves us A LOT of time in unit stripping.
+        self._cached_positions_in_md_units = openmm_state._coordList
+        self._cached_velocities_in_md_units = openmm_state._velList
 
 
 # =============================================================================
