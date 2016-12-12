@@ -723,8 +723,8 @@ class ThermodynamicState(object):
                                       barostat.__class__.__name__)
         return barostat
 
-    @classmethod
-    def _find_barostat_index(cls, system):
+    @staticmethod
+    def _find_barostat_index(system):
         """Return the index of the first barostat found in the system.
 
         Returns
