@@ -143,7 +143,7 @@ class SamplerStateError(Exception):
 
     error_messages = {
         INCONSISTENT_VELOCITIES: "Velocities have different length than positions.",
-        INCONSISTENT_POSITIONS: "Specified positions for inconsistent number of particles."
+        INCONSISTENT_POSITIONS: "Specified positions with inconsistent number of particles."
     }
 
     def __init__(self, code, *args):
@@ -412,8 +412,8 @@ class ThermodynamicState(object):
 
         If the sampler state is incompatible, an error is raised
 
-        >>> sampler_state.positions = sampler_state.positions[:-1]
-        >>> state.reduced_potential(sampler_state)
+        >>> incompatible_sampler_state = sampler_state[:-1]
+        >>> state.reduced_potential(incompatible_sampler_state)
         Traceback (most recent call last):
         ...
         ThermodynamicsError: The sampler state has a different number of particles.
@@ -841,17 +841,16 @@ class SamplerState(object):
 
     Parameters
     ----------
-    positions : Nx3 array of simtk.unit.Quantity
+    positions : Nx3 simtk.unit.Quantity
         Position vectors for N particles (length units).
-    velocities : Nx3 array of simtk.unit.Quantity, optional
+    velocities : Nx3 simtk.unit.Quantity, optional
         Velocity vectors for N particles (velocity units).
-    box_vectors : 3x3 array of simtk.unit.Quantity
+    box_vectors : 3x3 simtk.unit.Quantity
         Current box vectors (length units).
 
     Attributes
     ----------
-    positions : Nx3 array of simtk.unit.Quantity
-        Position vectors for N particles (length units).
+    positions
     velocities
     box_vectors : 3x3 array of simtk.unit.Quantity
         Current box vectors (length units).
@@ -896,13 +895,20 @@ class SamplerState(object):
     >>> sampler_state.update_from_context(incompatible_context)
     Traceback (most recent call last):
     ...
-    SamplerStateError: Velocities have different length than positions.
+    SamplerStateError: Specified positions with inconsistent number of particles.
 
     Create a new SamplerState instead
 
     >>> sampler_state2 = SamplerState.from_context(context)
     >>> sampler_state2.potential_energy is not None
     True
+
+    It is possible to slice a sampler state to obtain positions and
+    particles of a subset of atoms
+
+    >>> sliced_sampler_state = sampler_state[:10]
+    >>> sliced_sampler_state.n_particles
+    10
 
     """
 
@@ -943,6 +949,18 @@ class SamplerState(object):
 
     @property
     def positions(self):
+        """Particle positions.
+
+        An Nx3 simtk.unit.Quantity object, where N is the number of
+        particles.
+
+        Raises
+        ------
+        SamplerStateError
+            If set to an array with a number of particles different
+            than n_particles.
+
+        """
         return self._positions
 
     @positions.setter
@@ -955,14 +973,14 @@ class SamplerState(object):
     def velocities(self):
         """Particle velocities.
 
-        An Nx3 array of simtk.unit.Quantity, where N is the number of
+        An Nx3 simtk.unit.Quantity object, where N is the number of
         particles.
 
         Raises
         ------
         SamplerStateError
             If set to an array with a number of particles different
-            than positions.
+            than n_particles.
 
         """
         return self._velocities
@@ -1050,6 +1068,25 @@ class SamplerState(object):
             context.setVelocities(self._velocities)
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
+
+    def __getitem__(self, item):
+        sampler_state = SamplerState([])
+        if isinstance(item, slice):
+            sampler_state._positions = self._positions[item]
+            if self._velocities is not None:
+                sampler_state._velocities = self._velocities[item]
+        else:
+            pos_value = self._positions[item].value_in_unit(self._positions.unit)
+            sampler_state._positions = unit.Quantity(np.array([pos_value]),
+                                                     self._positions.unit)
+            if self._velocities is not None:
+                vel_value = self._velocities[item].value_in_unit(self._velocities.unit)
+                sampler_state._velocities = unit.Quantity(np.array([vel_value]),
+                                                          self._velocities.unit)
+        sampler_state.box_vectors = self.box_vectors
+        sampler_state.potential_energy = self.potential_energy
+        sampler_state.kinetic_energy = self.kinetic_energy
+        return sampler_state
 
     # -------------------------------------------------------------------------
     # Internal-usage
