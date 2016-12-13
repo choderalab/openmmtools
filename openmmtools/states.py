@@ -95,7 +95,8 @@ class ThermodynamicsError(Exception):
      INCONSISTENT_BAROSTAT,
      BAROSTATED_NONPERIODIC,
      INCONSISTENT_INTEGRATOR,
-     INCOMPATIBLE_SAMPLER_STATE) = range(6)
+     INCOMPATIBLE_SAMPLER_STATE,
+     INCOMPATIBLE_ENSEMBLE) = range(7)
 
     error_messages = {
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
@@ -103,7 +104,8 @@ class ThermodynamicsError(Exception):
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
         BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat.",
         INCONSISTENT_INTEGRATOR: "Integrator is coupled to a heat bath at a different temperature.",
-        INCOMPATIBLE_SAMPLER_STATE: "The sampler state has a different number of particles."
+        INCOMPATIBLE_SAMPLER_STATE: "The sampler state has a different number of particles.",
+        INCOMPATIBLE_ENSEMBLE: "Cannot apply to a context in a different thermodynamic ensemble."
     }
 
     def __init__(self, code, *args):
@@ -320,7 +322,7 @@ class ThermodynamicState(object):
         self._temperature = value
         barostat = self._barostat
         if barostat is not None:
-            self._set_barostat_temperature(barostat)
+            self._set_barostat_temperature(barostat, self._temperature)
 
     @property
     def pressure(self):
@@ -339,6 +341,7 @@ class ThermodynamicState(object):
     @pressure.setter
     def pressure(self, value):
         self._set_system_pressure(self._system, value)
+        self._cached_standard_system_hash = None  # Invalidate cache.
 
     @property
     def volume(self):
@@ -544,6 +547,13 @@ class ThermodynamicState(object):
         context : simtk.openmm.Context
            The OpenMM Context to be set to this ThermodynamicState.
 
+        Raises
+        ------
+        ThermodynamicsError
+            If the context is in a different thermodynamic ensemble w.r.t.
+            this state. This is just a quick check which is not as extensive
+            as is_state_compatible or is_context_compatible.
+
         See Also
         --------
         ThermodynamicState.is_state_compatible
@@ -552,18 +562,43 @@ class ThermodynamicState(object):
         """
         system = context.getSystem()
         integrator = context.getIntegrator()
-        has_changed = self._set_system_pressure(system, self.pressure)
         barostat = self._find_barostat(system)
         if barostat is not None:
-            has_changed = self._set_barostat_temperature(barostat) or has_changed
-        has_changed = self._set_integrator_temperature(integrator) or has_changed
-        if has_changed:
-            context.reinitialize()
+            if self._barostat is None:
+                # The context is NPT but this is NVT.
+                raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+
+            has_changed = self._set_system_pressure(system, self.pressure)
+            if has_changed:
+                context.setParameter(barostat.Pressure(), self.pressure)
+            has_changed = self._set_barostat_temperature(barostat, self._temperature)
+            if has_changed:
+                # TODO remove try except when drop openmm7.0 support
+                try:
+                    context.setParameter(barostat.Temperature(), self._temperature)
+                except AttributeError:  # OpenMM < 7.1
+                    openmm_state = context.getState(getPositions=True, getVelocities=True,
+                                                    getParameters=True)
+                    context.reinitialize()
+                    context.setState(openmm_state)
+
+        elif self._barostat is not None:
+            # The context is NVT but this is NPT.
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+        self._set_integrator_temperature(integrator)
         # TODO context.setVelocitiesToTemperature()?
 
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
     # -------------------------------------------------------------------------
+
+    # Standard values are not standard in a physical sense, they are
+    # just consistent between ThermodynamicStates to make comparison
+    # of standard system hashes possible. We set this to round floats
+    # and use OpenMM units to avoid funniness due to precision errors
+    # caused by periodic binary representation/unit conversion.
+    _STANDARD_PRESSURE = 1.0*unit.bar
+    _STANDARD_TEMPERATURE = 273.0*unit.kelvin
 
     _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
                                       openmm.NonbondedForce.CutoffNonPeriodic}
@@ -621,9 +656,13 @@ class ThermodynamicState(object):
         the (cached) serialization of the standard systems are identical.
 
         Here, the standard system is simply the system with the barostat
-        removed, which effectively makes its serialization independent
-        from temperature and pressure. The method apply_to_context then
-        adds/configures the barostat in the Context's system.
+        pressure/temperature set to _STANDARD_PRESSURE/TEMPERATURE. The
+        method apply_to_context then configures the barostat parameters
+        in the Context. If the system doesn't have a barostat, nothing
+        changes.
+
+        Effectively this means that only same systems in same ensemble
+        (NPT or NVT) are compatible.
 
         Parameters
         ----------
@@ -637,9 +676,11 @@ class ThermodynamicState(object):
         ThermodynamicState.is_context_compatible
 
         """
-        barostat_id = cls._find_barostat_index(system)
-        if barostat_id is not None:
-            system.removeForce(barostat_id)
+        barostat = cls._find_barostat(system)
+        if barostat is not None:
+            barostat.setDefaultPressure(cls._STANDARD_PRESSURE)
+            cls._set_barostat_temperature(barostat, cls._STANDARD_TEMPERATURE)
+
 
     @classmethod
     def _get_standard_system_hash(cls, system):
@@ -777,6 +818,11 @@ class ThermodynamicState(object):
             True if the system has changed, False if it was already
             configured correctly.
 
+        Raises
+        ------
+        ThermodynamicsError
+            If pressure needs to be set for a non-periodic system.
+
         """
         has_changed = False
 
@@ -801,8 +847,9 @@ class ThermodynamicState(object):
 
         return has_changed
 
-    def _set_barostat_temperature(self, barostat):
-        """Set barostat temperature to self._temperature.
+    @staticmethod
+    def _set_barostat_temperature(barostat, temperature):
+        """Set barostat temperature.
 
         Returns
         -------
@@ -814,12 +861,12 @@ class ThermodynamicState(object):
         has_changed = False
         # TODO remove this when we OpenMM 7.0 drop support
         try:
-            if barostat.getDefaultTemperature() != self._temperature:
-                barostat.setDefaultTemperature(self._temperature)
+            if barostat.getDefaultTemperature() != temperature:
+                barostat.setDefaultTemperature(temperature)
                 has_changed = True
         except AttributeError:  # versions previous to OpenMM 7.1
-            if barostat.getTemperature() != self._temperature:
-                barostat.setTemperature(self._temperature)
+            if barostat.getTemperature() != temperature:
+                barostat.setTemperature(temperature)
                 has_changed = True
         return has_changed
 
