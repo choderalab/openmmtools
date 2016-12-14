@@ -90,15 +90,23 @@ class ThermodynamicsError(Exception):
     """
 
     # TODO substitute this with enum when we drop Python 2.7 support
-    (MULTIPLE_BAROSTATS,
+    (MULTIPLE_THERMOSTATS,
+     NO_THERMOSTAT,
+     NONE_TEMPERATURE,
+     INCONSISTENT_THERMOSTAT,
+     MULTIPLE_BAROSTATS,
      UNSUPPORTED_BAROSTAT,
      INCONSISTENT_BAROSTAT,
      BAROSTATED_NONPERIODIC,
      INCONSISTENT_INTEGRATOR,
      INCOMPATIBLE_SAMPLER_STATE,
-     INCOMPATIBLE_ENSEMBLE) = range(7)
+     INCOMPATIBLE_ENSEMBLE) = range(11)
 
     error_messages = {
+        MULTIPLE_THERMOSTATS: "System has multipe thermostats.",
+        NO_THERMOSTAT: "System does not have a thermostat specifying the temperature.",
+        NONE_TEMPERATURE: "Cannot set temperature of the thermodynamic state to None.",
+        INCONSISTENT_THERMOSTAT: "System thermostat is inconsistent with thermodynamic state.",
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
@@ -166,20 +174,28 @@ class ThermodynamicState(object):
     change with integration. Its main objectives are to wrap an
     OpenMM system object to easily maintain a consistent thermodynamic
     state. It can be used to create new OpenMM Contexts, or to convert
-    an existing Contexts to this particular thermodynamic state.
+    an existing Context to this particular thermodynamic state.
+
+    Only NVT and NPT ensembles are supported. The temperature must
+    be specified in the constructor, either implicitly via a thermostat
+    force in the system, or explicitly through the temperature
+    parameter, which overrides an eventual thermostat indication.
 
     Parameters
     ----------
     system : simtk.openmm.System
         An OpenMM system in a particular thermodynamic state.
-    temperature : simtk.unit.Quantity
+    temperature : simtk.unit.Quantity, optional
         The temperature for the system at constant temperature. If
         a MonteCarloBarostat is associated to the system, its
-        temperature will be set to this.
+        temperature will be set to this. If None, the temperature
+        is inferred from the system thermostat.
     pressure : simtk.unit.Quantity, optional
         The pressure for the system at constant pressure. If this
         is specified, a MonteCarloBarostat is added to the system,
-        or just set to this pressure in case it already exists.
+        or just set to this pressure in case it already exists. If
+        None, the pressure is inferred from the system barostat, and
+        NVT ensemble is assumed if there is no barostat.
 
     Attributes
     ----------
@@ -187,6 +203,7 @@ class ThermodynamicState(object):
     temperature
     pressure
     volume
+    n_particles
 
     Notes
     -----
@@ -273,21 +290,24 @@ class ThermodynamicState(object):
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, system, temperature, pressure=None):
+    def __init__(self, system, temperature=None, pressure=None):
         # The standard system hash is cached and computed on-demand.
         self._cached_standard_system_hash = None
 
         # Do not modify original system.
         self._system = copy.deepcopy(system)
 
-        # We cannot model the temperature as a pure property because
-        # if the system has no barostat, it doesn't contain any info
-        # on T, so we need to maintain consistency between this
-        # internal variable and the barostat/integrator.
-        self._temperature = temperature
+        # If temperature is None, the user must specify a thermostat.
+        if temperature is None:
+            if self._thermostat is None:
+                raise ThermodynamicsError(ThermodynamicsError.NO_THERMOSTAT)
+            # Read temperature from thermostat and pass it to barostat.
+            temperature = self.temperature
 
-        # Set barostat temperature and pressure.
+        # Set thermostat and barostat temperature.
         self.temperature = temperature
+
+        # Set barostat pressure.
         if pressure is not None:
             self.pressure = pressure
 
@@ -302,8 +322,16 @@ class ThermodynamicState(object):
         be set only to a system which is consistent with the current
         thermodynamic state.
 
+        In order to ensure a consistent thermodynamic state, the
+        system has a Thermostat force. The method create_context takes
+        care of removing the thermostat when an integrator with a
+        coupled heat bath is used (e.g. LangevinIntegrator).
+
+        See Also
+        --------
+        ThermodynamicState.create_context
+
         """
-        # TODO wrap system in a CallBackable class to avoid copying it
         return copy.deepcopy(self._system)
 
     @system.setter
@@ -315,14 +343,16 @@ class ThermodynamicState(object):
     @property
     def temperature(self):
         """Constant temperature of the thermodynamic state."""
-        return self._temperature
+        return self._thermostat.getDefaultTemperature()
 
     @temperature.setter
     def temperature(self, value):
-        self._temperature = value
+        if value is None:
+            raise ThermodynamicsError(ThermodynamicsError.NONE_TEMPERATURE)
+        self._set_system_thermostat(self._system, value)
         barostat = self._barostat
         if barostat is not None:
-            self._set_barostat_temperature(barostat, self._temperature)
+            self._set_barostat_temperature(barostat, value)
 
     @property
     def pressure(self):
@@ -501,9 +531,13 @@ class ThermodynamicState(object):
     def create_context(self, integrator, platform=None):
         """Create a context in this ThermodynamicState.
 
-        The context contains a copy of the system. An exception is
-        raised if the integrator is coupled to a heat bath set at a
-        temperature different from the thermodynamic state's.
+        The context contains a copy of the system. If the integrator
+        is coupled to a heat bath (e.g. LangevinIntegrator), the system
+        won't contain a thermostat and vice versa. A CompoundIntegrator
+        is considered coupled to a heat bath if at least one of its
+        integrators is. An exception is raised if the integrator is
+        thermostated at a temperature different from the thermodynamic
+        state's.
 
         Parameters
         ----------
@@ -526,13 +560,27 @@ class ThermodynamicState(object):
             If the integrator has an inconsistent temperature.
 
         """
-        # Check that integrator is consistent
-        if not self._is_integrator_consistent(integrator):
-            raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_INTEGRATOR)
-        if platform is None:
-            return openmm.Context(self.system, integrator)
+        # Check that integrator is consistent and if it is thermostated.
+        # With CompoundIntegrator, at least one must be thermostated.
+        is_thermostated = False
+        if isinstance(integrator, openmm.CompoundIntegrator):
+            for integrator_id in range(integrator.getNumIntegrators()):
+                _integrator = integrator.getIntegrator(integrator_id)
+                is_thermostated = is_thermostated or self._is_integrator_thermostated(_integrator)
         else:
-            return openmm.Context(self.system, integrator, platform)
+            is_thermostated = self._is_integrator_thermostated(integrator)
+
+        # If integrator is coupled to heat bath, remove system thermostat.
+        system = copy.deepcopy(self._system)
+        if is_thermostated:
+            thermostat_id = self._find_thermostat_index(system)
+            system.removeForce(thermostat_id)
+
+        # Create platform.
+        if platform is None:
+            return openmm.Context(system, integrator)
+        else:
+            return openmm.Context(system, integrator, platform)
 
     def apply_to_context(self, context):
         """Apply this ThermodynamicState to the context.
@@ -551,8 +599,8 @@ class ThermodynamicState(object):
         ------
         ThermodynamicsError
             If the context is in a different thermodynamic ensemble w.r.t.
-            this state. This is just a quick check which is not as extensive
-            as is_state_compatible or is_context_compatible.
+            this state. This is just a quick check which does not substitute
+            is_state_compatible or is_context_compatible.
 
         See Also
         --------
@@ -561,7 +609,8 @@ class ThermodynamicState(object):
 
         """
         system = context.getSystem()
-        integrator = context.getIntegrator()
+
+        # Apply pressure and temperature to barostat.
         barostat = self._find_barostat(system)
         if barostat is not None:
             if self._barostat is None:
@@ -571,22 +620,29 @@ class ThermodynamicState(object):
             has_changed = self._set_system_pressure(system, self.pressure)
             if has_changed:
                 context.setParameter(barostat.Pressure(), self.pressure)
-            has_changed = self._set_barostat_temperature(barostat, self._temperature)
+            has_changed = self._set_barostat_temperature(barostat, self.temperature)
             if has_changed:
                 # TODO remove try except when drop openmm7.0 support
                 try:
-                    context.setParameter(barostat.Temperature(), self._temperature)
+                    context.setParameter(barostat.Temperature(), self.temperature)
                 except AttributeError:  # OpenMM < 7.1
                     openmm_state = context.getState(getPositions=True, getVelocities=True,
                                                     getParameters=True)
                     context.reinitialize()
                     context.setState(openmm_state)
-
         elif self._barostat is not None:
             # The context is NVT but this is NPT.
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
-        self._set_integrator_temperature(integrator)
-        # TODO context.setVelocitiesToTemperature()?
+
+        # Apply temperature to thermostat or integrator.
+        thermostat = self._find_thermostat(system)
+        if thermostat is not None:
+            if thermostat.getDefaultTemperature() != self.temperature:
+                thermostat.setDefaultTemperature(self.temperature)
+                context.setParameter(thermostat.Temperature(), self.temperature)
+        else:
+            integrator = context.getIntegrator()
+            self._set_integrator_temperature(integrator)
 
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
@@ -611,6 +667,7 @@ class ThermodynamicState(object):
         """Check system consistency with this ThermodynamicState.
 
         Raise an error if the system is inconsistent. Currently checks
+        that there's 1 and only 1 thermostat at the correct temperature,
         that there's only 1 barostat (or none in case this is in NVT),
         that the barostat is supported, has the correct temperature and
         pressure, and that it is not associated to a non-periodic system.
@@ -627,6 +684,16 @@ class ThermodynamicState(object):
 
         """
         TE = ThermodynamicsError  # shortcut
+
+        # This raises MULTIPLE_THERMOSTATS
+        thermostat = self._find_thermostat(system)
+        # When system is self._system, we check the presence of a
+        # thermostat before the barostat to avoid crashes when
+        # checking the barostat temperature.
+        if thermostat is None:
+            raise TE(TE.NO_THERMOSTAT)
+        elif thermostat.getDefaultTemperature() != self.temperature:
+            raise TE(TE.INCONSISTENT_THERMOSTAT)
 
         # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
         barostat = self._find_barostat(system)
@@ -655,14 +722,15 @@ class ThermodynamicState(object):
         standard systems, and is_state_compatible will return True if
         the (cached) serialization of the standard systems are identical.
 
-        Here, the standard system is simply the system with the barostat
-        pressure/temperature set to _STANDARD_PRESSURE/TEMPERATURE. The
-        method apply_to_context then configures the barostat parameters
-        in the Context. If the system doesn't have a barostat, nothing
-        changes.
+        Here, the standard system has the barostat pressure/temperature
+        set to _STANDARD_PRESSURE/TEMPERATURE (if a barostat exist), and
+        the thermostat removed (if it is present). Removing the thermostat
+        means that systems that will enforce a temperature through an
+        integrator coupled to a heat bath will be compatible as well. The
+        method apply_to_context then sets the parameters in the Context.
 
-        Effectively this means that only same systems in same ensemble
-        (NPT or NVT) are compatible.
+        Effectively this means that only same systems in the same ensemble
+        (NPT or NVT) are compatible between each other.
 
         Parameters
         ----------
@@ -671,11 +739,14 @@ class ThermodynamicState(object):
 
         See Also
         --------
-        ThermodyncmicState.apply_to_context
+        ThermodynamicState.apply_to_context
         ThermodynamicState.is_state_compatible
         ThermodynamicState.is_context_compatible
 
         """
+        thermostat_id = cls._find_thermostat_index(system)
+        if thermostat_id is not None:
+            system.removeForce(thermostat_id)
         barostat = cls._find_barostat(system)
         if barostat is not None:
             barostat.setDefaultPressure(cls._STANDARD_PRESSURE)
@@ -701,18 +772,33 @@ class ThermodynamicState(object):
     # Internal-usage: integrator handling
     # -------------------------------------------------------------------------
 
-    def _is_integrator_consistent(self, integrator):
-        """False if integrator is coupled to a heat bath at different T."""
-        if isinstance(integrator, openmm.CompoundIntegrator):
-            integrator_id = integrator.getCurrentIntegrator()
-            integrator = integrator.getIntegrator(integrator_id)
+    def _is_integrator_thermostated(self, integrator):
+        """True if integrator is coupled to a heat bath.
+
+        Raises
+        ------
+        ThermodynamicsError
+            If integrator is couple to a heat bath at a different
+            temperature than this thermodynamic state.
+
+        """
+        is_thermostated = False
         try:
-            return integrator.getTemperature() == self.temperature
+            temperature = integrator.getTemperature()
         except AttributeError:
-            return True
+            pass
+        else:
+            if temperature != self.temperature:
+                err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
+                raise ThermodynamicsError(err_code)
+            is_thermostated = True
+        return is_thermostated
 
     def _set_integrator_temperature(self, integrator):
         """Set heat bath temperature of the integrator.
+
+        If integrator is a CompoundIntegrator, it sets the temperature
+        of every sub-integrator.
 
         Returns
         -------
@@ -720,14 +806,23 @@ class ThermodynamicState(object):
             True if the integrator temperature has changed.
 
         """
-        has_changed = False
-        try:
-            if integrator.getTemperature() != self._temperature:
-                integrator.setTemperature(self.temperature)
-                has_changed = True
-        except AttributeError:
-            pass
-        return has_changed
+        def set_temp(_integrator):
+            try:
+                if _integrator.getTemperature() != self.temperature:
+                    _integrator.setTemperature(self.temperature)
+                    return True
+            except AttributeError:
+                pass
+            return False
+
+        if isinstance(integrator, openmm.CompoundIntegrator):
+            has_changed = False
+            for integrator_id in range(integrator.getNumIntegrators()):
+                _integrator = integrator.getIntegrator(integrator_id)
+                has_changed = has_changed or set_temp(_integrator)
+            return has_changed
+        else:
+            return set_temp(integrator)
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -802,7 +897,7 @@ class ThermodynamicState(object):
     def _set_system_pressure(self, system, pressure):
         """Add or configure the system barostat to the given pressure.
 
-        The barostat temperature is set to self._temperature.
+        The barostat temperature is set to self.temperature.
 
         Parameters
         ----------
@@ -838,7 +933,7 @@ class ThermodynamicState(object):
         else:  # Add/configure barostat
             barostat = self._find_barostat(system)
             if barostat is None:  # Add barostat
-                barostat = openmm.MonteCarloBarostat(pressure, self._temperature)
+                barostat = openmm.MonteCarloBarostat(pressure, self.temperature)
                 system.addForce(barostat)
                 has_changed = True
             elif barostat.getDefaultPressure() != pressure:  # Set existing barostat
@@ -867,6 +962,84 @@ class ThermodynamicState(object):
         except AttributeError:  # versions previous to OpenMM 7.1
             if barostat.getTemperature() != temperature:
                 barostat.setTemperature(temperature)
+                has_changed = True
+        return has_changed
+
+    # -------------------------------------------------------------------------
+    # Internal-usage: thermostat handling
+    # -------------------------------------------------------------------------
+
+    @property
+    def _thermostat(self):
+        """Shortcut for self._find_thermostat(self._system)."""
+        return self._find_thermostat(self._system)
+
+    @classmethod
+    def _find_thermostat(cls, system):
+        """Return the first thermostat in the system.
+
+        Returns
+        -------
+        thermostat : OpenMM Force object or None
+            The thermostat in system, or None if no thermostat is found.
+
+        """
+        thermostat_id = cls._find_thermostat_index(system)
+        if thermostat_id is not None:
+            return system.getForce(thermostat_id)
+        return None
+
+    @staticmethod
+    def _find_thermostat_index(system):
+        """Return the index of the first thermostat in the system."""
+        thermostat_ids = [i for i, force in enumerate(system.getForces())
+                          if 'Thermostat' in force.__class__.__name__]
+        if len(thermostat_ids) == 0:
+            return None
+        if len(thermostat_ids) > 1:
+            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_THERMOSTATS)
+        return thermostat_ids[0]
+
+    def _is_thermostat_consistent(self, thermostat):
+        """Check thermostat temperature."""
+        return thermostat.getDefaultTemperature() == self.temperature
+
+    @classmethod
+    def _set_system_thermostat(cls, system, temperature):
+        """Configure the system thermostat.
+
+        If temperature is None and the system has a thermostat, it is
+        removed. Otherwise the thermostat temperature is set, or a new
+        AndersenThermostat is added if it doesn't exist.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to modify.
+        temperature : simtk.unit.Quantity or None
+            The temperature for the thermostat, or None to remove it.
+
+        Returns
+        -------
+        has_changed : bool
+            True if the thermostat has changed, False if it was already
+            configured with the correct temperature.
+
+        """
+        has_changed = False
+        if temperature is None:  # Remove thermostat.
+            thermostat_id = cls._find_thermostat_index(system)
+            if thermostat_id is not None:
+                system.removeForce(thermostat_id)
+                has_changed = True
+        else:  # Add/configure existing thermostat.
+            thermostat = cls._find_thermostat(system)
+            if thermostat is None:
+                thermostat = openmm.AndersenThermostat(temperature, 1.0/unit.picosecond)
+                system.addForce(thermostat)
+                has_changed = True
+            elif thermostat.getDefaultTemperature() != temperature:
+                thermostat.setDefaultTemperature(temperature)
                 has_changed = True
         return has_changed
 
