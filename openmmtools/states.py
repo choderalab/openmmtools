@@ -370,8 +370,10 @@ class ThermodynamicState(object):
 
     @pressure.setter
     def pressure(self, value):
+        # Invalidate cache if the ensemble changes.
+        if (value is None) != (self._barostat is None):
+            self._cached_standard_system_hash = None
         self._set_system_pressure(self._system, value)
-        self._cached_standard_system_hash = None  # Invalidate cache.
 
     @property
     def volume(self):
