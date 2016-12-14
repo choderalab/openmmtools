@@ -395,9 +395,22 @@ class ThermodynamicState(object):
         """Number of particles (read-only)."""
         return self._system.getNumParticles()
 
-    def reduced_potential(self, sampler_state):
+    def reduced_potential(self, context_state):
         """Reduced potential in this thermodynamic state.
 
+        Parameters
+        ----------
+        context_state : SamplerState or simtk.openmm.Context
+            Carry the configurational properties of the system.
+
+        Returns
+        -------
+        u : float
+            The unit-less reduced potential, which can be considered
+            to have units of kT.
+
+        Notes
+        -----
         The reduced potential is defined as in Ref. [1]
 
         u = \beta [U(x) + p V(x) + \mu N(x)]
@@ -416,17 +429,10 @@ class ThermodynamicState(object):
         N(x) the numbers of various particle species (e.g. protons of
              titratible groups)
 
-        Parameters
+        References
         ----------
-
-        sampler_state : SamplerState
-            Carry the configurational properties of the system.
-
-        Returns
-        -------
-        u : float
-            The unit-less reduced potential, which can be considered
-            to have units of kT.
+        [1] Shirts MR and Chodera JD. Statistically optimal analysis of
+        equilibrium states. J Chem Phys 129:124105, 2008.
 
         Examples
         --------
@@ -453,23 +459,34 @@ class ThermodynamicState(object):
         ...
         ThermodynamicsError: The sampler state has a different number of particles.
 
-        References
-        ----------
+        In case a cached SamplerState containing the potential energy
+        and the volume of the context is not available, the method
+        accepts a Context object and compute them with Context.getState().
 
-        [1] Shirts MR and Chodera JD. Statistically optimal analysis of
-        equilibrium states. J Chem Phys 129:124105, 2008.
+        >>> u = state.reduced_potential(context)
 
         """
-        # Check SamplerState compatibility
-        if sampler_state.n_particles != self.n_particles:
+        # Read Context/SamplerState n_particles, energy and volume.
+        if isinstance(context_state, openmm.Context):
+            n_particles = context_state.getSystem().getNumParticles()
+            openmm_state = context_state.getState(getEnergy=True)
+            potential_energy = openmm_state.getPotentialEnergy()
+            volume = openmm_state.getPeriodicBoxVolume()
+        else:
+            n_particles = context_state.n_particles
+            potential_energy = context_state.potential_energy
+            volume = context_state.volume
+
+        # Check compatibility.
+        if n_particles != self.n_particles:
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE)
 
         beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
-        reduced_potential = sampler_state.potential_energy
+        reduced_potential = potential_energy
         reduced_potential = reduced_potential / unit.AVOGADRO_CONSTANT_NA
         pressure = self.pressure
         if pressure is not None:
-            reduced_potential += pressure * sampler_state.volume
+            reduced_potential += pressure * volume
         return beta * reduced_potential
 
     def is_state_compatible(self, thermodynamic_state):
