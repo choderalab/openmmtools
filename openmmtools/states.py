@@ -95,12 +95,13 @@ class ThermodynamicsError(Exception):
      NONE_TEMPERATURE,
      INCONSISTENT_THERMOSTAT,
      MULTIPLE_BAROSTATS,
+     NO_BAROSTAT,
      UNSUPPORTED_BAROSTAT,
      INCONSISTENT_BAROSTAT,
      BAROSTATED_NONPERIODIC,
      INCONSISTENT_INTEGRATOR,
      INCOMPATIBLE_SAMPLER_STATE,
-     INCOMPATIBLE_ENSEMBLE) = range(11)
+     INCOMPATIBLE_ENSEMBLE) = range(12)
 
     error_messages = {
         MULTIPLE_THERMOSTATS: "System has multipe thermostats.",
@@ -109,6 +110,7 @@ class ThermodynamicsError(Exception):
         INCONSISTENT_THERMOSTAT: "System thermostat is inconsistent with thermodynamic state.",
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
+        NO_BAROSTAT: "System does not have a barostat specifying the pressure.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
         BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat.",
         INCONSISTENT_INTEGRATOR: "Integrator is coupled to a heat bath at a different temperature.",
@@ -339,6 +341,72 @@ class ThermodynamicState(object):
         self._check_system_consistency(value)
         self._system = copy.deepcopy(value)
         self._cached_standard_system_hash = None  # Invalidate cache.
+
+    def set_system(self, system, fix_thermostat=False, fix_barostat=False):
+        """Manipulate and set the system.
+
+        With default arguments, this is equivalent to using the system
+        property, which raises an exception if the thermostat and the
+        barostat are not configured according to the thermodynamic state.
+        With this method it is possible to adjust temperature and
+        pressure of the system to make the assignment possible, without
+        manually configuring thermostat and barostat.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to set.
+        fix_thermostat : bool
+            If True, a thermostat is added to the system (if not already
+            present) and set to the correct temperature.
+        fix_barostat : bool
+            If True, a barostat is added or removed depending on
+            whether this state is in NPT or NVT ensemble, and configured
+            to the correct pressure and temperature.
+
+        Raises
+        ------
+        ThermodynamicsError
+            If the system after the requested manipulation is still in
+            an incompatible state.
+
+        """
+        system = copy.deepcopy(system)
+        if fix_thermostat:
+            self._set_system_thermostat(system, self.temperature)
+        if fix_barostat:
+            self._set_system_pressure(system, self.pressure)
+            barostat = self._find_barostat(system)
+            if barostat is not None:
+                self._set_barostat_temperature(barostat, self.temperature)
+        self.system = system
+
+    def get_system(self, remove_thermostat=False, remove_barostat=False):
+        """Manipulate and return the system.
+
+        With default arguments, this is equivalent as the system property.
+        By setting the arguments it is possible to obtain a modified copy
+        of the system without the thermostat or the barostat.
+
+        Parameters
+        ----------
+        remove_thermostat : bool
+            If True, the system thermostat is removed.
+        remove_barostat : bool
+            If True, the system barostat is removed.
+
+        Returns
+        -------
+        system : simtk.openmm.System
+            The system of this ThermodynamicState.
+
+        """
+        system = copy.deepcopy(self._system)
+        if remove_thermostat:
+            self._remove_thermostat(system)
+        if remove_barostat:
+            self._remove_barostat(system)
+        return system
 
     @property
     def temperature(self):
@@ -592,8 +660,7 @@ class ThermodynamicState(object):
         # If integrator is coupled to heat bath, remove system thermostat.
         system = copy.deepcopy(self._system)
         if is_thermostated:
-            thermostat_id = self._find_thermostat_index(system)
-            system.removeForce(thermostat_id)
+            self._remove_thermostat(system)
 
         # Create platform.
         if platform is None:
@@ -730,7 +797,7 @@ class ThermodynamicState(object):
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
                         raise TE(TE.BAROSTATED_NONPERIODIC)
         elif self._barostat is not None:
-            raise TE(TE.BAROSTATED_NONPERIODIC)
+            raise TE(TE.NO_BAROSTAT)
 
     @classmethod
     def _standardize_system(cls, system):
@@ -763,9 +830,7 @@ class ThermodynamicState(object):
         ThermodynamicState.is_context_compatible
 
         """
-        thermostat_id = cls._find_thermostat_index(system)
-        if thermostat_id is not None:
-            system.removeForce(thermostat_id)
+        cls._remove_thermostat(system)
         barostat = cls._find_barostat(system)
         if barostat is not None:
             barostat.setDefaultPressure(cls._STANDARD_PRESSURE)
@@ -856,7 +921,7 @@ class ThermodynamicState(object):
 
     @classmethod
     def _find_barostat(cls, system):
-        """Shortcut for system.getForce(cls._find_barostat_index(system)).
+        """Return the first barostat found in the system.
 
         Returns
         -------
@@ -877,6 +942,21 @@ class ThermodynamicState(object):
             raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
                                       barostat.__class__.__name__)
         return barostat
+
+    @classmethod
+    def _remove_barostat(cls, system):
+        """Remove the system barostat.
+
+        Returns
+        -------
+        True if the barostat was found and removed, False otherwise.
+
+        """
+        barostat_id = cls._find_barostat_index(system)
+        if barostat_id is not None:
+            system.removeForce(barostat_id)
+            return True
+        return False
 
     @staticmethod
     def _find_barostat_index(system):
@@ -940,11 +1020,8 @@ class ThermodynamicState(object):
         """
         has_changed = False
 
-        if pressure is None: # If new pressure is None, remove barostat.
-            barostat_id = self._find_barostat_index(system)
-            if barostat_id is not None:
-                system.removeForce(barostat_id)
-                has_changed = True
+        if pressure is None:  # If new pressure is None, remove barostat.
+            has_changed = self._remove_barostat(system)
 
         elif not system.usesPeriodicBoundaryConditions():
             raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
@@ -1008,6 +1085,21 @@ class ThermodynamicState(object):
             return system.getForce(thermostat_id)
         return None
 
+    @classmethod
+    def _remove_thermostat(cls, system):
+        """Remove the system thermostat.
+
+        Returns
+        -------
+        True if the thermostat was found and removed, False otherwise.
+
+        """
+        thermostat_id = cls._find_thermostat_index(system)
+        if thermostat_id is not None:
+            system.removeForce(thermostat_id)
+            return True
+        return False
+
     @staticmethod
     def _find_thermostat_index(system):
         """Return the index of the first thermostat in the system."""
@@ -1047,10 +1139,7 @@ class ThermodynamicState(object):
         """
         has_changed = False
         if temperature is None:  # Remove thermostat.
-            thermostat_id = cls._find_thermostat_index(system)
-            if thermostat_id is not None:
-                system.removeForce(thermostat_id)
-                has_changed = True
+            has_changed = cls._remove_thermostat(system)
         else:  # Add/configure existing thermostat.
             thermostat = cls._find_thermostat(system)
             if thermostat is None:
