@@ -104,7 +104,7 @@ class ThermodynamicsError(Exception):
      INCOMPATIBLE_ENSEMBLE) = range(12)
 
     error_messages = {
-        MULTIPLE_THERMOSTATS: "System has multipe thermostats.",
+        MULTIPLE_THERMOSTATS: "System has multiple thermostats.",
         NO_THERMOSTAT: "System does not have a thermostat specifying the temperature.",
         NONE_TEMPERATURE: "Cannot set temperature of the thermodynamic state to None.",
         INCONSISTENT_THERMOSTAT: "System thermostat is inconsistent with thermodynamic state.",
@@ -242,49 +242,34 @@ class ThermodynamicState(object):
     You cannot set a non-periodic system at constant pressure
 
     >>> nonperiodic_system = testsystems.TolueneVacuum().system
-    >>> state.system = nonperiodic_system
+    >>> state = ThermodynamicState(nonperiodic_system, temperature=300*unit.kelvin,
+    ...                            pressure=1.0*unit.atmosphere)
     Traceback (most recent call last):
     ...
     ThermodynamicsError: Non-periodic systems cannot have a barostat.
 
-    The same error is raised in the constructor if the optional pressure
-    parameter is specified. To set this system you first need to change
-    the thermodynamic state.
+    When temperature and/or pressure are not specified (i.e. they are
+    None) ThermodynamicState tries to infer them from a thermostat or
+    a barostat.
 
-    >>> state.pressure = None
-    >>> state.system = nonperiodic_system
+    >>> state = ThermodynamicState(system=waterbox)
+    Traceback (most recent call last):
+    ...
+    ThermodynamicsError: System does not have a thermostat specifying the temperature.
+    >>> thermostat = openmm.AndersenThermostat(200.0*unit.kelvin, 1.0/unit.picosecond)
+    >>> force_id = waterbox.addForce(thermostat)
+    >>> state = ThermodynamicState(system=waterbox)
     >>> state.pressure is None
     True
-    >>> state.volume is None
-    True
-
-    Systems that differ between each other only by their pressure and
-    temperature are compatible to each other.
-
-    >>> nonbarostated_state = ThermodynamicState(waterbox, temperature)
-    >>> barostated_state = ThermodynamicState(waterbox, temperature, pressure)
-    >>> nonbarostated_state.pressure is None
-    True
-    >>> barostated_state.pressure
+    >>> state.temperature
+    Quantity(value=200.0, unit=kelvin)
+    >>> barostat = openmm.MonteCarloBarostat(1.0*unit.atmosphere, 200.0*unit.kelvin)
+    >>> force_id = waterbox.addForce(barostat)
+    >>> state = ThermodynamicState(system=waterbox)
+    >>> state.pressure
     Quantity(value=1.01325, unit=bar)
-    >>> barostated_state.is_state_compatible(nonbarostated_state)
-    True
-
-    But systems that differ by any other property are not (e.g. different
-    number of particles, different forces and parameters).
-
-    >>> waterbox.setParticleMass(0, 2.0*unit.amus)
-    >>> incompatible_state = ThermodynamicState(waterbox, temperature)
-    >>> barostated_state.is_state_compatible(incompatible_state)
-    False
-
-    The context created from a state, can be converted to a compatible
-    state.
-
-    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-    >>> context = nonbarostated_state.create_context(integrator)
-    >>> if barostated_state.is_state_compatible(nonbarostated_state):
-    ...     barostated_state.apply_to_context(context)
+    >>> state.temperature
+    Quantity(value=200.0, unit=kelvin)
 
     """
 
@@ -320,18 +305,27 @@ class ThermodynamicState(object):
         """The system in this thermodynamic state.
 
         The returned system is a copy and can be modified without
-        altering the internal state of ThermodynamicState. It can
-        be set only to a system which is consistent with the current
-        thermodynamic state.
+        altering the internal state of ThermodynamicState. In order
+        to ensure a consistent thermodynamic state, the system has
+        a Thermostat force. You can use get_system() to obtained a
+        copy of the system without the thermostat. The method
+        create_context then takes care of removing the thermostat
+        when an integrator with a coupled heat bath is used (e.g.
+        LangevinIntegrator).
 
-        In order to ensure a consistent thermodynamic state, the
-        system has a Thermostat force. The method create_context takes
-        care of removing the thermostat when an integrator with a
-        coupled heat bath is used (e.g. LangevinIntegrator).
+        It can be set only to a system which is consistent with the
+        current thermodynamic state. Use set_system() if you want to
+        correct the thermodynamic state of the system automatically
+        before assignment.
 
         See Also
         --------
+        ThermodynamicState.get_system
+        ThermodynamicState.set_system
         ThermodynamicState.create_context
+
+        Examples
+        --------
 
         """
         return copy.deepcopy(self._system)
@@ -370,13 +364,32 @@ class ThermodynamicState(object):
             If the system after the requested manipulation is still in
             an incompatible state.
 
+        Examples
+        --------
+        The constructor adds a thermostat and a barostat to configure
+        the system in an NPT ensemble.
+
+        >>> from openmmtools import testsystems
+        >>> alanine = testsystems.AlanineDipeptideExplicit()
+        >>> state = ThermodynamicState(alanine.system, temperature=300*unit.kelvin,
+        ...                            pressure=1.0*unit.atmosphere)
+
+        If we try to set a system not in NPT ensemble, an error occur.
+
+        >>> state.system = alanine.system
+        Traceback (most recent call last):
+        ...
+        ThermodynamicsError: System does not have a thermostat specifying the temperature.
+
+        We can fix both thermostat and barostat while setting the system.
+        >>> state.set_system(alanine.system, fix_thermostat=True, fix_barostat=True)
+
         """
         system = copy.deepcopy(system)
         if fix_thermostat:
             self._set_system_thermostat(system, self.temperature)
         if fix_barostat:
-            self._set_system_pressure(system, self.pressure)
-            barostat = self._find_barostat(system)
+            barostat = self._set_system_pressure(system, self.pressure)
             if barostat is not None:
                 self._set_barostat_temperature(barostat, self.temperature)
         self.system = system
@@ -399,6 +412,31 @@ class ThermodynamicState(object):
         -------
         system : simtk.openmm.System
             The system of this ThermodynamicState.
+
+        Examples
+        --------
+        The constructor adds a thermostat and a barostat to configure
+        the system in an NPT ensemble.
+
+        >>> from openmmtools import testsystems
+        >>> alanine = testsystems.AlanineDipeptideExplicit()
+        >>> state = ThermodynamicState(alanine.system, temperature=300*unit.kelvin,
+        ...                            pressure=1.0*unit.atmosphere)
+
+        The system property returns a copy of the system with the
+        added thermostat and barostat.
+
+        >>> system = state.system
+        >>> [force.__class__.__name__ for force in system.getForces()
+        ...  if 'Thermostat' in force.__class__.__name__]
+        ['AndersenThermostat']
+
+        We can remove them while getting the arguments with
+
+        >>> system = state.get_system(remove_thermostat=True, remove_barostat=True)
+        >>> [force.__class__.__name__ for force in system.getForces()
+        ...  if 'Thermostat' in force.__class__.__name__]
+        []
 
         """
         system = copy.deepcopy(self._system)
@@ -562,6 +600,7 @@ class ThermodynamicState(object):
 
         The state is compatible if Contexts created by thermodynamic_state
         can be set to this ThermodynamicState through apply_to_context.
+        The property is symmetric and transitive.
 
         This is faster than checking compatibility of a Context object
         through is_context_compatible since, and it should be preferred
@@ -583,6 +622,33 @@ class ThermodynamicState(object):
         ThermodynamicState.apply_to_context
         ThermodynamicState.is_context_compatible
 
+        Examples
+        --------
+        States in the same ensemble (NVT or NPT) are compatible.
+
+        >>> from simtk import unit
+        >>> from openmmtools import testsystems
+        >>> alanine = testsystems.AlanineDipeptideExplicit()
+        >>> state1 = ThermodynamicState(alanine.system, 273*unit.kelvin)
+        >>> state2 = ThermodynamicState(alanine.system, 310*unit.kelvin)
+        >>> state1.is_state_compatible(state2)
+        True
+
+        States in different ensembles are not compatible.
+
+        >>> state1.pressure = 1.0*unit.atmosphere
+        >>> state1.is_state_compatible(state2)
+        False
+
+        States that store different systems (that differ by more than
+        barostat and thermostat pressure and temperature) are also not
+        compatible.
+
+        >>> alanine_implicit = testsystems.AlanineDipeptideImplicit().system
+        >>> state_implicit = ThermodynamicState(alanine_implicit, 310*unit.kelvin)
+        >>> state2.is_state_compatible(state_implicit)
+        False
+
         """
         state_system_hash = thermodynamic_state._standard_system_hash
         return self._standard_system_hash == state_system_hash
@@ -590,10 +656,10 @@ class ThermodynamicState(object):
     def is_context_compatible(self, context):
         """Check compatibility of the given context.
 
-        The context is compatible if it can be set to this
-        ThermodynamicState through apply_to_context. This is generally
-        slower than is_state_compatible, and the latter should be
-        preferred when possible
+        This is equivalent to is_state_compatible but slower, and it should
+        be used only when the state the created the context is unknown. The
+        context is compatible if it can be set to this ThermodynamicState
+        through apply_to_context().
 
         Parameters
         ----------
@@ -620,11 +686,15 @@ class ThermodynamicState(object):
 
         The context contains a copy of the system. If the integrator
         is coupled to a heat bath (e.g. LangevinIntegrator), the system
-        won't contain a thermostat and vice versa. A CompoundIntegrator
-        is considered coupled to a heat bath if at least one of its
-        integrators is. An exception is raised if the integrator is
-        thermostated at a temperature different from the thermodynamic
-        state's.
+        in the context will not have a thermostat, and vice versa if
+        the integrator is not thermostated the system in the context will
+        have a thermostat.
+
+        An integrator is considered thermostated if it exposes a method
+        getTemperature(). A CompoundIntegrator is considered coupled to
+        a heat bath if at least one of its integrators is. An exception
+        is raised if the integrator is thermostated at a temperature
+        different from the thermodynamic state's.
 
         Parameters
         ----------
@@ -644,7 +714,34 @@ class ThermodynamicState(object):
         Raises
         ------
         ThermodynamicsError
-            If the integrator has an inconsistent temperature.
+            If the integrator has a temperature different from this
+            ThermodynamicState.
+
+        Examples
+        --------
+        Creating a context with a thermostated integrator means that
+        the context system will not have a thermostat.
+
+        >>> from simtk import openmm, unit
+        >>> from openmmtools import testsystems
+        >>> toluene = testsystems.TolueneVacuum()
+        >>> state = ThermodynamicState(toluene.system, 300*unit.kelvin)
+        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        >>> context = state.create_context(integrator)
+        >>> system = context.getSystem()
+        >>> [force.__class__.__name__ for force in system.getForces()
+        ...  if 'Thermostat' in force.__class__.__name__]
+        ['AndersenThermostat']
+
+        The thermostat is removed if we choose an integrator coupled
+        to a heat bath.
+
+        >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond,
+        ...                                        2.0*unit.femtosecond)
+        >>> context = state.create_context(integrator)
+        >>> [force.__class__.__name__ for force in system.getForces()
+        ...  if 'Thermostat' in force.__class__.__name__]
+        []
 
         """
         # Check that integrator is consistent and if it is thermostated.
@@ -693,6 +790,24 @@ class ThermodynamicState(object):
         ThermodynamicState.is_state_compatible
         ThermodynamicState.is_context_compatible
 
+        Examples
+        --------
+        The method doesn't verify compatibility with the context, it is
+        the user's responsibility to do so, possibly with is_state_compatible
+        rather than is_context_compatible which is slower.
+
+        >>> from simtk import openmm, unit
+        >>> from openmmtools import testsystems
+        >>> toluene = testsystems.TolueneVacuum()
+        >>> state1 = ThermodynamicState(toluene.system, 273.0*unit.kelvin)
+        >>> state2 = ThermodynamicState(toluene.system, 310.0*unit.kelvin)
+        >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        >>> context = state1.create_context(integrator)
+        >>> if state2.is_state_compatible(state1):
+        ...     state2.apply_to_context(context)
+        >>> context.getParameter(openmm.AndersenThermostat.Temperature())
+        310.0
+
         """
         system = context.getSystem()
 
@@ -703,7 +818,7 @@ class ThermodynamicState(object):
                 # The context is NPT but this is NVT.
                 raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
 
-            has_changed = self._set_system_pressure(system, self.pressure)
+            has_changed = self._set_barostat_pressure(barostat, self.pressure)
             if has_changed:
                 context.setParameter(barostat.Pressure(), self.pressure)
             has_changed = self._set_barostat_temperature(barostat, self.temperature)
@@ -996,7 +1111,8 @@ class ThermodynamicState(object):
     def _set_system_pressure(self, system, pressure):
         """Add or configure the system barostat to the given pressure.
 
-        The barostat temperature is set to self.temperature.
+        If a new barostat is added, its temperature is set to
+        self.temperature.
 
         Parameters
         ----------
@@ -1008,9 +1124,9 @@ class ThermodynamicState(object):
 
         Returns
         -------
-        has_changed : bool
-            True if the system has changed, False if it was already
-            configured correctly.
+        barostat : OpenMM Force object or None
+            The current barostat of the system. None if the barostat
+            was removed.
 
         Raises
         ------
@@ -1018,25 +1134,36 @@ class ThermodynamicState(object):
             If pressure needs to be set for a non-periodic system.
 
         """
-        has_changed = False
-
         if pressure is None:  # If new pressure is None, remove barostat.
-            has_changed = self._remove_barostat(system)
+            self._remove_barostat(system)
+            return None
 
-        elif not system.usesPeriodicBoundaryConditions():
+        if not system.usesPeriodicBoundaryConditions():
             raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
 
-        else:  # Add/configure barostat
-            barostat = self._find_barostat(system)
-            if barostat is None:  # Add barostat
-                barostat = openmm.MonteCarloBarostat(pressure, self.temperature)
-                system.addForce(barostat)
-                has_changed = True
-            elif barostat.getDefaultPressure() != pressure:  # Set existing barostat
-                barostat.setDefaultPressure(pressure)
-                has_changed = True
+        barostat = self._find_barostat(system)
+        if barostat is None:  # Add barostat
+            barostat = openmm.MonteCarloBarostat(pressure, self.temperature)
+            system.addForce(barostat)
+        else:  # Set existing barostat
+            self._set_barostat_pressure(barostat, pressure)
+        return barostat
 
-        return has_changed
+    @staticmethod
+    def _set_barostat_pressure(barostat, pressure):
+        """Set barostat pressure.
+
+        Returns
+        -------
+        has_changed : bool
+            True if the barostat has changed, False if it was already
+            configured with the correct pressure.
+
+        """
+        if barostat.getDefaultPressure() != pressure:
+            barostat.setDefaultPressure(pressure)
+            return True
+        return False
 
     @staticmethod
     def _set_barostat_temperature(barostat, temperature):
@@ -1220,6 +1347,8 @@ class SamplerState(object):
     >>> integrator2 = openmm.VerletIntegrator(1.0*unit.femtosecond)
     >>> incompatible_context = incompatible_state.create_context(integrator2)
     >>> incompatible_context.setPositions(hostguest_test.positions)
+    >>> sampler_state.is_context_compatible(incompatible_context)
+    False
     >>> sampler_state.update_from_context(incompatible_context)
     Traceback (most recent call last):
     ...
