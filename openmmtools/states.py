@@ -1678,7 +1678,8 @@ class IComposableState(utils.SubhookedABCMeta):
         """Apply changes to the context to be consistent with the state."""
         pass
 
-    @abc.abstractclassmethod
+    @classmethod
+    @abc.abstractmethod
     def standardize_system(cls, system):
         """Standardize the given system.
 
