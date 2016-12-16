@@ -336,7 +336,7 @@ class ThermodynamicState(object):
         self._system = copy.deepcopy(value)
         self._cached_standard_system_hash = None  # Invalidate cache.
 
-    def set_system(self, system, fix_thermostat=False, fix_barostat=False):
+    def set_system(self, system, fix_state=False):
         """Manipulate and set the system.
 
         With default arguments, this is equivalent to using the system
@@ -350,13 +350,13 @@ class ThermodynamicState(object):
         ----------
         system : simtk.openmm.System
             The system to set.
-        fix_thermostat : bool
+        fix_state : bool, optional
             If True, a thermostat is added to the system (if not already
-            present) and set to the correct temperature.
-        fix_barostat : bool
-            If True, a barostat is added or removed depending on
-            whether this state is in NPT or NVT ensemble, and configured
-            to the correct pressure and temperature.
+            present) and set to the correct temperature. If this state is
+            in NPT ensemble, a barostat is added or configured if it
+            exist already. If False, this simply check that thermostat
+            and barostat are correctly configured without modifying them.
+            Default is False.
 
         Raises
         ------
@@ -382,13 +382,12 @@ class ThermodynamicState(object):
         ThermodynamicsError: System does not have a thermostat specifying the temperature.
 
         We can fix both thermostat and barostat while setting the system.
-        >>> state.set_system(alanine.system, fix_thermostat=True, fix_barostat=True)
+        >>> state.set_system(alanine.system, fix_state=True)
 
         """
         system = copy.deepcopy(system)
-        if fix_thermostat:
+        if fix_state:
             self._set_system_thermostat(system, self.temperature)
-        if fix_barostat:
             barostat = self._set_system_pressure(system, self.pressure)
             if barostat is not None:
                 self._set_barostat_temperature(barostat, self.temperature)
@@ -1782,6 +1781,31 @@ class CompoundThermodynamicState(ThermodynamicState):
         super(CompoundThermodynamicState, self.__class__).system.fset(self, value)
         for s in self._composable_states:
             s.check_system_consistency(self._system)
+
+    def set_system(self, system, fix_state=False):
+        """Allow to set the system and fix its thermodynamic state.
+
+        With default arguments, this is equivalent to assign the
+        system property, which raise an error if the system is in
+        a different thermodynamic state.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to set.
+        fix_state : bool, optional
+            The thermodynamic state of the state will be fixed by
+            all the composable states. Default is False.
+
+        See Also
+        --------
+        ThermodynamicState.set_system
+
+        """
+        if fix_state is True:
+            for s in self._composable_states:
+                s.set_system_state(system)
+        super(CompoundThermodynamicState, self).set_system(system, fix_state)
 
     def is_context_compatible(self, context):
         """Check compatibility of the given context.
