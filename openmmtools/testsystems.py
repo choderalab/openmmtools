@@ -3241,23 +3241,23 @@ class HostGuestImplicit(TestSystem):
 
         self.system, self.positions = system, positions
 
-class HostGuestImplicitHCT(TolueneImplicit):
+class HostGuestImplicitHCT(HostGuestImplicit):
     def __init__(self, **kwargs):
         HostGuestImplicit.__init__(self, implicitSolvent=app.HCT, **kwargs)
 
-class HostGuestImplicitOBC1(TolueneImplicit):
+class HostGuestImplicitOBC1(HostGuestImplicit):
     def __init__(self, **kwargs):
         HostGuestImplicit.__init__(self, implicitSolvent=app.OBC1, **kwargs)
 
-class HostGuestImplicitOBC2(TolueneImplicit):
+class HostGuestImplicitOBC2(HostGuestImplicit):
     def __init__(self, **kwargs):
         HostGuestImplicit.__init__(self, implicitSolvent=app.OBC2, **kwargs)
 
-class HostGuestImplicitGBn(TolueneImplicit):
+class HostGuestImplicitGBn(HostGuestImplicit):
     def __init__(self, **kwargs):
         HostGuestImplicit.__init__(self, implicitSolvent=app.GBn, **kwargs)
 
-class HostGuestImplicitGBn2(TolueneImplicit):
+class HostGuestImplicitGBn2(HostGuestImplicit):
     def __init__(self, **kwargs):
         HostGuestImplicit.__init__(self, implicitSolvent=app.GBn2, **kwargs)
 
