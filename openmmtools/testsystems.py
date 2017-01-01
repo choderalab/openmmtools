@@ -49,6 +49,7 @@ import os.path
 import numpy as np
 import numpy.random
 import itertools
+import inspect
 
 import scipy
 import scipy.special
@@ -66,6 +67,45 @@ pi = np.pi
 # SUBROUTINES
 #=============================================================================================
 
+def unwrap_py2(func):
+    """Unwrap a wrapped function.
+    The function inspect.unwrap has been implemented only in Python 3.4. With
+    Python 2, this works only for functions wrapped by wraps_py2().
+    """
+    unwrapped_func = func
+    try:
+        while True:
+            unwrapped_func = unwrapped_func.__wrapped__
+    except AttributeError:
+        return unwrapped_func
+
+def handle_kwargs(func, defaults, input_kwargs):
+    """Override defaults with provided kwargs that appear in `func` signature.
+
+    Parameters
+    ----------
+    func : function
+        The function to which the resulting modified kwargs is to be fed
+    defaults : dict
+        The default kwargs.
+    input_kwargs: dict
+        Input kwargs, which should override default kwargs or be added to output kwargs
+        if the key is present in the function signature.
+
+    Returns
+    -------
+    kwargs : dict
+        Dictionary of kwargs that appear in function signature.
+
+    """
+    # Get arguments that appear in function signature.
+    args, _, _, kwarg_defaults = inspect.getargspec(unwrap_py2(func))
+    # Add defaults
+    kwargs = { k : v for (k,v) in defaults.items() }
+    # Override those that appear in args
+    kwargs = { k : v for (k,v) in input_kwargs.items() if k in args }
+
+    return kwargs
 
 def in_openmm_units(quantity):
     """Strip the units from a simtk.unit.Quantity object after converting to natural OpenMM units
@@ -3053,9 +3093,16 @@ class TolueneImplicit(TestSystem):
     Create toluene with constraints on bonds to hydrogen
     >>> testsystem = TolueneImplicit()
     >>> [system, positions, topology] = [testsystem.system, testsystem.positions, testsystem.topology]
+    Use the HCT GB model (may have non-optimal parameters)
+    >>> testsystem = TolueneImplicit(implicitSolvent=app.HCT)
+    Use the OBC2 GB model (may have non-optimal parameters)
+    >>> testsystem = TolueneImplicit(implicitSolvent=app.OBC2)
+    Create a dict containing a version with each available GB model:
+    >>> testsystems = { name : TolueneImplicit(implicitSolvent=getattr(simtk.openmm.app, name)) for name in ['HCT', 'OBC1', 'OBC2', 'GBn', 'GBn2'] }
+
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3063,7 +3110,13 @@ class TolueneImplicit(TestSystem):
         inpcrd_filename = get_data_filename("data/benzene-toluene-implicit/solvent.inpcrd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        defaults = { 'implicitSolvent' : app.OBC1,
+                     'constraints' : app.HBonds,
+                     'nonbondedMethod' : app.NoCutoff,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3073,6 +3126,26 @@ class TolueneImplicit(TestSystem):
         positions = inpcrd.getPositions(asNumpy=True)
 
         self.system, self.positions = system, positions
+
+class TolueneImplicitHCT(TolueneImplicit):
+    def __init__(self, **kwargs):
+        TolueneImplicit.__init__(self, implicitSolvent=app.HCT, **kwargs)
+
+class TolueneImplicitOBC1(TolueneImplicit):
+    def __init__(self, **kwargs):
+        TolueneImplicit.__init__(self, implicitSolvent=app.OBC1, **kwargs)
+
+class TolueneImplicitOBC2(TolueneImplicit):
+    def __init__(self, **kwargs):
+        TolueneImplicit.__init__(self, implicitSolvent=app.OBC2, **kwargs)
+
+class TolueneImplicitGBn(TolueneImplicit):
+    def __init__(self, **kwargs):
+        TolueneImplicit.__init__(self, implicitSolvent=app.GBn, **kwargs)
+
+class TolueneImplicitGBn2(TolueneImplicit):
+    def __init__(self, **kwargs):
+        TolueneImplicit.__init__(self, implicitSolvent=app.GBn2, **kwargs)
 
 #=============================================================================================
 # Host-guest in vacuum
@@ -3137,9 +3210,12 @@ class HostGuestImplicit(TestSystem):
     Create host-guest system with constraints on bonds to hydrogen
     >>> testsystem = HostGuestImplicit()
     >>> (system, positions) = testsystem.system, testsystem.positions
+    Create host-guest system with a specified implicit solvent model
+    >>> testsystem = HostGuestImplicit(implicitSolvent=app.GBn)
+
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3148,7 +3224,13 @@ class HostGuestImplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        defaults = { 'implicitSolvent' : app.OBC1,
+                     'constraints' : app.HBonds,
+                     'nonbondedMethod' : app.NoCutoff,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3158,6 +3240,26 @@ class HostGuestImplicit(TestSystem):
         positions = inpcrd.getPositions(asNumpy=True)
 
         self.system, self.positions = system, positions
+
+class HostGuestImplicitHCT(TolueneImplicit):
+    def __init__(self, **kwargs):
+        HostGuestImplicit.__init__(self, implicitSolvent=app.HCT, **kwargs)
+
+class HostGuestImplicitOBC1(TolueneImplicit):
+    def __init__(self, **kwargs):
+        HostGuestImplicit.__init__(self, implicitSolvent=app.OBC1, **kwargs)
+
+class HostGuestImplicitOBC2(TolueneImplicit):
+    def __init__(self, **kwargs):
+        HostGuestImplicit.__init__(self, implicitSolvent=app.OBC2, **kwargs)
+
+class HostGuestImplicitGBn(TolueneImplicit):
+    def __init__(self, **kwargs):
+        HostGuestImplicit.__init__(self, implicitSolvent=app.GBn, **kwargs)
+
+class HostGuestImplicitGBn2(TolueneImplicit):
+    def __init__(self, **kwargs):
+        HostGuestImplicit.__init__(self, implicitSolvent=app.GBn2, **kwargs)
 
 #=============================================================================================
 # Host-guest system in explicit solvent
