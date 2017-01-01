@@ -3415,11 +3415,16 @@ class LysozymeImplicit(TestSystem):
     Examples
     --------
 
+    Create T4 lysozyme L99A with p-xylene ligand using OBC1 GBSA.
     >>> lysozyme = LysozymeImplicit()
     >>> (system, positions) = lysozyme.system, lysozyme.positions
+
+    Create T4 lysozyme L99A with p-xylene ligand using OBC2 GBSA.
+    >>> lysozyme = LysozymeImplicit(implicitSolvent=app.OBC2)
+
     """
 
-    def __init__(self, constraints=app.HBonds, implicitSolvent=app.OBC1, **kwargs):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3428,7 +3433,13 @@ class LysozymeImplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=app.HBonds, nonbondedCutoff=None)
+
+        defaults = { 'implicitSolvent' : app.OBC1,
+                     'constraints' : app.HBonds,
+                     'nonbondedMethod' : app.NoCutoff,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3438,7 +3449,6 @@ class LysozymeImplicit(TestSystem):
         positions = inpcrd.getPositions(asNumpy=True)
 
         self.system, self.positions = system, positions
-
 
 class SrcImplicit(TestSystem):
 
