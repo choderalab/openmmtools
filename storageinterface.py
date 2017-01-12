@@ -99,7 +99,8 @@ class StorageInterfaceDirVar(object):
             If False, overwriting is allowed but the variable will still not be able to be appended to.
 
         """
-        self._bind_write_append()
+        if not self.bound_target:
+            self._bind_write_append()
         previously_written = True  # Assume this is true until proven otherwise
         if not self._variable:
             path = self.path
@@ -133,7 +134,8 @@ class StorageInterfaceDirVar(object):
             handle the data once the units have been stripped out and assigned to this instance of SIDV.
 
         """
-        self._bind_write_append()
+        if not self.bound_target:
+            self._bind_write_append()
         if not self._variable:
             path = self.path
             # Try to get already on disk variable
@@ -158,7 +160,8 @@ class StorageInterfaceDirVar(object):
             Data stored on VARIABLE read from disk and processed through the STORAGESYSTEM back into a Python type
             and possibly through the UNIT logic to recast into Quantity before being handed to the user.
         """
-        self._bind_read()
+        if not self.bound_target:
+            self._bind_read()
         if not self._variable:
             path = self.path
             # Try to get variable on disk
@@ -191,7 +194,7 @@ class StorageInterfaceDirVar(object):
         if self._variable:
             self._variable.add_metadata(name, data)
         elif self._directory:
-            self._variable.add_metadata(name, data)
+            self._directory.add_metadata(name, data)
         else:
             self._metadata_buffer[name] = data
 
@@ -432,7 +435,7 @@ class StorageInterface(object):
         ----------
         name : string
             Name of the attribute you wish to assign
-        data : any, but prefered string
+        data : any, but preferred string
             Extra meta data to add to the variable
 
         """

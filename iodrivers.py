@@ -22,7 +22,7 @@ import importlib
 import collections
 import numpy as np
 import netCDF4 as nc
-from functools import partial
+from sys import getsizeof
 
 from simtk import unit
 
@@ -454,11 +454,10 @@ class NetCDFIODriver(StorageIODriver):
         self.ncfile = nc.Dataset(file_name, access_mode)
         self._groups = {}
         # Bind all of the Type Handlers
-        #self.set_codec(str, NCString)  # String
-        self.set_codec(str, NCString2)  # String
-        self.set_codec(int, NCInt2)  # Int
+        self.set_codec(str, NCString)  # String
+        self.set_codec(int, NCInt)  # Int
         self.set_codec(dict, NCDict)  # Dict
-        self.set_codec(float, NCFloat2)  # Float
+        self.set_codec(float, NCFloat)  # Float
         # List/tuple
         self.set_codec(list, NCIterable)
         self.set_codec(tuple, NCIterable)
@@ -767,7 +766,7 @@ class NCVariableTypeHandler(ABC):
                           "operations will not work and .read() operations may work", RuntimeWarning)
 
 # =============================================================================
-# NETCDF NON-COMPOUND TYPE CODERS
+# NETCDF NON-COMPOUND TYPE CODECS
 # =============================================================================
 
 # Decoders: Convert from NC variable to python type
@@ -842,6 +841,42 @@ def nc_iterable_decoder(nc_variable):
 
 def nc_iterable_encoder(data):
     return data
+
+
+# =============================================================================
+# HDF5 CHUNK SIZE ROUTINES
+# =============================================================================
+
+def determine_appendable_chunk_size(data, max_iteration=128, max_memory=104857600):
+    """
+    Determine the chunk size of the appendable dimension, it will either be max_iterations in count or max_memory in
+    bytes where the system will try to
+
+    Parameters
+    ----------
+    data : Data that will be saved to disk of shape that will be saved
+        This is a sample of what will be written at any one point in time.
+    max_iteration : int, Default: 128
+        Maximum number of iterations that will be chunked, either this limit or max_memory will be hit first, reducing
+        the max iterations by a factor of 2 until we are below the memory limit, to a minimum of 1
+    max_memory: int (bytes), Default: 104856700 (100MB)
+        Maximum number of bytes the chunk is allowed to have, if the 100 iterations exceeds this size, then we
+        reduce the number of iterations by half until we are below the memory limit
+
+    Returns
+    -------
+    iteration_chunk : int
+        Chunksize of the iteration dimension
+
+    """
+    if max_iteration < 1 or not isinstance(max_iteration, int):
+        raise ValueError("max_iteration was {} but must be an integer greater than 1!".format(max_iteration))
+    iteration_chunk = int(max_iteration)
+    data_size = getsizeof(data)
+    while iteration_chunk * data_size > max_memory and iteration_chunk > 1:
+        iteration_chunk /= 2
+    # Ceiling and int since np.ceil returns a float
+    return int(np.ceil(iteration_chunk))
 
 
 # =============================================================================
@@ -924,9 +959,10 @@ class NCScalar(NCVariableTypeHandler, ABC):
         except KeyError:
             NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
             infinite_name = self._parent_handler.generate_infinite_dimension()
+            appendable_chunk_size = determine_appendable_chunk_size(data)
             self._bound_target = self._storage_object.createVariable(self._target, self.dtype,
                                                                      dimensions=[infinite_name, 'scalar'],
-                                                                     chunksizes=(1, 1))
+                                                                     chunksizes=(appendable_chunk_size, 1))
             # Specify a way for the IO Driver stores data
             self.add_metadata('IODriver_Type', self.dtype_string)
             self.add_metadata('type', typename(self.dtype))
@@ -984,7 +1020,7 @@ class NCScalar(NCVariableTypeHandler, ABC):
         return 'variables'
 
 
-class NCInt2(NCScalar):
+class NCInt(NCScalar):
     """
     NetCDF handler for Integers
     """
@@ -1006,7 +1042,7 @@ class NCInt2(NCScalar):
         return "int"
 
 
-class NCFloat2(NCScalar):
+class NCFloat(NCScalar):
     """
     NetCDF handler for Floats
     """
@@ -1028,7 +1064,7 @@ class NCFloat2(NCScalar):
         return "float"
 
 
-class NCString2(NCScalar):
+class NCString(NCScalar):
     """
     NetCDF handler for String
     """
@@ -1107,13 +1143,14 @@ class NCArray(NCVariableTypeHandler):
         except KeyError:
             data_shape, data_base_type, data_type_name = self._determine_data_information(data)
             infinite_name = self._parent_handler.generate_infinite_dimension()
+            appendable_chunk_size = determine_appendable_chunk_size(data)
             dims = [infinite_name]
             for length in data_shape:
                 NetCDFIODriver.check_iterable_dimension(self._parent_handler.ncfile, length=length)
                 dims.append('iterable{}'.format(length))
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
-                                                                     chunksizes=(1,) + data_shape)
+                                                                     chunksizes=(appendable_chunk_size,) + data_shape)
             # Specify a way for the IO Driver stores data
             self.add_metadata('IODriver_Type', self.dtype_string)
             self.add_metadata('type', str(data_base_type))
@@ -1189,226 +1226,6 @@ class NCArray(NCVariableTypeHandler):
         return 'variables'
 
 
-class NCFloat(NCVariableTypeHandler):
-    """
-    NetCDF handler for floats
-    """
-    @property
-    def _dtype(self):
-        return float
-
-    @staticmethod
-    def _dtype_string():
-        return "float"
-
-    def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-            # Handle variable size objects
-            # This line will not happen unless target is real, so None should not be returned by _check_write_append
-            self._check_write_append()
-            if self._output_mode is 'a':
-                self._save_shape = self._bound_target.shape[1:]
-            else:
-                self._save_shape = self._bound_target.shape
-        except KeyError as e:
-            raise e
-
-    def _bind_write(self, data):
-        try:
-            self._bind_read()
-        except KeyError:
-            NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
-            self._bound_target = self._storage_object.createVariable(self._target, float,
-                                                                     dimensions='scalar',
-                                                                     chunksizes=(1,))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string)
-            self.add_metadata('type', 'float')
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
-        self._dump_metadata_buffer()
-        self._check_write_append()
-
-    def _bind_append(self, data):
-        try:
-            self._bind_read()
-        except KeyError:
-            NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
-            infinite_name = self._parent_handler.generate_infinite_dimension()
-            self._bound_target = self._storage_object.createVariable(self._target, float,
-                                                                     dimensions=[infinite_name, 'scalar'],
-                                                                     chunksizes=(1, 1))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string)
-            self.add_metadata('type', 'float')
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
-        self._dump_metadata_buffer()
-        self._check_write_append()
-        return
-
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
-        return nc_float_decoder(self._bound_target)
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self._dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string, self._target)
-            )
-        # Save data
-        self._bound_target[:] = nc_float_encoder(data)
-        return
-
-    def append(self, data):
-        # Check type
-        if type(data) is not self._dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Check writeable
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string, self._target)
-            )
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        # Save data
-        self._bound_target[length, :] = nc_float_encoder(data)
-
-    @property
-    def _storage_type(self):
-        return 'variables'
-
-
-class NCInt(NCVariableTypeHandler):
-    """
-    NetCDF handler for integers.
-    """
-    @property
-    def _dtype(self):
-        return int
-
-    @staticmethod
-    def _dtype_string():
-        return "int"
-
-    def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-            # Handle variable size objects
-            # This line will not happen unless target is real, so None should not be returned by _check_write_append
-            self._check_write_append()
-            if self._output_mode is 'a':
-                self._save_shape = self._bound_target.shape[1:]
-            else:
-                self._save_shape = self._bound_target.shape
-        except (KeyError, IndexError) as e:
-            raise e
-
-    def _bind_write(self, data):
-        try:
-            self._bind_read()
-        except KeyError:
-            NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
-            self._bound_target = self._storage_object.createVariable(self._target, int,
-                                                                     dimensions='scalar',
-                                                                     chunksizes=(1,))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string)
-            self.add_metadata('type', 'int')
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
-        self._dump_metadata_buffer()
-        self._check_write_append()
-
-    def _bind_append(self, data):
-        try:
-            self._bind_read()
-        except KeyError:
-            NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
-            infinite_name = self._parent_handler.generate_infinite_dimension()
-            self._bound_target = self._storage_object.createVariable(self._target, int,
-                                                                     dimensions=[infinite_name, 'scalar'],
-                                                                     chunksizes=(1, 1))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string)
-            self.add_metadata('type', 'int')
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
-        self._dump_metadata_buffer()
-        self._check_write_append()
-        return
-
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
-        return nc_int_decoder(self._bound_target)
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self._dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string, self._target)
-            )
-        # Save data
-        self._bound_target[:] = nc_int_encoder(data)
-        return
-
-    def append(self, data):
-        # Check type
-        if type(data) is not self._dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Check writeable
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string, self._target)
-            )
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        # Save data
-        self._bound_target[length, :] = nc_int_encoder(data)
-
-    @property
-    def _storage_type(self):
-        return 'variables'
-
-
 class NCIterable(NCVariableTypeHandler):
     """
     NetCDF handler for lists and tuples
@@ -1462,11 +1279,12 @@ class NCIterable(NCVariableTypeHandler):
         except KeyError:
             data_shape, data_base_type, data_type_name = self._determine_data_information(data)
             infinite_name = self._parent_handler.generate_infinite_dimension()
+            appendable_chunk_size = determine_appendable_chunk_size(data)
             NetCDFIODriver.check_iterable_dimension(self._parent_handler.ncfile, length=data_shape)
             dims = [infinite_name, 'iterable{}'.format(data_shape)]
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
-                                                                     chunksizes=(1, data_shape))
+                                                                     chunksizes=(appendable_chunk_size, data_shape))
             # Specify a way for the IO Driver stores data
             self.add_metadata('IODriver_Type', self.dtype_string)
             self.add_metadata('type', data_type_name)
@@ -1608,12 +1426,13 @@ class NCQuantity(NCVariableTypeHandler):
             self._bind_read()
         except KeyError:
             data_shape, data_base_type, data_type_name = self._determine_data_information(data)
+            appendable_chunk_size = determine_appendable_chunk_size(data)
             infinite_name = self._parent_handler.generate_infinite_dimension()
             if data_shape == 1:  # Single dimension quantity
                 NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
                 self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                          dimensions=[infinite_name, 'scalar'],
-                                                                         chunksizes=(1, 1))
+                                                                         chunksizes=(appendable_chunk_size, 1))
             else:
                 dims = [infinite_name]
                 for length in data_shape:
@@ -1621,7 +1440,7 @@ class NCQuantity(NCVariableTypeHandler):
                     dims.append('iterable{}'.format(length))
                 self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                          dimensions=dims,
-                                                                         chunksizes=(1,) + data_shape)
+                                                                         chunksizes=(appendable_chunk_size,) + data_shape)
             # Specify a way for the IO Driver stores data
             self.add_metadata('IODriver_Type', self.dtype_string)
             self.add_metadata('type', data_type_name)
@@ -1742,111 +1561,6 @@ class NCQuantity(NCVariableTypeHandler):
             self._decoder = nc_numpy_array_decoder
         else:
             raise TypeError("NCQuantity does not know how to handle a quantity of type {}!".format(stype))
-
-    @property
-    def _storage_type(self):
-        return 'variables'
-
-
-class NCString(NCVariableTypeHandler):
-    """
-    NetCDF handling strings
-    I don't expect the unit to be affixed to a string, so there is no processing for it
-    """
-    @property
-    def _dtype(self):
-        return str
-
-    @staticmethod
-    def _dtype_string():
-        return "str"
-
-    def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-        except KeyError as e:
-            raise e
-
-    def _bind_write(self, data):
-        try:
-            self._bind_read()
-        except KeyError:
-            NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
-            self._bound_target = self._storage_object.createVariable(self._target,
-                                                                     str,
-                                                                     dimensions='scalar',
-                                                                     chunksizes=(1,))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
-        self._dump_metadata_buffer()
-        self._check_write_append()
-        return
-
-    def _bind_append(self, data):
-        try:
-            self._bind_read()
-        except KeyError:
-            NetCDFIODriver.check_scalar_dimension(self._parent_handler.ncfile)
-            infinite_name = self._parent_handler.generate_infinite_dimension()
-            self._bound_target = self._storage_object.createVariable(
-                self._target,
-                str,
-                dimensions=(infinite_name, 'scalar'),
-                chunksizes=(1, 1))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
-        self._dump_metadata_buffer()
-        self._check_write_append()
-        return
-
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
-        return nc_string_decoder(self._bound_target)
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self._dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string, self._target)
-            )
-        # Save data
-        storable_data = nc_string_encoder(data)
-        self._bound_target[:] = storable_data
-        return
-
-    def append(self, data):
-        # Check type
-        if type(data) is not self._dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Can append
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as static, non-appendable data! Cannot append, must use write()".format(
-                self.dtype_string, self._target)
-            )
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        # Save data
-        storable_data = nc_string_encoder(data)
-        self._bound_target[length, :] = storable_data
-        return
 
     @property
     def _storage_type(self):
