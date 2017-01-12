@@ -191,12 +191,11 @@ class StorageInterfaceDirVar(object):
         data: What data you wish to attach to the `name`d metadata pointer.
 
         """
-        if self._variable:
-            self._variable.add_metadata(name, data)
-        elif self._directory:
-            self._directory.add_metadata(name, data)
-        else:
+        bound_target = self.bound_target
+        if bound_target is None:
             self._metadata_buffer[name] = data
+        else:
+            self._storage_driver.add_metadata(name, data, path=self.path)
 
     """
     PROTECTED FLAGS
@@ -360,6 +359,7 @@ class StorageInterfaceDirVar(object):
         self._check_directory()
         if self._directory is None or self._directory is True:
             self._directory = self._storage_driver.get_directory(self.path, create=True)
+        self._dump_metadata_buffer()
 
     def __getattr__(self, name):
         if self._variable:

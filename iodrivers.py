@@ -187,7 +187,7 @@ class StorageIODriver(ABC):
         raise NotImplementedError("close_down method has not been implemented!")
 
     @abc.abstractmethod
-    def add_metadata(self, name, value):
+    def add_metadata(self, name, value, path=''):
         """
         Function to add metadata to the file. This can be treated as optional and can simply be a `pass` if you do not
         want your storage system to handle additional metadata
@@ -198,6 +198,8 @@ class StorageIODriver(ABC):
             Name of the attribute you wish to assign
         value : any, but prefered string
             Extra meta data to add to the variable
+        path : string, Default: ''
+            Extra path pointer to add metadata to a specific location if platform allows it
 
         """
         raise NotImplementedError("add_metadata has not been implemented!")
@@ -413,7 +415,7 @@ class NetCDFIODriver(StorageIODriver):
         elif path in self._groups:
             self._groups[path].setncattr(name, value)
         elif path in self._variables:
-            self._variables[path].addmetadata(name, value)
+            self._variables[path].add_metadata(name, value)
         else:
             raise KeyError("Cannot assign metadata at path {} since no known object exists there! "
                            "Try get_directory or get_variable_handler first.".format(path))
