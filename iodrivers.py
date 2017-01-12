@@ -1263,7 +1263,7 @@ class NCIterable(NCVariableTypeHandler):
                                                                      dimensions='iterable{}'.format(data_shape),
                                                                      chunksizes=(data_shape,))
             # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.type_string)
+            self.add_metadata('IODriver_Type', self.dtype_string)
             self.add_metadata('type', data_type_name)
             self._unit = "NoneType"
             self.add_metadata('IODriver_Unit', self._unit)
