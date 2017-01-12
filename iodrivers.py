@@ -455,10 +455,10 @@ class NetCDFIODriver(StorageIODriver):
         self._groups = {}
         # Bind all of the Type Handlers
         #self.set_codec(str, NCString)  # String
-        self.set_codec(str, NCScalar(str, 'str'))  # String
-        self.set_codec(int, NCInt)  # Int
+        self.set_codec(str, NCString2)  # String
+        self.set_codec(int, NCInt2)  # Int
         self.set_codec(dict, NCDict)  # Dict
-        self.set_codec(float, NCFloat)  # Float
+        self.set_codec(float, NCFloat2)  # Float
         # List/tuple
         self.set_codec(list, NCIterable)
         self.set_codec(tuple, NCIterable)
@@ -814,17 +814,9 @@ def nc_float_decoder(nc_variable):
 def nc_float_encoder(data):
     return data
 
-# Basic dict to help with the general codec below
-basic_codecs = {'decode': {int: nc_int_decoder,
-                           float: nc_float_decoder,
-                           str: nc_string_decoder},
-                'encode': {int: nc_int_encoder,
-                           float: nc_float_encoder,
-                           str: nc_string_encoder}}
-
 
 # There really isn't anything that needs to happen here, arrays are the ideal type
-# Leaving these as explicit coders in case we need to change them later
+# Leaving these as explicit codecs in case we need to change them later
 def nc_numpy_array_decoder(nc_variable):
     return nc_variable[:]
 
@@ -858,52 +850,41 @@ def nc_iterable_encoder(data):
 
 # Generic handler for non-compound data types: inf, float, string
 
-class NCScalar(NCVariableTypeHandler):
+class NCScalar(NCVariableTypeHandler, ABC):
 
     """"
     This particular class is to minimize code duplication between some very basic data types such as int, str, float
+
+    It is itself an abstract class and requires the following functions to be complete:
+    _encoder (@property)
+    _decoder (@property)
+    _dtype (@property)
+    _dtype_string (@staticmethod)
     """
 
-    def __init__(self, dtype, dtype_string):
+    @abc.abstractproperty
+    def _encoder(self):
         """
-        Create a simi-initiated NCVariableTypeHandler instance.
-        We use the __call__ function to initialize the parent class
+        Define the encoder used to convert from Python Data -> netcdf
 
-        Parameters
-        ----------
-        dtype : Python Type
-            Type that the basic data that will be passed into this variable
-        dtype_string : String
-            String name of the data that is used for internal validation
+        Returns
+        -------
+        encoder : function
+            Returns the encoder function
         """
-        self._passed_dtype = dtype
-        self._passed_dtype_string = dtype_string
+        raise NotImplementedError("Encoder has not yet been set!")
 
-    def __call__(self, parent_handler, target, storage_object=None):
+    @abc.abstractproperty
+    def _decoder(self):
         """
-        Bind to a given nc_storage_object on ncfile with given final_target_name,
-        If no nc_storage_object is None, it defaults to the top level ncfile.
-        Create a copy of self as a new instance of self so any binding on the current level is ignored
+        Define the decoder used to convert from netCDF -> Python Data
 
-        Parameters
-        ----------
-        parent_handler : Parent NetCDF handler
-            Class which can manipulate the NetCDF file at the top level for dimension creation and meta handling
-        target : string
-            String of the name of the object. Not explicitly a variable nor a group since the object could be either
-        storage_object : NetCDF file or NetCDF group, optional, Default to ncfile on parent_handler
-            Object the variable/object will be written onto
+        Returns
+        -------
+        decoder : function
+            Returns the decoder function
         """
-        new_self = NCScalar(self._passed_dtype, self._passed_dtype_string)
-        super(NCScalar, new_self).__init__(parent_handler, target, storage_object=storage_object)
-        return new_self
-
-    @property
-    def _dtype(self):
-        return self._passed_dtype
-
-    def _dtype_string(self):
-        return self._passed_dtype_string
+        raise NotImplementedError("Decoder has not yet been set!")
 
     def _bind_read(self):
         try:
@@ -963,8 +944,7 @@ class NCScalar(NCVariableTypeHandler):
             self._bind_read()
         if not self._output_mode:
             self._check_write_append()
-        decoder = basic_codecs['decode'][self.dtype]
-        return decoder(self._bound_target)
+        return self._decoder(self._bound_target)
 
     def write(self, data):
         # Check type
@@ -979,8 +959,7 @@ class NCScalar(NCVariableTypeHandler):
                 self.dtype_string, self._target)
             )
         # Save data
-        encoder = basic_codecs['encode'][self._dtype]
-        self._bound_target[:] = encoder(data)
+        self._bound_target[:] = self._encoder(data)
         return
 
     def append(self, data):
@@ -998,12 +977,77 @@ class NCScalar(NCVariableTypeHandler):
         # Determine current current length and therefore the last index
         length = self._bound_target.shape[0]
         # Save data
-        encoder = basic_codecs['encode'][self._dtype]
-        self._bound_target[length, :] = encoder(data)
+        self._bound_target[length, :] = self._encoder(data)
 
     @property
     def _storage_type(self):
         return 'variables'
+
+
+class NCInt2(NCScalar):
+    """
+    NetCDF handler for Integers
+    """
+
+    @property
+    def _encoder(self):
+        return nc_int_encoder
+
+    @property
+    def _decoder(self):
+        return nc_int_decoder
+
+    @property
+    def _dtype(self):
+        return int
+
+    @staticmethod
+    def _dtype_string():
+        return "int"
+
+
+class NCFloat2(NCScalar):
+    """
+    NetCDF handler for Floats
+    """
+
+    @property
+    def _encoder(self):
+        return nc_float_encoder
+
+    @property
+    def _decoder(self):
+        return nc_float_decoder
+
+    @property
+    def _dtype(self):
+        return float
+
+    @staticmethod
+    def _dtype_string():
+        return "float"
+
+
+class NCString2(NCScalar):
+    """
+    NetCDF handler for String
+    """
+
+    @property
+    def _encoder(self):
+        return nc_string_encoder
+
+    @property
+    def _decoder(self):
+        return nc_string_decoder
+
+    @property
+    def _dtype(self):
+        return str
+
+    @staticmethod
+    def _dtype_string():
+        return "str"
 
 
 # Array
