@@ -476,7 +476,6 @@ class StorageInterface(object):
         >>> my_storage.add_metadata('my_index', 4)
         """
         # Instance if not done
-        self._instance_write_append()
         self.storage_system.add_metadata(name, data)
 
     @property
