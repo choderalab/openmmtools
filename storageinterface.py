@@ -15,7 +15,6 @@ Classes that store arbitrary NetCDF (or other) options and describe how to handl
 
 import os
 import abc
-import warnings
 
 from .iodrivers import NetCDFIODriver
 
@@ -37,7 +36,7 @@ class StorageInterfaceDirVar(object):
     The API only shows the protected and internal methods of the SIDV class which cannot be used for variable and
     directory names.
 
-    This class is never meant to be used as its own object and should never be invoked by itself. The class is currently
+    This class is NEVER meant to be used as its own object and should never be invoked by itself. The class is currently
     housed outside of the main StorageInterface class to show the API to users.
 
     Examples are located in the StorageInterface main class
@@ -98,6 +97,23 @@ class StorageInterfaceDirVar(object):
             If True, no overwrite is allowed and an error is raised if the variable already exists.
             If False, overwriting is allowed but the variable will still not be able to be appended to.
 
+        Examples
+        --------
+        Store a numpy "eye" array to the variable "my_arr"
+        >>> import numpy as np
+        >>> my_driver = NetCDFIODriver('my_store.nc')
+        >>> my_store = StorageInterface(my_driver)
+        >>> x = np.eye(3)
+        >>> my_store.my_arr.write(x)
+
+        Save a list again after making a modification to it
+        >>> my_driver = NetCDFIODriver('my_store.nc')
+        >>> my_store = StorageInterface(my_driver)
+        >>> x = [0,0,1]
+        >>> my_store.the_list.write(x)
+        >>> y = [1,1,1]
+        >>> my_store.the_list.write(y, protected_write=False)
+
         """
         if not self.bound_target:
             self._bind_write_append()
@@ -133,6 +149,15 @@ class StorageInterfaceDirVar(object):
             This is what will be written to disk, the data will be processed by the STORAGESYSTEM as to how to actually
             handle the data once the units have been stripped out and assigned to this instance of SIDV.
 
+        Examples
+        --------
+        Store a single int several times in a variable that is inside a directory
+        >>> my_driver = NetCDFIODriver('my_store.nc')
+        >>> my_store = StorageInterface(my_driver)
+        >>> x = 756
+        >>> my_store.IAmADir.AnInt.append(x)
+        >>> my_store.IAmADir.AnInt.append(x+1)
+        >>> my_store.IAmADir.AnInt.append(x+2)
         """
         if not self.bound_target:
             self._bind_write_append()
@@ -326,21 +351,23 @@ class StorageInterfaceDirVar(object):
     def _bind_write_append(self):
         self._check_variable()
         # Check instanced storage driver, accessing its protected ability to bind write/append (user should not do this)
-        self._storage_interface._instance_write_append()
         if self._predecessor is not None:
             self._predecessor._write_append_directory()
 
+    def _check_read_file(self):
+        """Check that the file exists before trying to read"""
+        file_name = self._storage_interface.file_name
+        if not os.path.isfile(file_name):
+            raise NameError("No such file exists at {}! Cannot read from non-existent file!".format(file_name))
+
     def _bind_read(self):
+        """Check that we are not a directory and all predecessors can read as well"""
         self._check_variable()
-        # Check instanced storage driver, accessing its protected ability to bind reading (user should not do this)
-        self._storage_interface._instance_read()
         if self._predecessor is not None:
             self._predecessor._read_directory()
 
     def _dump_metadata_buffer(self):
-        """
-        Dump the metadata buffer to file, this is only ever called once bound
-        """
+        """Dump the metadata buffer to file, this is only ever called once bound"""
         for key in self._metadata_buffer.keys():
             data = self._metadata_buffer[key]
             self.add_metadata(key, data)
@@ -348,14 +375,13 @@ class StorageInterfaceDirVar(object):
 
     def _read_directory(self):
         """Special function of a predecessor to try and fetch the directory from file"""
-        self._storage_interface._instance_read()
+        self._check_read_file()
         self._check_directory()
         if self._directory is None or self._directory is True:
             self._directory = self._storage_driver.get_directory(self.path, create=False)
 
     def _write_append_directory(self):
         """Special function of a predecessor to try and fetch the directory from file"""
-        self._storage_interface._instance_read()
         self._check_directory()
         if self._directory is None or self._directory is True:
             self._directory = self._storage_driver.get_directory(self.path, create=True)
@@ -378,11 +404,11 @@ class StorageInterfaceDirVar(object):
 
 class StorageInterface(object):
     """
-    This class holds what folders and variables are known to the file on the disk, and dynamically
-    creates them on the fly. Any attempt to reference a property which is not explicitly listed below implies that you
-    wish to define either a storage directory or variable, and creates a new StorageInterfaceVarDir (SIVD) with that
-    name. The SIVD is what handles the read/write operations on this disk by interfacing with the uninstanced
-    StorageIODriver you provide to storage_system keyword in StorageInterface class's __init__.
+    This class interfaces with a StorageIODriver class to internally hold what folders and variables are known to the
+    file on the disk, and dynamically creates them on the fly. Any attempt to reference a property which is not
+    explicitly listed below implies that you wish to define either a storage directory or variable, and creates a new
+    StorageInterfaceVarDir (SIVD) with that name. The SIVD is what handles the read/write operations on this disk by
+    interfacing with the StorageIODriver object you provide StorageInterface class's __init__.
 
     See StorageInterfaceVarDir for how the dynamic interfacing works.
 
@@ -390,47 +416,50 @@ class StorageInterface(object):
     --------
 
     Create a basic storage system and write new my_data to disk
+    >>> my_driver = NetCDFIODriver('my_store.nc')
     >>> my_data = [4,2,1,6]
-    >>> my_storage = StorageInterface('my_store.nc')
+    >>> my_storage = StorageInterface(my_driver)
     >>> my_storage.my_variable.write(my_data)
 
     Create a folder called "vardir" with two variables in it, "var1" and "var2" holding DATA1 and DATA2 respectively
     Then, fetch data from the same folders and variables as above
+    >>> my_driver = NetCDFIODriver('my_store.nc')
     >>> DATA1 = "some string"
     >>> DATA2 = (4.5, 7.0, -23.1)
-    >>> my_storage = StorageInterface('my_store.nc')
+    >>> my_storage = StorageInterface(my_driver)
     >>> my_storage.vardir.var1.write(DATA1)
     >>> my_storage.vardir.var2.write(DATA2)
-    >>> var1 = my_storage.vardir.var1.fetch()
-    >>> var2 = my_storage.vardir.var2.fetch()
+    >>> var1 = my_storage.vardir.var1.read()
+    >>> var2 = my_storage.vardir.var2.read()
 
     Run some_function() to generate data over an iteration, store each value in a dynamically sized var called "looper"
+    >>> my_driver = NetCDFIODriver('my_store.nc')
     >>> mydata = [-1, 24, 5]
-    >>> my_storage = StorageInterface('my_store.nc')
+    >>> my_storage = StorageInterface(my_driver)
     >>> for i in range(10):
-    >>>     mydata = some_function()
+    >>>     mydata = i**2
     >>>     my_storage.looper.append(mydata)
     """
-    def __init__(self, file_name, storage_system=NetCDFIODriver):
+    def __init__(self, storage_system):
         """
+        Initialize the class by reading in the StorageIODriver in storage_system. The file name is inferred from the
+        storage system and the read/write/append actions are handled by the SIVD class which also act on the
+        storage_system.
 
         Parameters
         ----------
-        file_name : string
-            Full path to the location of the save file on the operating system. A new file will be generated if one
-            cannot be found, or this class will load and read the file it does find in that location.
-        storage_system : un-instanced StorageIODriver, default: NetCDFIODriver
-            What type of storage to use. Requires fully implemented StorageIODriver class to use.
+        storage_system : StorageIODriver object
+            What type of storage to use. Requires fully implemented and instanced StorageIODriver class to use.
 
         """
-        self._file_name = file_name
         self._storage_system = storage_system
+        self._file_name = storage_system.file_name
         # Used for logic checks
-        self._base_storage_type = storage_system
 
     def add_metadata(self, name, data):
         """
         Write additional meta data to attach to the storage_system file itself.
+
         Parameters
         ----------
         name : string
@@ -438,6 +467,13 @@ class StorageInterface(object):
         data : any, but preferred string
             Extra meta data to add to the variable
 
+        Examples
+        --------
+
+        Create a storage system and add meta data
+        >>> my_driver = NetCDFIODriver('my_store.nc')
+        >>> my_storage = StorageInterface(my_driver)
+        >>> my_storage.add_metadata('my_index', 4)
         """
         # Instance if not done
         self._instance_write_append()
@@ -461,6 +497,7 @@ class StorageInterface(object):
     def storage_system(self):
         """
         Pointer to the object which actually handles read/write operations
+
         Returns
         -------
         storage_system :
@@ -468,39 +505,11 @@ class StorageInterface(object):
             string at initialization.
 
         """
-        # Check if instanced yet
-        if not self.instanced:
-            warnings.warn("Storage system currently not instanced", RuntimeWarning)
         return self._storage_system
-
-    def instanced(self):
-        """Helper function to see if we are instanced"""
-        return isinstance(self._storage_system, self._base_storage_type)
-
-    def _instance_read(self):
-        """
-        Try to instance if file on disk in append, fail if not there
-        Don't create empty file that then cannot read
-        """
-        if not os.path.isfile(self._file_name):
-            raise NameError("No such file exists at {}! Cannot read from non-existent file!".format(self._file_name))
-        if not self.instanced():
-            self._storage_system = self._base_storage_type(self._file_name, access_mode='a')
-        return
-
-    def _instance_write_append(self):
-        """
-        Try to instance if file on disk in append, create file if not there in write
-        """
-        if not self.instanced():
-            if os.path.isfile(self._file_name):
-                self._storage_system = self._base_storage_type(self._file_name, access_mode='a')
-            else:
-                self._storage_system = self._base_storage_type(self._file_name, access_mode='w')
 
     def __getattr__(self, name):
         """
-        Workhorse function to handle all the automagical path and variable assignments
+        Workhorse function to handle all the auto-magical path and variable assignments
 
         Parameters
         ----------
@@ -509,6 +518,5 @@ class StorageInterface(object):
 
         """
         # Instance storage system
-        self._instance_write_append()
         setattr(self, name, StorageInterfaceDirVar(name, self.storage_system, self))
         return getattr(self, name)

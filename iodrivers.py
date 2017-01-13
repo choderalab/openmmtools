@@ -16,6 +16,7 @@ saved which special instructions for each.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import os
 import abc
 import warnings
 import importlib
@@ -92,19 +93,23 @@ class StorageIODriver(ABC):
     The specific driver for a type of storage should be a subclass of this with its own
     encoders and decoders for specific file types.
     """
-    def __init__(self, file_name, access_mode='w'):
+    def __init__(self, file_name, access_mode=None):
         """
 
         Parameters
         ----------
         file_name : string
             Name of the file to read/write to of a given storage type
-        access_mode : string, Default 'w', accepts 'w', 'r', 'a'
+        access_mode : string or None, Default None, accepts 'w', 'r', 'a'
             Define how to access the file in either write, read, or append mode
+            None should behave like Python "a+" in which a file is created if not present, or opened in append if it is.
+            How this is implemented is up to the subclass
         """
         # Internal map from Python Type <-> De/Encoder which handles the actual encoding and decoding of the data
         self._type_maps = {}
         self._variables = {}
+        self._file_name = file_name
+        self._access_mode = access_mode
 
     def set_codec(self, type_key, codec):
         """
@@ -204,6 +209,16 @@ class StorageIODriver(ABC):
         """
         raise NotImplementedError("add_metadata has not been implemented!")
 
+    @property
+    def file_name(self):
+        """File name of on hard drive"""
+        return self._file_name
+
+    @property
+    def access_mode(self):
+        """Access mode of file on disk"""
+        return self._access_mode
+
 
 # =============================================================================
 # NetCDF IO Driver
@@ -233,6 +248,7 @@ class NetCDFIODriver(StorageIODriver):
             Group object requested from file. All subsequent groups are created on the way down and can be accessed
             the same way.
         """
+        self._check_bind_to_file()
         path = normalize_path(path)
         try:
             group = self._groups[path]
@@ -264,6 +280,7 @@ class NetCDFIODriver(StorageIODriver):
             The handler tied to a specific variable and bound to it on the disk
 
         """
+        self._check_bind_to_file()
         path = normalize_path(path)
         try:
             # Check if the handler is already known to this instance
@@ -313,6 +330,7 @@ class NetCDFIODriver(StorageIODriver):
         return handler
 
     def create_storage_variable(self, path, type_key):
+        self._check_bind_to_file()
         path = normalize_path(path)
         try:
             handler = self._type_maps[type_key]
@@ -382,10 +400,12 @@ class NetCDFIODriver(StorageIODriver):
         infinite_dim_name : string
             Name of the new infinite dimension on file
         """
+        self._check_bind_to_file()
         created_dim = False
         while not created_dim:
             infinite_dim_name = 'unlimited{}'.format(self._auto_iterable_count)
             if infinite_dim_name not in self.ncfile.dimensions:
+                self.check
                 self.ncfile.createDimension(infinite_dim_name, 0)
                 created_dim = True
             else:
@@ -406,6 +426,7 @@ class NetCDFIODriver(StorageIODriver):
             Path to the object to assign metadata. If the object does not exist, an error is raised
             Not passing a path in attaches the data to the top level file
         """
+        self._check_bind_to_file()
         path = normalize_path(path)
         split_path = decompose_path(path)
         if len(split_path) == 0:
@@ -438,22 +459,40 @@ class NetCDFIODriver(StorageIODriver):
         """
         # NetCDF4 creates the cascade of groups automatically or returns the group if already present
         # To simplify code, the cascade of groups is not stored in this class until called
+        self._check_bind_to_file()
         path = normalize_path(path)
         self._groups[path] = self.ncfile.createGroup(path)
         return self._groups[path]
 
     def sync(self):
-        self.ncfile.sync()
+        if self.ncfile is not None:
+            self.ncfile.sync()
 
     def close_down(self):
-        # Ensure the netcdf file closes down
-        self.sync()
-        self.ncfile.close()
+        if self.ncfile is not None:
+            # Ensure the netcdf file closes down
+            self.sync()
+            self.ncfile.close()
+            self.ncfile = None
 
-    def __init__(self, file_name, access_mode='w'):
+    def _check_bind_to_file(self):
+        """
+        Bind to and create the file if it does not already exist (depending on access_mode)
+
+        """
+        if self.ncfile is None:
+            if self.access_mode is None:
+                if os.path.isfile(self.file_name):
+                    self.ncfile = nc.Dataset(self.file_name, 'a')
+                else:
+                    self.ncfile = nc.Dataset(self.file_name, 'r')
+            else:
+                self.ncfile = nc.Dataset(self.file_name, self.access_mode)
+
+    def __init__(self, file_name, access_mode=None):
         super(NetCDFIODriver, self).__init__(file_name, access_mode=access_mode)
-        # Bind to file
-        self.ncfile = nc.Dataset(file_name, access_mode)
+        # Initialize the file bind variable. All actions involving files
+        self.ncfile = None
         self._groups = {}
         # Bind all of the Type Handlers
         self.set_codec(str, NCString)  # String
@@ -466,7 +505,7 @@ class NetCDFIODriver(StorageIODriver):
         self.set_codec(np.ndarray, NCArray)  # Array
         self.set_codec(unit.Quantity, NCQuantity)  # Quantity
         # Bind the metadata reader types based on the dtype string of each class
-        self._IOMetaDataReaders = {self._type_maps[key]._dtype_string(): self._type_maps[key] for key in self._type_maps}
+        self._IOMetaDataReaders = {self._type_maps[key].dtype_string(): self._type_maps[key] for key in self._type_maps}
         # Counter for auto-creating infinite iterable dimensions
         self._auto_iterable_count = 0
 
@@ -505,36 +544,22 @@ class NCVariableTypeHandler(ABC):
         self._storage_object = storage_object
         # Buffer to store metadata if assigned before binding
         self._metadata_buffer = {}
-        # Flag for write/append mode
-        self._output_mode = None
 
     @abc.abstractproperty  # TODO: Depreciate when we move to Python 3 fully with @abc.abstractmethod + @property
-    def _dtype(self):
+    def dtype(self):
         """
         Define the Python data type for this variable
 
         Returns
         -------
-        type
+        dtype : type
 
         """
-        raise NotImplementedError("_dtype property has not been implemented in this subclass yet!")
-
-    @property
-    def dtype(self):
-        """
-        Create the property which calls the protected property
-
-        Returns
-        -------
-        self._dtype : type
-
-        """
-        return self._dtype
+        raise NotImplementedError("dtype property has not been implemented in this subclass yet!")
 
     # @abc.abstractproperty
     @staticmethod
-    def _dtype_string():
+    def dtype_string(self):
         """
         Short name of variable for strings and errors
 
@@ -544,19 +569,7 @@ class NCVariableTypeHandler(ABC):
 
         """
         # TODO: Replace with @abstractstaticmethod when on Python 3
-        raise NotImplementedError("_dtype_string has not been implemented in this subclass yet!")
-
-    @property
-    def dtype_string(self):
-        """
-        Read the specified string name of the nc_variable type
-
-        Returns
-        -------
-        dtype_string : string
-
-        """
-        return self._dtype_string()
+        raise NotImplementedError("dtype_string has not been implemented in this subclass yet!")
 
     @abc.abstractmethod
     def _bind_read(self):
@@ -653,7 +666,7 @@ class NCVariableTypeHandler(ABC):
         raise NotImplementedError("Appending Python data to NetCDF data has not been implemented!")
 
     @abc.abstractproperty
-    def _storage_type(self):
+    def storage_type(self):
         """
         Tell the handler what NetCDF storage type this handler treats the data as.
         This is explicitly either 'variables' or 'groups' so the handler knows which property to call on the NetCDF
@@ -665,22 +678,6 @@ class NCVariableTypeHandler(ABC):
 
         """
         raise NotImplementedError("I have not been set to 'variables' or 'groups'")
-
-    @property
-    def storage_type(self):
-        """
-        Returns if this is handler stores its information as variables or as groups
-
-        Returns
-        -------
-        storage_type: string of either 'variables' or 'groups'
-
-        """
-        storage_type = self._storage_type
-        if storage_type != 'variables' and storage_type != 'groups':
-            raise ValueError('storage_type must be "variables" or "groups", it is instead {}! '
-                             'Check handler implementation'.format(storage_type))
-        return storage_type
 
     def add_metadata(self, name, value):
         """
@@ -738,15 +735,21 @@ class NCVariableTypeHandler(ABC):
             proper_type = getattr(module, stored_type)
         return proper_type
 
-    def _check_write_append(self):
+    @property
+    def _output_mode(self):
         """
-        Set the write and append flags, should only be called from within _bind_write and _bind_append after being bound
-        or within read if not bound.
+        Set the write and append flags. Code should only call this after being bound to a variable
+
+        Returns
+        -------
+        output_mode : string
+            Either 'a' for append or 'w' for write
         """
         if self._bound_target.getncattr('IODriver_Appendable'):
-            self._output_mode = 'a'
+            output_mode = 'a'
         else:
-            self._output_mode = 'w'
+            output_mode = 'w'
+        return output_mode
 
     def _attempt_storage_read(self):
         """
@@ -895,8 +898,8 @@ class NCScalar(NCVariableTypeHandler, ABC):
     It is itself an abstract class and requires the following functions to be complete:
     _encoder (@property)
     _decoder (@property)
-    _dtype (@property)
-    _dtype_string (@staticmethod)
+    dtype (@property)
+    dtype_string (@staticmethod)
     """
 
     @abc.abstractproperty
@@ -924,17 +927,13 @@ class NCScalar(NCVariableTypeHandler, ABC):
         raise NotImplementedError("Decoder has not yet been set!")
 
     def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-            # Handle variable size objects
-            # This line will not happen unless target is real, so None should not be returned by _check_write_append
-            self._check_write_append()
-            if self._output_mode is 'a':
-                self._save_shape = self._bound_target.shape[1:]
-            else:
-                self._save_shape = self._bound_target.shape
-        except (KeyError, IndexError) as e:
-            raise e
+        self._attempt_storage_read()
+        # Handle variable size objects
+        # This line will not happen unless target is real, so output mode should return correct value
+        if self._output_mode is 'a':
+            self._save_shape = self._bound_target.shape[1:]
+        else:
+            self._save_shape = self._bound_target.shape
 
     def _bind_write(self, data):
         try:
@@ -953,7 +952,8 @@ class NCScalar(NCVariableTypeHandler, ABC):
             self.add_metadata('IODriver_Storage_Type', self.storage_type)
             self.add_metadata('IODriver_Appendable', 0)
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
 
     def _bind_append(self, data):
         try:
@@ -974,19 +974,20 @@ class NCScalar(NCVariableTypeHandler, ABC):
             self.add_metadata('IODriver_Storage_Type', self.storage_type)
             self.add_metadata('IODriver_Appendable', 1)
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return
 
     def read(self):
         if self._bound_target is None:
             self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return self._decoder(self._bound_target)
 
     def write(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1002,7 +1003,7 @@ class NCScalar(NCVariableTypeHandler, ABC):
 
     def append(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1018,7 +1019,7 @@ class NCScalar(NCVariableTypeHandler, ABC):
         self._bound_target[length, :] = self._encoder(data)
 
     @property
-    def _storage_type(self):
+    def storage_type(self):
         return 'variables'
 
 
@@ -1036,11 +1037,11 @@ class NCInt(NCScalar):
         return nc_int_decoder
 
     @property
-    def _dtype(self):
+    def dtype(self):
         return int
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "int"
 
 
@@ -1058,11 +1059,11 @@ class NCFloat(NCScalar):
         return nc_float_decoder
 
     @property
-    def _dtype(self):
+    def dtype(self):
         return float
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "float"
 
 
@@ -1080,11 +1081,11 @@ class NCString(NCScalar):
         return nc_string_decoder
 
     @property
-    def _dtype(self):
+    def dtype(self):
         return str
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "str"
 
 
@@ -1095,25 +1096,21 @@ class NCArray(NCVariableTypeHandler):
     NetCDF handler for numpy arrays
     """
     @property
-    def _dtype(self):
+    def dtype(self):
         return np.ndarray
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "numpy.ndarray"
 
     def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-            # Handle variable size objects
-            # This line will not happen unless target is real, so None should not be returned by _check_write_append
-            self._check_write_append()
-            if self._output_mode is 'a':
-                self._save_shape = self._bound_target.shape[1:]
-            else:
-                self._save_shape = self._bound_target.shape
-        except KeyError as e:
-            raise e
+        self._attempt_storage_read()
+        # Handle variable size objects
+        # This line will not happen unless target is real, so output_mode should return correct value
+        if self._output_mode is 'a':
+            self._save_shape = self._bound_target.shape[1:]
+        else:
+            self._save_shape = self._bound_target.shape
 
     def _bind_write(self, data):
         try:
@@ -1137,7 +1134,8 @@ class NCArray(NCVariableTypeHandler):
             self.add_metadata('IODriver_Appendable', 0)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
 
     def _bind_append(self, data):
         try:
@@ -1163,18 +1161,19 @@ class NCArray(NCVariableTypeHandler):
             self.add_metadata('IODriver_Appendable', 1)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
 
     def read(self):
         if self._bound_target is None:
             self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return nc_numpy_array_decoder(self._bound_target)
 
     def write(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1195,7 +1194,7 @@ class NCArray(NCVariableTypeHandler):
 
     def append(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1224,7 +1223,7 @@ class NCArray(NCVariableTypeHandler):
         return data_shape, data_base_type, data_type_name
 
     @property
-    def _storage_type(self):
+    def storage_type(self):
         return 'variables'
 
 
@@ -1233,25 +1232,21 @@ class NCIterable(NCVariableTypeHandler):
     NetCDF handler for lists and tuples
     """
     @property
-    def _dtype(self):
+    def dtype(self):
         return collections.Iterable
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "iterable"
 
     def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-            # Handle variable size objects
-            # This line will not happen unless target is real, so None should not be returned by _check_write_append
-            self._check_write_append()
-            if self._output_mode is 'a':
-                self._save_shape = self._bound_target.shape[1:]
-            else:
-                self._save_shape = self._bound_target.shape
-        except KeyError as e:
-            raise e
+        self._attempt_storage_read()
+        # Handle variable size objects
+        # This line will not happen unless target is real, so output_mode should return the correct value
+        if self._output_mode is 'a':
+            self._save_shape = self._bound_target.shape[1:]
+        else:
+            self._save_shape = self._bound_target.shape
 
     def _bind_write(self, data):
         try:
@@ -1272,7 +1267,8 @@ class NCIterable(NCVariableTypeHandler):
             self.add_metadata('IODriver_Appendable', 0)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return
 
     def _bind_append(self, data):
@@ -1297,19 +1293,20 @@ class NCIterable(NCVariableTypeHandler):
             self.add_metadata('IODriver_Appendable', 1)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return
 
     def read(self):
         if self._bound_target is None:
             self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return nc_iterable_decoder(self._bound_target)
 
     def write(self, data):
         # Check type
-        if not isinstance(data, self._dtype):
+        if not isinstance(data, self.dtype):
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1330,7 +1327,7 @@ class NCIterable(NCVariableTypeHandler):
 
     def append(self, data):
         # Check type
-        if not isinstance(data, self._dtype):
+        if not isinstance(data, self.dtype):
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1359,7 +1356,7 @@ class NCIterable(NCVariableTypeHandler):
         return data_shape, data_base_type, data_type_name
 
     @property
-    def _storage_type(self):
+    def storage_type(self):
         return 'variables'
 
 
@@ -1368,27 +1365,23 @@ class NCQuantity(NCVariableTypeHandler):
     NetCDF handler for ALL simtk.unit.Quantity's
     """
     @property
-    def _dtype(self):
+    def dtype(self):
         return unit.Quantity
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "quantity"
 
     def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-            # Handle variable size objects
-            # This line will not happen unless target is real, so None should not be returned by _check_write_append
-            self._check_write_append()
-            if self._output_mode is 'a':
-                self._save_shape = self._bound_target.shape[1:]
-            else:
-                self._save_shape = self._bound_target.shape
-            self._unit = self._bound_target.getncattr('IODriver_Unit')
-            self._set_codifiers(self._bound_target.getncattr('type'))
-        except KeyError as e:
-            raise e
+        self._attempt_storage_read()
+        # Handle variable size objects
+        # This line will not happen unless target is real, so output_mode will return the correct value
+        if self._output_mode is 'a':
+             self._save_shape = self._bound_target.shape[1:]
+        else:
+             self._save_shape = self._bound_target.shape
+        self._unit = self._bound_target.getncattr('IODriver_Unit')
+        self._set_codifiers(self._bound_target.getncattr('type'))
 
     def _bind_write(self, data):
         try:
@@ -1420,7 +1413,8 @@ class NCQuantity(NCVariableTypeHandler):
             self._save_shape = data_shape
             self._set_codifiers(data_type_name)
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return
 
     def _bind_append(self, data):
@@ -1454,14 +1448,15 @@ class NCQuantity(NCVariableTypeHandler):
             self._save_shape = data_shape
             self._set_codifiers(data_type_name)
         self._dump_metadata_buffer()
-        self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         return
 
     def read(self):
         if self._bound_target is None:
             self._bind_read()
-        if not self._output_mode:
-            self._check_write_append()
+        # Set the output mode by calling the variable
+        self._output_mode
         data = self._decoder(self._bound_target)
         unit_name = self._bound_target.getncattr('IODriver_Unit')
         # Do some things to handle the way quantity_from_string parses units that only have a denominator (e.g. Hz)
@@ -1474,7 +1469,7 @@ class NCQuantity(NCVariableTypeHandler):
 
     def write(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1501,7 +1496,7 @@ class NCQuantity(NCVariableTypeHandler):
 
     def append(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1565,7 +1560,7 @@ class NCQuantity(NCVariableTypeHandler):
             raise TypeError("NCQuantity does not know how to handle a quantity of type {}!".format(stype))
 
     @property
-    def _storage_type(self):
+    def storage_type(self):
         return 'variables'
 
 
@@ -1575,11 +1570,11 @@ class NCDict(NCVariableTypeHandler):
     This is by in-large the most complicated object to store since its the combination of all types
     """
     @property
-    def _dtype(self):
+    def dtype(self):
         return dict
 
     @staticmethod
-    def _dtype_string():
+    def dtype_string():
         return "dict"
 
     def _bind_read(self):
@@ -1601,6 +1596,8 @@ class NCDict(NCVariableTypeHandler):
         self.add_metadata('IODriver_Storage_Type', self.storage_type)
         self.add_metadata('IODriver_Appendable', 0)
         self._dump_metadata_buffer()
+        # Set the output mode by calling the variable
+        self._output_mode
 
     def _bind_append(self, data):
         # TODO: Determine how to do this eventually
@@ -1613,7 +1610,7 @@ class NCDict(NCVariableTypeHandler):
 
     def write(self, data):
         # Check type
-        if type(data) is not self._dtype:
+        if type(data) is not self.dtype:
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:
@@ -1749,5 +1746,5 @@ class NCDict(NCVariableTypeHandler):
         return
 
     @property
-    def _storage_type(self):
+    def storage_type(self):
         return 'groups'
