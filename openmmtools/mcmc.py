@@ -735,14 +735,11 @@ class LangevinDynamicsMove(MCMCMove):
         >>> # Create a test system
         >>> from openmmtools import testsystems
         >>> test = testsystems.IdealGas()
-        >>> # Add a MonteCarloBarostat.
-        >>> barostat = mm.MonteCarloBarostat(1*u.atmospheres, 298*u.kelvin, 25)
-        >>> force_index = test.system.addForce(barostat)
         >>> # Create a sampler state.
         >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
         >>> # Create a thermodynamic state.
         >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin, pressure=1.0*u.atmospheres)
+        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
         >>> # Create a LangevinDynamicsMove
         >>> move = LangevinDynamicsMove(nsteps=500, timestep=0.5*u.femtoseconds, collision_rate=20.0/u.picoseconds)
         >>> # Perform one update of the sampler state.
@@ -758,7 +755,7 @@ class LangevinDynamicsMove(MCMCMove):
         barostat = None
         if 'MonteCarloBarostat' in forces:
             barostat = forces['MonteCarloBarostat']
-            barostat.setTemperature(thermodynamic_state.temperature)
+            barostat.setDefaultTemperature(thermodynamic_state.temperature)
             parameter_name = barostat.Pressure()
             if thermodynamic_state.pressure == None:
                 raise Exception('MonteCarloBarostat is present but no pressure specified in thermodynamic state.')
@@ -1163,7 +1160,7 @@ class MonteCarloBarostatMove(MCMCMove):
 
     >>> # Create a test system
     >>> from openmmtools import testsystems
-    >>> test = testsystems.IdealGas()
+    >>> test = testsystems.LennardJonesFluid(nparticles=200)
     >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions, box_vectors=test.system.getDefaultPeriodicBoxVectors())
     >>> # Create a thermodynamic state.
@@ -1247,7 +1244,7 @@ class MonteCarloBarostatMove(MCMCMove):
         old_barostat_frequency = None
         if 'MonteCarloBarostat' in forces:
             force = forces['MonteCarloBarostat']
-            force.setTemperature(thermodynamic_state.temperature)
+            force.setDefaultTemperature(thermodynamic_state.temperature)
             old_barostat_frequency = force.getFrequency()
             force.setFrequency(1)
             parameter_name = force.Pressure()
