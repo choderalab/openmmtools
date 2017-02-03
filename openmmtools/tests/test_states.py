@@ -14,9 +14,9 @@ Test State classes in states.py.
 # =============================================================================
 
 import nose
-from openmmtools import testsystems
 
-from yank.states import *
+from openmmtools import testsystems
+from openmmtools.states import *
 
 
 # =============================================================================
