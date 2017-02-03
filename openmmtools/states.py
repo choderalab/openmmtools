@@ -20,7 +20,7 @@ import copy
 import numpy as np
 from simtk import openmm, unit
 
-from . import utils
+from openmmtools import utils
 
 
 # =============================================================================
@@ -738,6 +738,7 @@ class ThermodynamicState(object):
         >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond,
         ...                                        2.0*unit.femtosecond)
         >>> context = state.create_context(integrator)
+        >>> system = context.getSystem()
         >>> [force.__class__.__name__ for force in system.getForces()
         ...  if 'Thermostat' in force.__class__.__name__]
         []
