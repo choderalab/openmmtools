@@ -210,7 +210,7 @@ class TestContextCache(object):
         assert len(cache) == 6
         assert n_contexts == 8
 
-        cache = ContextCache(time_to_live=8)
+        cache = ContextCache(time_to_live=4)
         n_contexts = self.cache_incompatible_contexts(cache)
         assert len(cache) == 4
         assert n_contexts == 8
