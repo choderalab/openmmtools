@@ -14,7 +14,10 @@ Provide cache classes to handle creation of OpenMM Context objects.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import copy
 import collections
+
+from simtk import openmm
 
 from openmmtools import utils
 
@@ -103,12 +106,75 @@ class ContextCache(object):
     def __len__(self):
         return len(self._lru)
 
+    def get_context(self, thermodynamic_state, integrator, platform=None):
+        """Return a context in the given thermodynamic state.
+
+        Creates a new context if no compatible one has been cached.
+
+        """
+        context_id = self._generate_context_id(thermodynamic_state, integrator,
+                                               platform)
+        try:
+            context = self._lru[context_id]
+        except KeyError:
+            context = thermodynamic_state.create_context(integrator, platform)
+            self._lru[context_id] = context
+        context_integrator = context.getIntegrator()
+
+        # Update state of system and integrator of the cached context.
+        self._copy_integrator_state(integrator, context_integrator)
+        thermodynamic_state.apply_to_context(context)
+        return context, context_integrator
+
     # -------------------------------------------------------------------------
     # Internal usage
     # -------------------------------------------------------------------------
 
-    @staticmethod
-    def _generate_context_id(thermodynamic_state, integrator, platform):
+    # Each element is the name of the integrator attribute used before
+    # get/set, and its standard value used to check for compatibility.
+    _COMPATIBLE_INTEGRATOR_ATTRIBUTES = {
+        'StepSize': 0.001,
+        'ConstraintTolerance': 1e-05,
+        'Temperature': 273,
+        'Friction': 5,
+        'RandomNumberSeed': 0
+    }
+
+    @classmethod
+    def _copy_integrator_state(cls, copied_integrator, integrator):
+        """Copy the supported attributes of copied_integrator to integrator.
+
+        Simply using __getstate__ and __setstate__ doesn't work because
+        __setstate__ set also the bound Context.
+
+        """
+        assert type(integrator) == type(copied_integrator)
+        for attribute in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES:
+            try:
+                value = getattr(copied_integrator, 'get' + attribute)()
+            except AttributeError:
+                pass
+            else:
+                getattr(integrator, 'set' + attribute)(value)
+
+    @classmethod
+    def _standardize_integrator(cls, integrator):
+        """Return a standard copy of the integrator.
+
+        This is used to determine if the same context can be used with
+        different integrators that differ by only few supported parameters.
+
+        """
+        standard_integrator = copy.deepcopy(integrator)
+        for attribute, std_value in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
+            try:
+                getattr(standard_integrator, 'set' + attribute)(std_value)
+            except AttributeError:
+                pass
+        return standard_integrator
+
+    @classmethod
+    def _generate_context_id(cls, thermodynamic_state, integrator, platform):
         """Return the unique string key of the context for this state."""
         if platform is None:
             platform = utils.get_fastest_platform()
@@ -116,7 +182,8 @@ class ContextCache(object):
         # We take advantage of the cached _standard_system_hash property
         # to generate a compatible hash for the thermodynamic state.
         state_id = str(thermodynamic_state._standard_system_hash)
-        integrator_id = integrator.__class__.__name__
+        standard_integrator = cls._standardize_integrator(integrator)
+        integrator_id = openmm.XmlSerializer.serialize(standard_integrator)
         platform_id = platform.getName()
 
         return state_id + integrator_id + platform_id

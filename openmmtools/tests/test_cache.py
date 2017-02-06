@@ -15,7 +15,7 @@ Test Context cache classes in cache.py.
 
 import itertools
 
-from simtk import unit, openmm
+from simtk import unit
 
 from openmmtools import testsystems, states
 
@@ -125,34 +125,92 @@ class TestContextCache(object):
         cls.water_310k_1atm = states.ThermodynamicState(water_test.system, 310*unit.kelvin,
                                                         1*unit.atmosphere)
 
-        cls.verlet_2fm = openmm.VerletIntegrator(2.0*unit.femtosecond)
-        cls.verlet_3fm = openmm.VerletIntegrator(3.0*unit.femtosecond)
-        cls.langevin_2fm = openmm.LangevinIntegrator(310*unit.kelvin, 5.0/unit.picosecond,
-                                                     2.0*unit.femtosecond)
+        cls.verlet_2fs = openmm.VerletIntegrator(2.0*unit.femtosecond)
+        cls.verlet_3fs = openmm.VerletIntegrator(3.0*unit.femtosecond)
+        cls.langevin_2fs_310k = openmm.LangevinIntegrator(310*unit.kelvin, 5.0/unit.picosecond,
+                                                          2.0*unit.femtosecond)
+
+        cls.compatible_states = [cls.water_300k, cls.water_310k]
+        cls.compatible_integrators = [cls.verlet_2fs, cls.verlet_3fs]
+        cls.compatible_platforms = [None, utils.get_fastest_platform()]
+
+        cls.incompatible_states = [cls.water_310k, cls.water_310k_1atm]
+        cls.incompatible_integrators = [cls.verlet_2fs, cls.langevin_2fs_310k]
+        cls.incompatible_platforms = [openmm.Platform.getPlatformByName(name)
+                                      for name in ('Reference', 'CPU')]
+
+    @classmethod
+    def cache_incompatible_contexts(cls, cache):
+        """Return the number of contexts created."""
+        context_ids = set()
+        for state, integrator, platform in itertools.product(cls.incompatible_states,
+                                                             cls.incompatible_integrators,
+                                                             cls.incompatible_platforms):
+            # Avoid binding same integrator to multiple contexts
+            integrator = copy.deepcopy(integrator)
+            context, context_integrator = cache.get_context(state, integrator, platform)
+            context_ids.add(id(context))
+        return len(context_ids)
+
+    def test_copy_integrator_state(self):
+        """ContextCache._copy_integrator_state correctly copies state."""
+        langevin1 = copy.deepcopy(self.langevin_2fs_310k)
+        langevin2 = openmm.LangevinIntegrator(300*unit.kelvin, 8.0/unit.picosecond,
+                                              3.0*unit.femtosecond)
+        assert langevin1.__getstate__() != langevin2.__getstate__()
+        ContextCache._copy_integrator_state(langevin1, langevin2)
+        assert langevin1.__getstate__() == langevin2.__getstate__()
 
     def test_generate_compatible_context_key(self):
         """Context._generate_context_id creates same id for compatible contexts."""
-        compatible_states = [self.water_300k, self.water_310k]
-        compatible_integrators = [self.verlet_2fm, self.verlet_3fm]
-        compatible_platforms = [None, utils.get_fastest_platform()]
-
-        all_keys = set()
-        for state, integrator, platform in itertools.product(compatible_states,
-                                                             compatible_integrators,
-                                                             compatible_platforms):
-            all_keys.add(ContextCache._generate_context_id(state, integrator, platform))
-        assert len(all_keys) == 1
+        all_ids = set()
+        for state, integrator, platform in itertools.product(self.compatible_states,
+                                                             self.compatible_integrators,
+                                                             self.compatible_platforms):
+            all_ids.add(ContextCache._generate_context_id(state, integrator, platform))
+        assert len(all_ids) == 1
 
     def test_generate_incompatible_context_key(self):
         """Context._generate_context_id creates different ids for incompatible contexts."""
-        incompatible_states = [self.water_310k, self.water_310k_1atm]
-        incompatible_integrators = [self.verlet_2fm, self.langevin_2fm]
-        incompatible_platforms = [openmm.Platform.getPlatform(i)
-                                  for i in range(openmm.Platform.getNumPlatforms())]
+        all_ids = set()
+        for state, integrator, platform in itertools.product(self.incompatible_states,
+                                                             self.incompatible_integrators,
+                                                             self.incompatible_platforms):
+            all_ids.add(ContextCache._generate_context_id(state, integrator, platform))
+        assert len(all_ids) == 8
 
-        all_keys = set()
-        for state, integrator, platform in itertools.product(incompatible_states,
-                                                             incompatible_integrators,
-                                                             incompatible_platforms):
-            all_keys.add(ContextCache._generate_context_id(state, integrator, platform))
-        assert len(all_keys) == 4 * len(incompatible_platforms)
+    def test_get_compatible_context(self):
+        """ContextCache.get_context method do not recreate a compatible context."""
+        cache = ContextCache()
+        context_ids = set()
+        for state, integrator, platform in itertools.product(self.compatible_states,
+                                                             self.compatible_integrators,
+                                                             self.compatible_platforms):
+            # Avoid binding same integrator to multiple contexts
+            integrator = copy.deepcopy(integrator)
+            context, context_integrator = cache.get_context(state, integrator, platform)
+            context_ids.add(id(context))
+            assert integrator.__getstate__() == context_integrator.__getstate__()
+            assert integrator.__getstate__() == context.getIntegrator().__getstate__()
+            assert context.getSystem().__getstate__() == state.system.__getstate__()
+        assert len(cache) == 1
+        assert len(context_ids) == 1
+
+    def test_get_incompatible_context(self):
+        """ContextCache.get_context method create handles incompatible contexts."""
+        cache = ContextCache()
+        n_contexts = self.cache_incompatible_contexts(cache)
+        assert len(cache) == 8
+        assert n_contexts == 8
+
+    def test_cache_capacity_ttl(self):
+        """Check that the cache capacity and time_to_live work as expected."""
+        cache = ContextCache(capacity=6)
+        n_contexts = self.cache_incompatible_contexts(cache)
+        assert len(cache) == 6
+        assert n_contexts == 8
+
+        cache = ContextCache(time_to_live=8)
+        n_contexts = self.cache_incompatible_contexts(cache)
+        assert len(cache) == 4
+        assert n_contexts == 8
