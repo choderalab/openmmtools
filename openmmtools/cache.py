@@ -24,7 +24,7 @@ import collections
 class LRUCache(object):
     """A simple LRU cache."""
 
-    def __init__(self, capacity, time_to_live=None):
+    def __init__(self, capacity=None, time_to_live=None):
         self._data = collections.OrderedDict()
         self._capacity = capacity
         self._ttl = time_to_live
@@ -53,7 +53,7 @@ class LRUCache(object):
             self._data.pop(key)
         except KeyError:
             # Remove first item if we hit maximum capacity.
-            if len(self._data) >= self._capacity:
+            if self._capacity is not None and len(self._data) >= self._capacity:
                 self._data.popitem(last=False)
 
         # Determine expiration and clean up expired.

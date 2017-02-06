@@ -41,6 +41,12 @@ def test_lru_cache_maximum_capacity():
     assert len(cache) == 2
     assert 'first' not in cache
 
+    # Test infinite capacity
+    cache = LRUCache()
+    for i in range(100):
+        cache[str(i)] = i
+    assert len(cache) == 100
+
 
 def test_lru_cache_eliminate_least_recently_used():
     """LRUCache deletes LRU element when size exceeds capacity."""
