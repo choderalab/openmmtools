@@ -13,6 +13,12 @@ Test Context cache classes in cache.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import itertools
+
+from simtk import unit, openmm
+
+from openmmtools import testsystems, states
+
 from openmmtools.cache import *
 
 
@@ -101,3 +107,52 @@ def test_lru_cache_access_to_live():
     cache['first']
     assert 'second' in cache
     assert 'first' in cache
+
+
+# =============================================================================
+# TEST CONTEXT CACHE
+# =============================================================================
+
+class TestContextCache(object):
+    """Test ContextCache class."""
+
+    @classmethod
+    def setup_class(cls):
+        """Create the thermodynamic states used in the test suite."""
+        water_test = testsystems.WaterBox(box_edge=2.0*unit.nanometer)
+        cls.water_300k = states.ThermodynamicState(water_test.system, 300*unit.kelvin)
+        cls.water_310k = states.ThermodynamicState(water_test.system, 310*unit.kelvin)
+        cls.water_310k_1atm = states.ThermodynamicState(water_test.system, 310*unit.kelvin,
+                                                        1*unit.atmosphere)
+
+        cls.verlet_2fm = openmm.VerletIntegrator(2.0*unit.femtosecond)
+        cls.verlet_3fm = openmm.VerletIntegrator(3.0*unit.femtosecond)
+        cls.langevin_2fm = openmm.LangevinIntegrator(310*unit.kelvin, 5.0/unit.picosecond,
+                                                     2.0*unit.femtosecond)
+
+    def test_generate_compatible_context_key(self):
+        """Context._generate_context_id creates same id for compatible contexts."""
+        compatible_states = [self.water_300k, self.water_310k]
+        compatible_integrators = [self.verlet_2fm, self.verlet_3fm]
+        compatible_platforms = [None, utils.get_fastest_platform()]
+
+        all_keys = set()
+        for state, integrator, platform in itertools.product(compatible_states,
+                                                             compatible_integrators,
+                                                             compatible_platforms):
+            all_keys.add(ContextCache._generate_context_id(state, integrator, platform))
+        assert len(all_keys) == 1
+
+    def test_generate_incompatible_context_key(self):
+        """Context._generate_context_id creates different ids for incompatible contexts."""
+        incompatible_states = [self.water_310k, self.water_310k_1atm]
+        incompatible_integrators = [self.verlet_2fm, self.langevin_2fm]
+        incompatible_platforms = [openmm.Platform.getPlatform(i)
+                                  for i in range(openmm.Platform.getNumPlatforms())]
+
+        all_keys = set()
+        for state, integrator, platform in itertools.product(incompatible_states,
+                                                             incompatible_integrators,
+                                                             incompatible_platforms):
+            all_keys.add(ContextCache._generate_context_id(state, integrator, platform))
+        assert len(all_keys) == 4 * len(incompatible_platforms)

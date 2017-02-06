@@ -962,7 +962,17 @@ class ThermodynamicState(object):
 
     @property
     def _standard_system_hash(self):
-        """Shortcut for _get_standard_system_hash(self._system)."""
+        """Shortcut for _get_standard_system_hash(self._system).
+
+        This property is marked for internal usage since we may change
+        this system in the future, but ContextCache makes use of this
+        property too.
+
+        See Also
+        --------
+        cache.ContextCache._generate_context_id
+
+        """
         if self._cached_standard_system_hash is None:
             self._cached_standard_system_hash = self._get_standard_system_hash(self._system)
         return self._cached_standard_system_hash

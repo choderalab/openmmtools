@@ -16,6 +16,8 @@ Provide cache classes to handle creation of OpenMM Context objects.
 
 import collections
 
+from openmmtools import utils
+
 
 # =============================================================================
 # GENERAL LRU CACHE
@@ -86,6 +88,38 @@ class LRUCache(object):
                 break
         for key in keys_to_remove:
             del self._data[key]
+
+
+# =============================================================================
+# GENERAL CONTEXT CACHE
+# =============================================================================
+
+class ContextCache(object):
+    """Cache the minimum amount of incompatible Contexts."""
+
+    def __init__(self, **kwargs):
+        self._lru = LRUCache(**kwargs)
+
+    def __len__(self):
+        return len(self._lru)
+
+    # -------------------------------------------------------------------------
+    # Internal usage
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _generate_context_id(thermodynamic_state, integrator, platform):
+        """Return the unique string key of the context for this state."""
+        if platform is None:
+            platform = utils.get_fastest_platform()
+
+        # We take advantage of the cached _standard_system_hash property
+        # to generate a compatible hash for the thermodynamic state.
+        state_id = str(thermodynamic_state._standard_system_hash)
+        integrator_id = integrator.__class__.__name__
+        platform_id = platform.getName()
+
+        return state_id + integrator_id + platform_id
 
 
 # =============================================================================
