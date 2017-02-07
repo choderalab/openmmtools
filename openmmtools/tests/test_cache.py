@@ -205,12 +205,12 @@ class TestContextCache(object):
 
     def test_cache_capacity_ttl(self):
         """Check that the cache capacity and time_to_live work as expected."""
-        cache = ContextCache(capacity=6)
+        cache = ContextCache(capacity=7)
         n_contexts = self.cache_incompatible_contexts(cache)
-        assert len(cache) == 6
+        assert len(cache) == 7
         assert n_contexts == 8
 
-        cache = ContextCache(time_to_live=4)
+        cache = ContextCache(time_to_live=7)
         n_contexts = self.cache_incompatible_contexts(cache)
-        assert len(cache) == 4
+        assert len(cache) == 7
         assert n_contexts == 8
