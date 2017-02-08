@@ -97,7 +97,7 @@ logger = logging.getLogger(__name__)
 # MODULE CONSTANTS
 # =============================================================================
 
-_RANDOM_SEED_MAX = np.iinfo(np.int32).max # maximum random number seed value
+_RANDOM_SEED_MAX = np.iinfo(np.int32).max  # maximum random number seed value
 
 
 # =============================================================================
@@ -581,6 +581,58 @@ class MCMCSampler(object):
 
         # Return the updated sampler state.
         return sampler_state
+
+    def minimize(self, tolerance=None, max_iterations=None, platform=None):
+        """
+        Minimize the current configuration.
+
+        Parameters
+        ----------
+        tolerance : simtk.unit.Quantity compatible with kilocalories_per_mole/anstroms, optional, default = 1*kilocalories_per_mole/anstrom
+           Tolerance to use for minimization termination criterion.
+
+        max_iterations : int, optional, default = 100
+           Maximum number of iterations to use for minimization.
+
+        platform : simtk.openmm.Platform, optional
+           Platform to use for minimization.
+
+        Examples
+        --------
+
+        >>> # Create a test system
+        >>> from openmmtools import testsystems
+        >>> test = testsystems.AlanineDipeptideVacuum()
+        >>> # Create a sampler state.
+        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+        >>> # Minimize
+        >>> sampler_state.minimize()
+
+        """
+        timer = Timer()
+
+        if tolerance is None:
+            tolerance = 1.0 * unit.kilocalories_per_mole / unit.angstroms
+
+        if max_iterations is None:
+            max_iterations = 100
+
+        # Use LocalEnergyMinimizer
+        timer.start("Context creation")
+        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        context = self.thermodynamic_state.create_context(integrator=integrator,
+                                                          platform=platform)
+        logger.debug("LocalEnergyMinimizer: platform is %s" % context.getPlatform().getName())
+        logger.debug("Minimizing with tolerance %s and %d max. iterations." % (tolerance, max_iterations))
+        timer.stop("Context creation")
+        timer.start("LocalEnergyMinimizer minimize")
+        openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
+        timer.stop("LocalEnergyMinimizer minimize")
+
+        # Retrieve data.
+        self.sampler_state.update_from_context(context)
+
+        timer.report_timing()
 
     def update_thermodynamic_state(self, thermodynamic_state):
         """
