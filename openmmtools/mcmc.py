@@ -1,6 +1,8 @@
-#=============================================================================================
+#!/usr/bin/env python
+
+# =============================================================================
 # MODULE DOCSTRING
-#=============================================================================================
+# =============================================================================
 
 """
 Markov chain Monte Carlo simulation framework.
@@ -71,18 +73,15 @@ TODO
 
 """
 
-#=============================================================================================
+# =============================================================================
 # GLOBAL IMPORTS
-#=============================================================================================
+# =============================================================================
 
 import copy
-import time
 
 import numpy as np
 
-import simtk
-import simtk.openmm as mm
-import simtk.unit as u
+from simtk import openmm, unit
 
 from openmmtools import integrators
 from openmmmcmc import thermodynamics
@@ -93,20 +92,22 @@ from abc import abstractmethod
 import logging
 logger = logging.getLogger(__name__)
 
-#=============================================================================================
+
+# =============================================================================
 # MODULE CONSTANTS
-#=============================================================================================
+# =============================================================================
 
 _RANDOM_SEED_MAX = np.iinfo(np.int32).max # maximum random number seed value
 
-#=============================================================================================
+
+# =============================================================================
 # MCMC sampler state
-#=============================================================================================
+# =============================================================================
 
 class SamplerState(object):
     """
-    Sampler state for MCMC move representing everything that may be allowed to change during
-    the simulation.
+    Sampler state for MCMC move representing everything that may be allowed to
+    change during the simulation.
 
     Parameters
     ----------
@@ -306,13 +307,13 @@ class SamplerState(object):
 
         # Use a Verlet integrator if none is specified.
         if integrator is None:
-            integrator = mm.VerletIntegrator(1.0 * u.femtoseconds)
+            integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
 
         # Create a Context.
         if platform:
-            context = mm.Context(self.system, integrator, platform)
+            context = openmm.Context(self.system, integrator, platform)
         else:
-            context = mm.Context(self.system, integrator)
+            context = openmm.Context(self.system, integrator)
 
         # Set box vectors, if specified.
         if (self.box_vectors is not None):
@@ -362,7 +363,7 @@ class SamplerState(object):
         timer = Timer()
 
         if (tolerance is None):
-            tolerance = 1.0 * u.kilocalories_per_mole / u.angstroms
+            tolerance = 1.0 * unit.kilocalories_per_mole / u.angstroms
 
         if (maxIterations is None):
             maxIterations = 100
@@ -398,7 +399,7 @@ class SamplerState(object):
 
         Currently checks only the positions.
         """
-        x = self.positions / u.nanometers
+        x = self.positions / unit.nanometers
 
         if np.any(np.isnan(x)):
             return True
@@ -406,9 +407,9 @@ class SamplerState(object):
             return False
 
 
-#=============================================================================================
+# =============================================================================
 # Monte Carlo Move abstract base class
-#=============================================================================================
+# =============================================================================
 
 class MCMCMove(object):
     """
@@ -441,9 +442,10 @@ class MCMCMove(object):
         """
         pass
 
-#=============================================================================================
+
+# =============================================================================
 # Markov chain Monte Carlo sampler
-#=============================================================================================
+# =============================================================================
 
 class MCMCSampler(object):
     """
@@ -568,7 +570,7 @@ class MCMCSampler(object):
             # Random moves.
             moves = list(self.move_set)
             weights = np.array([self.move_set[move] for move in moves])
-            weights /= weights.sum() # normalize
+            weights /= weights.sum()  # normalize
             move_sequence = np.random.choice(moves, size=niterations, p=weights)
 
         sampler_state.system = self.thermodynamic_state.system  # HACK!
@@ -618,9 +620,10 @@ class MCMCSampler(object):
         # Store thermodynamic state.
         self.thermodynamic_state = thermodynamic_state
 
-#=============================================================================================
+
+# =============================================================================
 # Langevin dynamics move
-#=============================================================================================
+# =============================================================================
 
 class LangevinDynamicsMove(MCMCMove):
     """
@@ -656,7 +659,8 @@ class LangevinDynamicsMove(MCMCMove):
 
     """
 
-    def __init__(self, timestep=1.0*simtk.unit.femtosecond, collision_rate=10.0/simtk.unit.picoseconds, nsteps=1000, reassign_velocities=False):
+    def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
+                 nsteps=1000, reassign_velocities=False):
         """
         Parameters
         ----------
@@ -751,17 +755,18 @@ class LangevinDynamicsMove(MCMCMove):
 
         # Check if the system contains a barostat.
         system = sampler_state.system
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index)
+                  for index in range(system.getNumForces())}
         barostat = None
         if 'MonteCarloBarostat' in forces:
             barostat = forces['MonteCarloBarostat']
             barostat.setDefaultTemperature(thermodynamic_state.temperature)
             parameter_name = barostat.Pressure()
-            if thermodynamic_state.pressure == None:
+            if thermodynamic_state.pressure is None:
                 raise Exception('MonteCarloBarostat is present but no pressure specified in thermodynamic state.')
 
         # Create integrator.
-        integrator = mm.LangevinIntegrator(thermodynamic_state.temperature, self.collision_rate, self.timestep)
+        integrator = openmm.LangevinIntegrator(thermodynamic_state.temperature, self.collision_rate, self.timestep)
 
         # Random number seed.
         seed = np.random.randint(_RANDOM_SEED_MAX)
@@ -775,7 +780,8 @@ class LangevinDynamicsMove(MCMCMove):
 
         # Set pressure, if barostat is included.
         if barostat is not None:
-            context.setParameter(parameter_name, thermodynamic_state.pressure.value_in_unit_system(u.md_unit_system))
+            context.setParameter(parameter_name,
+                                 thermodynamic_state.pressure.value_in_unit_system(unit.md_unit_system))
 
         if self.reassign_velocities:
             # Assign Maxwell-Boltzmann velocities.
@@ -798,9 +804,10 @@ class LangevinDynamicsMove(MCMCMove):
 
         return updated_sampler_state
 
-#=============================================================================================
-# Genaralized Hybrid Monte Carlo (GHMC, a form of Metropolized Langevin dynamics) move
-#=============================================================================================
+
+# =============================================================================
+# Genaralized Hybrid Monte Carlo (a form of Metropolized Langevin dynamics)
+# =============================================================================
 
 class GHMCMove(MCMCMove):
     """
@@ -834,7 +841,8 @@ class GHMCMove(MCMCMove):
 
     """
 
-    def __init__(self, timestep=1.0*simtk.unit.femtosecond, collision_rate=20.0/simtk.unit.picoseconds, nsteps=1000):
+    def __init__(self, timestep=1.0*unit.femtosecond,
+                 collision_rate=20.0/unit.picoseconds, nsteps=1000):
         """
         Parameters
         ----------
@@ -896,8 +904,8 @@ class GHMCMove(MCMCMove):
 
         """
 
-        self.naccepted = 0 # number of accepted steps
-        self.nattempted = 0 # number of attempted steps
+        self.naccepted = 0  # number of accepted steps
+        self.nattempted = 0  # number of attempted steps
 
         return
 
@@ -935,8 +943,7 @@ class GHMCMove(MCMCMove):
         >>> [naccepted, nattempted, fraction_accepted] = move.get_statistics()
 
         """
-        return (self.naccepted, self.nattempted, float(self.naccepted) / float(self.nattempted))
-
+        return self.naccepted, self.nattempted, float(self.naccepted) / float(self.nattempted)
 
     def apply(self, thermodynamic_state, sampler_state, platform=None):
         """
@@ -977,7 +984,8 @@ class GHMCMove(MCMCMove):
         timer = Timer()
 
         # Create integrator.
-        integrator = integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature, collision_rate=self.collision_rate, timestep=self.timestep)
+        integrator = integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature,
+                                                collision_rate=self.collision_rate, timestep=self.timestep)
 
         # Random number seed.
         seed = np.random.randint(_RANDOM_SEED_MAX)
@@ -989,9 +997,9 @@ class GHMCMove(MCMCMove):
         timer.stop("Context Creation")
 
         # TODO: Enforce constraints?
-        #tol = 1.0e-8
-        #context.applyConstraints(tol)
-        #context.applyVelocityConstraints(tol)
+        # tol = 1.0e-8
+        # context.applyConstraints(tol)
+        # context.applyVelocityConstraints(tol)
 
         # Run dynamics.
         timer.start("step()")
@@ -1004,14 +1012,12 @@ class GHMCMove(MCMCMove):
         timer.start("update_sampler_state")
 
         # Accumulate acceptance statistics.
-        ghmc_global_variables = { integrator.getGlobalVariableName(index) : index for index in range(integrator.getNumGlobalVariables()) }
+        ghmc_global_variables = {integrator.getGlobalVariableName(index): index
+                                 for index in range(integrator.getNumGlobalVariables())}
         naccepted = integrator.getGlobalVariable(ghmc_global_variables['naccept'])
         nattempted = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
         self.naccepted += naccepted
         self.nattempted += nattempted
-
-        # DEBUG.
-        #print "  GHMC accepted %d / %d (%.1f%%)" % (naccepted, nattempted, float(naccepted) / float(nattempted) * 100.0)
 
         # Clean up.
         del context
@@ -1020,9 +1026,10 @@ class GHMCMove(MCMCMove):
 
         return updated_sampler_state
 
-#=============================================================================================
+
+# =============================================================================
 # Hybrid Monte Carlo move
-#=============================================================================================
+# =============================================================================
 
 class HMCMove(MCMCMove):
     """
@@ -1049,7 +1056,7 @@ class HMCMove(MCMCMove):
 
     """
 
-    def __init__(self, timestep=1.0*simtk.unit.femtosecond, nsteps=1000):
+    def __init__(self, timestep=1.0*unit.femtosecond, nsteps=1000):
         """
         Parameters
         ----------
@@ -1115,7 +1122,8 @@ class HMCMove(MCMCMove):
         timer = Timer()
 
         # Create integrator.
-        integrator = integrators.HMCIntegrator(temperature=thermodynamic_state.temperature, timestep=self.timestep, nsteps=self.nsteps)
+        integrator = integrators.HMCIntegrator(temperature=thermodynamic_state.temperature,
+                                               timestep=self.timestep, nsteps=self.nsteps)
 
         # Random number seed.
         seed = np.random.randint(_RANDOM_SEED_MAX)
@@ -1127,7 +1135,8 @@ class HMCMove(MCMCMove):
         timer.stop("Context Creation")
 
         # Run dynamics.
-        # Note that ONE step of this integrator is equal to self.nsteps of velocity Verlet dynamics followed by Metropolis accept/reject.
+        # Note that ONE step of this integrator is equal to self.nsteps
+        # of velocity Verlet dynamics followed by Metropolis accept/reject.
         timer.start("HMC integration")
         integrator.step(1)
         timer.stop("HMC integration")
@@ -1145,9 +1154,10 @@ class HMCMove(MCMCMove):
         # Return updated sampler state.
         return updated_sampler_state
 
-#=============================================================================================
+
+# =============================================================================
 # Monte Carlo barostat move
-#=============================================================================================
+# =============================================================================
 
 class MonteCarloBarostatMove(MCMCMove):
     """
@@ -1240,7 +1250,8 @@ class MonteCarloBarostatMove(MCMCMove):
 
         # Make sure system contains a barostat.
         system = sampler_state.system
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index)
+                  for index in range(system.getNumForces())}
         old_barostat_frequency = None
         if 'MonteCarloBarostat' in forces:
             force = forces['MonteCarloBarostat']
@@ -1250,7 +1261,7 @@ class MonteCarloBarostatMove(MCMCMove):
             parameter_name = force.Pressure()
         else:
             # Add MonteCarloBarostat.
-            force = mm.MonteCarloBarostat(thermodynamic_state.pressure, thermodynamic_state.temperature, 1)
+            force = openmm.MonteCarloBarostat(thermodynamic_state.pressure, thermodynamic_state.temperature, 1)
             system.addForce(force)
             parameter_name = force.Pressure()
 
@@ -1270,7 +1281,8 @@ class MonteCarloBarostatMove(MCMCMove):
         context.setParameter(parameter_name, thermodynamic_state.pressure)
 
         # Run update.
-        # Note that ONE step of this integrator is equal to self.nsteps of velocity Verlet dynamics followed by Metropolis accept/reject.
+        # Note that ONE step of this integrator is equal to self.nsteps
+        # of velocity Verlet dynamics followed by Metropolis accept/reject.
         timer.start("step(1)")
         integrator.step(self.nattempts)
         timer.stop("step(1)")
@@ -1279,9 +1291,6 @@ class MonteCarloBarostatMove(MCMCMove):
         timer.start("update_sampler_state")
         updated_sampler_state = SamplerState.createFromContext(context)
         timer.stop("update_sampler_state")
-
-        # DEBUG
-        #print thermodynamics.volume(updated_sampler_state.box_vectors)
 
         # Clean up.
         del context
@@ -1295,9 +1304,10 @@ class MonteCarloBarostatMove(MCMCMove):
         # Return updated sampler state.
         return updated_sampler_state
 
-#=============================================================================================
+
+# =============================================================================
 # MAIN AND TESTS
-#=============================================================================================
+# =============================================================================
 
 if __name__ == "__main__":
     import doctest
