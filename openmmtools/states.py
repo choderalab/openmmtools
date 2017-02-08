@@ -1540,6 +1540,21 @@ class SamplerState(object):
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
 
+    def has_nan(self):
+        """Check that energies and positions are finite.
+
+        Returns
+        -------
+        True if the potential energy or any of the generalized coordinates
+        are nan.
+
+        """
+        if self.potential_energy is not None and np.isnan(self.potential_energy):
+            return True
+        if np.any(np.isnan(self._positions_in_md_units)):
+            return True
+        return False
+
     def __getitem__(self, item):
         sampler_state = SamplerState([])
         if isinstance(item, slice):
