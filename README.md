@@ -35,6 +35,11 @@ This is installed onto the command line when the repository is installed.
 
 You can use `openmmtools.distributed` to run various OpenMM tasks in a distributed manner using [`celery`](http://www.celeryproject.org/).
 
+To run, first start one or more workers:
+```bash
+$ celery -A openmmtools.distributed worker -l info
+```
+Then 
 ```python
 from simtk import openmm, unit
 from openmmtools import testsystems, distributed
