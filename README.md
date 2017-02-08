@@ -22,6 +22,19 @@ This repository contains a number of additional integrators for OpenMM in `openm
 
 The `openmmtools.testsystems` module contains a large suite of test systems---including many with simple exactly-computable properties---that can be used to test molecular simulation algorithms
 
+## States
+
+The module `openmmtools.states` contains classes to maintain a consistent state of the simulation.
+- `ThermodynamicState`: Represent and manipulate the thermodynamic state of OpenMM `System`s and `Context`s.
+- `SamplerState`: Represent and cache the state of the simulation that changes when the `System` is integrated.
+- `CompoundThermodynamicState`: Extend the `ThermodynamicState` to handle parameters other than temperature and pressure through the implementations of the `IComposableState` abstract class.
+
+## Cache
+
+The module `openmmtools.cache` implements a shared LRU cache for `Context` objects that tries to minimize the number of `Context` in memory at the same time.
+- `LRUCache`: A simple LRU cache with a dictionary-like interface. It supports a maximum capacity and expiration.
+- `ContextCache`: A LRU cache for OpenMM `Context` objects.
+
 ## OpenMM testing scripts
 
 `scripts/` contains a script that may be useful in testing your OpenMM installation is installed:

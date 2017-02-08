@@ -16,6 +16,29 @@ General utility functions for the repo.
 
 import abc
 
+from simtk import openmm
+
+
+# =============================================================================
+# OPENMM PLATFORM UTILITIES
+# =============================================================================
+
+def get_fastest_platform():
+    """Return the fastest available platform.
+
+    This relies on the hardcoded speed values in Platform.getSpeed().
+
+    Returns
+    -------
+    platform : simtk.openmm.Platform
+       The fastest available platform.
+
+    """
+    platforms = [openmm.Platform.getPlatform(i)
+                 for i in range(openmm.Platform.getNumPlatforms())]
+    fastest_platform = max(platforms, key=lambda x: x.getSpeed())
+    return fastest_platform
+
 
 # =============================================================================
 # METACLASS UTILITIES
