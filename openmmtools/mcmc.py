@@ -121,9 +121,11 @@ class MCMCMove(SubhookedABCMeta):
         Parameters
         ----------
         thermodynamic_state : states.ThermodynamicState
-           The initial thermodynamic state before applying the move.
+           The initial thermodynamic state before applying the move. This
+           may be modified depending on the implementation.
         sampler_state : states.SamplerState
-           The initial sampler state before applying the move.
+           The initial sampler state before applying the move. This may
+           be modified depending on the implementation.
 
         """
         pass
@@ -360,151 +362,150 @@ class MCMCSampler(object):
 
 
 # =============================================================================
-# Langevin dynamics move
+# LANGEVIN DYNAMICS MOVE
 # =============================================================================
 
-class LangevinDynamicsMove(MCMCMove):
-    """
-    Langevin dynamics segment as a (pseudo) Monte Carlo move.
+class LangevinDynamicsMove(object):
+    """Langevin dynamics segment as a (pseudo) Monte Carlo move.
 
-    This move assigns a velocity from the Maxwell-Boltzmann distribution and executes a number
-    of Maxwell-Boltzmann steps to propagate dynamics.  This is not a *true* Monte Carlo move,
-    in that the generation of the correct distribution is only exact in the limit of infinitely
-    small timestep; in other words, the discretization error is assumed to be negligible. Use
-    HybridMonteCarloMove instead to ensure the exact distribution is generated.
+    This move assigns a velocity from the Maxwell-Boltzmann distribution
+    and executes a number of Maxwell-Boltzmann steps to propagate dynamics.
+    This is not a *true* Monte Carlo move, in that the generation of the
+    correct distribution is only exact in the limit of infinitely small
+    timestep; in other words, the discretization error is assumed to be
+    negligible. Use HybridMonteCarloMove instead to ensure the exact
+    distribution is generated.
 
-    Warning
-    -------
-    No Metropolization is used to ensure the correct phase space distribution is sampled.
-    This means that timestep-dependent errors will remain uncorrected, and are amplified with larger timesteps.
-    Use this move at your own risk!
+    .. warning::
+        No Metropolization is used to ensure the correct phase space
+        distribution is sampled. This means that timestep-dependent errors
+        will remain uncorrected, and are amplified with larger timesteps.
+        Use this move at your own risk!
+
+    Parameters
+    ----------
+    timestep : simtk.unit.Quantity, optional
+        The timestep to use for Langevin integration
+        (time units, default is 1*simtk.unit.femtosecond).
+    collision_rate : simtk.unit.Quantity, optional
+        The collision rate with fictitious bath particles
+        (1/time units, default is 10/simtk.unit.picoseconds).
+    n_steps : int, optional
+        The number of integration timesteps to take each time the
+        move is applied (default is 1000).
+    reassign_velocities : bool, optional
+        If True, the velocities will be reassigned from the Maxwell-Boltzmann
+        distribution at the beginning of the move (default is False).
+    platform : simtk.openmm.Platform, optional
+        Platform to use for Context creation. If None, OpenMM tries to
+        automatically select the fastest available (default is None).
+
+    Attributes
+    ----------
+    timestep : simtk.unit.Quantity, optional
+        The timestep to use for Langevin integration
+        (time units, default is 1*simtk.unit.femtosecond).
+    collision_rate : simtk.unit.Quantity, optional
+        The collision rate with fictitious bath particles
+        (1/time units, default is 10/simtk.unit.picoseconds).
+    n_steps : int, optional
+        The number of integration timesteps to take each time the
+        move is applied (default is 1000).
+    reassign_velocities : bool, optional
+        If True, the velocities will be reassigned from the Maxwell-Boltzmann
+        distribution at the beginning of the move (default is False).
+    platform : simtk.openmm.Platform, optional
+        Platform to use for Context creation. If None, OpenMM tries to
+        automatically select the fastest available (default is None).
 
     Examples
     --------
+    First we need to create the thermodynamic state and the sampler
+    state to propagate.
 
-    >>> # Create a test system
     >>> from openmmtools import testsystems
+    >>> from openmmtools.states import SamplerState, ThermodynamicState
     >>> test = testsystems.AlanineDipeptideVacuum()
-    >>> # Create a sampler state.
-    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-    >>> # Create a thermodynamic state.
-    >>> from openmmmcmc.thermodynamics import ThermodynamicState
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-    >>> # Create a LangevinDynamicsMove
-    >>> move = LangevinDynamicsMove(nsteps=10)
-    >>> # Perform one update of the sampler state.
-    >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin)
+
+    Create a Langevin move with default parameters
+
+    >>> move = LangevinDynamicsMove()
+
+    or create a Langevin move with specified parameters.
+
+    >>> from simtk import unit
+    >>> move = LangevinDynamicsMove(timestep=0.5*unit.femtoseconds,
+    ...                             collision_rate=20.0/unit.picoseconds, n_steps=100)
+
+    Perform one update of the sampler state.
+
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
 
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
-                 nsteps=1000, reassign_velocities=False):
-        """
-        Parameters
-        ----------
-        timestep : simtk.unit.Quantity compatible with femtoseconds, optional, default = 1*simtk.unit.femtoseconds
-            The timestep to use for Langevin integration.
-        collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, optional, default = 10/simtk.unit.picoseconds
-            The collision rate with fictitious bath particles.
-        nsteps : int, optional, default = 1000
-            The number of integration timesteps to take each time the move is applied.
-        reassign_velocities : bool, optional, default = False
-            If True, the velocities will be reassigned from the Maxwell-Boltzmann distribution at the beginning of the move.
-
-        Note
-        ----
-        The temperature of the thermodynamic state is used in Langevin dynamics.
-        If a barostat is present, the temperature and pressure will be set to the thermodynamic state being simulated.
-
-        Examples
-        --------
-
-        Create a Langevin move with default parameters.
-
-        >>> move = LangevinDynamicsMove()
-
-        Create a Langevin move with specified parameters.
-
-        >>> move = LangevinDynamicsMove(timestep=0.5*u.femtoseconds, collision_rate=20.0/u.picoseconds, nsteps=100)
-
-        """
-
+                 n_steps=1000, reassign_velocities=False, platform=None):
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.nsteps = nsteps
+        self.n_steps = n_steps
         self.reassign_velocities = reassign_velocities
+        self.platform = platform
 
-        return
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply the Langevin dynamics MCMC move.
 
-    def apply(self, thermodynamic_state, sampler_state, platform=None):
-        """
-        Apply the Langevin dynamics MCMC move.
+        This modifies the given sampler_state. The temperature of the
+        thermodynamic state is used in Langevin dynamics.
 
         Parameters
         ----------
         thermodynamic_state : ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move
+           The thermodynamic state to use to propagate dynamics.
         sampler_state : SamplerState
-           The sampler state to apply the move to
-        platform : simtk.openmm.Platform, optional, default = None
-           If not None, the specified platform will be used.
-
-        Returns
-        -------
-        updated_sampler_state : SamplerState
-           The updated sampler state
+           The sampler state to apply the move to. This is modified.
 
         Examples
         --------
 
-        Alanine dipeptide in vacuum.
-
-        >>> # Create a test system
+        >>> from simtk import unit
         >>> from openmmtools import testsystems
+        >>> from openmmtools.states import ThermodynamicState, SamplerState
+
+        Apply Langevin dynamics move to an alanine dipeptide in vacuum.
+
         >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a sampler state.
         >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a LangevinDynamicsMove
-        >>> move = LangevinDynamicsMove(nsteps=10, timestep=0.5*u.femtoseconds, collision_rate=20.0/u.picoseconds)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+        >>> thermodynamic_state = ThermodynamicState(system=test.system,
+        ...                                          temperature=298*unit.kelvin)
+        >>> move = LangevinDynamicsMove(n_steps=10, timestep=0.5*unit.femtoseconds,
+        ...                             collision_rate=20.0/unit.picoseconds)
+        >>> move.apply(thermodynamic_state, sampler_state)
+        >>> np.allclose(sampler_state.positions, test.positions)
+        False
 
-        Ideal gas.
+        Apply Langevin dynamics move to an ideal gas.
 
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
         >>> test = testsystems.IdealGas()
-        >>> # Create a sampler state.
         >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a LangevinDynamicsMove
-        >>> move = LangevinDynamicsMove(nsteps=500, timestep=0.5*u.femtoseconds, collision_rate=20.0/u.picoseconds)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+        >>> thermodynamic_state = ThermodynamicState(system=test.system,
+        ...                                          temperature=298*unit.kelvin)
+        >>> move = LangevinDynamicsMove(n_steps=500, timestep=0.5*unit.femtoseconds,
+        ...                             collision_rate=20.0/unit.picoseconds)
+        >>> move.apply(thermodynamic_state, sampler_state)
+        >>> np.allclose(sampler_state.positions, test.positions)
+        False
 
         """
 
         timer = Timer()
 
-        # Check if the system contains a barostat.
-        system = sampler_state.system
-        forces = {system.getForce(index).__class__.__name__: system.getForce(index)
-                  for index in range(system.getNumForces())}
-        barostat = None
-        if 'MonteCarloBarostat' in forces:
-            barostat = forces['MonteCarloBarostat']
-            barostat.setDefaultTemperature(thermodynamic_state.temperature)
-            parameter_name = barostat.Pressure()
-            if thermodynamic_state.pressure is None:
-                raise Exception('MonteCarloBarostat is present but no pressure specified in thermodynamic state.')
-
         # Create integrator.
-        integrator = openmm.LangevinIntegrator(thermodynamic_state.temperature, self.collision_rate, self.timestep)
+        integrator = openmm.LangevinIntegrator(thermodynamic_state.temperature,
+                                               self.collision_rate, self.timestep)
 
         # Random number seed.
         seed = np.random.randint(_RANDOM_SEED_MAX)
@@ -512,14 +513,10 @@ class LangevinDynamicsMove(MCMCMove):
 
         # Create context.
         timer.start("Context Creation")
-        context = sampler_state.createContext(integrator, platform=platform)
+        context = thermodynamic_state.create_context(integrator, self.platform)
         timer.stop("Context Creation")
-        logger.debug("LangevinDynamicMove: Context created, platform is %s" % context.getPlatform().getName())
-
-        # Set pressure, if barostat is included.
-        if barostat is not None:
-            context.setParameter(parameter_name,
-                                 thermodynamic_state.pressure.value_in_unit_system(unit.md_unit_system))
+        logger.debug("LangevinDynamicMove: Context created, platform is {}".format(
+            context.getPlatform().getName()))
 
         if self.reassign_velocities:
             # Assign Maxwell-Boltzmann velocities.
@@ -527,20 +524,18 @@ class LangevinDynamicsMove(MCMCMove):
 
         # Run dynamics.
         timer.start("step()")
-        integrator.step(self.nsteps)
+        integrator.step(self.n_steps)
         timer.stop("step()")
 
         # Get updated sampler state.
         timer.start("update_sampler_state")
-        updated_sampler_state = SamplerState.createFromContext(context)
+        sampler_state.update_from_context(context)
         timer.start("update_sampler_state")
 
         # Clean up.
         del context
 
         timer.report_timing()
-
-        return updated_sampler_state
 
 
 # =============================================================================
