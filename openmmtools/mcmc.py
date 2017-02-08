@@ -397,32 +397,32 @@ class LangevinDynamicsMove(object):
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
     platform : simtk.openmm.Platform, optional
-        Platform to use for Context creation. If None, OpenMM tries to
-        automatically select the fastest available (default is None).
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available (default is None).
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity, optional
-        The timestep to use for Langevin integration
-        (time units, default is 1*simtk.unit.femtosecond).
-    collision_rate : simtk.unit.Quantity, optional
-        The collision rate with fictitious bath particles
-        (1/time units, default is 10/simtk.unit.picoseconds).
-    n_steps : int, optional
-        The number of integration timesteps to take each time the
-        move is applied (default is 1000).
-    reassign_velocities : bool, optional
+    timestep : simtk.unit.Quantity
+        The timestep to use for Langevin integration (time units).
+    collision_rate : simtk.unit.Quantity
+        The collision rate with fictitious bath particles (1/time units).
+    n_steps : int
+        The number of integration timesteps to take each time the move
+        is applied.
+    reassign_velocities : bool
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
-        distribution at the beginning of the move (default is False).
-    platform : simtk.openmm.Platform, optional
-        Platform to use for Context creation. If None, OpenMM tries to
-        automatically select the fastest available (default is None).
+        distribution at the beginning of the move.
+    platform : simtk.openmm.Platform
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available.
 
     Examples
     --------
     First we need to create the thermodynamic state and the sampler
-    state to propagate.
+    state to propagate. Here we create an alanine dipeptide system
+    in vacuum.
 
+    >>> from simtk import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import SamplerState, ThermodynamicState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -435,12 +435,22 @@ class LangevinDynamicsMove(object):
 
     or create a Langevin move with specified parameters.
 
-    >>> from simtk import unit
     >>> move = LangevinDynamicsMove(timestep=0.5*unit.femtoseconds,
-    ...                             collision_rate=20.0/unit.picoseconds, n_steps=100)
+    ...                             collision_rate=20.0/unit.picoseconds, n_steps=10)
 
-    Perform one update of the sampler state.
+    Perform one update of the sampler state. The sampler state is updated
+    with the new state.
 
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
+
+    The same move can be applied to a different state, here an ideal gas.
+
+    >>> test = testsystems.IdealGas()
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
     >>> move.apply(thermodynamic_state, sampler_state)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
@@ -467,37 +477,6 @@ class LangevinDynamicsMove(object):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : SamplerState
            The sampler state to apply the move to. This is modified.
-
-        Examples
-        --------
-
-        >>> from simtk import unit
-        >>> from openmmtools import testsystems
-        >>> from openmmtools.states import ThermodynamicState, SamplerState
-
-        Apply Langevin dynamics move to an alanine dipeptide in vacuum.
-
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> thermodynamic_state = ThermodynamicState(system=test.system,
-        ...                                          temperature=298*unit.kelvin)
-        >>> move = LangevinDynamicsMove(n_steps=10, timestep=0.5*unit.femtoseconds,
-        ...                             collision_rate=20.0/unit.picoseconds)
-        >>> move.apply(thermodynamic_state, sampler_state)
-        >>> np.allclose(sampler_state.positions, test.positions)
-        False
-
-        Apply Langevin dynamics move to an ideal gas.
-
-        >>> test = testsystems.IdealGas()
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> thermodynamic_state = ThermodynamicState(system=test.system,
-        ...                                          temperature=298*unit.kelvin)
-        >>> move = LangevinDynamicsMove(n_steps=500, timestep=0.5*unit.femtoseconds,
-        ...                             collision_rate=20.0/unit.picoseconds)
-        >>> move.apply(thermodynamic_state, sampler_state)
-        >>> np.allclose(sampler_state.positions, test.positions)
-        False
 
         """
 
@@ -539,148 +518,124 @@ class LangevinDynamicsMove(object):
 
 
 # =============================================================================
-# Genaralized Hybrid Monte Carlo (a form of Metropolized Langevin dynamics)
+# GENERALIZED HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class GHMCMove(MCMCMove):
-    """
-    Generalized hybrid Monte Carlo (GHMC) Markov chain Monte Carlo move
+class GHMCMove(object):
+    """Generalized hybrid Monte Carlo (GHMC) Markov chain Monte Carlo move.
 
-    This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized Langevin
-    dynamics, to propagate the system.
+    This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized
+    Langevin dynamics, to propagate the system.
+
+    Parameters
+    ----------
+    timestep : simtk.unit.Quantity, optional
+        The timestep to use for Langevin integration (time units, default
+        is 1*simtk.unit.femtoseconds).
+    collision_rate : simtk.unit.Quantity, optional
+        The collision rate with fictitious bath particles (1/time units,
+        default is 20/simtk.unit.picoseconds).
+    n_steps : int, optional
+        The number of integration timesteps to take each time the move
+        is applied (default is 1000).
+    platform : simtk.openmm.Platform, optional
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available (default is None).
+
+    Attributes
+    ----------
+    timestep : simtk.unit.Quantity
+        The timestep to use for Langevin integration (time units).
+    collision_rate : simtk.unit.Quantity
+        The collision rate with fictitious bath particles (1/time units).
+    n_steps : int
+        The number of integration timesteps to take each time the move
+        is applied.
+    platform : simtk.openmm.Platform
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available.
+    n_accepted : int
+        The number of accepted steps.
+    n_attempted : int
+        The number of attempted steps.
+    fraction_accepted
 
     References
     ----------
-    Lelievre T, Stoltz G, and Rousset M. Free Energy Computations: A Mathematical Perspective
-    http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
+    Lelievre T, Stoltz G, Rousset M. Free energy computations: A mathematical
+    perspective. World Scientific, 2010.
 
     Examples
     --------
+    First we need to create the thermodynamic state and the sampler
+    state to propagate. Here we create an alanine dipeptide system
+    in vacuum.
 
-    >>> # Create a test system
+    >>> from simtk import unit
     >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
-    >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-    >>> # Minimize.
-    >>> sampler_state.minimize()
-    >>> # Create a thermodynamic state.
-    >>> from openmmmcmc.thermodynamics import ThermodynamicState
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-    >>> # Create a GHMC move
-    >>> move = GHMCMove(nsteps=10)
-    >>> # Perform one update of the sampler state.
-    >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin)
+
+    Create a GHMC move with default parameters.
+
+    >>> move = GHMCMove()
+
+    or create a GHMC move with specified parameters.
+
+    >>> move = GHMCMove(timestep=0.5*unit.femtoseconds,
+    ...                 collision_rate=20.0/unit.picoseconds, n_steps=10)
+
+    Perform one update of the sampler state. The sampler state is updated
+    with the new state.
+
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
+
+    The same move can be applied to a different state, here an ideal gas.
+
+    >>> test = testsystems.IdealGas()
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
 
     """
 
-    def __init__(self, timestep=1.0*unit.femtosecond,
-                 collision_rate=20.0/unit.picoseconds, nsteps=1000):
-        """
-        Parameters
-        ----------
-        timestep : simtk.unit.Quantity compatible with femtoseconds, optional, default = 1*simtk.unit.femtoseconds
-            The timestep to use for Langevin integration.
-        collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, optional, default = 10/simtk.unit.picoseconds
-            The collision rate with fictitious bath particles.
-        nsteps : int, optional, default = 1000
-            The number of integration timesteps to take each time the move is applied.
-
-        Note
-        ----
-        The temperature of the thermodynamic state is used.
-
-        Examples
-        --------
-
-        Create a GHMC move with default parameters.
-
-        >>> move = GHMCMove()
-
-        Create a GHMC move with specified parameters.
-
-        >>> move = GHMCMove(timestep=0.5*u.femtoseconds, collision_rate=20.0/u.picoseconds, nsteps=100)
-
-        """
-
+    def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=20.0/unit.picoseconds,
+                 n_steps=1000, platform=None):
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.nsteps = nsteps
+        self.n_steps = n_steps
+        self.platform = platform
 
         self.reset_statistics()
 
-        return
-
     def reset_statistics(self):
-        """
-        Reset the internal statistics of number of accepted and attempted moves.
+        """Reset the internal statistics of number of accepted and attempted moves."""
+        self.n_accepted = 0  # number of accepted steps
+        self.n_attempted = 0  # number of attempted steps
 
-        Examples
-        --------
+    @property
+    def fraction_accepted(self):
+        """Ratio between accepted over attempted moves (read-only).
 
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a LangevinDynamicsMove
-        >>> move = GHMCMove(nsteps=10, timestep=1.0*u.femtoseconds, collision_rate=20.0/u.picoseconds)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
-
-        Reset statistics.
-
-        >>> move.reset_statistics()
+        If the number of attempted steps is 0, this is numpy.NaN.
 
         """
+        if self.n_attempted == 0:
+            return np.NaN
+        # TODO drop the casting when stop Python2 support
+        return float(self.n_accepted) / self.n_attempted
 
-        self.naccepted = 0  # number of accepted steps
-        self.nattempted = 0  # number of attempted steps
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply the GHMC MCMC move.
 
-        return
-
-    def get_statistics(self):
-        """
-        Return the current acceptance/rejection statistics of the sampler.
-
-        Returns
-        -------
-        naccepted : int
-           The number of accepted steps
-        nattempted : int
-           The number of attempted steps
-        faction_accepted : float
-           The fraction of steps accepted.
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a LangevinDynamicsMove
-        >>> move = GHMCMove(nsteps=10, timestep=1.0*u.femtoseconds, collision_rate=20.0/u.picoseconds)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
-
-        Get statistics.
-
-        >>> [naccepted, nattempted, fraction_accepted] = move.get_statistics()
-
-        """
-        return self.naccepted, self.nattempted, float(self.naccepted) / float(self.nattempted)
-
-    def apply(self, thermodynamic_state, sampler_state, platform=None):
-        """
-        Apply the GHMC MCMC move.
+        The temperature of the thermodynamic state is used.
 
         Parameters
         ----------
@@ -688,29 +643,6 @@ class GHMCMove(MCMCMove):
            The thermodynamic state to use when applying the MCMC move
         sampler_state : SamplerState
            The sampler state to apply the move to
-        platform : simtk.openmm.Platform, optional, default = None
-           If not None, the specified platform will be used.
-
-        Returns
-        -------
-        updated_sampler_state : SamplerState
-           The updated sampler state
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a LangevinDynamicsMove
-        >>> move = GHMCMove(nsteps=10, timestep=1.0*u.femtoseconds, collision_rate=20.0/u.picoseconds)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
 
         """
 
@@ -718,7 +650,8 @@ class GHMCMove(MCMCMove):
 
         # Create integrator.
         integrator = integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature,
-                                                collision_rate=self.collision_rate, timestep=self.timestep)
+                                                collision_rate=self.collision_rate,
+                                                timestep=self.timestep)
 
         # Random number seed.
         seed = np.random.randint(_RANDOM_SEED_MAX)
@@ -726,7 +659,7 @@ class GHMCMove(MCMCMove):
 
         # Create context.
         timer.start("Context Creation")
-        context = sampler_state.createContext(integrator, platform=platform)
+        context = thermodynamic_state.create_context(integrator, platform=self.platform)
         timer.stop("Context Creation")
 
         # TODO: Enforce constraints?
@@ -736,28 +669,26 @@ class GHMCMove(MCMCMove):
 
         # Run dynamics.
         timer.start("step()")
-        integrator.step(self.nsteps)
+        integrator.step(self.n_steps)
         timer.stop("step()")
 
         # Get updated sampler state.
         timer.start("update_sampler_state")
-        updated_sampler_state = SamplerState.createFromContext(context)
+        sampler_state.update_from_context(context)
         timer.start("update_sampler_state")
 
         # Accumulate acceptance statistics.
         ghmc_global_variables = {integrator.getGlobalVariableName(index): index
                                  for index in range(integrator.getNumGlobalVariables())}
-        naccepted = integrator.getGlobalVariable(ghmc_global_variables['naccept'])
-        nattempted = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
-        self.naccepted += naccepted
-        self.nattempted += nattempted
+        n_accepted = integrator.getGlobalVariable(ghmc_global_variables['naccept'])
+        n_attempted = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
+        self.n_accepted += n_accepted
+        self.n_attempted += n_attempted
 
         # Clean up.
         del context
 
         timer.report_timing()
-
-        return updated_sampler_state
 
 
 # =============================================================================
