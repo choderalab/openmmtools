@@ -120,10 +120,10 @@ class MCMCMove(SubhookedABCMeta):
 
         Parameters
         ----------
-        thermodynamic_state : states.ThermodynamicState
+        thermodynamic_state : openmmtools.states.ThermodynamicState
            The initial thermodynamic state before applying the move. This
            may be modified depending on the implementation.
-        sampler_state : states.SamplerState
+        sampler_state : openmmtools.states.SamplerState
            The initial sampler state before applying the move. This may
            be modified depending on the implementation.
 
@@ -473,9 +473,9 @@ class LangevinDynamicsMove(object):
 
         Parameters
         ----------
-        thermodynamic_state : ThermodynamicState
+        thermodynamic_state : openmmtools.states.ThermodynamicState
            The thermodynamic state to use to propagate dynamics.
-        sampler_state : SamplerState
+        sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
 
         """
@@ -635,14 +635,15 @@ class GHMCMove(object):
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the GHMC MCMC move.
 
-        The temperature of the thermodynamic state is used.
+        This modifies the given sampler_state. The temperature of the
+        thermodynamic state is used.
 
         Parameters
         ----------
-        thermodynamic_state : ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move
-        sampler_state : SamplerState
-           The sampler state to apply the move to
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use when applying the MCMC move.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
 
         """
 
@@ -695,99 +696,98 @@ class GHMCMove(object):
 # Hybrid Monte Carlo move
 # =============================================================================
 
-class HMCMove(MCMCMove):
-    """
-    Hybrid Monte Carlo dynamics.
+class HMCMove(object):
+    """Hybrid Monte Carlo dynamics.
 
-    This move assigns a velocity from the Maxwell-Boltzmann distribution and executes a number
-    of velocity Verlet steps to propagate dynamics.
+    This move assigns a velocity from the Maxwell-Boltzmann distribution
+    and executes a number of velocity Verlet steps to propagate dynamics.
+
+    Parameters
+    ----------
+    timestep : simtk.unit.Quantity, optional
+       The timestep to use for HMC dynamics, which uses velocity Verlet following
+       velocity randomization (time units, default is 1*simtk.unit.femtosecond)
+    n_steps : int, optional
+       The number of dynamics steps to take before Metropolis acceptance/rejection
+       (default is 1000).
+    platform : simtk.openmm.Platform, optional
+        Platform to use for Context creation. If None, OpenMM selects the fastest
+        available (default is None).
+
+    Attributes
+    ----------
+    timestep : simtk.unit.Quantity
+       The timestep to use for HMC dynamics, which uses velocity Verlet following
+       velocity randomization (time units).
+    n_steps : int
+       The number of dynamics steps to take before Metropolis acceptance/rejection.
+    platform : simtk.openmm.Platform
+        Platform to use for Context creation. If None, OpenMM selects the fastest
+        available.
 
     Examples
     --------
+    First we need to create the thermodynamic state and the sampler
+    state to propagate. Here we create an alanine dipeptide system
+    in vacuum.
 
-    >>> # Create a test system
+    >>> from simtk import unit
     >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
-    >>> # Create a sampler state.
     >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-    >>> # Create a thermodynamic state.
-    >>> from openmmmcmc.thermodynamics import ThermodynamicState
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-    >>> # Create an HMC move.
-    >>> move = HMCMove(nsteps=10)
-    >>> # Perform one update of the sampler state.
-    >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin)
+
+    Create a GHMC move with default parameters.
+
+    >>> move = HMCMove()
+
+    or create a GHMC move with specified parameters.
+
+    >>> move = HMCMove(timestep=0.5*unit.femtoseconds, nsteps=10)
+
+    Perform one update of the sampler state. The sampler state is updated
+    with the new state.
+
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
+
+    The same move can be applied to a different state, here an ideal gas.
+
+    >>> test = testsystems.IdealGas()
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
 
     """
 
-    def __init__(self, timestep=1.0*unit.femtosecond, nsteps=1000):
-        """
-        Parameters
-        ----------
-        timestep : simtk.unit.Quantity compatible with femtoseconds, optional, default = 1*femtosecond
-           The timestep to use for HMC dynamics (which uses velocity Verlet following velocity randomization)
-        nsteps : int, optional, default = 1000
-           The number of dynamics steps to take before Metropolis acceptance/rejection.
-
-        Examples
-        --------
-
-        Create an HMC move with default timestep and number of steps.
-
-        >>> move = HMCMove()
-
-        Create an HMC move with specified timestep and number of steps.
-
-        >>> move = HMCMove(timestep=0.5*u.femtoseconds, nsteps=500)
-
-        """
-
+    def __init__(self, timestep=1.0*unit.femtosecond, n_steps=1000, platform=None):
         self.timestep = timestep
-        self.nsteps = nsteps
+        self.n_steps = n_steps
+        self.platform = platform
 
-        return
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply the MCMC move.
 
-    def apply(self, thermodynamic_state, sampler_state, platform=None):
-        """
-        Apply the MCMC move.
+        This modifies the given sampler_state.
 
         Parameters
         ----------
-        thermodynamic_state : ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move
-        sampler_state : SamplerState
-           The sampler state to apply the move to
-        platform : simtk.openmm.Platform, optional, default = None
-           If not None, the specified platform will be used.
-
-        Returns
-        -------
-        updated_sampler_state : SamplerState
-           The updated sampler state
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create an HMC move.
-        >>> move = HMCMove(nsteps=10, timestep=0.5*u.femtoseconds)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use when applying the MCMC move.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
 
         """
-
         timer = Timer()
 
         # Create integrator.
         integrator = integrators.HMCIntegrator(temperature=thermodynamic_state.temperature,
-                                               timestep=self.timestep, nsteps=self.nsteps)
+                                               timestep=self.timestep, n_steps=self.n_steps)
 
         # Random number seed.
         seed = np.random.randint(_RANDOM_SEED_MAX)
@@ -795,11 +795,11 @@ class HMCMove(MCMCMove):
 
         # Create context.
         timer.start("Context Creation")
-        context = sampler_state.createContext(integrator, platform=platform)
+        context = thermodynamic_state.create_context(integrator, platform=self.platform)
         timer.stop("Context Creation")
 
         # Run dynamics.
-        # Note that ONE step of this integrator is equal to self.nsteps
+        # Note that ONE step of this integrator is equal to self.n_steps
         # of velocity Verlet dynamics followed by Metropolis accept/reject.
         timer.start("HMC integration")
         integrator.step(1)
@@ -807,16 +807,13 @@ class HMCMove(MCMCMove):
 
         # Get sampler state.
         timer.start("updated_sampler_state")
-        updated_sampler_state = SamplerState.createFromContext(context)
+        sampler_state.update_from_context(context)
         timer.stop("updated_sampler_state")
 
         # Clean up.
         del context
 
         timer.report_timing()
-
-        # Return updated sampler state.
-        return updated_sampler_state
 
 
 # =============================================================================
