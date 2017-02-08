@@ -17,6 +17,7 @@ script:
   - source activate test
   # Add org channel
   - conda config --add channels ${ORGNAME}
+  - conda config --add channels rdkit
   # Add omnia dev channels
   - conda config --add channels https://conda.anaconda.org/omnia/label/dev
   # Build the recipe
