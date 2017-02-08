@@ -78,18 +78,16 @@ TODO
 # =============================================================================
 
 import copy
+import logging
+from abc import abstractmethod
 
 import numpy as np
-
 from simtk import openmm, unit
 
 from openmmtools import integrators
-from openmmmcmc import thermodynamics
-from openmmmcmc.timing import Timer
+from openmmtools.utils import SubhookedABCMeta
+from openmmmcmc.timing import Timer  # TODO move this in openmmtools.utils
 
-from abc import abstractmethod
-
-import logging
 logger = logging.getLogger(__name__)
 
 
@@ -101,43 +99,38 @@ _RANDOM_SEED_MAX = np.iinfo(np.int32).max  # maximum random number seed value
 
 
 # =============================================================================
-# Monte Carlo Move abstract base class
+# MARKOV CHAIN MOVE ABSTRACTION
 # =============================================================================
 
-class MCMCMove(object):
-    """
-    Markov chain Monte Carlo (MCMC) move abstract base class.
+class MCMCMove(SubhookedABCMeta):
+    """Markov chain Monte Carlo (MCMC) move abstraction.
 
-    Markov chain Monte Carlo (MCMC) simulations are constructed from a set of derived objects.
+    To create a new MCMCMove class compatible with this framework, you
+    will have to implement this abstraction. The instance can keep internal
+    statistics such as number of attempted moves and acceptance rates.
 
     """
 
     @abstractmethod
-    def apply(self, thermodynamic_state, sampler_state, platform=None):
-        """
-        Apply the MCMC move.
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply the MCMC move.
+
+        Depending on the implementation, this can alter the thermodynamic
+        state and/or the sampler state.
 
         Parameters
         ----------
-        thermodynamic_state : ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move
-        sampler_state : SamplerState
-           The sampler state to apply the move to
-        platform : simtk.openmm.Platform, optional, default = None
-           The platform to use.
-
-        Returns
-        -------
-        updated_sampler_state : SamplerState
-           The updated sampler state
-
+        thermodynamic_state : states.ThermodynamicState
+           The initial thermodynamic state before applying the move.
+        sampler_state : states.SamplerState
+           The initial sampler state before applying the move.
 
         """
         pass
 
 
 # =============================================================================
-# Markov chain Monte Carlo sampler
+# MARKOV CHAIN MONTE CARLO SAMPLER
 # =============================================================================
 
 class MCMCSampler(object):
