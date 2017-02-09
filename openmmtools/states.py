@@ -481,6 +481,40 @@ class ThermodynamicState(object):
         self._set_system_pressure(self._system, value)
 
     @property
+    def barostat(self):
+        """The barostat associated to the system.
+
+        Note that this is only a copy of the barostat, and you will need
+        to set the ThermodynamicState.barostat property for the changes
+        to take place internally. If the pressure is allowed to fluctuate,
+        this is None. Normally, you should only need to access the pressure
+        and temperature property, but this allows you to modify other parameters
+        of the MonteCarloBarostat (e.g. frequency) after initialization. Setting
+        this to None will place the system in an NVT ensemble.
+
+        """
+        return copy.deepcopy(self._barostat)
+
+    @barostat.setter
+    def barostat(self, value):
+        if value is None:
+            # Reset the standard system hash only if we actually switch to NVT
+            if self._remove_barostat(self._system):
+                self._cached_standard_system_hash = None
+        elif not self.system.usesPeriodicBoundaryConditions():
+            raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
+        elif value.__class__.__name__ not in self._SUPPORTED_BAROSTATS:
+            raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
+                                      value.__class__.__name__)
+        else:
+            self._remove_barostat(self._system)
+            new_barostat = copy.deepcopy(value)
+            self._system.addForce(new_barostat)
+            self._cached_standard_system_hash = None
+            if not self._is_barostat_consistent(new_barostat):  # TODO REFACTOR THIS TO NOT ALTER THE STATE
+                raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_BAROSTAT)
+
+    @property
     def volume(self):
         """Constant volume of the thermodynamic state.
 

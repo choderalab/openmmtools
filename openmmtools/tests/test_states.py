@@ -78,9 +78,9 @@ class TestThermodynamicState(object):
         pressure_in_bars = cls.std_pressure / unit.bar
         anisotropic_pressure = openmm.Vec3(pressure_in_bars, pressure_in_bars,
                                            pressure_in_bars)
-        barostat = openmm.MonteCarloAnisotropicBarostat(anisotropic_pressure,
-                                                        cls.std_temperature)
-        cls.unsupported_barostat_alanine.addForce(barostat)
+        cls.anisotropic_barostat = openmm.MonteCarloAnisotropicBarostat(anisotropic_pressure,
+                                                                        cls.std_temperature)
+        cls.unsupported_barostat_alanine.addForce(cls.anisotropic_barostat)
 
         # A system with an inconsistent pressure in the barostat.
         cls.inconsistent_pressure_alanine = copy.deepcopy(cls.alanine_explicit)
@@ -206,17 +206,22 @@ class TestThermodynamicState(object):
         state._set_system_pressure(state._system, self.std_pressure)
         assert state._barostat.getDefaultPressure() == self.std_pressure
 
-    def test_property_pressure(self):
-        """ThermodynamicState.pressure property."""
+    def test_property_pressure_barostat(self):
+        """ThermodynamicState.pressure and barostat properties."""
         # Vacuum and implicit system are read with no pressure
         nonperiodic_testcases = [self.toluene_vacuum, self.toluene_implicit]
+        new_barostat = openmm.MonteCarloBarostat(1.0*unit.bar, self.std_temperature)
         for system in nonperiodic_testcases:
             state = ThermodynamicState(system, self.std_temperature)
             assert state.pressure is None
+            assert state.barostat is None
 
             # We can't set the pressure on non-periodic systems
             with nose.tools.assert_raises(ThermodynamicsError) as cm:
                 state.pressure = 1.0*unit.bar
+            assert cm.exception.code == ThermodynamicsError.BAROSTATED_NONPERIODIC
+            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                state.barostat = new_barostat
             assert cm.exception.code == ThermodynamicsError.BAROSTATED_NONPERIODIC
 
         # Correctly reads and set system pressures
@@ -224,26 +229,66 @@ class TestThermodynamicState(object):
         for system in periodic_testcases:
             state = ThermodynamicState(system, self.std_temperature)
             assert state.pressure is None
-            assert state._barostat is None
+            assert state.barostat is None
 
             # Setting pressure adds a barostat
             state.pressure = self.std_pressure
             assert state.pressure == self.std_pressure
-            barostat = state._barostat
-            assert barostat.getDefaultPressure() == self.std_pressure
-            assert get_barostat_temperature(barostat) == self.std_temperature
+            assert state.barostat.getDefaultPressure() == self.std_pressure
+            assert get_barostat_temperature(state.barostat) == self.std_temperature
+
+            # Changing the exposed barostat doesn't affect the state.
+            new_pressure = self.std_pressure + 1.0*unit.bar
+            barostat = state.barostat
+            barostat.setDefaultPressure(new_pressure)
+            assert state.barostat.getDefaultPressure() == self.std_pressure
 
             # Setting new pressure changes the barostat parameters
-            new_pressure = self.std_pressure + 1.0*unit.bar
             state.pressure = new_pressure
             assert state.pressure == new_pressure
-            barostat = state._barostat
-            assert barostat.getDefaultPressure() == new_pressure
-            assert get_barostat_temperature(barostat) == self.std_temperature
+            assert state.barostat.getDefaultPressure() == new_pressure
+            assert get_barostat_temperature(state.barostat) == self.std_temperature
 
-            # Setting pressure to None removes barostat
+            # Assigning the barostat changes the pressure
+            barostat = state.barostat
+            barostat.setDefaultPressure(self.std_pressure)
+            state.barostat = barostat
+            assert state.pressure == self.std_pressure
+
+            # Setting pressure of the assigned barostat doesn't change TS internals
+            barostat.setDefaultPressure(new_pressure)
+            assert state.pressure == self.std_pressure
+
+            # Setting pressure to None removes barostat and viceversa.
+            # Changing ensemble also reset the cached system hash.
             state.pressure = None
-            assert state._barostat is None
+            state._standard_system_hash  # cause the system hash to be cached
+            assert state.barostat is None
+            state.pressure = self.std_pressure
+            assert state._cached_standard_system_hash is None
+            state._standard_system_hash
+            state.pressure = None
+            assert state._cached_standard_system_hash is None
+
+            state._standard_system_hash
+            state.barostat = barostat
+            assert state._cached_standard_system_hash is None
+            state._standard_system_hash
+            state.barostat = None
+            assert state.pressure is None
+            assert state._cached_standard_system_hash is None
+
+            # It is impossible to assign an unsupported barostat with incorrect temperature
+            new_temperature = self.std_temperature + 10.0*unit.kelvin
+            ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
+            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                state.barostat = barostat
+            assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
+
+            # Assign incompatible barostat raise error
+            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                state.barostat = self.anisotropic_barostat
+            assert cm.exception.code == ThermodynamicsError.UNSUPPORTED_BAROSTAT
 
     def test_property_volume(self):
         """Check that volume is computed correctly."""
