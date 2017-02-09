@@ -17,6 +17,7 @@ from pymbar import timeseries
 from functools import partial
 
 from openmmtools import testsystems
+from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.mcmc import *
 
 
@@ -27,14 +28,14 @@ from openmmtools.mcmc import *
 # Test various combinations of systems and MCMC schemes
 analytical_testsystems = [
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        [GHMCMove(timestep=10.0*unit.femtoseconds, nsteps=100)]),
+        [GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)]),
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        {GHMCMove(timestep=10.0*unit.femtoseconds, nsteps=100): 0.5,
-         HMCMove(timestep=10*unit.femtosecond, nsteps=10): 0.5}),
+        {GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100): 0.5,
+         HMCMove(timestep=10*unit.femtosecond, n_steps=10): 0.5}),
     ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
-        [LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, nsteps=100)]),
+        [LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)]),
     ("IdealGas", testsystems.IdealGas(nparticles=216),
-        [HMCMove(timestep=10*unit.femtosecond, nsteps=10)])
+        [HMCMove(timestep=10*unit.femtosecond, n_steps=10)])
     ]
 
 NSIGMA_CUTOFF = 6.0  # cutoff for significance testing
@@ -56,8 +57,7 @@ def test_minimizer_all_testsystems():
 
         testsystem = testsystem_class()
 
-        from openmmmcmc import mcmc
-        sampler_state = mcmc.SamplerState(testsystem.system, testsystem.positions)
+        sampler_state = SamplerState(testsystem.positions)
 
         # Check if NaN.
         if np.isnan(sampler_state.potential_energy / unit.kilocalories_per_mole):
@@ -74,7 +74,7 @@ def test_minimizer_all_testsystems():
 def test_mcmc_expectations():
     # Select system:
     for [system_name, testsystem, move_set] in analytical_testsystems:
-        subtest_mcmc_expectation(testsystem, move_set)
+        print(system_name)
         f = partial(subtest_mcmc_expectation, testsystem, move_set)
         f.description = "Testing MCMC expectation for %s" % system_name
         logging.info(f.description)
@@ -94,26 +94,19 @@ def subtest_mcmc_expectation(testsystem, move_set):
     # Retrieve system and positions.
     [system, positions] = [testsystem.system, testsystem.positions]
 
-    platform_name = 'Reference'
-    from simtk.openmm import Platform
-    platform = Platform.getPlatformByName(platform_name)
-
     # Compute properties.
     kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
     kT = kB * temperature
     ndof = 3*system.getNumParticles() - system.getNumConstraints()
 
     # Create thermodynamic state
-    from openmmmcmc.thermodynamics import ThermodynamicState
     thermodynamic_state = ThermodynamicState(system=testsystem.system, temperature=temperature)
 
     # Create MCMC sampler.
-    from openmmmcmc.mcmc import MCMCSampler
-    sampler = MCMCSampler(thermodynamic_state, move_set=move_set, platform=platform)
+    sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
 
     # Create sampler state.
-    from openmmmcmc.mcmc import SamplerState
-    sampler_state = SamplerState(system=testsystem.system, positions=testsystem.positions, platform=platform)
+    sampler_state = SamplerState(positions=testsystem.positions)
 
     # Equilibrate
     for iteration in range(nequil):
