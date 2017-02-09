@@ -155,6 +155,26 @@ class MCMCSampler(object):
     >>> # Run a number of iterations of the sampler.
     >>> updated_sampler_state = sampler.run(sampler_state, 10)
 
+
+    >>> # Create a test system
+    >>> from openmmtools import testsystems
+    >>> test = testsystems.LennardJonesFluid(nparticles=200)
+    >>> # Create a sampler state.
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions,
+    ...                              box_vectors=test.system.getDefaultPeriodicBoxVectors())
+    >>> # Create a thermodynamic state.
+    >>> from openmmmcmc.thermodynamics import ThermodynamicState
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin,
+    ...                                          pressure=1*u.atmospheres)
+    >>> # Create a move set that includes a Monte Carlo barostat move.
+    >>> move_set = [ GHMCMove(nsteps=50), MonteCarloBarostatMove(nattempts=5) ]
+    >>> # Simulate on Reference platform.
+    >>> import simtk.openmm as mm
+    >>> platform = mm.Platform.getPlatformByName('Reference')
+    >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set, platform=platform)
+    >>> # Run a number of iterations of the sampler.
+    >>> updated_sampler_state = sampler.run(sampler_state, 2)
+
     """
 
     def __init__(self, thermodynamic_state, move_set=None, platform=None):
@@ -693,7 +713,7 @@ class GHMCMove(object):
 
 
 # =============================================================================
-# Hybrid Monte Carlo move
+# HYBRID MONTE CARLO MOVE
 # =============================================================================
 
 class HMCMove(object):
@@ -817,153 +837,132 @@ class HMCMove(object):
 
 
 # =============================================================================
-# Monte Carlo barostat move
+# MONTE CARLO BAROSTAT MOVE
 # =============================================================================
 
-class MonteCarloBarostatMove(MCMCMove):
-    """
-    Monte Carlo barostat move.
+class MonteCarloBarostatMove(object):
+    """Monte Carlo barostat move.
 
-    This move makes one or more attempts to update the box volume using Monte Carlo updates.
+    This move makes one or more attempts to update the box volume using
+    Monte Carlo updates.
+
+    Parameters
+    ----------
+    n_attempts : int, optional
+        The number of Monte Carlo attempts to make to adjust the box
+        volume (default is 5).
+    platform : simtk.openmm.Platform, optional
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available (default is None).
+
+    Attributes
+    ----------
+    n_attempts : int
+        The number of Monte Carlo attempts to make to adjust the box
+        volume..
+    platform : simtk.openmm.Platform
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available.
 
     Examples
     --------
+    The thermodynamic state must be barostated by a MonteCarloBarostat
+    force. The class ThermodynamicState takes care of adding one when
+    we specify the pressure in its constructor.
 
-    >>> # Create a test system
+    >>> from simtk import unit
     >>> from openmmtools import testsystems
-    >>> test = testsystems.LennardJonesFluid(nparticles=200)
-    >>> # Create a sampler state.
-    >>> sampler_state = SamplerState(system=test.system, positions=test.positions, box_vectors=test.system.getDefaultPeriodicBoxVectors())
-    >>> # Create a thermodynamic state.
-    >>> from openmmmcmc.thermodynamics import ThermodynamicState
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin, pressure=1*u.atmospheres)
-    >>> # Create a move set that includes a Monte Carlo barostat move.
-    >>> move_set = [ GHMCMove(nsteps=50), MonteCarloBarostatMove(nattempts=5) ]
-    >>> # Simulate on Reference platform.
-    >>> import simtk.openmm as mm
-    >>> platform = mm.Platform.getPlatformByName('Reference')
-    >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set, platform=platform)
-    >>> # Run a number of iterations of the sampler.
-    >>> updated_sampler_state = sampler.run(sampler_state, 2)
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
+    >>> test = testsystems.AlanineDipeptideExplicit()
+    >>> sampler_state = SamplerState(system=test.system, positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin,
+    ...                                          pressure=1.0*unit.atmosphere)
+
+    Create a MonteCarloBarostatMove move with default parameters.
+
+    >>> move = MonteCarloBarostatMove()
+
+    or create a GHMC move with specified parameters.
+
+    >>> MonteCarloBarostatMove(n_attempts=2)
+
+    Perform one update of the sampler state. The sampler state is updated
+    with the new state.
+
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
 
     """
 
-    def __init__(self, nattempts=5):
-        """
-        Parameters
-        ----------
-        nattempts : int
-           The number of Monte Carlo attempts to make to adjust the box volume.
+    def __init__(self, n_attempts=5, platform=None):
+        self.n_attempts = n_attempts
+        self.platform = platform
 
-        Examples
-        --------
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply the MCMC move.
 
-        Create a Monte Carlo barostat move with default parameters.
-
-        >>> move = MonteCarloBarostatMove()
-
-        Create a Monte Carlo barostat move with specified parameters.
-
-        >>> move = MonteCarloBarostatMove(nattempts=10)
-
-        """
-        self.nattempts = nattempts
-
-        return
-
-    def apply(self, thermodynamic_state, sampler_state, platform=None):
-        """
-        Apply the MCMC move.
+        The thermodynamic state must be barostated by a MonteCarloBarostat
+        force. This modifies the given sampler_state.
 
         Parameters
         ----------
-        thermodynamic_state : ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move
-        sampler_state : SamplerState
-           The sampler state to apply the move to
-        platform : simtk.openmm.Platform, optional, default = None
-           If not None, the specified platform will be used.
-
-        Returns
-        -------
-        updated_sampler_state : SamplerState
-           The updated sampler state
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.LennardJonesFluid()
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(system=test.system, positions=test.positions, box_vectors=test.system.getDefaultPeriodicBoxVectors())
-        >>> # Create a thermodynamic state.
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin, pressure=1*u.atmospheres)
-        >>> # Create a Monte Carlo Barostat move.
-        >>> move = MonteCarloBarostatMove(nattempts=5)
-        >>> # Perform one update of the sampler state.
-        >>> updated_sampler_state = move.apply(thermodynamic_state, sampler_state)
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use when applying the MCMC move.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
 
         """
-
         timer = Timer()
 
-        # Make sure system contains a barostat.
-        system = sampler_state.system
-        forces = {system.getForce(index).__class__.__name__: system.getForce(index)
-                  for index in range(system.getNumForces())}
-        old_barostat_frequency = None
-        if 'MonteCarloBarostat' in forces:
-            force = forces['MonteCarloBarostat']
-            force.setDefaultTemperature(thermodynamic_state.temperature)
-            old_barostat_frequency = force.getFrequency()
-            force.setFrequency(1)
-            parameter_name = force.Pressure()
-        else:
-            # Add MonteCarloBarostat.
-            force = openmm.MonteCarloBarostat(thermodynamic_state.pressure, thermodynamic_state.temperature, 1)
-            system.addForce(force)
-            parameter_name = force.Pressure()
+        # Make sure system contains a MonteCarlo barostat.
+        barostat = thermodynamic_state.barostat
+        if barostat is None:
+            raise RuntimeError('Requested a MonteCarloBarostat move'
+                               ' on a system at constant pressure')
+        if not isinstance(barostat, openmm.MonteCarloBarostat):
+            raise RuntimeError('Requested a MonteCarloBarostat move on a system '
+                               'barostated with a {}'.format(barostat.__class__.__name__))
+
+        # Set temporarily the frequency if needed.
+        old_barostat_frequency = barostat.getFrequency()
+        if old_barostat_frequency != 1:
+            barostat.setFrequency(1)
+
+        # Random number seed.
+        seed = np.random.randint(_RANDOM_SEED_MAX)
+        barostat.setRandomNumberSeed(seed)
+        thermodynamic_state.barostat = barostat
 
         # Create integrator.
         integrator = integrators.DummyIntegrator()
 
-        # Random number seed.
-        seed = np.random.randint(_RANDOM_SEED_MAX)
-        force.setRandomNumberSeed(seed)
-
         # Create context.
         timer.start("Context Creation")
-        context = sampler_state.createContext(integrator, platform=platform)
+        context = thermodynamic_state.create_context(integrator, platform=self.platform)
         timer.stop("Context Creation")
-
-        # Set pressure.
-        context.setParameter(parameter_name, thermodynamic_state.pressure)
 
         # Run update.
         # Note that ONE step of this integrator is equal to self.nsteps
         # of velocity Verlet dynamics followed by Metropolis accept/reject.
         timer.start("step(1)")
-        integrator.step(self.nattempts)
+        integrator.step(self.n_attempts)
         timer.stop("step(1)")
 
         # Get sampler state.
         timer.start("update_sampler_state")
-        updated_sampler_state = SamplerState.createFromContext(context)
+        sampler_state.update_from_context(context)
         timer.stop("update_sampler_state")
 
         # Clean up.
         del context
 
         # Restore frequency of barostat.
-        if old_barostat_frequency:
-            force.setFrequency(old_barostat_frequency)
+        if old_barostat_frequency != 1:
+            barostat.setFrequency(old_barostat_frequency)
+            thermodynamic_state.barostat = barostat
 
         timer.report_timing()
-
-        # Return updated sampler state.
-        return updated_sampler_state
 
 
 # =============================================================================
