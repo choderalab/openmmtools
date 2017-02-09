@@ -290,6 +290,9 @@ class TestThermodynamicState(object):
                 state.barostat = self.anisotropic_barostat
             assert cm.exception.code == ThermodynamicsError.UNSUPPORTED_BAROSTAT
 
+            # After exception, state is left consistent
+            assert state.pressure is None
+
     def test_property_volume(self):
         """Check that volume is computed correctly."""
         # For volume-fluctuating systems volume is None.

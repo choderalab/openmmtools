@@ -442,7 +442,7 @@ class ThermodynamicState(object):
         if remove_thermostat:
             self._remove_thermostat(system)
         if remove_barostat:
-            self._remove_barostat(system)
+            self._pop_barostat(system)
         return system
 
     @property
@@ -485,10 +485,10 @@ class ThermodynamicState(object):
         """The barostat associated to the system.
 
         Note that this is only a copy of the barostat, and you will need
-        to set the ThermodynamicState.barostat property for the changes
+        to set back the ThermodynamicState.barostat property for the changes
         to take place internally. If the pressure is allowed to fluctuate,
         this is None. Normally, you should only need to access the pressure
-        and temperature property, but this allows you to modify other parameters
+        and temperature properties, but this allows you to modify other parameters
         of the MonteCarloBarostat (e.g. frequency) after initialization. Setting
         this to None will place the system in an NVT ensemble.
 
@@ -498,21 +498,20 @@ class ThermodynamicState(object):
     @barostat.setter
     def barostat(self, value):
         if value is None:
-            # Reset the standard system hash only if we actually switch to NVT
-            if self._remove_barostat(self._system):
+            # Reset the standard system hash only if we actually switch to NVT.
+            if self._pop_barostat(self._system) is not None:
                 self._cached_standard_system_hash = None
-        elif not self.system.usesPeriodicBoundaryConditions():
-            raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
-        elif value.__class__.__name__ not in self._SUPPORTED_BAROSTATS:
-            raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
-                                      value.__class__.__name__)
         else:
-            self._remove_barostat(self._system)
+            old_barostat = self._pop_barostat(self._system)
             new_barostat = copy.deepcopy(value)
             self._system.addForce(new_barostat)
+            try:
+                self._check_internal_consistency()
+            except Exception as e:
+                # Restore old barostat to leave state consistent.
+                self.barostat = old_barostat
+                raise e
             self._cached_standard_system_hash = None
-            if not self._is_barostat_consistent(new_barostat):  # TODO REFACTOR THIS TO NOT ALTER THE STATE
-                raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_BAROSTAT)
 
     @property
     def volume(self):
@@ -1103,19 +1102,20 @@ class ThermodynamicState(object):
         return barostat
 
     @classmethod
-    def _remove_barostat(cls, system):
+    def _pop_barostat(cls, system):
         """Remove the system barostat.
 
         Returns
         -------
-        True if the barostat was found and removed, False otherwise.
+        The removed barostat if it was found, None otherwise.
 
         """
         barostat_id = cls._find_barostat_index(system)
         if barostat_id is not None:
+            barostat = system.getForce(barostat_id)
             system.removeForce(barostat_id)
-            return True
-        return False
+            return barostat
+        return None
 
     @staticmethod
     def _find_barostat_index(system):
@@ -1179,7 +1179,7 @@ class ThermodynamicState(object):
 
         """
         if pressure is None:  # If new pressure is None, remove barostat.
-            self._remove_barostat(system)
+            self._pop_barostat(system)
             return None
 
         if not system.usesPeriodicBoundaryConditions():
