@@ -829,3 +829,48 @@ class VVVRIntegrator(mm.CustomIntegrator):
         if monitor_heat:
             self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
             self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
+
+    def setTemperature(self, temperature=298.0 * simtk.unit.kelvin):
+        """
+        Set the current temperature of the VVVR integrator.
+
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+           The temperature.
+
+        Examples
+        --------
+
+        Set the temperature.
+
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> integrator.setTemperature(temperature)
+
+        """
+
+        kT = kB * temperature
+
+        self.setGlobalVariableByName('kT', kT)
+
+    def getTemperature(self):
+        """
+        Get the current temperature of the VVVR integrator in Kelvin.
+
+        Examples
+        --------
+
+        Retrieve the temperature.
+
+        >>> print integrator.getTemperature()
+
+        """
+
+        kT = self.getGlobalVariableByName('kT')
+
+        if not isinstance(kT, units.Quantity):
+            # if we get a plain number assume that it given
+            # in kJ / mol which is one of the standard units in openmm
+            kT = float(kT) * units.kilojoule_per_mole
+
+        return kT / kB

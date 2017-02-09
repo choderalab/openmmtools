@@ -145,3 +145,16 @@ def test_vvvr_shadow_work_accumulation():
    names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
    assert('shadow_work' not in names_of_globals)
    
+def test_vvvr_getset_temperature():
+   temperature = 298.0 * unit.kelvin
+   integrator = integrators.VVVRIntegrator(temperature, monitor_work=True)
+
+   assert(integrator.getTemperature() == temperature)
+
+   new_temperature = 500.0 * unit.kelvin
+   integrator.setTemperature(new_temperature)
+
+   assert(integrator.getTemperature() == new_temperature)
+
+   new_kT = new_temperature * kB / unit.kilojoule_per_mole
+   assert(integrator.getGlobalVariableByName('kT') == new_kT)
