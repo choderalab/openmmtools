@@ -1,6 +1,6 @@
-#=============================================================================================
+# ============================================================================================
 # MODULE DOCSTRING
-#=============================================================================================
+# ============================================================================================
 
 """
 Custom integrators for molecular simulation.
@@ -31,9 +31,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
-#=============================================================================================
+# ============================================================================================
 # GLOBAL IMPORTS
-#=============================================================================================
+# ============================================================================================
 
 import numpy
 
@@ -43,11 +43,51 @@ import simtk.unit as units
 import simtk.openmm as mm
 from .constants import kB
 
-#=============================================================================================
-# INTEGRATORS
-#=============================================================================================
-
 from openmmtools import respa
+
+
+# ============================================================================================
+# MIXINS
+# ============================================================================================
+
+class MetropolizedIntegrator(object):
+    """Add temperature getter and setter to a CustomIntegrator.
+
+    This class intended to be inherited by integrators that maintain the
+    velocities stationary distribution at a given temperature. The setter
+    and getter assume the presence of a single global variable "kT" in
+    the CustomIntegrator definition.
+
+    """
+    def getTemperature(self):
+        """Return the temperature of the heat bath.
+
+        Returns
+        -------
+        temperature : simtk.unit.Quantity
+            The temperature of the heat bath in kelvins.
+
+        """
+        kT = self.getGlobalVariableByName('kT') * units.kilojoule_per_mole
+        temperature = kT / kB
+        return temperature
+
+    def setTemperature(self, temperature):
+        """Set the temperature of the heat bath.
+
+        Parameters
+        ----------
+        temperature : simtk.unit.Quantity
+            The new temperature of the heat bath (temperature units).
+
+        """
+        kT = kB * temperature
+        self.setGlobalVariableByName('kT', kT)
+
+
+# ============================================================================================
+# INTEGRATORS
+# ============================================================================================
 
 
 class MTSIntegrator(respa.MTSIntegrator):
@@ -230,7 +270,7 @@ class VelocityVerletIntegrator(mm.CustomIntegrator):
         self.addConstrainVelocities()
 
 
-class AndersenVelocityVerletIntegrator(mm.CustomIntegrator):
+class AndersenVelocityVerletIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
@@ -300,7 +340,7 @@ class AndersenVelocityVerletIntegrator(mm.CustomIntegrator):
         self.addConstrainVelocities()
 
 
-class MetropolisMonteCarloIntegrator(mm.CustomIntegrator):
+class MetropolisMonteCarloIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
     """
     Metropolis Monte Carlo with Gaussian displacement trials.
@@ -390,7 +430,7 @@ class MetropolisMonteCarloIntegrator(mm.CustomIntegrator):
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
 
-class HMCIntegrator(mm.CustomIntegrator):
+class HMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
     """
     Hybrid Monte Carlo (HMC) integrator.
@@ -523,7 +563,8 @@ class HMCIntegrator(mm.CustomIntegrator):
         """The acceptance rate: n_accept  / n_trials."""
         return self.n_accept / float(self.n_trials)
 
-class GHMCIntegrator(mm.CustomIntegrator):
+
+class GHMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.
@@ -664,22 +705,21 @@ class GHMCIntegrator(mm.CustomIntegrator):
         self.setGlobalVariableByName('naccept', 0)
 
     def setTemperature(self, temperature):
-        """
-        Set the temperature.
+        """Set the temperature of the heat bath.
 
         This also resets the trial statistics.
-        
+
         Parameters
         ----------
         temperature : simtk.unit.Quantity
-            The new temperature
+            The new temperature of the heat bath (temperature units).
+
         """
-        kT = kB * temperature
-        self.setGlobalVariableByName('kT', kT)
+        super(GHMCIntegrator, self).setTemperature(temperature)
         # Reset statistics to ensure 'sigma' is updated on step 0
         self.resetStatistics()
 
-class VVVRIntegrator(mm.CustomIntegrator):
+class VVVRIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
     """
     Create a velocity Verlet with velocity randomization (VVVR) integrator.
