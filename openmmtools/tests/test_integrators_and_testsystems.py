@@ -14,7 +14,7 @@ Test combinations of custom integrators and testsystems to make sure there are n
 #=============================================================================================
 
 import re
-import numpy
+import inspect
 from functools import partial
 
 from simtk import unit
@@ -65,8 +65,9 @@ def test_integrators_and_testsystems():
    """
    from openmmtools import integrators, testsystems
 
-   # Create lists of integrator and testsystem names.
-   integrator_names = [ methodname for methodname in dir(integrators) if re.match('.*Integrator$', methodname) ]
+   # Get all the CustomIntegrators in the integrators module.
+   is_integrator = lambda x: inspect.isclass(x) and issubclass(x, openmm.CustomIntegrator)
+   custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
 
    def all_subclasses(cls):
        """Return list of all subclasses and subsubclasses for a given class."""
@@ -86,9 +87,9 @@ def test_integrators_and_testsystems():
           print("Skipping %s due to missing dependency" % testsystem_name)
           continue
 
-      for integrator_name in integrator_names:
+      for integrator_name, integrator_class in custom_integrators:
          # Create integrator.
-         integrator = getattr(integrators, integrator_name)()
+         integrator = integrator_class()
 
          # Create test.
          f = partial(check_combination, integrator, testsystem, platform)

@@ -13,8 +13,8 @@ Test custom integrators.
 # GLOBAL IMPORTS
 #=============================================================================================
 
-import re
 import numpy
+import inspect
 
 from simtk import unit
 from simtk import openmm
@@ -73,32 +73,25 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 # TESTS
 #=============================================================================================
 
-def test_stabilities_harmonic_oscillator():
+def test_stabilities():
    """
-   Test integrators for stability over a short number of steps of a harmonic oscillator.
-
-   """
-   test = testsystems.HarmonicOscillator()
-
-   for methodname in dir(integrators):
-      if re.match('.*Integrator$', methodname):
-         integrator = getattr(integrators, methodname)()
-         integrator.__doc__ = methodname
-         check_stability.description = "Testing %s for stability over a short number of integration steps of a harmonic oscillator." % methodname
-         yield check_stability, integrator, test
-
-def test_stabilities_alanine_dipeptide():
-   """
-   Test integrators for stability over a short number of steps of a harmonic oscillator.
+   Test integrators for stability over a short number of steps.
 
    """
-   test = testsystems.AlanineDipeptideImplicit()
+   ts = testsystems  # shortcut
+   test_cases = {'harmonic oscillator': ts.HarmonicOscillator(),
+                 'alanine dipeptide in implicit solvent': ts.AlanineDipeptideImplicit()}
 
-   for methodname in dir(integrators):
-      if re.match('.*Integrator$', methodname):
-         integrator = getattr(integrators, methodname)()
-         integrator.__doc__ = methodname
-         check_stability.description = "Testing %s for stability over a short number of integration steps of alanine dipeptide in implicit solvent." % methodname
+   # Get all the CustomIntegrators in the integrators module.
+   is_integrator = lambda x: inspect.isclass(x) and issubclass(x, openmm.CustomIntegrator)
+   custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
+
+   for test_name, test in test_cases.items():
+      for integrator_name, integrator_class in custom_integrators:
+         integrator = integrator_class()
+         integrator.__doc__ = integrator_name
+         check_stability.description = ("Testing {} for stability over a short number of "
+                                        "integration steps of a {}.").format(integrator_name, test_name)
          yield check_stability, integrator, test
 
 def test_integrator_decorators():
