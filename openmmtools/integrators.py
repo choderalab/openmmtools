@@ -35,6 +35,8 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 # ============================================================================================
 
+import types
+
 import numpy
 
 import simtk.unit
@@ -114,6 +116,35 @@ class MetropolizedIntegrator(object):
             self.addComputePerDof(variable, expression)
         self.addComputeGlobal('has_kT_changed', '0')
         self.endBlock()
+
+    @classmethod
+    def add_interface(cls, integrator):
+        """Add the MetropolizedIntegrator interface to a CustomIntegrator.
+
+        The function adds the interface only to CustomIntegrators that
+        have a global variable named "kT". If this is not the case, it
+        returns False.
+
+        Parameters
+        ----------
+        integrator : simtk.openmm.CustomIntegrator
+            The integrator to which add setters and getters.
+
+        Returns
+        -------
+        True if the given integrator is a CustomIntegrator that defines
+        a "kT" global variables. False otherwise.
+
+        """
+        if not isinstance(integrator, mm.CustomIntegrator):
+            return False
+        try:
+            integrator.getGlobalVariableByName('kT')
+        except Exception:
+            return False
+        integrator.setTemperature = types.MethodType(cls.setTemperature, integrator)
+        integrator.getTemperature = types.MethodType(cls.getTemperature, integrator)
+        return True
 
 
 # ============================================================================================

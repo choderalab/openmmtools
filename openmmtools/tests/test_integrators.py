@@ -20,6 +20,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems
+from openmmtools.integrators import MetropolizedIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -27,9 +28,33 @@ from openmmtools import integrators, testsystems
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 
+
 #=============================================================================================
 # UTILITY SUBROUTINES
 #=============================================================================================
+
+def get_all_custom_integrators(only_metropolized=False):
+    """Return all CustomIntegrators in integrators.
+
+    Parameters
+    ----------
+    only_metropolized : bool
+        If True, only the CustomIntegrators inheriting from
+        MetropolizedIntegrator are returned.
+
+    Returns
+    -------
+    custom_integrators : list of tuples
+        A list of tuples ('IntegratorName', IntegratorClass)
+
+    """
+    predicate = lambda x: inspect.isclass(x) and issubclass(x, openmm.CustomIntegrator)
+    if only_metropolized:
+        old_predicate = predicate  # Avoid infinite recursion.
+        predicate = lambda x: old_predicate(x) and issubclass(x, integrators.MetropolizedIntegrator)
+    custom_integrators = inspect.getmembers(integrators, predicate=predicate)
+    return custom_integrators
+
 
 def check_stability(integrator, test, platform=None, nsteps=100, temperature=300.0*unit.kelvin):
    """
@@ -68,7 +93,47 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 
    del context
 
-   return
+
+def check_integrator_temperature(integrator, temperature, has_changed):
+    """Check integrator temperature has has_kT_changed variables."""
+    kT = (temperature * integrators.kB).value_in_unit_system(unit.md_unit_system)
+    temperature = temperature / unit.kelvin
+    assert numpy.isclose(integrator.getTemperature() / unit.kelvin, temperature)
+    assert numpy.isclose(integrator.getGlobalVariableByName('kT'), kT)
+    try:
+        has_kT_changed = integrator.getGlobalVariableByName('has_kT_changed')
+    except Exception:
+        has_kT_changed = False
+    if has_kT_changed is not False:
+        assert has_kT_changed == has_changed
+
+
+def check_integrator_temperature_getter_setter(integrator):
+    """Check that temperature setter/getter works correctly.
+
+    Parameters
+    ----------
+    integrator : MetropolizedIntegrator
+        An integrator just created and already bound to a context.
+
+    """
+    # The variable has_kT_changed is initialized correctly.
+    temperature = integrator.getTemperature()
+    check_integrator_temperature(integrator, temperature, 1)
+
+    # At the first step step, the temperature-dependent constants are computed.
+    integrator.step(1)
+    check_integrator_temperature(integrator, temperature, 0)
+
+    # Setting temperature update kT and has_kT_changed.
+    temperature += 100*unit.kelvin
+    integrator.setTemperature(temperature)
+    check_integrator_temperature(integrator, temperature, 1)
+
+    # At the next step, temperature-dependent constants are recomputed.
+    integrator.step(1)
+    check_integrator_temperature(integrator, temperature, 0)
+
 
 #=============================================================================================
 # TESTS
@@ -82,10 +147,7 @@ def test_stabilities():
    ts = testsystems  # shortcut
    test_cases = {'harmonic oscillator': ts.HarmonicOscillator(),
                  'alanine dipeptide in implicit solvent': ts.AlanineDipeptideImplicit()}
-
-   # Get all the CustomIntegrators in the integrators module.
-   is_integrator = lambda x: inspect.isclass(x) and issubclass(x, openmm.CustomIntegrator)
-   custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
+   custom_integrators = get_all_custom_integrators()
 
    for test_name, test in test_cases.items():
       for integrator_name, integrator_class in custom_integrators:
@@ -142,48 +204,41 @@ def test_vvvr_shadow_work_accumulation():
 
 def test_temperature_getter_setter():
     """Test that temperature setter and getter modify integrator variables."""
-
-    def check_temperature(temperature, has_changed):
-        kT = (temperature * integrators.kB).value_in_unit_system(unit.md_unit_system)
-        temperature = temperature / unit.kelvin
-        assert numpy.isclose(integrator.getTemperature() / unit.kelvin, temperature)
-        assert integrator.getGlobalVariableByName('kT') == kT
-        try:
-            has_kT_changed = integrator.getGlobalVariableByName('has_kT_changed')
-        except Exception:
-            has_kT_changed = False
-        if has_kT_changed is not False:
-            assert has_kT_changed == has_changed
-
+    temperature = 350*unit.kelvin
     test = testsystems.HarmonicOscillator()
+    custom_integrators = get_all_custom_integrators()
+    metropolized_integrators = dict(get_all_custom_integrators(only_metropolized=True))
 
-    # Find all integrators with temperature setter/getter.
-    is_metropolized = lambda x: (inspect.isclass(x) and
-                                 issubclass(x, openmm.CustomIntegrator) and
-                                 issubclass(x, integrators.MetropolizedIntegrator))
-    metropolized_integrators = inspect.getmembers(integrators, predicate=is_metropolized)
+    for integrator_name, integrator_class in custom_integrators:
 
-    temperature1 = 300*unit.kelvin
-    temperature2 = temperature1 + 100*unit.kelvin
-    for integrator_name, integrator_class in metropolized_integrators:
-        check_temperature.description = 'Test temperature setter and getter of {}'.format(integrator_name)
+        # If this is not a MetropolizedIntegrator, the interface should not be added.
+        if integrator_name not in metropolized_integrators:
+            integrator = integrator_class()
+            assert MetropolizedIntegrator.add_interface(integrator) is False
+            assert not hasattr(integrator, 'getTemperature')
+            continue
 
-        # Initialization set temperature correctly.
-        integrator = integrator_class(temperature=temperature1)
-        yield check_temperature, temperature1, 1
-
-        # At the first step step, the temperature-dependent constants are computed.
+        # Test original integrator.
+        check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
+                                                                  'getter of {}').format(integrator_name)
+        integrator = integrator_class(temperature=temperature)
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
-        integrator.step(1)
-        yield check_temperature, temperature1, 0
 
-        # Setting temperature update kT and has_kT_changed.
-        integrator.setTemperature(temperature2)
-        yield check_temperature, temperature2, 1
+        # Integrator temperature is initialized correctly.
+        check_integrator_temperature(integrator, temperature, 1)
+        yield check_integrator_temperature_getter_setter, integrator
+        del context
 
-        # At the next step, temperature-dependent constants are recomputed.
-        integrator.step(1)
-        yield check_temperature, temperature2, 0
+        # Test Context integrator wrapper.
+        check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
+                                                                  'of {}').format(integrator_name)
+        integrator = integrator_class()
+        context = openmm.Context(test.system, integrator)
+        context.setPositions(test.positions)
 
+        # Setter and getter should be added successfully.
+        assert MetropolizedIntegrator.add_interface(integrator) is True
+        assert hasattr(integrator, 'setTemperature')
+        yield check_integrator_temperature_getter_setter, integrator
         del context
