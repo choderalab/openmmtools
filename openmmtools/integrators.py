@@ -51,12 +51,15 @@ from openmmtools import respa
 # ============================================================================================
 
 class MetropolizedIntegrator(object):
-    """Add temperature getter and setter to a CustomIntegrator.
+    """Add temperature functions to a CustomIntegrator.
 
-    This class intended to be inherited by integrators that maintain the
+    This class is intended to be inherited by integrators that maintain the
     velocities stationary distribution at a given temperature. The setter
     and getter assume the presence of a single global variable "kT" in
     the CustomIntegrator definition.
+
+    It also provide a utility function to handle per-DOF constants that
+    must be computed only when the temperature changes.
 
     """
     def getTemperature(self):
@@ -83,6 +86,34 @@ class MetropolizedIntegrator(object):
         """
         kT = kB * temperature
         self.setGlobalVariableByName('kT', kT)
+
+        # Update the changed flag if it exist.
+        try:
+            self.setGlobalVariableByName('has_kT_changed', 1)
+        except Exception:
+            pass
+
+    def addTemperatureDependentComputePerDofs(self, compute_per_dof):
+        """Wrap the ComputePerDof into an if-block executed only when kT changes.
+
+        Parameters
+        ----------
+        computer_per_dof : dict of str: str
+            A dictionary of variable_name: expression.
+
+        """
+        # First check if flag variable already exist.
+        try:
+            self.getGlobalVariableByName('has_kT_changed')
+        except Exception:
+            self.addGlobalVariable('has_kT_changed', 1)
+
+        # Create if-block that conditionally update the per-DOF variables.
+        self.beginIfBlock("has_kT_changed = 1")
+        for variable, expression in compute_per_dof.items():
+            self.addComputePerDof(variable, expression)
+        self.setGlobalVariableByName('has_kT_changed', 0)
+        self.endBlock()
 
 
 # ============================================================================================
@@ -324,7 +355,7 @@ class AndersenVelocityVerletIntegrator(mm.CustomIntegrator, MetropolizedIntegrat
         #
         # Update velocities from Maxwell-Boltzmann distribution for particles that collide.
         #
-        self.addComputePerDof("sigma_v", "sqrt(kT/m)")
+        self.addTemperatureDependentComputePerDofs({"sigma_v": "sqrt(kT/m)"})
         self.addComputePerDof("collision", "step(p_collision-uniform)")  # if collision has occured this timestep, 0 otherwise
         self.addComputePerDof("v", "(1-collision)*v + collision*sigma_v*gaussian")  # randomize velocities of particles that have collided
 
@@ -410,7 +441,7 @@ class MetropolisMonteCarloIntegrator(mm.CustomIntegrator, MetropolizedIntegrator
         #
         # Update velocities from Maxwell-Boltzmann distribution.
         #
-        self.addComputePerDof("sigma_v", "sqrt(kT/m)")
+        self.addTemperatureDependentComputePerDofs({"sigma_v": "sqrt(kT/m)"})
         self.addComputePerDof("v", "sigma_v*gaussian")
         self.addConstrainVelocities()
 
@@ -503,7 +534,7 @@ class HMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         # This only needs to be done once, but it needs to be done for each degree of freedom.
         # Could move this to initialization?
         #
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addTemperatureDependentComputePerDofs({"sigma": "sqrt(kT/m)"})
 
         #
         # Allow Context updating here, outside of inner loop only.
@@ -821,7 +852,7 @@ class VVVRIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         # This only needs to be done once, but it needs to be done for each degree of freedom.
         # Could move this to initialization?
         #
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addTemperatureDependentComputePerDofs({"sigma": "sqrt(kT/m)"})
 
         #
         # Velocity perturbation.
