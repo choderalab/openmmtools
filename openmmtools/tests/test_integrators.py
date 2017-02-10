@@ -18,6 +18,7 @@ import inspect
 
 from simtk import unit
 from simtk import openmm
+
 from openmmtools import integrators, testsystems
 
 #=============================================================================================
@@ -137,4 +138,52 @@ def test_vvvr_shadow_work_accumulation():
    n_globals = integrator.getNumGlobalVariables()
    names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
    assert('shadow_work' not in names_of_globals)
-   
+
+
+def test_temperature_getter_setter():
+    """Test that temperature setter and getter modify integrator variables."""
+
+    def check_temperature(temperature, has_changed):
+        kT = (temperature * integrators.kB).value_in_unit_system(unit.md_unit_system)
+        temperature = temperature / unit.kelvin
+        assert numpy.isclose(integrator.getTemperature() / unit.kelvin, temperature)
+        assert integrator.getGlobalVariableByName('kT') == kT
+        try:
+            has_kT_changed = integrator.getGlobalVariableByName('has_kT_changed')
+        except Exception:
+            has_kT_changed = False
+        if has_kT_changed is not False:
+            assert has_kT_changed == has_changed
+
+    test = testsystems.HarmonicOscillator()
+
+    # Find all integrators with temperature setter/getter.
+    is_metropolized = lambda x: (inspect.isclass(x) and
+                                 issubclass(x, openmm.CustomIntegrator) and
+                                 issubclass(x, integrators.MetropolizedIntegrator))
+    metropolized_integrators = inspect.getmembers(integrators, predicate=is_metropolized)
+
+    temperature1 = 300*unit.kelvin
+    temperature2 = temperature1 + 100*unit.kelvin
+    for integrator_name, integrator_class in metropolized_integrators:
+        check_temperature.description = 'Test temperature setter and getter of {}'.format(integrator_name)
+
+        # Initialization set temperature correctly.
+        integrator = integrator_class(temperature=temperature1)
+        yield check_temperature, temperature1, 1
+
+        # At the first step step, the temperature-dependent constants are computed.
+        context = openmm.Context(test.system, integrator)
+        context.setPositions(test.positions)
+        integrator.step(1)
+        yield check_temperature, temperature1, 0
+
+        # Setting temperature update kT and has_kT_changed.
+        integrator.setTemperature(temperature2)
+        yield check_temperature, temperature2, 1
+
+        # At the next step, temperature-dependent constants are recomputed.
+        integrator.step(1)
+        yield check_temperature, temperature2, 0
+
+        del context
