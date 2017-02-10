@@ -63,6 +63,55 @@ class MetropolizedIntegrator(object):
     It also provide a utility function to handle per-DOF constants that
     must be computed only when the temperature changes.
 
+    Notes
+    -----
+    Notice that the CustomIntegrator internally stored by a Context object
+    will loose setter and getter. You can re-add them with add_interface().
+
+    Examples
+    --------
+    We can inherit from MetropolizedIntegrator to automatically define
+    setters and getters for the temperature and to add a per-DOF constant
+    "sigma" that we need to update only when the temperature is changed.
+
+    >>> from simtk import openmm, unit
+    >>> class TestIntegrator(openmm.CustomIntegrator, MetropolizedIntegrator):
+    ...     def __init__(self, temperature=298.0*unit.kelvin, timestep=1.0*unit.femtoseconds):
+    ...         kT = kB * temperature
+    ...         super(TestIntegrator, self).__init__(timestep)
+    ...         self.addGlobalVariable("kT", kT)  # thermal energy
+    ...         self.addPerDofVariable("sigma", 0)  # velocity standard deviation
+    ...         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+    ...
+
+    We instantiate the integrator normally.
+
+    >>> integrator = TestIntegrator(temperature=350*unit.kelvin)
+    >>> integrator.getTemperature()
+    Quantity(value=350.0, unit=kelvin)
+    >>> integrator.setTemperature(380.0*unit.kelvin)
+    >>> integrator.getTemperature()
+    Quantity(value=380.0, unit=kelvin)
+
+    Notice that a CustomIntegrator bound to a context loses any extra method.
+
+    >>> from openmmtools import testsystems
+    >>> test = testsystems.HarmonicOscillator()
+    >>> context = openmm.Context(test.system, integrator)
+    >>> integrator = context.getIntegrator()
+    >>> integrator.getTemperature()
+    Traceback (most recent call last):
+    ...
+    AttributeError: type object 'object' has no attribute '__getattr__'
+
+    We can restore the MetropolizedIntegrator interface with a class method
+
+    >>> MetropolizedIntegrator.add_interface(integrator)
+    True
+    >>> integrator.getTemperature()
+    Quantity(value=380.0, unit=kelvin)
+    >>> integrator.setTemperature(400.0*unit.kelvin)
+
     """
     def getTemperature(self):
         """Return the temperature of the heat bath.
@@ -931,3 +980,8 @@ class VVVRIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         if monitor_heat:
             self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
             self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
+
+
+if __name__ == '__main__':
+    import doctest
+    doctest.testmod()
