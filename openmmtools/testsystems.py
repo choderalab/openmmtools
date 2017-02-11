@@ -180,7 +180,8 @@ def halton_sequence(p, n):
 
     """
     eps = np.finfo(np.double).eps
-    b = np.zeros(np.ceil(np.log(n) / np.log(p)) + 1)   # largest number of digits (adding one for halton_sequence(2,64) corner case)
+    # largest number of digits (adding one for halton_sequence(2,64) corner case)
+    b = np.zeros(int(np.ceil(np.log(n) / np.log(p))) + 1)
     u = np.empty(n)
     for j in range(n):
         i = 0
