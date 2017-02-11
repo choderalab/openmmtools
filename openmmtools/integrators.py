@@ -35,38 +35,45 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 # ============================================================================================
 
-import types
-
 import numpy
 
 import simtk.unit
 
 import simtk.unit as units
 import simtk.openmm as mm
-from .constants import kB
 
+from openmmtools.constants import kB
 from openmmtools import respa
 
 
 # ============================================================================================
-# MIXINS
+# BASE CLASSES
 # ============================================================================================
 
-class MetropolizedIntegrator(object):
+class MetropolizedIntegrator(mm.CustomIntegrator):
     """Add temperature functions to a CustomIntegrator.
 
     This class is intended to be inherited by integrators that maintain the
-    velocities stationary distribution at a given temperature. The setter
-    and getter assume the presence of a single global variable "kT" in
-    the CustomIntegrator definition.
+    stationary distribution at a given temperature. The constructor adds a
+    global variable named "kT" defining the thermal energy at the given
+    temperature. This global variable is updated through the temperature
+    setter and getter.
 
     It also provide a utility function to handle per-DOF constants that
     must be computed only when the temperature changes.
 
-    Notes
-    -----
     Notice that the CustomIntegrator internally stored by a Context object
-    will loose setter and getter. You can re-add them with add_interface().
+    will loose setter and getter and any extra function you define. The same
+    happens when you copy your integrator. You can restore the methods with
+    the static method MetropolizedIntegrator.restore_interface().
+
+    Parameters
+    ----------
+    temperature : simtk.unit.Quantity
+        The temperature of the integrator heat bath (temperature units).
+    timestep : simtk.unit.Quantity
+        The timestep to pass to the CustomIntegrator constructor (time
+        units).
 
     Examples
     --------
@@ -75,11 +82,9 @@ class MetropolizedIntegrator(object):
     "sigma" that we need to update only when the temperature is changed.
 
     >>> from simtk import openmm, unit
-    >>> class TestIntegrator(openmm.CustomIntegrator, MetropolizedIntegrator):
+    >>> class TestIntegrator(MetropolizedIntegrator):
     ...     def __init__(self, temperature=298.0*unit.kelvin, timestep=1.0*unit.femtoseconds):
-    ...         kT = kB * temperature
-    ...         super(TestIntegrator, self).__init__(timestep)
-    ...         self.addGlobalVariable("kT", kT)  # thermal energy
+    ...         super(TestIntegrator, self).__init__(temperature, timestep)
     ...         self.addPerDofVariable("sigma", 0)  # velocity standard deviation
     ...         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
     ...
@@ -92,6 +97,8 @@ class MetropolizedIntegrator(object):
     >>> integrator.setTemperature(380.0*unit.kelvin)
     >>> integrator.getTemperature()
     Quantity(value=380.0, unit=kelvin)
+    >>> integrator.getGlobalVariableByName('kT')
+    3.1594995390636815
 
     Notice that a CustomIntegrator bound to a context loses any extra method.
 
@@ -104,15 +111,23 @@ class MetropolizedIntegrator(object):
     ...
     AttributeError: type object 'object' has no attribute '__getattr__'
 
-    We can restore the MetropolizedIntegrator interface with a class method
+    We can restore the original interface with a class method
 
-    >>> MetropolizedIntegrator.add_interface(integrator)
+    >>> MetropolizedIntegrator.restore_interface(integrator)
     True
     >>> integrator.getTemperature()
     Quantity(value=380.0, unit=kelvin)
     >>> integrator.setTemperature(400.0*unit.kelvin)
+    >>> isinstance(integrator, TestIntegrator)
+    True
 
     """
+    def __init__(self, temperature, *args, **kwargs):
+        super(MetropolizedIntegrator, self).__init__(*args, **kwargs)
+        self.addGlobalVariable('kT', kB * temperature)  # thermal energy
+        self.addGlobalVariable('metropolized_class_hash',
+                               self._compute_class_hash(self.__class__))
+
     def getTemperature(self):
         """Return the temperature of the heat bath.
 
@@ -149,7 +164,7 @@ class MetropolizedIntegrator(object):
 
         Parameters
         ----------
-        computer_per_dof : dict of str: str
+        compute_per_dof : dict of str: str
             A dictionary of variable_name: expression.
 
         """
@@ -166,13 +181,37 @@ class MetropolizedIntegrator(object):
         self.addComputeGlobal('has_kT_changed', '0')
         self.endBlock()
 
-    @classmethod
-    def add_interface(cls, integrator):
-        """Add the MetropolizedIntegrator interface to a CustomIntegrator.
+    @staticmethod
+    def is_metropolized(integrator):
+        """Return true if the integrator is a MetropolizedIntegrator.
 
-        The function adds the interface only to CustomIntegrators that
-        have a global variable named "kT". If this is not the case, it
-        returns False.
+        This can be useful when you only have access to the Context
+        CustomIntegrator, which loses all extra function during serialization.
+
+        Parameters
+        ----------
+        integrator : simtk.openmm.Integrator
+            The integrator to check.
+
+        Returns
+        -------
+        True if the original CustomIntegrator class inherited from
+        MetropolizedIntegrator, False otherwise.
+
+        """
+        try:
+            integrator.getGlobalVariableByName('metropolized_class_hash')
+            return True
+        except Exception:
+            return False
+
+    @classmethod
+    def restore_interface(cls, integrator):
+        """Restore the original interface to a CustomIntegrator.
+
+        The function restore the interface of the original class that
+        inherited from MetropolizedIntegrator. Return False if the interface
+        could not be restored.
 
         Parameters
         ----------
@@ -181,20 +220,33 @@ class MetropolizedIntegrator(object):
 
         Returns
         -------
-        True if the given integrator is a CustomIntegrator that defines
-        a "kT" global variables. False otherwise.
+        True if the original class interface could be restored, False otherwise.
 
         """
-        if not isinstance(integrator, mm.CustomIntegrator):
-            return False
         try:
-            integrator.getGlobalVariableByName('kT')
+            integrator_hash = integrator.getGlobalVariableByName('metropolized_class_hash')
         except Exception:
             return False
-        integrator.setTemperature = types.MethodType(cls.setTemperature, integrator)
-        integrator.getTemperature = types.MethodType(cls.getTemperature, integrator)
+
+        # Compute the hash table for all subclasses.
+        if not hasattr(cls, '_cached_hash_subclasses'):
+            cls._cached_hash_subclasses = {cls._compute_class_hash(sc): sc
+                                           for sc in cls.__subclasses__()}
+        # Retrieve integrator class.
+        try:
+            integrator_class = cls._cached_hash_subclasses[integrator_hash]
+        except KeyError:
+            return False
+
+        # Restore class interface.
+        integrator.__class__ = integrator_class
         return True
 
+    @staticmethod
+    def _compute_class_hash(integrator_class):
+        """Return a numeric hash for the integrator class."""
+        # We need to convert to float because some digits may be lost in the conversion
+        return float(hash(integrator_class.__name__))
 
 # ============================================================================================
 # INTEGRATORS
@@ -381,7 +433,7 @@ class VelocityVerletIntegrator(mm.CustomIntegrator):
         self.addConstrainVelocities()
 
 
-class AndersenVelocityVerletIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
+class AndersenVelocityVerletIntegrator(MetropolizedIntegrator):
 
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
@@ -420,13 +472,11 @@ class AndersenVelocityVerletIntegrator(mm.CustomIntegrator, MetropolizedIntegrat
            The integration timestep.
 
         """
-        super(AndersenVelocityVerletIntegrator, self).__init__(timestep)
+        super(AndersenVelocityVerletIntegrator, self).__init__(temperature, timestep)
 
         #
         # Integrator initialization.
         #
-        kT = kB * temperature
-        self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("p_collision", timestep * collision_rate)  # per-particle collision probability per timestep
         self.addPerDofVariable("sigma_v", 0)  # velocity distribution stddev for Maxwell-Boltzmann (computed later)
         self.addPerDofVariable("collision", 0)  # 1 if collision has occured this timestep, 0 otherwise
@@ -451,7 +501,7 @@ class AndersenVelocityVerletIntegrator(mm.CustomIntegrator, MetropolizedIntegrat
         self.addConstrainVelocities()
 
 
-class MetropolisMonteCarloIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
+class MetropolisMonteCarloIntegrator(MetropolizedIntegrator):
 
     """
     Metropolis Monte Carlo with Gaussian displacement trials.
@@ -494,10 +544,7 @@ class MetropolisMonteCarloIntegrator(mm.CustomIntegrator, MetropolizedIntegrator
         """
 
         # Create a new Custom integrator.
-        super(MetropolisMonteCarloIntegrator, self).__init__(timestep)
-
-        # Compute the thermal energy.
-        kT = kB * temperature
+        super(MetropolisMonteCarloIntegrator, self).__init__(temperature, timestep)
 
         #
         # Integrator initialization.
@@ -505,7 +552,6 @@ class MetropolisMonteCarloIntegrator(mm.CustomIntegrator, MetropolizedIntegrator
         self.addGlobalVariable("naccept", 0)  # number accepted
         self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
-        self.addGlobalVariable("kT", kT)  # thermal energy
         self.addPerDofVariable("sigma_x", sigma)  # perturbation size
         self.addPerDofVariable("sigma_v", 0)  # velocity distribution stddev for Maxwell-Boltzmann (set later)
         self.addPerDofVariable("xold", 0)  # old positions
@@ -541,7 +587,7 @@ class MetropolisMonteCarloIntegrator(mm.CustomIntegrator, MetropolizedIntegrator
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
 
-class HMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
+class HMCIntegrator(MetropolizedIntegrator):
 
     """
     Hybrid Monte Carlo (HMC) integrator.
@@ -589,10 +635,7 @@ class HMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
         """
 
-        super(HMCIntegrator, self).__init__(timestep)
-
-        # Compute the thermal energy.
-        kT = kB * temperature
+        super(HMCIntegrator, self).__init__(temperature, timestep)
 
         #
         # Integrator initialization.
@@ -600,7 +643,6 @@ class HMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         self.addGlobalVariable("naccept", 0)  # number accepted
         self.addGlobalVariable("ntrials", 0)  # number of Metropolization trials
 
-        self.addGlobalVariable("kT", kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
@@ -675,7 +717,7 @@ class HMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         return self.n_accept / float(self.n_trials)
 
 
-class GHMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
+class GHMCIntegrator(MetropolizedIntegrator):
 
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.
@@ -726,16 +768,14 @@ class GHMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         """
 
         # Initialize constants.
-        kT = kB * temperature
         gamma = collision_rate
 
         # Create a new custom integrator.
-        super(GHMCIntegrator, self).__init__(timestep)
+        super(GHMCIntegrator, self).__init__(temperature, timestep)
 
         #
         # Integrator initialization.
         #
-        self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
         self.addPerDofVariable("sigma", 0) # velocity standard deviation
         self.addGlobalVariable("ke", 0)  # kinetic energy
@@ -830,7 +870,7 @@ class GHMCIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
         # Reset statistics to ensure 'sigma' is updated on step 0
         self.resetStatistics()
 
-class VVVRIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
+class VVVRIntegrator(MetropolizedIntegrator):
 
     """
     Create a velocity Verlet with velocity randomization (VVVR) integrator.
@@ -885,16 +925,14 @@ class VVVRIntegrator(mm.CustomIntegrator, MetropolizedIntegrator):
 
         """
         # Compute constants.
-        kT = kB * temperature
         gamma = collision_rate
 
         # Create a new custom integrator.
-        super(VVVRIntegrator, self).__init__(timestep)
+        super(VVVRIntegrator, self).__init__(temperature, timestep)
 
         #
         # Integrator initialization.
         #
-        self.addGlobalVariable("kT", kT)  # thermal energy
         self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
         self.addPerDofVariable("sigma", 0)
         self.addPerDofVariable("x1", 0)  # position before application of constraints

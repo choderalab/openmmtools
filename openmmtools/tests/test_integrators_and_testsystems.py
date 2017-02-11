@@ -66,7 +66,9 @@ def test_integrators_and_testsystems():
    from openmmtools import integrators, testsystems
 
    # Get all the CustomIntegrators in the integrators module.
-   is_integrator = lambda x: inspect.isclass(x) and issubclass(x, openmm.CustomIntegrator)
+   is_integrator = lambda x: (inspect.isclass(x) and
+                              issubclass(x, openmm.CustomIntegrator) and
+                              x != integrators.MetropolizedIntegrator)
    custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
 
    def all_subclasses(cls):

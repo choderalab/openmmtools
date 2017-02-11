@@ -48,7 +48,9 @@ def get_all_custom_integrators(only_metropolized=False):
         A list of tuples ('IntegratorName', IntegratorClass)
 
     """
-    predicate = lambda x: inspect.isclass(x) and issubclass(x, openmm.CustomIntegrator)
+    predicate = lambda x: (inspect.isclass(x) and
+                           issubclass(x, openmm.CustomIntegrator) and
+                           x != integrators.MetropolizedIntegrator)
     if only_metropolized:
         old_predicate = predicate  # Avoid infinite recursion.
         predicate = lambda x: old_predicate(x) and issubclass(x, integrators.MetropolizedIntegrator)
@@ -214,7 +216,8 @@ def test_temperature_getter_setter():
         # If this is not a MetropolizedIntegrator, the interface should not be added.
         if integrator_name not in metropolized_integrators:
             integrator = integrator_class()
-            assert MetropolizedIntegrator.add_interface(integrator) is False
+            assert MetropolizedIntegrator.is_metropolized(integrator) is False
+            assert MetropolizedIntegrator.restore_interface(integrator) is False
             assert not hasattr(integrator, 'getTemperature')
             continue
 
@@ -236,9 +239,23 @@ def test_temperature_getter_setter():
         integrator = integrator_class()
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
+        integrator = context.getIntegrator()
 
         # Setter and getter should be added successfully.
-        assert MetropolizedIntegrator.add_interface(integrator) is True
-        assert hasattr(integrator, 'setTemperature')
+        assert MetropolizedIntegrator.is_metropolized(integrator) is True
+        assert MetropolizedIntegrator.restore_interface(integrator) is True
+        assert isinstance(integrator, integrator_class)
         yield check_integrator_temperature_getter_setter, integrator
         del context
+
+
+def test_metropolized_integrator_hash():
+    """Check hash collisions between MetropolizedIntegrators."""
+    metropolized_integrators = get_all_custom_integrators(only_metropolized=True)
+    all_hashes = set()
+    for integrator_name, integrator_class in metropolized_integrators:
+        hash_float = MetropolizedIntegrator._compute_class_hash(integrator_class)
+        all_hashes.add(hash_float)
+        integrator = integrator_class()
+        assert integrator.getGlobalVariableByName('metropolized_class_hash') == hash_float
+    assert len(all_hashes) == len(metropolized_integrators)
