@@ -50,7 +50,7 @@ from openmmtools import respa
 # BASE CLASSES
 # ============================================================================================
 
-class MetropolizedIntegrator(mm.CustomIntegrator):
+class ThermostatedIntegrator(mm.CustomIntegrator):
     """Add temperature functions to a CustomIntegrator.
 
     This class is intended to be inherited by integrators that maintain the
@@ -65,7 +65,7 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
     Notice that the CustomIntegrator internally stored by a Context object
     will loose setter and getter and any extra function you define. The same
     happens when you copy your integrator. You can restore the methods with
-    the static method MetropolizedIntegrator.restore_interface().
+    the static method ThermostatedIntegrator.restore_interface().
 
     Parameters
     ----------
@@ -77,12 +77,12 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
 
     Examples
     --------
-    We can inherit from MetropolizedIntegrator to automatically define
+    We can inherit from ThermostatedIntegrator to automatically define
     setters and getters for the temperature and to add a per-DOF constant
     "sigma" that we need to update only when the temperature is changed.
 
     >>> from simtk import openmm, unit
-    >>> class TestIntegrator(MetropolizedIntegrator):
+    >>> class TestIntegrator(ThermostatedIntegrator):
     ...     def __init__(self, temperature=298.0*unit.kelvin, timestep=1.0*unit.femtoseconds):
     ...         super(TestIntegrator, self).__init__(temperature, timestep)
     ...         self.addPerDofVariable("sigma", 0)  # velocity standard deviation
@@ -113,7 +113,7 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
 
     We can restore the original interface with a class method
 
-    >>> MetropolizedIntegrator.restore_interface(integrator)
+    >>> ThermostatedIntegrator.restore_interface(integrator)
     True
     >>> integrator.getTemperature()
     Quantity(value=380.0, unit=kelvin)
@@ -123,9 +123,9 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
 
     """
     def __init__(self, temperature, *args, **kwargs):
-        super(MetropolizedIntegrator, self).__init__(*args, **kwargs)
+        super(ThermostatedIntegrator, self).__init__(*args, **kwargs)
         self.addGlobalVariable('kT', kB * temperature)  # thermal energy
-        self.addGlobalVariable('metropolized_class_hash',
+        self.addGlobalVariable('thermostated_class_hash',
                                self._compute_class_hash(self.__class__))
 
     def getTemperature(self):
@@ -182,8 +182,8 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
         self.endBlock()
 
     @staticmethod
-    def is_metropolized(integrator):
-        """Return true if the integrator is a MetropolizedIntegrator.
+    def is_thermostated(integrator):
+        """Return true if the integrator is a ThermostatedIntegrator.
 
         This can be useful when you only have access to the Context
         CustomIntegrator, which loses all extra function during serialization.
@@ -196,11 +196,11 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
         Returns
         -------
         True if the original CustomIntegrator class inherited from
-        MetropolizedIntegrator, False otherwise.
+        ThermostatedIntegrator, False otherwise.
 
         """
         try:
-            integrator.getGlobalVariableByName('metropolized_class_hash')
+            integrator.getGlobalVariableByName('thermostated_class_hash')
             return True
         except Exception:
             return False
@@ -210,7 +210,7 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
         """Restore the original interface to a CustomIntegrator.
 
         The function restore the interface of the original class that
-        inherited from MetropolizedIntegrator. Return False if the interface
+        inherited from ThermostatedIntegrator. Return False if the interface
         could not be restored.
 
         Parameters
@@ -224,7 +224,7 @@ class MetropolizedIntegrator(mm.CustomIntegrator):
 
         """
         try:
-            integrator_hash = integrator.getGlobalVariableByName('metropolized_class_hash')
+            integrator_hash = integrator.getGlobalVariableByName('thermostated_class_hash')
         except Exception:
             return False
 
@@ -433,7 +433,7 @@ class VelocityVerletIntegrator(mm.CustomIntegrator):
         self.addConstrainVelocities()
 
 
-class AndersenVelocityVerletIntegrator(MetropolizedIntegrator):
+class AndersenVelocityVerletIntegrator(ThermostatedIntegrator):
 
     """Velocity Verlet integrator with Andersen thermostat using per-particle collisions (rather than massive collisions).
 
@@ -501,7 +501,7 @@ class AndersenVelocityVerletIntegrator(MetropolizedIntegrator):
         self.addConstrainVelocities()
 
 
-class MetropolisMonteCarloIntegrator(MetropolizedIntegrator):
+class MetropolisMonteCarloIntegrator(ThermostatedIntegrator):
 
     """
     Metropolis Monte Carlo with Gaussian displacement trials.
@@ -587,7 +587,7 @@ class MetropolisMonteCarloIntegrator(MetropolizedIntegrator):
         self.addComputeGlobal("ntrials", "ntrials + 1")
 
 
-class HMCIntegrator(MetropolizedIntegrator):
+class HMCIntegrator(ThermostatedIntegrator):
 
     """
     Hybrid Monte Carlo (HMC) integrator.
@@ -717,7 +717,7 @@ class HMCIntegrator(MetropolizedIntegrator):
         return self.n_accept / float(self.n_trials)
 
 
-class GHMCIntegrator(MetropolizedIntegrator):
+class GHMCIntegrator(ThermostatedIntegrator):
 
     """
     Generalized hybrid Monte Carlo (GHMC) integrator.
@@ -870,7 +870,7 @@ class GHMCIntegrator(MetropolizedIntegrator):
         # Reset statistics to ensure 'sigma' is updated on step 0
         self.resetStatistics()
 
-class VVVRIntegrator(MetropolizedIntegrator):
+class VVVRIntegrator(ThermostatedIntegrator):
 
     """
     Create a velocity Verlet with velocity randomization (VVVR) integrator.

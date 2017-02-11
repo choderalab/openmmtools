@@ -20,7 +20,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems
-from openmmtools.integrators import MetropolizedIntegrator
+from openmmtools.integrators import ThermostatedIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -33,14 +33,14 @@ kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 # UTILITY SUBROUTINES
 #=============================================================================================
 
-def get_all_custom_integrators(only_metropolized=False):
+def get_all_custom_integrators(only_thermostated=False):
     """Return all CustomIntegrators in integrators.
 
     Parameters
     ----------
-    only_metropolized : bool
+    only_thermostated : bool
         If True, only the CustomIntegrators inheriting from
-        MetropolizedIntegrator are returned.
+        ThermostatedIntegrator are returned.
 
     Returns
     -------
@@ -50,10 +50,10 @@ def get_all_custom_integrators(only_metropolized=False):
     """
     predicate = lambda x: (inspect.isclass(x) and
                            issubclass(x, openmm.CustomIntegrator) and
-                           x != integrators.MetropolizedIntegrator)
-    if only_metropolized:
+                           x != integrators.ThermostatedIntegrator)
+    if only_thermostated:
         old_predicate = predicate  # Avoid infinite recursion.
-        predicate = lambda x: old_predicate(x) and issubclass(x, integrators.MetropolizedIntegrator)
+        predicate = lambda x: old_predicate(x) and issubclass(x, integrators.ThermostatedIntegrator)
     custom_integrators = inspect.getmembers(integrators, predicate=predicate)
     return custom_integrators
 
@@ -115,7 +115,7 @@ def check_integrator_temperature_getter_setter(integrator):
 
     Parameters
     ----------
-    integrator : MetropolizedIntegrator
+    integrator : ThermostatedIntegrator
         An integrator just created and already bound to a context.
 
     """
@@ -209,15 +209,15 @@ def test_temperature_getter_setter():
     temperature = 350*unit.kelvin
     test = testsystems.HarmonicOscillator()
     custom_integrators = get_all_custom_integrators()
-    metropolized_integrators = dict(get_all_custom_integrators(only_metropolized=True))
+    thermostated_integrators = dict(get_all_custom_integrators(only_thermostated=True))
 
     for integrator_name, integrator_class in custom_integrators:
 
-        # If this is not a MetropolizedIntegrator, the interface should not be added.
-        if integrator_name not in metropolized_integrators:
+        # If this is not a ThermostatedIntegrator, the interface should not be added.
+        if integrator_name not in thermostated_integrators:
             integrator = integrator_class()
-            assert MetropolizedIntegrator.is_metropolized(integrator) is False
-            assert MetropolizedIntegrator.restore_interface(integrator) is False
+            assert ThermostatedIntegrator.is_thermostated(integrator) is False
+            assert ThermostatedIntegrator.restore_interface(integrator) is False
             assert not hasattr(integrator, 'getTemperature')
             continue
 
@@ -242,20 +242,20 @@ def test_temperature_getter_setter():
         integrator = context.getIntegrator()
 
         # Setter and getter should be added successfully.
-        assert MetropolizedIntegrator.is_metropolized(integrator) is True
-        assert MetropolizedIntegrator.restore_interface(integrator) is True
+        assert ThermostatedIntegrator.is_thermostated(integrator) is True
+        assert ThermostatedIntegrator.restore_interface(integrator) is True
         assert isinstance(integrator, integrator_class)
         yield check_integrator_temperature_getter_setter, integrator
         del context
 
 
-def test_metropolized_integrator_hash():
-    """Check hash collisions between MetropolizedIntegrators."""
-    metropolized_integrators = get_all_custom_integrators(only_metropolized=True)
+def test_thermostated_integrator_hash():
+    """Check hash collisions between ThermostatedIntegrators."""
+    thermostated_integrators = get_all_custom_integrators(only_thermostated=True)
     all_hashes = set()
-    for integrator_name, integrator_class in metropolized_integrators:
-        hash_float = MetropolizedIntegrator._compute_class_hash(integrator_class)
+    for integrator_name, integrator_class in thermostated_integrators:
+        hash_float = ThermostatedIntegrator._compute_class_hash(integrator_class)
         all_hashes.add(hash_float)
         integrator = integrator_class()
-        assert integrator.getGlobalVariableByName('metropolized_class_hash') == hash_float
-    assert len(all_hashes) == len(metropolized_integrators)
+        assert integrator.getGlobalVariableByName('thermostated_class_hash') == hash_float
+    assert len(all_hashes) == len(thermostated_integrators)
