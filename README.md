@@ -43,3 +43,11 @@ The module `openmmtools.cache` implements a shared LRU cache for `Context` objec
 If differences in energies in excess of `ENERGY_TOLERANCE` (default: 0.06 kcal/mol) are detected, these systems will be serialized to XML for further debugging.
 
 This is installed onto the command line when the repository is installed.
+
+## OptimizePME
+
+Tools for PME optimization (from Peter Eastman, originally stored [here](https://simtk.org/svn/pyopenmm/trunk/simtk/pyopenmm/extras/optimizepme.py)) are also available in the `optimizepme` module:
+```python
+from openmmtools.optimizepme import optimizePME
+optimizePME(system, integrator, positions, platform, properties, minCutoff, maxCutoff)
+```
