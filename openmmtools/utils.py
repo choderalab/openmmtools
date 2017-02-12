@@ -15,9 +15,74 @@ General utility functions for the repo.
 # =============================================================================
 
 import abc
+import time
+import logging
 
 import numpy as np
 from simtk import openmm, unit
+
+logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# BENCHMARKING UTILITIES
+# =============================================================================
+
+class Timer(object):
+    """A class with stopwatch-style timing functions.
+
+    Examples
+    --------
+    >>> timer = Timer()
+    >>> timer.start('my benchmark')
+    >>> for i in range(10):
+    ...     pass
+    >>> timer.stop('my benchmark')
+    >>> timer.start('second benchmark')
+    >>> for i in range(10):
+    ...     for j in range(10):
+    ...         pass
+    >>> timer.start('second benchmark')
+    >>> timer.report_timing()
+
+    """
+
+    def __init__(self):
+        self.reset_timing_statistics()
+
+    def reset_timing_statistics(self):
+        """Reset the timing statistics."""
+        self._t0 = {}
+        self._t1 = {}
+        self._elapsed = {}
+
+    def start(self, benchmark_id):
+        """Start a timer with given benchmark_id."""
+        self._t0[benchmark_id] = time.time()
+
+    def stop(self, benchmark_id):
+        if benchmark_id in self._t0:
+            self._t1[benchmark_id] = time.time()
+            self._elapsed[benchmark_id] = self._t1[benchmark_id] - self._t0[benchmark_id]
+        else:
+            logger.info("Can't stop timing for {}".format(benchmark_id))
+
+    def report_timing(self, clear=True):
+        """Log all the timings at the debug level.
+
+        Parameters
+        ----------
+        clear : bool
+            If True, the stored timings are deleted after being reported.
+
+        """
+        logger.debug('Saved timings:')
+
+        for benchmark_id, elapsed_time in self._elapsed.items():
+            logger.debug('{:.24}: {:8.3f}s'.format(benchmark_id, elapsed_time))
+
+        if clear is True:
+            self.reset_timing_statistics()
 
 
 # =============================================================================
