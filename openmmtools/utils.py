@@ -16,7 +16,46 @@ General utility functions for the repo.
 
 import abc
 
-from simtk import openmm
+import numpy as np
+from simtk import openmm, unit
+
+
+# =============================================================================
+# QUANTITY UTILITIES
+# =============================================================================
+
+def is_quantity_close(quantity1, quantity2):
+    """Check if the quantities are equal up to floating-point precision errors.
+
+    Parameters
+    ----------
+    quantity1 : simtk.unit.Quantity
+        The first quantity to compare.
+    quantity2 : simtk.unit.Quantity
+        The second quantity to compare.
+
+    Returns
+    -------
+    True if the quantities are equal up to approximately 10 digits.
+
+    Raises
+    ------
+    TypeError
+        If the two quantities are of incompatible units.
+
+    """
+    if not quantity1.unit.is_compatible(quantity2.unit):
+        raise TypeError('Cannot compare incompatible quantities {} and {}'.format(
+            quantity1, quantity2))
+
+    value1 = quantity1.value_in_unit_system(unit.md_unit_system)
+    value2 = quantity2.value_in_unit_system(unit.md_unit_system)
+
+    # np.isclose is not symmetric, so we make it so.
+    if value2 >= value1:
+        return np.isclose(value1, value2, rtol=1e-10, atol=0.0)
+    else:
+        return np.isclose(value2, value1, rtol=1e-10, atol=0.0)
 
 
 # =============================================================================
