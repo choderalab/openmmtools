@@ -865,7 +865,8 @@ class ThermodynamicState(object):
         # Apply temperature to thermostat or integrator.
         thermostat = self._find_thermostat(system)
         if thermostat is not None:
-            if thermostat.getDefaultTemperature() != self.temperature:
+            if not utils.is_quantity_close(thermostat.getDefaultTemperature(),
+                                           self.temperature):
                 thermostat.setDefaultTemperature(self.temperature)
                 context.setParameter(thermostat.Temperature(), self.temperature)
         else:
@@ -920,7 +921,8 @@ class ThermodynamicState(object):
         # checking the barostat temperature.
         if thermostat is None:
             raise TE(TE.NO_THERMOSTAT)
-        elif thermostat.getDefaultTemperature() != self.temperature:
+        elif not utils.is_quantity_close(thermostat.getDefaultTemperature(),
+                                         self.temperature):
             raise TE(TE.INCONSISTENT_THERMOSTAT)
 
         # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
@@ -1042,7 +1044,7 @@ class ThermodynamicState(object):
                 pass
             else:
                 # Raise exception if the heat bath is at the wrong temperature.
-                if temperature != self.temperature:
+                if not utils.is_quantity_close(temperature, self.temperature):
                     err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
                     raise ThermodynamicsError(err_code)
                 is_thermostated = True
@@ -1064,7 +1066,8 @@ class ThermodynamicState(object):
         """
         def set_temp(_integrator):
             try:
-                if _integrator.getTemperature() != self.temperature:
+                if not utils.is_quantity_close(_integrator.getTemperature(),
+                                               self.temperature):
                     _integrator.setTemperature(self.temperature)
                     return True
             except AttributeError:
@@ -1159,8 +1162,9 @@ class ThermodynamicState(object):
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat_temperature = barostat.getTemperature()
         barostat_pressure = barostat.getDefaultPressure()
-        is_consistent = barostat_temperature == self.temperature
-        is_consistent = is_consistent and barostat_pressure == self.pressure
+        is_consistent = utils.is_quantity_close(barostat_temperature, self.temperature)
+        is_consistent = is_consistent and utils.is_quantity_close(barostat_pressure,
+                                                                  self.pressure)
         return is_consistent
 
     def _set_system_pressure(self, system, pressure):
@@ -1215,7 +1219,7 @@ class ThermodynamicState(object):
             configured with the correct pressure.
 
         """
-        if barostat.getDefaultPressure() != pressure:
+        if not utils.is_quantity_close(barostat.getDefaultPressure(), pressure):
             barostat.setDefaultPressure(pressure)
             return True
         return False
@@ -1234,11 +1238,12 @@ class ThermodynamicState(object):
         has_changed = False
         # TODO remove this when we OpenMM 7.0 drop support
         try:
-            if barostat.getDefaultTemperature() != temperature:
+            if not utils.is_quantity_close(barostat.getDefaultTemperature(),
+                                           temperature):
                 barostat.setDefaultTemperature(temperature)
                 has_changed = True
         except AttributeError:  # versions previous to OpenMM 7.1
-            if barostat.getTemperature() != temperature:
+            if not utils.is_quantity_close(barostat.getTemperature(), temperature):
                 barostat.setTemperature(temperature)
                 has_changed = True
         return has_changed
@@ -1295,7 +1300,7 @@ class ThermodynamicState(object):
 
     def _is_thermostat_consistent(self, thermostat):
         """Check thermostat temperature."""
-        return thermostat.getDefaultTemperature() == self.temperature
+        return utils.is_quantity_close(thermostat.getDefaultTemperature(), self.temperature)
 
     @classmethod
     def _set_system_thermostat(cls, system, temperature):
@@ -1328,7 +1333,8 @@ class ThermodynamicState(object):
                 thermostat = openmm.AndersenThermostat(temperature, 1.0/unit.picosecond)
                 system.addForce(thermostat)
                 has_changed = True
-            elif thermostat.getDefaultTemperature() != temperature:
+            elif not utils.is_quantity_close(thermostat.getDefaultTemperature(),
+                                             temperature):
                 thermostat.setDefaultTemperature(temperature)
                 has_changed = True
         return has_changed
