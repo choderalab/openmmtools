@@ -20,7 +20,7 @@ import copy
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import utils
+from openmmtools import utils, integrators
 
 
 # =============================================================================
@@ -779,13 +779,7 @@ class ThermodynamicState(object):
         """
         # Check that integrator is consistent and if it is thermostated.
         # With CompoundIntegrator, at least one must be thermostated.
-        is_thermostated = False
-        if isinstance(integrator, openmm.CompoundIntegrator):
-            for integrator_id in range(integrator.getNumIntegrators()):
-                _integrator = integrator.getIntegrator(integrator_id)
-                is_thermostated = is_thermostated or self._is_integrator_thermostated(_integrator)
-        else:
-            is_thermostated = self._is_integrator_thermostated(integrator)
+        is_thermostated = self._is_integrator_thermostated(integrator)
 
         # If integrator is coupled to heat bath, remove system thermostat.
         system = copy.deepcopy(self._system)
@@ -1014,8 +1008,23 @@ class ThermodynamicState(object):
     # Internal-usage: integrator handling
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _loop_over_integrators(integrator):
+        """Unify manipulation of normal, compound and thermostated integrators."""
+        if isinstance(integrator, openmm.CompoundIntegrator):
+            for integrator_id in range(integrator.getNumIntegrators()):
+                _integrator = integrator.getIntegrator(integrator_id)
+                integrators.ThermostatedIntegrator.restore_interface(_integrator)
+                yield _integrator
+        else:
+            integrators.ThermostatedIntegrator.restore_interface(integrator)
+            yield integrator
+
     def _is_integrator_thermostated(self, integrator):
         """True if integrator is coupled to a heat bath.
+
+        If integrator is a CompoundIntegrator, it returns true if at least
+        one of its integrators is coupled to a heat bath.
 
         Raises
         ------
@@ -1024,16 +1033,21 @@ class ThermodynamicState(object):
             temperature than this thermodynamic state.
 
         """
+        # Loop over integrators to handle CompoundIntegrators.
         is_thermostated = False
-        try:
-            temperature = integrator.getTemperature()
-        except AttributeError:
-            pass
-        else:
-            if temperature != self.temperature:
-                err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
-                raise ThermodynamicsError(err_code)
-            is_thermostated = True
+        for _integrator in self._loop_over_integrators(integrator):
+            try:
+                temperature = _integrator.getTemperature()
+            except AttributeError:
+                pass
+            else:
+                # Raise exception if the heat bath is at the wrong temperature.
+                if temperature != self.temperature:
+                    err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
+                    raise ThermodynamicsError(err_code)
+                is_thermostated = True
+                # We still need to loop over every integrator to make sure
+                # that the temperature is consistent for all of them.
         return is_thermostated
 
     def _set_integrator_temperature(self, integrator):
@@ -1057,14 +1071,11 @@ class ThermodynamicState(object):
                 pass
             return False
 
-        if isinstance(integrator, openmm.CompoundIntegrator):
-            has_changed = False
-            for integrator_id in range(integrator.getNumIntegrators()):
-                _integrator = integrator.getIntegrator(integrator_id)
-                has_changed = has_changed or set_temp(_integrator)
-            return has_changed
-        else:
-            return set_temp(integrator)
+        # Loop over integrators to handle CompoundIntegrators.
+        has_changed = False
+        for _integrator in self._loop_over_integrators(integrator):
+            has_changed = has_changed or set_temp(_integrator)
+        return has_changed
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
