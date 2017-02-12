@@ -23,6 +23,12 @@ from simtk import openmm
 # OPENMM PLATFORM UTILITIES
 # =============================================================================
 
+def get_available_platforms():
+    """Return a list of the available OpenMM Platforms."""
+    return [openmm.Platform.getPlatform(i)
+            for i in range(openmm.Platform.getNumPlatforms())]
+
+
 def get_fastest_platform():
     """Return the fastest available platform.
 
@@ -34,8 +40,7 @@ def get_fastest_platform():
        The fastest available platform.
 
     """
-    platforms = [openmm.Platform.getPlatform(i)
-                 for i in range(openmm.Platform.getNumPlatforms())]
+    platforms = get_available_platforms()
     fastest_platform = max(platforms, key=lambda x: x.getSpeed())
     return fastest_platform
 
