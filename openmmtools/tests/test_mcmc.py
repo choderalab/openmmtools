@@ -35,7 +35,8 @@ analytical_testsystems = [
     ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
         LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("IdealGas", testsystems.IdealGas(nparticles=216),
-        HMCMove(timestep=10*unit.femtosecond, n_steps=10))
+        SequenceMove([HMCMove(timestep=10*unit.femtosecond, n_steps=10),
+                      MonteCarloBarostatMove()]))
     ]
 
 NSIGMA_CUTOFF = 6.0  # cutoff for significance testing
@@ -82,13 +83,17 @@ def subtest_mcmc_expectation(testsystem, move):
         print(testsystem.__class__.__name__)
         print(str(move))
 
+    # Retrieve system and positions.
+    [system, positions] = [testsystem.system, testsystem.positions]
+
     # Test settings.
     temperature = 298.0 * unit.kelvin
     nequil = 10  # number of equilibration iterations
     niterations = 40  # number of production iterations
-
-    # Retrieve system and positions.
-    [system, positions] = [testsystem.system, testsystem.positions]
+    if system.usesPeriodicBoundaryConditions():
+        pressure = 1.0*unit.atmosphere
+    else:
+        pressure = None
 
     # Compute properties.
     kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
@@ -98,7 +103,8 @@ def subtest_mcmc_expectation(testsystem, move):
     # Create sampler and thermodynamic state.
     sampler_state = SamplerState(positions=positions)
     thermodynamic_state = ThermodynamicState(system=system,
-                                             temperature=temperature)
+                                             temperature=temperature,
+                                             pressure=pressure)
 
     # Create MCMC sampler and equilibrate.
     sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)

@@ -2269,6 +2269,13 @@ class IdealGas(TestSystem):
         c = unit.Quantity((0 * unit.nanometer, 0 * unit.nanometer, length))
         system.setDefaultPeriodicBoxVectors(a, b, c)
 
+        # Add a null periodic nonbonded force to allow setting a barostat.
+        nonbonded_force = openmm.NonbondedForce()
+        nonbonded_force.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
+        for i in range(nparticles):
+            nonbonded_force.addParticle(0.0, 1.0, 0.0)
+        system.addForce(nonbonded_force)
+
         # Add particles.
         for index in range(nparticles):
             system.addParticle(mass)
