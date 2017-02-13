@@ -56,25 +56,21 @@ def test_minimizer_all_testsystems():
         logging.info("Testing minimization with testsystem %s" % class_name)
 
         testsystem = testsystem_class()
-
         sampler_state = SamplerState(testsystem.positions)
+        thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+
+        # Create sampler for minimization.
+        sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=[])
+        sampler.minimize(max_iterations=0)
 
         # Check if NaN.
-        if np.isnan(sampler_state.potential_energy / unit.kilocalories_per_mole):
-            raise Exception("Initial energy of system %s yielded NaN" % class_name)
-
-        # Minimize
-        # sampler_state.minimize(maxIterations=0)
-
-        # Check if NaN.
-        if np.isnan(sampler_state.potential_energy / unit.kilocalories_per_mole):
-            raise Exception("Minimization of system %s yielded NaN" % class_name)
+        err_msg = 'Minimization of system {} yielded NaN'.format(class_name)
+        assert not sampler_state.has_nan(), err_msg
 
 
 def test_mcmc_expectations():
     # Select system:
     for [system_name, testsystem, move_set] in analytical_testsystems:
-        print(system_name)
         f = partial(subtest_mcmc_expectation, testsystem, move_set)
         f.description = "Testing MCMC expectation for %s" % system_name
         logging.info(f.description)
@@ -97,21 +93,16 @@ def subtest_mcmc_expectation(testsystem, move_set):
     # Compute properties.
     kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
     kT = kB * temperature
-    ndof = 3*system.getNumParticles() - system.getNumConstraints()
+    ndof = 3 * system.getNumParticles() - system.getNumConstraints()
 
-    # Create thermodynamic state
-    thermodynamic_state = ThermodynamicState(system=testsystem.system, temperature=temperature)
+    # Create sampler and thermodynamic state.
+    sampler_state = SamplerState(positions=positions)
+    thermodynamic_state = ThermodynamicState(system=system,
+                                             temperature=temperature)
 
-    # Create MCMC sampler.
-    sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
-
-    # Create sampler state.
-    sampler_state = SamplerState(positions=testsystem.positions)
-
-    # Equilibrate
-    for iteration in range(nequil):
-        # Update sampler state.
-        sampler_state = sampler.run(sampler_state, 1)
+    # Create MCMC sampler and equilibrate.
+    sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+    sampler.run(nequil)
 
     # Accumulate statistics.
     x_n = np.zeros([niterations], np.float64)  # x_n[i] is the x position of atom 1 after iteration i, in angstroms
@@ -120,18 +111,14 @@ def subtest_mcmc_expectation(testsystem, move_set):
     temperature_n = np.zeros([niterations], np.float64)  # temperature_n[i] is the instantaneous kinetic temperature from iteration i, in K
     volume_n = np.zeros([niterations], np.float64)  # volume_n[i] is the volume from iteration i, in K
     for iteration in range(niterations):
-        if debug:
-            print("iteration %d / %d" % (iteration, niterations))
-
         # Update sampler state.
-        sampler_state = sampler.run(sampler_state, 1)
+        sampler.run(1)
 
         # Get statistics.
-        potential_energy = sampler_state.potential_energy
-        kinetic_energy = sampler_state.kinetic_energy
-        total_energy = sampler_state.total_energy
-        instantaneous_temperature = kinetic_energy * 2.0 / ndof / (unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA)
-        volume = sampler_state.volume
+        potential_energy = sampler.sampler_state.potential_energy
+        kinetic_energy = sampler.sampler_state.kinetic_energy
+        instantaneous_temperature = kinetic_energy * 2.0 / ndof / kB
+        volume = sampler.sampler_state.volume
 
         # Accumulate statistics.
         x_n[iteration] = sampler_state.positions[0, 0] / unit.angstroms
@@ -141,60 +128,49 @@ def subtest_mcmc_expectation(testsystem, move_set):
         volume_n[iteration] = volume / (unit.nanometers**3)
 
     # Compute expected statistics.
-    if 'get_potential_expectation' in dir(testsystem):
+    if hasattr(testsystem, 'get_potential_expectation'):
         # Skip this check if the std dev is zero.
-        skip_test = False
         if potential_n.std() == 0.0:
-            skip_test = True
             if debug:
                 print("Skipping potential test since variance is zero.")
-        if not skip_test:
+        else:
             potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
             potential_mean = potential_n.mean()
             g = timeseries.statisticalInefficiency(potential_n, fast=True)
             dpotential_mean = potential_n.std() / np.sqrt(niterations / g)
             potential_error = potential_mean - potential_expectation
             nsigma = abs(potential_error) / dpotential_mean
-            test_passed = True
-            if nsigma > NSIGMA_CUTOFF:
-                test_passed = False
 
-            if debug or (test_passed is False):
-                print("Potential energy expectation")
-                print("observed %10.5f +- %10.5f kT | expected %10.5f | error %10.5f +- %10.5f (%.1f sigma)" % (
-                    potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma))
-                if test_passed:
-                    print("TEST PASSED")
-                else:
-                    print("TEST FAILED")
-                print("----------------------------------------------------------------------------")
+            err_msg = ('Potential energy expectation\n'
+                       'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
+                       'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
+                       '----------------------------------------------------------------------------').format(
+                potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma)
+            assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
+            if debug:
+                print(err_msg)
 
-    if 'get_volume_expectation' in dir(testsystem):
+    if hasattr(testsystem, 'get_volume_expectation'):
         # Skip this check if the std dev is zero.
-        skip_test = False
         if volume_n.std() == 0.0:
-            skip_test = True
             if debug:
                 print("Skipping volume test.")
-        if not skip_test:
+        else:
             volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
             volume_mean = volume_n.mean()
             g = timeseries.statisticalInefficiency(volume_n, fast=True)
             dvolume_mean = volume_n.std() / np.sqrt(niterations / g)
             volume_error = volume_mean - volume_expectation
             nsigma = abs(volume_error) / dvolume_mean
-            test_passed = True
-            if nsigma > NSIGMA_CUTOFF:
-                test_passed = False
 
-            if debug or (test_passed is False):
-                print("Volume expectation")
-                print("observed %10.5f +- %10.5f kT | expected %10.5f | error %10.5f +- %10.5f (%.1f sigma)" % (volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma))
-                if test_passed:
-                    print("TEST PASSED")
-                else:
-                    print("TEST FAILED")
-                print("----------------------------------------------------------------------------")
+            err_msg = ('Volume expectation\n'
+                       'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
+                       'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
+                       '----------------------------------------------------------------------------').format(
+                volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma)
+            assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
+            if debug:
+                print(err_msg)
 
 
 # =============================================================================
