@@ -333,6 +333,34 @@ class ContextCache(object):
 
 
 # =============================================================================
+# DUMMY CONTEXT CACHE
+# =============================================================================
+
+class DummyContextCache(object):
+    """A dummy ContextCache which always create a new Context.
+
+    Parameters
+    ----------
+    platform : simtk.openmm.Platform, optional
+        The OpenMM platform to use. If None, OpenMM tries to select
+        the fastest one available (default is None).
+
+    Attributes
+    ----------
+    platform : simtk.openmm.Platform
+        The OpenMM platform to use. If None, OpenMM tries to select
+        the fastest one available.
+
+    """
+    def __init__(self, platform=None):
+        self.platform = platform
+
+    def get_context(self, thermodynamic_state, integrator):
+        """Create a new context in the given thermodynamic state."""
+        return thermodynamic_state.create_context(integrator, self.platform)
+
+
+# =============================================================================
 # CACHE ENTRY (MODULE INTERNAL USAGE)
 # =============================================================================
 
