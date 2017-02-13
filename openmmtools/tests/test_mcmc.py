@@ -134,49 +134,73 @@ def subtest_mcmc_expectation(testsystem, move):
         volume_n[iteration] = volume / (unit.nanometers**3)
 
     # Compute expected statistics.
-    if hasattr(testsystem, 'get_potential_expectation'):
-        # Skip this check if the std dev is zero.
-        if potential_n.std() == 0.0:
-            if debug:
-                print("Skipping potential test since variance is zero.")
-        else:
-            potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
-            potential_mean = potential_n.mean()
-            g = timeseries.statisticalInefficiency(potential_n, fast=True)
-            dpotential_mean = potential_n.std() / np.sqrt(niterations / g)
-            potential_error = potential_mean - potential_expectation
-            nsigma = abs(potential_error) / dpotential_mean
+    if (hasattr(testsystem, 'get_potential_expectation') and
+            testsystem.get_potential_standard_deviation(thermodynamic_state) / kT.unit != 0.0):
+        assert potential_n.std() != 0.0, 'Test {} shows no potential fluctuations'.format(
+            testsystem.__class__.__name__)
 
-            err_msg = ('Potential energy expectation\n'
-                       'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
-                       'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
-                       '----------------------------------------------------------------------------').format(
-                potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma)
-            assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
-            if debug:
-                print(err_msg)
+        potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
+        potential_mean = potential_n.mean()
+        g = timeseries.statisticalInefficiency(potential_n, fast=True)
+        dpotential_mean = potential_n.std() / np.sqrt(niterations / g)
+        potential_error = potential_mean - potential_expectation
+        nsigma = abs(potential_error) / dpotential_mean
 
-    if hasattr(testsystem, 'get_volume_expectation'):
-        # Skip this check if the std dev is zero.
-        if volume_n.std() == 0.0:
-            if debug:
-                print("Skipping volume test.")
-        else:
-            volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
-            volume_mean = volume_n.mean()
-            g = timeseries.statisticalInefficiency(volume_n, fast=True)
-            dvolume_mean = volume_n.std() / np.sqrt(niterations / g)
-            volume_error = volume_mean - volume_expectation
-            nsigma = abs(volume_error) / dvolume_mean
+        err_msg = ('Potential energy expectation\n'
+                   'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
+                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
+                   '----------------------------------------------------------------------------').format(
+            potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma)
+        assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
+        if debug:
+            print(err_msg)
+    elif debug:
+        print('Skipping potential expectation test.')
 
-            err_msg = ('Volume expectation\n'
-                       'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
-                       'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
-                       '----------------------------------------------------------------------------').format(
-                volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma)
-            assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
-            if debug:
-                print(err_msg)
+    if (hasattr(testsystem, 'get_volume_expectation') and
+            testsystem.get_volume_standard_deviation(thermodynamic_state) / (unit.nanometers**3) != 0.0):
+        assert volume_n.std() != 0.0, 'Test {} shows no volume fluctuations'.format(
+            testsystem.__class__.__name__)
+
+        volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
+        volume_mean = volume_n.mean()
+        g = timeseries.statisticalInefficiency(volume_n, fast=True)
+        dvolume_mean = volume_n.std() / np.sqrt(niterations / g)
+        volume_error = volume_mean - volume_expectation
+        nsigma = abs(volume_error) / dvolume_mean
+
+        err_msg = ('Volume expectation\n'
+                   'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
+                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
+                   '----------------------------------------------------------------------------').format(
+            volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma)
+        assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
+        if debug:
+            print(err_msg)
+    elif debug:
+        print('Skipping volume expectation test.')
+
+
+def test_barostat_move_frequency():
+    """MonteCarloBarostatMove restore barostat's frequency afterwards."""
+    # Get periodic test case.
+    for test_case in analytical_testsystems:
+        testsystem = test_case[1]
+        if testsystem.system.usesPeriodicBoundaryConditions():
+            break
+
+    sampler_state = SamplerState(testsystem.positions)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 298*unit.kelvin,
+                                             1*unit.atmosphere)
+    move = MonteCarloBarostatMove(n_attempts=5, platform=openmm.Platform.getPlatformByName('Reference'))
+
+    # Test-precondition: the frequency must be different than 1 or it
+    # will never change during the application of the MCMC move.
+    old_frequency = thermodynamic_state.barostat.getFrequency()
+    assert old_frequency != 1
+
+    move.apply(thermodynamic_state, sampler_state)
+    assert thermodynamic_state.barostat.getFrequency() == old_frequency
 
 
 # =============================================================================
