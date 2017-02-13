@@ -45,7 +45,7 @@ Create and run an alanine dipeptide simulation with a weighted move.
 >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
 >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
 >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
->>> sampler.run(n_iterations=10)
+>>> sampler.run(n_iterations=2)
 >>> np.allclose(sampler.sampler_state.positions, test.positions)
 False
 
@@ -88,9 +88,9 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import abc
 import copy
 import logging
-from abc import abstractmethod
 
 import numpy as np
 from simtk import openmm, unit
@@ -121,7 +121,7 @@ class MCMCMove(SubhookedABCMeta):
 
     """
 
-    @abstractmethod
+    @abc.abstractmethod
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the MCMC move.
 
@@ -188,7 +188,7 @@ class MCMCSampler(object):
     >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
-    >>> sampler.run(n_iterations=10)
+    >>> sampler.run(n_iterations=2)
     >>> np.allclose(sampler.sampler_state.positions, test.positions)
     False
 
@@ -366,7 +366,7 @@ class WeightedMove(object):
     >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
-    >>> sampler.run(n_iterations=10)
+    >>> sampler.run(n_iterations=2)
     >>> np.allclose(sampler.sampler_state.positions, test.positions)
     False
 
@@ -399,10 +399,137 @@ class WeightedMove(object):
 
 
 # =============================================================================
+# INTEGRATOR MCMC MOVE BASE CLASS
+# =============================================================================
+
+class IntegratorMove(object):
+    """A general MCMC move that applies an integrator.
+
+    This class is intended to be inherited by MCMCMoves that need to integrate
+    the system. The child class has to implement the _get_integrator method.
+
+    You can decide to override _before_integration() and _after_integration()
+    to execute some code at specific points of the workflow, for example to
+    read data from the Context before the it is destroyed.
+
+    Parameters
+    ----------
+    n_steps : int
+        The number of integration steps to take each time the move is applied.
+    platform : simtk.openmm.Platform, optional
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available (default is None).
+
+    Attributes
+    ----------
+    n_steps : int
+        The number of integration steps to take each time the move is applied.
+    platform : simtk.openmm.Platform
+        Platform to use for Context creation. If None, OpenMM selects
+        the fastest available.
+
+    Examples
+    --------
+    Create a VerletIntegratorMove class.
+
+    >>> from openmmtools import testsystems, states
+    >>> from simtk.openmm import VerletIntegrator
+    >>> class VerletMove(IntegratorMove):
+    ...     def __init__(self, timestep, n_steps, platform=None):
+    ...         super(VerletMove, self).__init__(n_steps, platform)
+    ...         self.timestep = timestep
+    ...     def _get_integrator(self, thermodynamic_state):
+    ...         return VerletIntegrator(self.timestep)
+    ...     def _before_integration(self, context, thermodynamic_state):
+    ...         print('Setting velocities')
+    ...         context.setVelocitiesToTemperature(thermodynamic_state.temperature)
+    ...     def _after_integration(self, context):
+    ...         print('Reading statistics')
+    ...
+    >>> alanine = testsystems.AlanineDipeptideVacuum()
+    >>> sampler_state = states.SamplerState(alanine.positions)
+    >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
+    >>> move = VerletMove(timestep=1.0*unit.femtosecond, n_steps=2)
+    >>> move.apply(thermodynamic_state, sampler_state)
+    Setting velocities
+    Reading statistics
+
+    """
+
+    def __init__(self, n_steps, platform=None):
+        self.n_steps = n_steps
+        self.platform = platform
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Propagate the state through the integrator.
+
+        This updates the SamplerState after the integration. It also logs
+        benchmarking information through the utils.Timer class.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to. This is modified.
+
+        See Also
+        --------
+        openmmtools.utils.Timer
+
+        """
+        move_name = self.__class__.__name__  # shortcut
+        timer = Timer()
+
+        # Create integrator.
+        integrator = self._get_integrator(thermodynamic_state)
+
+        # Create context.
+        timer.start("{}: Context creation".format(move_name))
+        context = thermodynamic_state.create_context(integrator, self.platform)
+        sampler_state.apply_to_context(context)
+        timer.stop("{}: Context creation".format(move_name))
+        logger.debug("{}: Context created, platform is {}".format(
+            move_name, context.getPlatform().getName()))
+
+        self._before_integration(context, thermodynamic_state)
+
+        # Run dynamics.
+        timer.start("{}: step()".format(move_name))
+        integrator.step(self.n_steps)
+        timer.stop("{}: step()".format(move_name))
+
+        self._after_integration(context)
+
+        # Get updated sampler state.
+        timer.start("{}: update sampler state".format(move_name))
+        sampler_state.update_from_context(context)
+        timer.start("{}: update sampler state".format(move_name))
+
+        timer.report_timing()
+
+    @abc.abstractmethod
+    def _get_integrator(self, thermodynamic_state):
+        """Create a new instance of the integrator to apply."""
+        pass
+
+    def _before_integration(self, context, thermodynamic_state):
+        """Execute code after Context creation and before integration."""
+        pass
+
+    def _after_integration(self, context):
+        """Execute code after integration.
+
+        After this point there are no guarantees that the Context will still
+        exist, together with its bound integrator and system.
+        """
+        pass
+
+# =============================================================================
 # LANGEVIN DYNAMICS MOVE
 # =============================================================================
 
-class LangevinDynamicsMove(object):
+class LangevinDynamicsMove(IntegratorMove):
     """Langevin dynamics segment as a (pseudo) Monte Carlo move.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution
@@ -496,11 +623,10 @@ class LangevinDynamicsMove(object):
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
                  n_steps=1000, reassign_velocities=False, platform=None):
+        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps, platform=platform)
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.n_steps = n_steps
         self.reassign_velocities = reassign_velocities
-        self.platform = platform
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the Langevin dynamics MCMC move.
@@ -516,50 +642,26 @@ class LangevinDynamicsMove(object):
            The sampler state to apply the move to. This is modified.
 
         """
+        # Explicitly implemented just to have more specific docstring.
+        super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state)
 
-        timer = Timer()
+    def _get_integrator(self, thermodynamic_state):
+        """Implement IntegratorMove._get_integrator()."""
+        return openmm.LangevinIntegrator(thermodynamic_state.temperature,
+                                         self.collision_rate, self.timestep)
 
-        # Create integrator.
-        integrator = openmm.LangevinIntegrator(thermodynamic_state.temperature,
-                                               self.collision_rate, self.timestep)
-
-        # Random number seed.
-        seed = np.random.randint(_RANDOM_SEED_MAX)
-        integrator.setRandomNumberSeed(seed)
-
-        # Create context.
-        timer.start("Context Creation")
-        context = thermodynamic_state.create_context(integrator, self.platform)
-        sampler_state.apply_to_context(context)
-        timer.stop("Context Creation")
-        logger.debug("LangevinDynamicMove: Context created, platform is {}".format(
-            context.getPlatform().getName()))
-
+    def _before_integration(self, context, thermodynamic_state):
+        """Override IntegratorMove._before_integration()."""
         if self.reassign_velocities:
             # Assign Maxwell-Boltzmann velocities.
             context.setVelocitiesToTemperature(thermodynamic_state.temperature)
-
-        # Run dynamics.
-        timer.start("step()")
-        integrator.step(self.n_steps)
-        timer.stop("step()")
-
-        # Get updated sampler state.
-        timer.start("update_sampler_state")
-        sampler_state.update_from_context(context)
-        timer.start("update_sampler_state")
-
-        # Clean up.
-        del context
-
-        timer.report_timing()
 
 
 # =============================================================================
 # GENERALIZED HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class GHMCMove(object):
+class GHMCMove(IntegratorMove):
     """Generalized hybrid Monte Carlo (GHMC) Markov chain Monte Carlo move.
 
     This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized
@@ -646,11 +748,9 @@ class GHMCMove(object):
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=20.0/unit.picoseconds,
                  n_steps=1000, platform=None):
+        super(GHMCMove, self).__init__(n_steps=n_steps, platform=platform)
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.n_steps = n_steps
-        self.platform = platform
-
         self.reset_statistics()
 
     def reset_statistics(self):
@@ -684,38 +784,19 @@ class GHMCMove(object):
            The sampler state to apply the move to. This is modified.
 
         """
+        # Explicitly implemented just to have more specific docstring.
+        super(GHMCMove, self).apply(thermodynamic_state, sampler_state)
 
-        timer = Timer()
+    def _get_integrator(self, thermodynamic_state):
+        """Implement IntegratorMove._get_integrator()."""
+        # Store lastly generated integrator to collect statistics.
+        return integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature,
+                                          collision_rate=self.collision_rate,
+                                          timestep=self.timestep)
 
-        # Create integrator.
-        integrator = integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature,
-                                                collision_rate=self.collision_rate,
-                                                timestep=self.timestep)
-
-        # Random number seed.
-        seed = np.random.randint(_RANDOM_SEED_MAX)
-        integrator.setRandomNumberSeed(seed)
-
-        # Create context.
-        timer.start("Context Creation")
-        context = thermodynamic_state.create_context(integrator, platform=self.platform)
-        sampler_state.apply_to_context(context)
-        timer.stop("Context Creation")
-
-        # TODO: Enforce constraints?
-        # tol = 1.0e-8
-        # context.applyConstraints(tol)
-        # context.applyVelocityConstraints(tol)
-
-        # Run dynamics.
-        timer.start("step()")
-        integrator.step(self.n_steps)
-        timer.stop("step()")
-
-        # Get updated sampler state.
-        timer.start("update_sampler_state")
-        sampler_state.update_from_context(context)
-        timer.start("update_sampler_state")
+    def _after_integration(self, context):
+        """Implement IntegratorMove._after_integration()."""
+        integrator = context.getIntegrator()
 
         # Accumulate acceptance statistics.
         ghmc_global_variables = {integrator.getGlobalVariableName(index): index
@@ -725,17 +806,12 @@ class GHMCMove(object):
         self.n_accepted += n_accepted
         self.n_attempted += n_attempted
 
-        # Clean up.
-        del context
-
-        timer.report_timing()
-
 
 # =============================================================================
 # HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class HMCMove(object):
+class HMCMove(IntegratorMove):
     """Hybrid Monte Carlo dynamics.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution
@@ -805,9 +881,8 @@ class HMCMove(object):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, n_steps=1000, platform=None):
+        super(HMCMove, self).__init__(n_steps=n_steps, platform=platform)
         self.timestep = timestep
-        self.n_steps = n_steps
-        self.platform = platform
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the MCMC move.
@@ -822,45 +897,20 @@ class HMCMove(object):
            The sampler state to apply the move to. This is modified.
 
         """
-        timer = Timer()
+        # Explicitly implemented just to have more specific docstring.
+        super(HMCMove, self).apply(thermodynamic_state, sampler_state)
 
-        # Create integrator.
-        integrator = integrators.HMCIntegrator(temperature=thermodynamic_state.temperature,
-                                               timestep=self.timestep, nsteps=self.n_steps)
-
-        # Random number seed.
-        seed = np.random.randint(_RANDOM_SEED_MAX)
-        integrator.setRandomNumberSeed(seed)
-
-        # Create context.
-        timer.start("Context Creation")
-        context = thermodynamic_state.create_context(integrator, platform=self.platform)
-        sampler_state.apply_to_context(context)
-        timer.stop("Context Creation")
-
-        # Run dynamics.
-        # Note that ONE step of this integrator is equal to self.n_steps
-        # of velocity Verlet dynamics followed by Metropolis accept/reject.
-        timer.start("HMC integration")
-        integrator.step(1)
-        timer.stop("HMC integration")
-
-        # Get sampler state.
-        timer.start("updated_sampler_state")
-        sampler_state.update_from_context(context)
-        timer.stop("updated_sampler_state")
-
-        # Clean up.
-        del context
-
-        timer.report_timing()
+    def _get_integrator(self, thermodynamic_state):
+        """Implement IntegratorMove._get_integrator()."""
+        return integrators.HMCIntegrator(temperature=thermodynamic_state.temperature,
+                                         timestep=self.timestep, nsteps=self.n_steps)
 
 
 # =============================================================================
 # MONTE CARLO BAROSTAT MOVE
 # =============================================================================
 
-class MonteCarloBarostatMove(object):
+class MonteCarloBarostatMove(IntegratorMove):
     """Monte Carlo barostat move.
 
     This move makes one or more attempts to update the box volume using
@@ -878,8 +928,6 @@ class MonteCarloBarostatMove(object):
     Attributes
     ----------
     n_attempts : int
-        The number of Monte Carlo attempts to make to adjust the box
-        volume..
     platform : simtk.openmm.Platform
         Platform to use for Context creation. If None, OpenMM selects
         the fastest available.
@@ -916,8 +964,17 @@ class MonteCarloBarostatMove(object):
     """
 
     def __init__(self, n_attempts=5, platform=None):
-        self.n_attempts = n_attempts
-        self.platform = platform
+        super(MonteCarloBarostatMove, self).__init__(n_steps=n_attempts,
+                                                     platform=platform)
+
+    @property
+    def n_attempts(self):
+        """The number of MC attempts to make to adjust the box volume."""
+        return self.n_steps  # The number of steps of the dummy integrator.
+
+    @n_attempts.setter
+    def n_attempts(self, value):
+        self.n_steps = value
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the MCMC move.
@@ -933,8 +990,6 @@ class MonteCarloBarostatMove(object):
            The sampler state to apply the move to. This is modified.
 
         """
-        timer = Timer()
-
         # Make sure system contains a MonteCarlo barostat.
         barostat = thermodynamic_state.barostat
         if barostat is None:
@@ -948,42 +1003,18 @@ class MonteCarloBarostatMove(object):
         old_barostat_frequency = barostat.getFrequency()
         if old_barostat_frequency != 1:
             barostat.setFrequency(1)
-
-        # Random number seed.
-        seed = np.random.randint(_RANDOM_SEED_MAX)
-        barostat.setRandomNumberSeed(seed)
         thermodynamic_state.barostat = barostat
 
-        # Create integrator.
-        integrator = integrators.DummyIntegrator()
-
-        # Create context.
-        timer.start("Context Creation")
-        context = thermodynamic_state.create_context(integrator, platform=self.platform)
-        sampler_state.apply_to_context(context)
-        timer.stop("Context Creation")
-
-        # Run update.
-        # Note that ONE step of this integrator is equal to self.n_steps
-        # of velocity Verlet dynamics followed by Metropolis accept/reject.
-        timer.start("step(1)")
-        integrator.step(self.n_attempts)
-        timer.stop("step(1)")
-
-        # Get sampler state.
-        timer.start("update_sampler_state")
-        sampler_state.update_from_context(context)
-        timer.stop("update_sampler_state")
-
-        # Clean up.
-        del context
+        super(MonteCarloBarostatMove, self).apply(thermodynamic_state, sampler_state)
 
         # Restore frequency of barostat.
         if old_barostat_frequency != 1:
             barostat.setFrequency(old_barostat_frequency)
             thermodynamic_state.barostat = barostat
 
-        timer.report_timing()
+    def _get_integrator(self, thermodynamic_state):
+        """Implement IntegratorMove._get_integrator()."""
+        return integrators.DummyIntegrator()
 
 
 # =============================================================================
