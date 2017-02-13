@@ -15,6 +15,7 @@ requirements:
     - cython
     - numpy
     - scipy
+    - nose
     - setuptools
     - openmm
     - parmed
@@ -24,6 +25,7 @@ requirements:
     - cython
     - numpy
     - scipy
+    - nose
     - setuptools
     - six
     - openmm
