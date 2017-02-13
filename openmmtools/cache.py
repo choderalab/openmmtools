@@ -148,17 +148,23 @@ class ContextCache(object):
     """LRU cache hosting the minimum amount of incompatible Contexts.
 
     Two Contexts are compatible if they are in a compatible ThermodynamicState,
-    they are associated to the same platform, and have compatible integrators.
-    In general, two integrators are compatible if they have the same serialized
-    state, but ContextCache can decide to store a single Context to optimize
-    memory when two integrators differ by only few parameters that can be set
-    after the Context is initialized.
+    and have compatible integrators. In general, two integrators are compatible
+    if they have the same serialized state, but ContextCache can decide to store
+    a single Context to optimize memory when two integrators differ by only few
+    parameters that can be set after the Context is initialized.
 
     Parameters
     ----------
+    platform : simtk.openmm.Platform, optional
+        The OpenMM platform to use to create Contexts. If None, OpenMM
+        tries to select the fastest one available (default is None).
     **kwargs
         Parameters to pass to the underlying LRUCache constructor such
         as capacity and time_to_live.
+
+    Attributes
+    ----------
+    platform
 
     Examples
     --------
@@ -216,13 +222,30 @@ class ContextCache(object):
 
     """
 
-    def __init__(self, **kwargs):
+    def __init__(self, platform=None, **kwargs):
+        self._platform = platform
         self._lru = LRUCache(**kwargs)
 
     def __len__(self):
         return len(self._lru)
 
-    def get_context(self, thermodynamic_state, integrator, platform=None):
+    @property
+    def platform(self):
+        """The OpenMM platform to use to create Contexts.
+
+        If None, OpenMM tries to select the fastest one available. This
+        can be set only if the cache is empty.
+
+        """
+        return self._platform
+
+    @platform.setter
+    def platform(self, new_platform):
+        if len(self._lru) > 0:
+            raise RuntimeError('Cannot change platform of a non-empty ContextCache')
+        self._platform = new_platform
+
+    def get_context(self, thermodynamic_state, integrator):
         """Return a context in the given thermodynamic state.
 
         In general, the Context must be considered newly initialized. This
@@ -242,9 +265,6 @@ class ContextCache(object):
             The thermodynamic state of the system.
         integrator : simtk.openmm.Integrator
             The integrator for the context.
-        platform : simtk.openmm.Platform, optional
-            The OpenMM platform to use. If None, OpenMM tries to select
-            the fastest one available (default is None).
 
         Returns
         -------
@@ -255,12 +275,11 @@ class ContextCache(object):
             a difference instance from the one passed as an argument.
 
         """
-        context_id = self._generate_context_id(thermodynamic_state, integrator,
-                                               platform)
+        context_id = self._generate_context_id(thermodynamic_state, integrator)
         try:
             context = self._lru[context_id]
         except KeyError:
-            context = thermodynamic_state.create_context(integrator, platform)
+            context = thermodynamic_state.create_context(integrator, self._platform)
             self._lru[context_id] = context
         context_integrator = context.getIntegrator()
 
@@ -317,19 +336,14 @@ class ContextCache(object):
         return standard_integrator
 
     @classmethod
-    def _generate_context_id(cls, thermodynamic_state, integrator, platform):
+    def _generate_context_id(cls, thermodynamic_state, integrator):
         """Return the unique string key of the context for this state."""
-        if platform is None:
-            platform = utils.get_fastest_platform()
-
         # We take advantage of the cached _standard_system_hash property
         # to generate a compatible hash for the thermodynamic state.
         state_id = str(thermodynamic_state._standard_system_hash)
         standard_integrator = cls._standardize_integrator(integrator)
         integrator_id = openmm.XmlSerializer.serialize(standard_integrator)
-        platform_id = platform.getName()
-
-        return state_id + integrator_id + platform_id
+        return state_id + integrator_id
 
 
 # =============================================================================
@@ -358,6 +372,13 @@ class DummyContextCache(object):
     def get_context(self, thermodynamic_state, integrator):
         """Create a new context in the given thermodynamic state."""
         return thermodynamic_state.create_context(integrator, self.platform)
+
+
+# =============================================================================
+# GLOBAL CONTEXT CACHE
+# =============================================================================
+
+global_context_cache = ContextCache(time_to_live=50)
 
 
 # =============================================================================
