@@ -42,9 +42,9 @@ Create and run an alanine dipeptide simulation with a weighted move.
 ...                                                 temperature=298*unit.kelvin)
 >>> sampler_state = SamplerState(positions=test.positions)
 >>> # Create a move set specifying probabilities fo each type of move.
->>> move_set = {HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5}
+>>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
 >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
->>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+>>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
 >>> sampler.run(n_iterations=10)
 >>> np.allclose(sampler.sampler_state.positions, test.positions)
 False
@@ -56,9 +56,9 @@ NPT ensemble simulation of a Lennard Jones fluid with a sequence of moves.
 ...                                          pressure=1*unit.atmospheres)
 >>> sampler_state = SamplerState(positions=test.positions)
 >>> # Create a move set that includes a Monte Carlo barostat move.
->>> move_set = [GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)]
+>>> move = SequenceMove([GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)])
 >>> # Create an MCMC sampler instance and run 5 iterations of the simulation.
->>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+>>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
 >>> sampler.run(n_iterations=2)
 >>> np.allclose(sampler.sampler_state.positions, test.positions)
 False
@@ -146,8 +146,7 @@ class MCMCMove(SubhookedABCMeta):
 # =============================================================================
 
 class MCMCSampler(object):
-    """
-    Markov chain Monte Carlo sampler.
+    """Basic Markov chain Monte Carlo sampler.
 
     Parameters
     ----------
@@ -186,9 +185,9 @@ class MCMCSampler(object):
     ...                                          temperature=298*unit.kelvin)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set specifying probabilities fo each type of move.
-    >>> move_set = {HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5}
+    >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
-    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     >>> sampler.run(n_iterations=10)
     >>> np.allclose(sampler.sampler_state.positions, test.positions)
     False
@@ -200,25 +199,20 @@ class MCMCSampler(object):
     ...                                          pressure=1*unit.atmospheres)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set that includes a Monte Carlo barostat move.
-    >>> move_set = [GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)]
+    >>> move = SequenceMove([GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)])
     >>> # Create an MCMC sampler instance and run 5 iterations of the simulation.
-    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     >>> sampler.run(n_iterations=2)
     >>> np.allclose(sampler.sampler_state.positions, test.positions)
     False
 
     """
 
-    def __init__(self, thermodynamic_state, sampler_state, move_set):
+    def __init__(self, thermodynamic_state, sampler_state, move):
         # Make a deep copy of the state so that initial state is unchanged.
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
-
-        # Store the move set.
-        if type(move_set) not in [list, dict]:
-            raise Exception("move_set must be list or dict")
-        # TODO: Make deep copy of the move set?
-        self.move_set = move_set
+        self.move = move
 
     def run(self, n_iterations=1):
         """
@@ -230,24 +224,9 @@ class MCMCSampler(object):
             Number of iterations of the sampler to run.
 
         """
-
-        # Generate move sequence.
-        move_sequence = list()
-        if type(self.move_set) == list:
-            # Sequential moves.
-            for iteration in range(n_iterations):
-                for move in self.move_set:
-                    move_sequence.append(move)
-        elif type(self.move_set) == dict:
-            # Random moves.
-            moves = list(self.move_set)
-            weights = np.array([self.move_set[move] for move in moves])
-            weights /= weights.sum()  # normalize
-            move_sequence = np.random.choice(moves, size=n_iterations, p=weights)
-
-        # Apply move sequence.
-        for move in move_sequence:
-            move.apply(self.thermodynamic_state, self.sampler_state)
+        # Apply move for n_iterations.
+        for iteration in range(n_iterations):
+            self.move.apply(self.thermodynamic_state, self.sampler_state)
 
     def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
                  max_iterations=100, platform=None):
@@ -286,6 +265,137 @@ class MCMCSampler(object):
         self.sampler_state.update_from_context(context)
 
         timer.report_timing()
+
+
+# =============================================================================
+# MCMC MOVE CONTAINERS
+# =============================================================================
+
+class SequenceMove(object):
+    """A sequence of MCMC moves.
+
+    Parameters
+    ----------
+    move_list : list-like of MCMCMove
+        The sequence of MCMC moves to apply.
+    platform : simtk.openmm.Platform, optional
+        If not None, the platform of all the moves in the sequence will
+        be set to this (default is None).
+
+    Attributes
+    ----------
+    move_list : list of MCMCMove
+        The sequence of MCMC moves to apply.
+
+    Examples
+    --------
+
+    NPT ensemble simulation of a Lennard Jones fluid with a sequence of moves.
+
+    >>> import numpy as np
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
+    >>> test = testsystems.LennardJonesFluid(nparticles=200)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin,
+    ...                                          pressure=1*unit.atmospheres)
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> # Create a move set that includes a Monte Carlo barostat move.
+    >>> move = SequenceMove([GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)])
+    >>> # Create an MCMC sampler instance and run 5 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
+    >>> sampler.run(n_iterations=2)
+    >>> np.allclose(sampler.sampler_state.positions, test.positions)
+    False
+
+    """
+    def __init__(self, move_list, platform=None):
+        self.move_list = list(move_list)
+        if platform is not None:
+            for move in self.move_list:
+                move.platform = platform
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply the sequence of MCMC move in order.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to.
+
+        """
+        for move in self.move_list:
+            move.apply(thermodynamic_state, sampler_state)
+
+    def __str__(self):
+        return str(self.move_list)
+
+
+class WeightedMove(object):
+    """Pick an MCMC move out of set with given probability at each iteration.
+
+    Parameters
+    ----------
+    move_set : dict of MCMCMove: float
+        The dict of MCMCMoves: probability of being selected at an iteration.
+    platform : simtk.openmm.Platform, optional
+        If not None, the platform of all the moves in the sequence will
+        be set to this (default is None).
+
+    Attributes
+    ----------
+    move_set : dict of MCMCMove: float
+        The dict of MCMCMoves: probability of being selected at an iteration.
+
+    Examples
+    --------
+
+    Create and run an alanine dipeptide simulation with a weighted move.
+
+    >>> import numpy as np
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> # Create a move set specifying probabilities fo each type of move.
+    >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
+    >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
+    >>> sampler.run(n_iterations=10)
+    >>> np.allclose(sampler.sampler_state.positions, test.positions)
+    False
+
+    """
+    def __init__(self, move_set, platform=None):
+        self.move_set = move_set
+        if platform is not None:
+            for move in self.move_set:
+                move.platform = platform
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply one of the MCMC moves in the set to the state.
+
+        The probability that a move is picked is given by its weight.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to propagate dynamics.
+        sampler_state : openmmtools.states.SamplerState
+           The sampler state to apply the move to.
+
+        """
+        moves, weights = zip(*self.move_set.items())
+        move = np.random.choice(moves, p=weights)
+        move.apply(thermodynamic_state, sampler_state)
+
+    def __str__(self):
+        return str(self.move_set)
 
 
 # =============================================================================

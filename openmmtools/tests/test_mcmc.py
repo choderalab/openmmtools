@@ -28,14 +28,14 @@ from openmmtools.mcmc import *
 # Test various combinations of systems and MCMC schemes
 analytical_testsystems = [
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        [GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)]),
+        GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        {GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100): 0.5,
-         HMCMove(timestep=10*unit.femtosecond, n_steps=10): 0.5}),
+        WeightedMove({GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100): 0.5,
+                      HMCMove(timestep=10*unit.femtosecond, n_steps=10): 0.5})),
     ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
-        [LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)]),
+        LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("IdealGas", testsystems.IdealGas(nparticles=216),
-        [HMCMove(timestep=10*unit.femtosecond, n_steps=10)])
+        HMCMove(timestep=10*unit.femtosecond, n_steps=10))
     ]
 
 NSIGMA_CUTOFF = 6.0  # cutoff for significance testing
@@ -60,7 +60,7 @@ def test_minimizer_all_testsystems():
         thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
 
         # Create sampler for minimization.
-        sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=[])
+        sampler = MCMCSampler(thermodynamic_state, sampler_state, move=None)
         sampler.minimize(max_iterations=0)
 
         # Check if NaN.
@@ -70,17 +70,17 @@ def test_minimizer_all_testsystems():
 
 def test_mcmc_expectations():
     # Select system:
-    for [system_name, testsystem, move_set] in analytical_testsystems:
-        f = partial(subtest_mcmc_expectation, testsystem, move_set)
+    for [system_name, testsystem, move] in analytical_testsystems:
+        f = partial(subtest_mcmc_expectation, testsystem, move)
         f.description = "Testing MCMC expectation for %s" % system_name
         logging.info(f.description)
         yield f
 
 
-def subtest_mcmc_expectation(testsystem, move_set):
+def subtest_mcmc_expectation(testsystem, move):
     if debug:
         print(testsystem.__class__.__name__)
-        print(str(move_set))
+        print(str(move))
 
     # Test settings.
     temperature = 298.0 * unit.kelvin
@@ -101,7 +101,7 @@ def subtest_mcmc_expectation(testsystem, move_set):
                                              temperature=temperature)
 
     # Create MCMC sampler and equilibrate.
-    sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+    sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     sampler.run(nequil)
 
     # Accumulate statistics.
