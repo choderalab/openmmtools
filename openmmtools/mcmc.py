@@ -4,8 +4,7 @@
 # MODULE DOCSTRING
 # =============================================================================
 
-"""
-Markov chain Monte Carlo simulation framework.
+"""Markov chain Monte Carlo simulation framework.
 
 DESCRIPTION
 
@@ -13,41 +12,57 @@ This module provides a framework for equilibrium sampling from a given thermodyn
 a biomolecule using a Markov chain Monte Carlo scheme.
 
 CAPABILITIES
+
 * Langevin dynamics [assumed to be free of integration error; use at your own risk]
 * hybrid Monte Carlo
 * generalized hybrid Monte Carlo
 
-NOTES
 
+Notes
+-----
 This is still in development.
 
-REFERENCES
 
+References
+----------
 [1] Jun S. Liu. Monte Carlo Strategies in Scientific Computing. Springer, 2008.
 
-EXAMPLES
 
-Construct a simple MCMC simulation using Langevin dynamics moves.
-
->>> # Create a test system
+Examples
+--------
+>>> import numpy as np
+>>> from simtk import unit
 >>> from openmmtools import testsystems
+>>> from openmmtools.states import ThermodynamicState, SamplerState
+
+Create and run an alanine dipeptide simulation with a weighted move.
+
 >>> test = testsystems.AlanineDipeptideVacuum()
->>> # Create a thermodynamic state.
->>> import simtk.unit as u
->>> from openmmmcmc.thermodynamics import ThermodynamicState
->>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
->>> # Create a sampler state.
+>>> thermodynamic_state = ThermodynamicState(system=test.system,
+...                                                 temperature=298*unit.kelvin)
 >>> sampler_state = SamplerState(positions=test.positions)
->>> # Create a move set.
->>> move_set = [ HMCMove(nsteps=10), LangevinDynamicsMove(nsteps=10) ]
->>> # Create MCMC sampler
->>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
->>> # Run a number of iterations of the sampler.
->>> updated_sampler_state = sampler.run(sampler_state, 10)
+>>> # Create a move set specifying probabilities fo each type of move.
+>>> move_set = {HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5}
+>>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
+>>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+>>> sampler.run(n_iterations=10)
+>>> np.allclose(sampler.sampler_state.positions, test.positions)
+False
 
-TODO
+NPT ensemble simulation of a Lennard Jones fluid with a sequence of moves.
 
-* Split this into a separate package, with individual files for each move type.
+>>> test = testsystems.LennardJonesFluid(nparticles=200)
+>>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin,
+...                                          pressure=1*unit.atmospheres)
+>>> sampler_state = SamplerState(positions=test.positions)
+>>> # Create a move set that includes a Monte Carlo barostat move.
+>>> move_set = [GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)]
+>>> # Create an MCMC sampler instance and run 5 iterations of the simulation.
+>>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+>>> sampler.run(n_iterations=2)
+>>> np.allclose(sampler.sampler_state.positions, test.positions)
+False
+
 
 COPYRIGHT AND LICENSE
 
@@ -67,10 +82,6 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
 
-TODO
-----
-* Recognize when MonteCarloBarostat is in use with system.
-
 """
 
 # =============================================================================
@@ -85,8 +96,7 @@ import numpy as np
 from simtk import openmm, unit
 
 from openmmtools import integrators
-from openmmtools.utils import SubhookedABCMeta
-from openmmmcmc.timing import Timer  # TODO move this in openmmtools.utils
+from openmmtools.utils import SubhookedABCMeta, Timer
 
 logger = logging.getLogger(__name__)
 
@@ -139,86 +149,70 @@ class MCMCSampler(object):
     """
     Markov chain Monte Carlo sampler.
 
-    >>> # Create a test system
+    Parameters
+    ----------
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        Initial thermodynamic state.
+    sampler_state : openmmtools.states.SamplerState
+        Initial sampler state.
+    move_set : container of MarkovChainMonteCarloMove objects
+        Moves to attempt during MCMC run. If list or tuple, will run all moves each
+        iteration in specified sequence (e.g. [move1, move2, move3]). If dict, will
+        use specified unnormalized weights (e.g. { move1 : 0.3, move2 : 0.5, move3, 0.9 })
+
+    Attributes
+    ----------
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        Current thermodynamic state.
+    sampler_state : openmmtools.states.SamplerState
+        Current sampler state.
+    move_set : container of MarkovChainMonteCarloMove objects
+        Moves to attempt during MCMC run. If list or tuple, will run all moves each
+        iteration in specified sequence (e.g. [move1, move2, move3]). If dict, will
+        use specified unnormalized weights (e.g. { move1 : 0.3, move2 : 0.5, move3, 0.9 })
+
+    Examples
+    --------
+
+    >>> import numpy as np
+    >>> from simtk import unit
     >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
+
+    Create and run an alanine dipeptide simulation with a weighted move.
+
     >>> test = testsystems.AlanineDipeptideVacuum()
-    >>> # Create a thermodynamic state.
-    >>> import simtk.unit as u
-    >>> from openmmmcmc.thermodynamics import ThermodynamicState
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-    >>> # Create a sampler state.
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set specifying probabilities fo each type of move.
-    >>> move_set = { HMCMove(nsteps=10) : 0.5, LangevinDynamicsMove(nsteps=10) : 0.5 }
-    >>> # Create MCMC sampler
-    >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
-    >>> # Run a number of iterations of the sampler.
-    >>> updated_sampler_state = sampler.run(sampler_state, 10)
+    >>> move_set = {HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5}
+    >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+    >>> sampler.run(n_iterations=10)
+    >>> np.allclose(sampler.sampler_state.positions, test.positions)
+    False
 
+    NPT ensemble simulation of a Lennard Jones fluid with a sequence of moves.
 
-    >>> # Create a test system
-    >>> from openmmtools import testsystems
     >>> test = testsystems.LennardJonesFluid(nparticles=200)
-    >>> # Create a sampler state.
-    >>> sampler_state = SamplerState(positions=test.positions,
-    ...                              box_vectors=test.system.getDefaultPeriodicBoxVectors())
-    >>> # Create a thermodynamic state.
-    >>> from openmmmcmc.thermodynamics import ThermodynamicState
-    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin,
-    ...                                          pressure=1*u.atmospheres)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin,
+    ...                                          pressure=1*unit.atmospheres)
+    >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set that includes a Monte Carlo barostat move.
-    >>> move_set = [ GHMCMove(nsteps=50), MonteCarloBarostatMove(nattempts=5) ]
-    >>> # Simulate on Reference platform.
-    >>> import simtk.openmm as mm
-    >>> platform = mm.Platform.getPlatformByName('Reference')
-    >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set, platform=platform)
-    >>> # Run a number of iterations of the sampler.
-    >>> updated_sampler_state = sampler.run(sampler_state, 2)
+    >>> move_set = [GHMCMove(n_steps=50), MonteCarloBarostatMove(n_attempts=5)]
+    >>> # Create an MCMC sampler instance and run 5 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move_set=move_set)
+    >>> sampler.run(n_iterations=2)
+    >>> np.allclose(sampler.sampler_state.positions, test.positions)
+    False
 
     """
 
-    def __init__(self, thermodynamic_state, move_set=None):
-        """
-        Initialize a Markov chain Monte Carlo sampler.
-
-        Parameters
-        ----------
-        thermodynamic_state : ThermodynamicState
-            Thermodynamic state to sample during MCMC run.
-        move_set : container of MarkovChainMonteCarloMove objects
-            Moves to attempt during MCMC run.
-            If list or tuple, will run all moves each iteration in specified sequence. (e.g. [move1, move2, move3])
-            if dict, will use specified unnormalized weights (e.g. { move1 : 0.3, move2 : 0.5, move3, 0.9 })
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a thermodynamic state.
-        >>> import simtk.unit as u
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(positions=test.positions)
-
-        Create a move set specifying probabilities for each type of move.
-
-        >>> move_set = { HMCMove() : 0.5, LangevinDynamicsMove() : 0.5 }
-        >>> # Create MCMC sampler
-        >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
-
-        Create a move set specifying an order of moves.
-
-        >>> move_set = [ HMCMove(), LangevinDynamicsMove(), HMCMove() ]
-        >>> # Create MCMC sampler
-        >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
-
-        """
-
-        # Store thermodynamic state.
-        self.thermodynamic_state = thermodynamic_state
+    def __init__(self, thermodynamic_state, sampler_state, move_set):
+        # Make a deep copy of the state so that initial state is unchanged.
+        self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        self.sampler_state = copy.deepcopy(sampler_state)
 
         # Store the move set.
         if type(move_set) not in [list, dict]:
@@ -226,49 +220,22 @@ class MCMCSampler(object):
         # TODO: Make deep copy of the move set?
         self.move_set = move_set
 
-        return
-
-    def run(self, sampler_state, niterations=1):
+    def run(self, n_iterations=1):
         """
         Run the sampler for a specified number of iterations.
 
         Parameters
         ----------
-        sampler_state : SamplerState
-            The current state of the sampler.
-        niterations : int
+        n_iterations : int
             Number of iterations of the sampler to run.
 
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a thermodynamic state.
-        >>> import simtk.unit as u
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(positions=test.positions)
-        >>> # Create a move set specifying probabilities fo each type of move.
-        >>> move_set = { HMCMove(nsteps=10) : 0.5, LangevinDynamicsMove(nsteps=10) : 0.5 }
-        >>> # Create MCMC sampler
-        >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
-        >>> # Run a number of iterations of the sampler.
-        >>> updated_sampler_state = sampler.run(sampler_state, 10)
-
         """
-
-        # Make a deep copy of the sampler state so that initial state is unchanged.
-        # TODO: This seems to cause problems.  Let's figure this out later.
-        sampler_state = copy.deepcopy(sampler_state)
 
         # Generate move sequence.
         move_sequence = list()
         if type(self.move_set) == list:
             # Sequential moves.
-            for iteration in range(niterations):
+            for iteration in range(n_iterations):
                 for move in self.move_set:
                     move_sequence.append(move)
         elif type(self.move_set) == dict:
@@ -276,40 +243,30 @@ class MCMCSampler(object):
             moves = list(self.move_set)
             weights = np.array([self.move_set[move] for move in moves])
             weights /= weights.sum()  # normalize
-            move_sequence = np.random.choice(moves, size=niterations, p=weights)
-
-        sampler_state.system = self.thermodynamic_state.system  # HACK!
+            move_sequence = np.random.choice(moves, size=n_iterations, p=weights)
 
         # Apply move sequence.
         for move in move_sequence:
-            sampler_state = move.apply(self.thermodynamic_state, sampler_state)
+            move.apply(self.thermodynamic_state, self.sampler_state)
 
-        # Return the updated sampler state.
-        return sampler_state
-
-    def minimize(self, tolerance=None, max_iterations=None, platform=None):
-        """
-        Minimize the current configuration.
+    def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
+                 max_iterations=100, platform=None):
+        """Minimize the current configuration.
 
         Parameters
         ----------
-        tolerance : simtk.unit.Quantity compatible with kilocalories_per_mole/anstroms, optional, default = 1*kilocalories_per_mole/anstrom
-           Tolerance to use for minimization termination criterion.
-
-        max_iterations : int, optional, default = 100
-           Maximum number of iterations to use for minimization.
-
+        tolerance : simtk.unit.Quantity, optional
+            Tolerance to use for minimization termination criterion (units of
+            energy/(mole*distance), default is 1*kilocalories_per_mole/angstroms).
+        max_iterations : int, optional
+            Maximum number of iterations to use for minimization. If 0, the minimization
+            will continue until convergence (default is 100).
         platform : simtk.openmm.Platform, optional
-           Platform to use for minimization.
+            Platform to use for minimization. If None, OpenMM will select the
+            fastest available platform (default is None).
 
         """
         timer = Timer()
-
-        if tolerance is None:
-            tolerance = 1.0 * unit.kilocalories_per_mole / unit.angstroms
-
-        if max_iterations is None:
-            max_iterations = 100
 
         # Use LocalEnergyMinimizer
         timer.start("Context creation")
@@ -320,6 +277,7 @@ class MCMCSampler(object):
         logger.debug("LocalEnergyMinimizer: platform is %s" % context.getPlatform().getName())
         logger.debug("Minimizing with tolerance %s and %d max. iterations." % (tolerance, max_iterations))
         timer.stop("Context creation")
+
         timer.start("LocalEnergyMinimizer minimize")
         openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
         timer.stop("LocalEnergyMinimizer minimize")
@@ -328,44 +286,6 @@ class MCMCSampler(object):
         self.sampler_state.update_from_context(context)
 
         timer.report_timing()
-
-    def update_thermodynamic_state(self, thermodynamic_state):
-        """
-        Update the thermodynamic state.
-
-        Parameters
-        ----------
-        thermodynamic_state : ThermodynamicState
-            Thermodynamic state to sample during MCMC run.
-
-        Examples
-        --------
-
-        >>> # Create a test system
-        >>> from openmmtools import testsystems
-        >>> test = testsystems.AlanineDipeptideVacuum()
-        >>> # Create a thermodynamic state.
-        >>> import simtk.unit as u
-        >>> from openmmmcmc.thermodynamics import ThermodynamicState
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*u.kelvin)
-        >>> # Create a sampler state.
-        >>> sampler_state = SamplerState(positions=test.positions)
-        >>> # Create a move set specifying probabilities fo each type of move.
-        >>> move_set = { HMCMove(nsteps=10) : 0.5, LangevinDynamicsMove(nsteps=10) : 0.5 }
-        >>> # Create MCMC sampler
-        >>> sampler = MCMCSampler(thermodynamic_state, move_set=move_set)
-        >>> # Run a number of iterations of the sampler.
-        >>> updated_sampler_state = sampler.run(sampler_state, 10)
-
-        Update the thermodynamic state.
-
-        >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=310*u.kelvin)
-        >>> sampler.update_thermodynamic_state(thermodynamic_state)
-
-        """
-
-        # Store thermodynamic state.
-        self.thermodynamic_state = thermodynamic_state
 
 
 # =============================================================================
@@ -753,7 +673,7 @@ class HMCMove(object):
 
     or create a GHMC move with specified parameters.
 
-    >>> move = HMCMove(timestep=0.5*unit.femtoseconds, nsteps=10)
+    >>> move = HMCMove(timestep=0.5*unit.femtoseconds, n_steps=10)
 
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
@@ -874,7 +794,7 @@ class MonteCarloBarostatMove(object):
 
     or create a GHMC move with specified parameters.
 
-    >>> MonteCarloBarostatMove(n_attempts=2)
+    >>> move = MonteCarloBarostatMove(n_attempts=2)
 
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
@@ -934,7 +854,7 @@ class MonteCarloBarostatMove(object):
         timer.stop("Context Creation")
 
         # Run update.
-        # Note that ONE step of this integrator is equal to self.nsteps
+        # Note that ONE step of this integrator is equal to self.n_steps
         # of velocity Verlet dynamics followed by Metropolis accept/reject.
         timer.start("step(1)")
         integrator.step(self.n_attempts)
@@ -962,4 +882,4 @@ class MonteCarloBarostatMove(object):
 
 if __name__ == "__main__":
     import doctest
-    doctest.testmod(verbose=True)
+    doctest.testmod()
