@@ -1,0 +1,12 @@
+*.py[cod]
+
+openmmtools/version.py
+
+# Packages
+*.egg-info
+dist
+build
+__pycache__
+
+# PyCharm
+.idea
