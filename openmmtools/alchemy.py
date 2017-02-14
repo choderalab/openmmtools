@@ -209,7 +209,6 @@ class AbsoluteAlchemicalFactory(object):
     >>> # Create an alchemically-perturbed test system
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
-    >>> from alchemy import AbsoluteAlchemicalFactory
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
@@ -223,7 +222,6 @@ class AbsoluteAlchemicalFactory(object):
     >>> # Create an alchemically-perturbed test system.
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.TolueneImplicit()
-    >>> from alchemy import AbsoluteAlchemicalFactory
     >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
