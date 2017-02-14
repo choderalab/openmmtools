@@ -24,7 +24,7 @@ script:
   # Install the package
   - conda install --yes --use-local ${PACKAGENAME}-dev
   # Install testing dependencies
-  - conda install --yes --quiet nose nose-timer
+  - conda install --yes --quiet nose nose-timer pymbar
   # Test the package
   # TODO: remove the IGNORE_EXCEPTION_DETAIL when we drop Python2 support
   - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-timer --with-doctest --doctest-options="+IGNORE_EXCEPTION_DETAIL" -a '!slow' && cd ..
