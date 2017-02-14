@@ -16,7 +16,7 @@ Test State classes in mcmc.py.
 from pymbar import timeseries
 from functools import partial
 
-from openmmtools import testsystems
+from openmmtools import testsystems, utils
 from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.mcmc import *
 
@@ -41,7 +41,7 @@ analytical_testsystems = [
 
 NSIGMA_CUTOFF = 6.0  # cutoff for significance testing
 
-debug = False  # set to True only for manual debugging of this nose test
+debug = True  # set to True only for manual debugging of this nose test
 
 
 # =============================================================================
@@ -188,11 +188,12 @@ def test_barostat_move_frequency():
         testsystem = test_case[1]
         if testsystem.system.usesPeriodicBoundaryConditions():
             break
+    assert testsystem.system.usesPeriodicBoundaryConditions(), "Can't find periodic test case!"
 
     sampler_state = SamplerState(testsystem.positions)
     thermodynamic_state = ThermodynamicState(testsystem.system, 298*unit.kelvin,
                                              1*unit.atmosphere)
-    move = MonteCarloBarostatMove(n_attempts=5, platform=openmm.Platform.getPlatformByName('Reference'))
+    move = MonteCarloBarostatMove(n_attempts=5)
 
     # Test-precondition: the frequency must be different than 1 or it
     # will never change during the application of the MCMC move.
@@ -201,6 +202,52 @@ def test_barostat_move_frequency():
 
     move.apply(thermodynamic_state, sampler_state)
     assert thermodynamic_state.barostat.getFrequency() == old_frequency
+
+
+def test_context_cache():
+    """Test configuration of the context cache."""
+    testsystem = testsystems.AlanineDipeptideImplicit()
+    sampler_state = SamplerState(testsystem.positions)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+
+    # By default the global context cache is used.
+    move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
+    move.apply(thermodynamic_state, sampler_state)
+    assert len(cache.global_context_cache) == 2
+
+    # Configuring the global cache works correctly.
+    cache.global_context_cache = cache.ContextCache(time_to_live=1)
+    move.apply(thermodynamic_state, sampler_state)
+    assert len(cache.global_context_cache) == 1
+
+    # The ContextCache creates only one context with compatible moves.
+    cache.global_context_cache = cache.ContextCache(capacity=10, time_to_live=None)
+    move = SequenceMove([LangevinDynamicsMove(n_steps=1), LangevinDynamicsMove(n_steps=1),
+                         LangevinDynamicsMove(n_steps=1), LangevinDynamicsMove(n_steps=1)])
+    move.apply(thermodynamic_state, sampler_state)
+    assert len(cache.global_context_cache) == 1
+
+    # We can configure a local context cache instead of global.
+    local_cache = cache.ContextCache()
+    move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)],
+                        context_cache=local_cache)
+    for m in move:
+        assert m.context_cache == local_cache
+
+    # Running with the local cache doesn't affect the global one.
+    cache.global_context_cache = cache.ContextCache()  # empty global
+    move.apply(thermodynamic_state, sampler_state)
+    assert len(cache.global_context_cache) == 0
+    assert len(local_cache) == 2
+
+    # DummyContextCache works for all platforms.
+    platforms = utils.get_available_platforms()
+    dummy_cache = cache.DummyContextCache()
+    for platform in platforms:
+        dummy_cache.platform = platform
+        move = LangevinDynamicsMove(n_steps=5, context_cache=dummy_cache)
+        move.apply(thermodynamic_state, sampler_state)
+    assert len(cache.global_context_cache) == 0
 
 
 # =============================================================================
