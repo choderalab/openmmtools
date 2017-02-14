@@ -19,7 +19,7 @@ import collections
 
 from simtk import openmm
 
-from openmmtools import utils
+from openmmtools import integrators
 
 
 # =============================================================================
@@ -44,6 +44,11 @@ class LRUCache(object):
         If an element is not accessed after time_to_live read/write
         operations, the element is removed. When set to None, elements do
         not have an expiration (default is None).
+
+    Attributes
+    ----------
+    capacity
+    time_to_live
 
     Examples
     --------
@@ -80,6 +85,46 @@ class LRUCache(object):
         self._capacity = capacity
         self._ttl = time_to_live
         self._n_access = 0
+
+    @property
+    def capacity(self):
+        """Maximum number of elements that can be cached.
+
+        If None, the capacity is unlimited.
+
+        """
+        return self._capacity
+
+    @capacity.setter
+    def capacity(self, new_capacity):
+        # Remove excess elements
+        while len(self._data) > new_capacity:
+            self._data.popitem(last=False)
+        self._capacity = new_capacity
+
+    @property
+    def time_to_live(self):
+        """Number of read/write operations before an cached element expires.
+
+        If None, elements have no expiration.
+
+        """
+        return self._ttl
+
+    @time_to_live.setter
+    def time_to_live(self, new_time_to_live):
+        # Update entries only if we are changing the ttl.
+        ttl_diff = new_time_to_live - self._ttl
+        if ttl_diff == 0:
+            return
+        for entry in self._data.values():
+            entry.expiration += ttl_diff
+        self._remove_expired()
+        self._ttl = new_time_to_live
+
+    def empty(self):
+        """Purge the cache."""
+        self._data = collections.OrderedDict()
 
     def __getitem__(self, key):
         # When we access data, push element at the
@@ -165,6 +210,8 @@ class ContextCache(object):
     Attributes
     ----------
     platform
+    capacity
+    time_to_live
 
     Examples
     --------
@@ -245,6 +292,32 @@ class ContextCache(object):
             raise RuntimeError('Cannot change platform of a non-empty ContextCache')
         self._platform = new_platform
 
+    @property
+    def capacity(self):
+        """The maximum number of Context cached.
+
+        If None, the capacity is unlimited.
+
+        """
+        return self._lru.capacity
+
+    @capacity.setter
+    def capacity(self, new_capacity):
+        self._lru.capacity = new_capacity
+
+    @property
+    def time_to_live(self):
+        """The Contexts expiration date in number of accesses to the LRUCache.
+
+        If None, Contexts do not expire.
+
+        """
+        return self._lru.time_to_live
+
+    @time_to_live.setter
+    def time_to_live(self, new_time_to_live):
+        self._lru.time_to_live = new_time_to_live
+
     def get_context(self, thermodynamic_state, integrator):
         """Return a context in the given thermodynamic state.
 
@@ -310,7 +383,10 @@ class ContextCache(object):
         __setstate__ set also the bound Context.
 
         """
-        assert type(integrator) == type(copied_integrator)
+        # Restore temperature getter/setter before copying attributes.
+        integrators.ThermostatedIntegrator.restore_interface(integrator)
+        integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
+
         for attribute in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES:
             try:
                 value = getattr(copied_integrator, 'get' + attribute)()
@@ -371,7 +447,8 @@ class DummyContextCache(object):
 
     def get_context(self, thermodynamic_state, integrator):
         """Create a new context in the given thermodynamic state."""
-        return thermodynamic_state.create_context(integrator, self.platform)
+        context = thermodynamic_state.create_context(integrator, self.platform)
+        return context, integrator
 
 
 # =============================================================================

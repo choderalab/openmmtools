@@ -110,6 +110,30 @@ def test_lru_cache_access_to_live():
     assert 'first' in cache
 
 
+def test_lru_cache_capacity_property():
+    """When capacity is reduced, LRUCache delete elements."""
+    capacity = 4
+    cache = LRUCache(capacity=capacity)
+    for i in range(capacity):
+        cache[str(i)] = 1
+    cache.capacity = 1
+    assert len(cache) == 1
+    assert cache.capacity == 1
+    assert str(capacity-1) in cache
+
+
+def test_lru_cache_time_to_live_property():
+    """Decreasing the time to live updates the expiration of elements."""
+    cache = LRUCache(time_to_live=50)
+    for i in range(4):
+        cache[str(i)] = i
+    assert len(cache) == 4
+    cache.time_to_live = 1
+    assert len(cache) == 1
+    assert cache.time_to_live == 1
+    assert '3' in cache
+
+
 # =============================================================================
 # TEST CONTEXT CACHE
 # =============================================================================
