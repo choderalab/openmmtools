@@ -13,7 +13,7 @@ requirements:
   build:
     - python
     - cython
-    - numpy >=1.11 # Without this I get libgfortran.so.1: ...: No such file or directory
+    - numpy
     - scipy
     - setuptools
     - openmm
@@ -22,7 +22,7 @@ requirements:
   run:
     - python
     - cython
-    - numpy >=1.11 # Without this I get libgfortran.so.1: ...: No such file or directory
+    - numpy
     - scipy
     - setuptools
     - six
