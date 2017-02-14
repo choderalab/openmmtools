@@ -318,6 +318,10 @@ class ContextCache(object):
     def time_to_live(self, new_time_to_live):
         self._lru.time_to_live = new_time_to_live
 
+    def empty(self):
+        """Clear up cache and remove all Contexts."""
+        self._lru.empty()
+
     def get_context(self, thermodynamic_state, integrator):
         """Return a context in the given thermodynamic state.
 

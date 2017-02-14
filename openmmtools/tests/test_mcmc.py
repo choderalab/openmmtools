@@ -211,6 +211,7 @@ def test_context_cache():
     thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
 
     # By default the global context cache is used.
+    cache.global_context_cache.empty()  # Clear cache from previous tests.
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
     move.apply(thermodynamic_state, sampler_state)
     assert len(cache.global_context_cache) == 2
