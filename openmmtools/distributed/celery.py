@@ -5,7 +5,7 @@ import os
 server = os.getenv('RABBITMQ_SERVER', 'localhost')
 username = os.getenv('RABBITMQ_USERNAME', 'user')
 password = os.getenv('RABBITMQ_PASSWORD', 'password')
-port = os.getenv('RABBITMQ_PORT', '5762')
+port = os.getenv('RABBITMQ_PORT', '5672')
 vhost = os.getenv('RABBITMQ_VHOST', 'celery')
 
 broker = 'amqp://%(username)s:%(password)s@%(server)s:%(port)s/%(vhost)s' % vars()

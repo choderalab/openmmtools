@@ -4,9 +4,9 @@ See [First Steps with Celery](http://docs.celeryproject.org/en/latest/getting-st
 
 First, set your environment variables:
 ```
-RABBITMQ_SERVER
-RABBITMQ_USERNAME
-RABBITMQ_PASSWORD
+RABBITMQ_SERVER (defaults to 'localhost')
+RABBITMQ_USERNAME (defaults to 'user')
+RABBITMQ_PASSWORD (defaults to 'password')
 RABBITMQ_PORT (defaults to '5762')
 RABBITMQ_VHOST (defaults to 'celery')
 ```
