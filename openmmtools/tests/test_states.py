@@ -931,7 +931,7 @@ class TestCompoundThermodynamicState(object):
             except TypeError:  # No parameter to set.
                 raise ValueError
 
-        def set_system_state(self, system):
+        def apply_to_system(self, system):
             self.set_dummy_parameter(system, self.dummy_parameter)
 
         def check_system_consistency(self, system):

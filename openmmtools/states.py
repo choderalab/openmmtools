@@ -1715,7 +1715,7 @@ class IComposableState(utils.SubhookedABCMeta):
     """
 
     @abc.abstractmethod
-    def set_system_state(self, system):
+    def apply_to_system(self, system):
         """Change the system properties to be consistent with this state.
 
         This method is called on CompoundThermodynamicState init to update
@@ -1840,7 +1840,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # be the last new attribute set in the constructor.
         self._composable_states = composable_states
         for s in self._composable_states:
-            s.set_system_state(self._system)
+            s.apply_to_system(self._system)
 
     @property
     def system(self):
@@ -1881,7 +1881,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         """
         if fix_state is True:
             for s in self._composable_states:
-                s.set_system_state(system)
+                s.apply_to_system(system)
         super(CompoundThermodynamicState, self).set_system(system, fix_state)
 
     def is_context_compatible(self, context):
@@ -1947,7 +1947,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             for s in self._composable_states:
                 if any(name in C.__dict__ for C in s.__class__.__mro__):
                     s.__setattr__(name, value)
-                    s.set_system_state(self._system)
+                    s.apply_to_system(self._system)
                     break
 
         # Monkey patching.
