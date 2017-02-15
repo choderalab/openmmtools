@@ -2,9 +2,9 @@ from __future__ import absolute_import, unicode_literals
 from celery import Celery
 import os
 
-server = os.environ['RABBITMQ_SERVER']
-username = os.environ['RABBITMQ_USERNAME']
-password = os.environ['RABBITMQ_PASSWORD']
+server = os.getenv('RABBITMQ_SERVER', 'localhost')
+username = os.getenv('RABBITMQ_USERNAME', 'user')
+password = os.getenv('RABBITMQ_PASSWORD', 'password')
 port = os.getenv('RABBITMQ_PORT', '5762')
 vhost = os.getenv('RABBITMQ_VHOST', 'celery')
 
