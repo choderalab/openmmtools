@@ -206,19 +206,19 @@ class AlchemicalState(object):
 
         """
         alchemical_parameters = {}
-        for force, parameter, parameter_id in cls._get_system_lambda_parameters(system):
+        for force, parameter_name, parameter_id in cls._get_system_lambda_parameters(system):
             parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
 
             # Check that we haven't already found
             # the parameter with a different value.
-            if parameter in alchemical_parameters:
-                if alchemical_parameters[parameter] != parameter_value:
+            if parameter_name in alchemical_parameters:
+                if alchemical_parameters[parameter_name] != parameter_value:
                     err_msg = ('Parameter {} has been found in the force {} with two values: '
-                               '{} and {}').format(parameter, force.__class__.__name__,
-                                                   parameter_value, alchemical_parameters[parameter])
+                               '{} and {}').format(parameter_name, force.__class__.__name__,
+                                                   parameter_value, alchemical_parameters[parameter_name])
                     raise AlchemicalStateError(err_msg)
             else:
-                alchemical_parameters[parameter] = parameter_value
+                alchemical_parameters[parameter_name] = parameter_value
 
         # Check that the system is alchemical.
         if len(alchemical_parameters) == 0:
@@ -259,6 +259,95 @@ class AlchemicalState(object):
         return is_equal
 
     # -------------------------------------------------------------------------
+    # IComposableState interface
+    # -------------------------------------------------------------------------
+
+    def apply_to_system(self, system):
+        """Set the alchemical state of the system to this.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to modify.
+
+        Raises
+        ------
+        AlchemicalStateError
+            If the system does not have the required lambda global variables.
+
+        """
+        parameters_applied = set()
+        for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
+            parameter_value = self._parameters[parameter_name]
+            if parameter_value is None:
+                err_msg = 'The system has parameter {} that is not defined in this state.'
+                raise AlchemicalStateError(err_msg.format(parameter_name))
+            else:
+                parameters_applied.add(parameter_name)
+                force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
+
+        # Check that we set all the defined parameters.
+        for parameter_name in self._get_supported_parameters():
+            if (self._parameters[parameter_name] is not None and
+                    parameter_name not in parameters_applied):
+                err_msg = 'Could not find parameter {} in the system'
+                raise AlchemicalStateError(err_msg.format(parameter_name))
+
+    def check_system_consistency(self, system):
+        """Check if the system is consistent with the alchemical state.
+
+        It raises a AlchemicalStateError if the system is not consistent
+        with the alchemical state.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to test.
+
+        Raises
+        ------
+        AlchemicalStateError
+            If the system is not consistent with this state.
+
+        """
+        pass
+
+    def apply_to_context(self, context):
+        """Put the Context into this AlchemicalState.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to set.
+
+        Raises
+        ------
+        AlchemicalStateError
+            If the context does not have the required lambda global variables.
+
+        """
+        pass
+
+    @classmethod
+    def standardize_system(cls, system):
+        """Standardize the given system.
+
+        Set all global lambda parameters of the system to 1.0.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system to standardize.
+
+        Raises
+        ------
+        AlchemicalStateError
+            If the system is not consistent with this state.
+
+        """
+        pass
+
+    # -------------------------------------------------------------------------
     # Internal-usage
     # -------------------------------------------------------------------------
 
@@ -277,7 +366,14 @@ class AlchemicalState(object):
 
     @classmethod
     def _get_system_lambda_parameters(cls, system):
-        """Yields the supported lambda parameters in the system"""
+        """Yields the supported lambda parameters in the system.
+
+        Yields
+        ------
+        A tuple force, parameter_name, parameter_index for each supported
+        lambda parameter.
+
+        """
         supported_parameters = cls._get_supported_parameters()
 
         # Retrieve all the forces with global supported parameters.
@@ -287,10 +383,10 @@ class AlchemicalState(object):
                 n_global_parameters = force.getNumGlobalParameters()
             except AttributeError:
                 continue
-            for parameter_index in range(n_global_parameters):
-                parameter_name = force.getGlobalParameterName(parameter_index)
+            for parameter_id in range(n_global_parameters):
+                parameter_name = force.getGlobalParameterName(parameter_id)
                 if parameter_name in supported_parameters:
-                    yield force, parameter_name, parameter_index
+                    yield force, parameter_name, parameter_id
 
 # =============================================================================
 # ABSOLUTE ALCHEMICAL FACTORY

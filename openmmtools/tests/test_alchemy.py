@@ -1250,13 +1250,20 @@ class TestAlchemicalState(object):
         cls.alanine_state = states.ThermodynamicState(alchemical_alanine_system,
                                                       temperature=300*unit.kelvin)
 
-        # System with all lambdas.
+        # System with all lambdas except for lambda_restraints.
         alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_explicit.system,
                                                        ligand_atoms=range(0, 22), alchemical_torsions=True,
                                                        alchemical_angles=True, alchemical_bonds=True)
         fully_alchemical_alanine_system = alchemical_factory.alchemically_modified_system
         cls.full_alanine_state = states.ThermodynamicState(fully_alchemical_alanine_system,
                                                            temperature=300*unit.kelvin)
+
+        # Test case: (ThermodynamicState, defined_lambda_parameters)
+        cls.test_cases = [
+            (cls.alanine_state, {'lambda_sterics', 'lambda_electrostatics'}),
+            (cls.full_alanine_state, {'lambda_sterics', 'lambda_electrostatics', 'lambda_bonds',
+                                      'lambda_angles', 'lambda_torsions'})
+        ]
 
     @staticmethod
     def test_constructor():
@@ -1283,20 +1290,13 @@ class TestAlchemicalState(object):
         with nose.tools.assert_raises(AlchemicalStateError):
             AlchemicalState.from_system(testsystems.AlanineDipeptideVacuum().system)
 
-        # Test case is (ThermodynamicState, not_None_lambda_parameters).
-        test_cases = [
-            (self.alanine_state, {'sterics', 'electrostatics'}),
-            (self.full_alanine_state, {'sterics', 'electrostatics', 'bonds', 'angles', 'torsions'})
-        ]
-
         # Valid parameters are 1.0 by default in AbsoluteAlchemicalFactory,
         # and all the others must be None.
-        for state, valid_lambdas in test_cases:
+        for state, defined_lambdas in self.test_cases:
             alchemical_state = AlchemicalState.from_system(state.system)
-            valid_lambdas = {'lambda_' + parameter for parameter in valid_lambdas}
             for parameter in AlchemicalState._get_supported_parameters():
                 property_value = getattr(alchemical_state, parameter)
-                if parameter in valid_lambdas:
+                if parameter in defined_lambdas:
                     assert property_value == 1.0, '{}: {}'.format(parameter, property_value)
                 else:
                     assert property_value is None, '{}: {}'.format(parameter, property_value)
@@ -1311,6 +1311,65 @@ class TestAlchemicalState(object):
         assert state1 == state2
         assert state2 != state3
         assert state3 != state4
+
+    def test_apply_to_system(self):
+        """Test method AlchemicalState.apply_to_system()."""
+        # Do not modify cached test cases.
+        test_cases = copy.deepcopy(self.test_cases)
+
+        # Test precondition: all parameters are 1.0.
+        for state, defined_lambdas in test_cases:
+            kwargs = dict.fromkeys(defined_lambdas, 1.0)
+            alchemical_state = AlchemicalState(**kwargs)
+            assert alchemical_state == AlchemicalState.from_system(state.system)
+
+        # apply_to_system() modifies the state.
+        for state, defined_lambdas in test_cases:
+            kwargs = dict.fromkeys(defined_lambdas, 0.5)
+            alchemical_state = AlchemicalState(**kwargs)
+            system = state.system
+            alchemical_state.apply_to_system(system)
+            system_state = AlchemicalState.from_system(system)
+            assert system_state == alchemical_state
+
+        # Raise an error if an extra parameter is defined in the system.
+        for state, defined_lambdas in test_cases:
+            defined_lambdas = set(defined_lambdas)  # Copy
+            defined_lambdas.pop()  # Remove one element.
+            kwargs = dict.fromkeys(defined_lambdas, 1.0)
+            alchemical_state = AlchemicalState(**kwargs)
+            with nose.tools.assert_raises(AlchemicalStateError):
+                alchemical_state.apply_to_system(state.system)
+
+        # Raise an error if an extra parameter is defined in the state.
+        for state, defined_lambdas in test_cases:
+            defined_lambdas = set(defined_lambdas)  # Copy
+            defined_lambdas.add('lambda_restraints')  # Add extra parameter.
+            kwargs = dict.fromkeys(defined_lambdas, 1.0)
+            alchemical_state = AlchemicalState(**kwargs)
+            with nose.tools.assert_raises(AlchemicalStateError):
+                alchemical_state.apply_to_system(state.system)
+
+    def test_constructor_compound_state(self):
+        """The AlchemicalState is set on construction of the CompoundState."""
+        test_cases = copy.deepcopy(self.test_cases)
+
+        # Test precondition: the original systems are in fully interacting state.
+        for state, defined_lambdas in test_cases:
+            system_state = AlchemicalState.from_system(state.system)
+            kwargs = dict.fromkeys(defined_lambdas, 1.0)
+            assert system_state == AlchemicalState(**kwargs)
+
+        # CompoundThermodynamicState set the system state in constructor.
+        for state, defined_lambdas in test_cases:
+            kwargs = dict.fromkeys(defined_lambdas, 0.5)
+            alchemical_state = AlchemicalState(**kwargs)
+            compound_state = states.CompoundThermodynamicState(state, [alchemical_state])
+            system_state = AlchemicalState.from_system(compound_state.system)
+            assert system_state == alchemical_state
+
+    # TODO implement set_noninteracting() function
+    # TODO implement alchemical functions in pure python
 
 
 # =============================================================================
