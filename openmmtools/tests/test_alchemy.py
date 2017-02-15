@@ -15,20 +15,15 @@ Tests for alchemical factory in `alchemy.py`.
 # =============================================================================
 
 import os
-import copy
-import time
-import logging
 from functools import partial
 
 import nose
 import scipy
-import numpy as np
-from simtk import unit, openmm
 from simtk.openmm import app
 from nose.plugins.attrib import attr
 
-from openmmtools import testsystems, states
-from openmmtools.alchemy import AlchemicalState, AbsoluteAlchemicalFactory, ONE_4PI_EPS0
+from openmmtools import testsystems
+from openmmtools.alchemy import *
 
 logger = logging.getLogger(__name__)
 
@@ -1247,24 +1242,64 @@ class TestAlchemicalState(object):
     def setup_class(cls):
         """Create test systems and shared objects."""
         alanine_explicit = testsystems.AlanineDipeptideExplicit()
+
+        # System with only lambda_sterics and lambda_electrostatics.
         alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_explicit.system,
                                                        ligand_atoms=range(0, 22))
         alchemical_alanine_system = alchemical_factory.alchemically_modified_system
         cls.alanine_state = states.ThermodynamicState(alchemical_alanine_system,
                                                       temperature=300*unit.kelvin)
 
-    @staticmethod
-    def test_constructors():
-        """Interacting/noninteracting AlchemicalState constructors behave as expected."""
-        interacting_state = AlchemicalState()
-        for parameter in AlchemicalState._get_supported_parameters():
-            assert getattr(interacting_state, parameter) == 1
-        noninteracting_state = AlchemicalState().create_noninteracting()
-        for parameter in AlchemicalState._get_supported_parameters():
-            assert getattr(noninteracting_state, parameter) == 0
+        # System with all lambdas.
+        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_explicit.system,
+                                                       ligand_atoms=range(0, 22), alchemical_torsions=True,
+                                                       alchemical_angles=True, alchemical_bonds=True)
+        fully_alchemical_alanine_system = alchemical_factory.alchemically_modified_system
+        cls.full_alanine_state = states.ThermodynamicState(fully_alchemical_alanine_system,
+                                                           temperature=300*unit.kelvin)
 
-        with nose.tools.assert_raises(RuntimeError):
+    @staticmethod
+    def test_constructor():
+        """Test AlchemicalState constructor behave as expected."""
+        # Raise an exception if parameter is not recognized.
+        with nose.tools.assert_raises(AlchemicalStateError):
             AlchemicalState(lambda_electro=1.0)
+
+        # Properties are initialized correctly.
+        test_cases = [{},
+                      {'lambda_sterics': 0.5, 'lambda_angles': 0.5},
+                      {'lambda_electrostatics': 1.0}]
+        for test_kwargs in test_cases:
+            alchemical_state = AlchemicalState(**test_kwargs)
+            for parameter in AlchemicalState._get_supported_parameters():
+                if parameter in test_kwargs:
+                    assert getattr(alchemical_state, parameter) == test_kwargs[parameter]
+                else:
+                    assert getattr(alchemical_state, parameter) is None
+
+    def test_from_system_constructor(self):
+        """Test AlchemicalState.from_system constructor."""
+        # A non-alchemical system raises an error.
+        with nose.tools.assert_raises(AlchemicalStateError):
+            AlchemicalState.from_system(testsystems.AlanineDipeptideVacuum().system)
+
+        # Test case is (ThermodynamicState, not_None_lambda_parameters).
+        test_cases = [
+            (self.alanine_state, {'sterics', 'electrostatics'}),
+            (self.full_alanine_state, {'sterics', 'electrostatics', 'bonds', 'angles', 'torsions'})
+        ]
+
+        # Valid parameters are 1.0 by default in AbsoluteAlchemicalFactory,
+        # and all the others must be None.
+        for state, valid_lambdas in test_cases:
+            alchemical_state = AlchemicalState.from_system(state.system)
+            valid_lambdas = {'lambda_' + parameter for parameter in valid_lambdas}
+            for parameter in AlchemicalState._get_supported_parameters():
+                property_value = getattr(alchemical_state, parameter)
+                if parameter in valid_lambdas:
+                    assert property_value == 1.0, '{}: {}'.format(parameter, property_value)
+                else:
+                    assert property_value is None, '{}: {}'.format(parameter, property_value)
 
     @staticmethod
     def test_equality_operator():
@@ -1272,16 +1307,10 @@ class TestAlchemicalState(object):
         state1 = AlchemicalState(lambda_electrostatics=1.0)
         state2 = AlchemicalState(lambda_electrostatics=1.0)
         state3 = AlchemicalState(lambda_electrostatics=0.9)
+        state4 = AlchemicalState(lambda_electrostatics=0.9, lambda_sterics=1.0)
         assert state1 == state2
         assert state2 != state3
-
-    def test_constructor_set_state(self):
-        """The AlchemicalState is set on construction of the compound state."""
-        alanine_state = copy.deepcopy(self.alanine_state)
-
-        # Test precondition: the original system is in fully interacting state.
-        system_state = AlchemicalState.from_system(alanine_state.system)
-        assert system_state == AlchemicalState()
+        assert state3 != state4
 
 
 # =============================================================================

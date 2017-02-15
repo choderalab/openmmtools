@@ -39,12 +39,14 @@ TODO
 import copy
 import time
 import inspect
+import logging
 
 import numpy as np
 import simtk.openmm as openmm
 import simtk.unit as unit
 
-import logging
+from openmmtools import states
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,6 +124,11 @@ def _is_periodic(system):
 # ALCHEMICAL STATE
 # =============================================================================
 
+class AlchemicalStateError(states.ComposableStateError):
+    """Error raised by an AlchemicalState."""
+    pass
+
+
 class AlchemicalState(object):
     """Alchemical state description.
 
@@ -165,8 +172,8 @@ class AlchemicalState(object):
         # Get supported parameters from properties introspection.
         supported_parameters = self._get_supported_parameters()
 
-        # Default value for all parameters is 1.0.
-        self._parameters = dict.fromkeys(supported_parameters, 1.0)
+        # Default value for all parameters is None.
+        self._parameters = dict.fromkeys(supported_parameters, None)
 
         # Update parameters with constructor arguments.
         self._parameters.update(kwargs)
@@ -174,16 +181,8 @@ class AlchemicalState(object):
         # Check for unknown parameters
         unknown_parameters = set(self._parameters) - supported_parameters
         if len(unknown_parameters) > 0:
-            err_msg = "Unknown AlchemicalState parameters {}".format(unknown_parameters)
-            raise RuntimeError(err_msg)
-
-    @classmethod
-    def create_noninteracting(cls):
-        """Constructor creating a non-interacting AlchemicalState"""
-        noninteracting_parameters = {}
-        for parameter in cls._get_supported_parameters():
-            noninteracting_parameters[parameter] = 0.0
-        return AlchemicalState(**noninteracting_parameters)
+            err_msg = "Unknown parameters {}".format(unknown_parameters)
+            raise AlchemicalStateError(err_msg)
 
     @classmethod
     def from_system(cls, system):
@@ -196,21 +195,36 @@ class AlchemicalState(object):
 
         Returns
         -------
-        The AlchemicalState object of the system.
+        The AlchemicalState object representing the alchemical state of
+        the system.
+
+        Raises
+        ------
+        AlchemicalStateError
+            If the same parameter has different values in the system, or
+            if the system has no lambda parameters.
 
         """
-        # Retrieve all the global parameters from a reference context.
-        platform = openmm.Platform.getPlatformByName('Reference')
-        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(system, integrator, platform)
-        global_parameters = context.getState(getParameters=True).getParameters()
-        del context, integrator
+        alchemical_parameters = {}
+        for force, parameter, parameter_id in cls._get_system_lambda_parameters(system):
+            parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
 
-        # Retrieve supported parameters.
-        supported_parameters = cls._get_supported_parameters()
-        alchemical_parameters = {parameter: value
-                                 for parameter, value in global_parameters.items()
-                                 if parameter in supported_parameters}
+            # Check that we haven't already found
+            # the parameter with a different value.
+            if parameter in alchemical_parameters:
+                if alchemical_parameters[parameter] != parameter_value:
+                    err_msg = ('Parameter {} has been found in the force {} with two values: '
+                               '{} and {}').format(parameter, force.__class__.__name__,
+                                                   parameter_value, alchemical_parameters[parameter])
+                    raise AlchemicalStateError(err_msg)
+            else:
+                alchemical_parameters[parameter] = parameter_value
+
+        # Check that the system is alchemical.
+        if len(alchemical_parameters) == 0:
+            raise AlchemicalStateError('System has no lambda parameters.')
+
+        # Create and return the AlchemicalState.
         return AlchemicalState(**alchemical_parameters)
 
     @property
@@ -261,6 +275,22 @@ class AlchemicalState(object):
             cls, lambda o: isinstance(o, property))}
         return {parameter for parameter in properties if parameter.startswith('lambda_')}
 
+    @classmethod
+    def _get_system_lambda_parameters(cls, system):
+        """Yields the supported lambda parameters in the system"""
+        supported_parameters = cls._get_supported_parameters()
+
+        # Retrieve all the forces with global supported parameters.
+        for force_index in range(system.getNumForces()):
+            force = system.getForce(force_index)
+            try:
+                n_global_parameters = force.getNumGlobalParameters()
+            except AttributeError:
+                continue
+            for parameter_index in range(n_global_parameters):
+                parameter_name = force.getGlobalParameterName(parameter_index)
+                if parameter_name in supported_parameters:
+                    yield force, parameter_name, parameter_index
 
 # =============================================================================
 # ABSOLUTE ALCHEMICAL FACTORY
