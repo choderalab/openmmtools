@@ -180,7 +180,8 @@ def halton_sequence(p, n):
 
     """
     eps = np.finfo(np.double).eps
-    b = np.zeros(np.ceil(np.log(n) / np.log(p)) + 1)   # largest number of digits (adding one for halton_sequence(2,64) corner case)
+    # largest number of digits (adding one for halton_sequence(2,64) corner case)
+    b = np.zeros(int(np.ceil(np.log(n) / np.log(p))) + 1)
     u = np.empty(n)
     for j in range(n):
         i = 0
@@ -2267,6 +2268,13 @@ class IdealGas(TestSystem):
         b = unit.Quantity((0 * unit.nanometer,           length, 0 * unit.nanometer))
         c = unit.Quantity((0 * unit.nanometer, 0 * unit.nanometer, length))
         system.setDefaultPeriodicBoxVectors(a, b, c)
+
+        # Add a null periodic nonbonded force to allow setting a barostat.
+        nonbonded_force = openmm.NonbondedForce()
+        nonbonded_force.setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
+        for i in range(nparticles):
+            nonbonded_force.addParticle(0.0, 1.0, 0.0)
+        system.addForce(nonbonded_force)
 
         # Add particles.
         for index in range(nparticles):

@@ -20,7 +20,7 @@ import copy
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import utils
+from openmmtools import utils, integrators
 
 
 # =============================================================================
@@ -442,7 +442,7 @@ class ThermodynamicState(object):
         if remove_thermostat:
             self._remove_thermostat(system)
         if remove_barostat:
-            self._remove_barostat(system)
+            self._pop_barostat(system)
         return system
 
     @property
@@ -479,6 +479,39 @@ class ThermodynamicState(object):
         if (value is None) != (self._barostat is None):
             self._cached_standard_system_hash = None
         self._set_system_pressure(self._system, value)
+
+    @property
+    def barostat(self):
+        """The barostat associated to the system.
+
+        Note that this is only a copy of the barostat, and you will need
+        to set back the ThermodynamicState.barostat property for the changes
+        to take place internally. If the pressure is allowed to fluctuate,
+        this is None. Normally, you should only need to access the pressure
+        and temperature properties, but this allows you to modify other parameters
+        of the MonteCarloBarostat (e.g. frequency) after initialization. Setting
+        this to None will place the system in an NVT ensemble.
+
+        """
+        return copy.deepcopy(self._barostat)
+
+    @barostat.setter
+    def barostat(self, value):
+        if value is None:
+            # Reset the standard system hash only if we actually switch to NVT.
+            if self._pop_barostat(self._system) is not None:
+                self._cached_standard_system_hash = None
+        else:
+            old_barostat = self._pop_barostat(self._system)
+            new_barostat = copy.deepcopy(value)
+            self._system.addForce(new_barostat)
+            try:
+                self._check_internal_consistency()
+            except Exception as e:
+                # Restore old barostat to leave state consistent.
+                self.barostat = old_barostat
+                raise e
+            self._cached_standard_system_hash = None
 
     @property
     def volume(self):
@@ -746,13 +779,7 @@ class ThermodynamicState(object):
         """
         # Check that integrator is consistent and if it is thermostated.
         # With CompoundIntegrator, at least one must be thermostated.
-        is_thermostated = False
-        if isinstance(integrator, openmm.CompoundIntegrator):
-            for integrator_id in range(integrator.getNumIntegrators()):
-                _integrator = integrator.getIntegrator(integrator_id)
-                is_thermostated = is_thermostated or self._is_integrator_thermostated(_integrator)
-        else:
-            is_thermostated = self._is_integrator_thermostated(integrator)
+        is_thermostated = self._is_integrator_thermostated(integrator)
 
         # If integrator is coupled to heat bath, remove system thermostat.
         system = copy.deepcopy(self._system)
@@ -838,7 +865,8 @@ class ThermodynamicState(object):
         # Apply temperature to thermostat or integrator.
         thermostat = self._find_thermostat(system)
         if thermostat is not None:
-            if thermostat.getDefaultTemperature() != self.temperature:
+            if not utils.is_quantity_close(thermostat.getDefaultTemperature(),
+                                           self.temperature):
                 thermostat.setDefaultTemperature(self.temperature)
                 context.setParameter(thermostat.Temperature(), self.temperature)
         else:
@@ -893,7 +921,8 @@ class ThermodynamicState(object):
         # checking the barostat temperature.
         if thermostat is None:
             raise TE(TE.NO_THERMOSTAT)
-        elif thermostat.getDefaultTemperature() != self.temperature:
+        elif not utils.is_quantity_close(thermostat.getDefaultTemperature(),
+                                         self.temperature):
             raise TE(TE.INCONSISTENT_THERMOSTAT)
 
         # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
@@ -981,8 +1010,23 @@ class ThermodynamicState(object):
     # Internal-usage: integrator handling
     # -------------------------------------------------------------------------
 
+    @staticmethod
+    def _loop_over_integrators(integrator):
+        """Unify manipulation of normal, compound and thermostated integrators."""
+        if isinstance(integrator, openmm.CompoundIntegrator):
+            for integrator_id in range(integrator.getNumIntegrators()):
+                _integrator = integrator.getIntegrator(integrator_id)
+                integrators.ThermostatedIntegrator.restore_interface(_integrator)
+                yield _integrator
+        else:
+            integrators.ThermostatedIntegrator.restore_interface(integrator)
+            yield integrator
+
     def _is_integrator_thermostated(self, integrator):
         """True if integrator is coupled to a heat bath.
+
+        If integrator is a CompoundIntegrator, it returns true if at least
+        one of its integrators is coupled to a heat bath.
 
         Raises
         ------
@@ -991,16 +1035,21 @@ class ThermodynamicState(object):
             temperature than this thermodynamic state.
 
         """
+        # Loop over integrators to handle CompoundIntegrators.
         is_thermostated = False
-        try:
-            temperature = integrator.getTemperature()
-        except AttributeError:
-            pass
-        else:
-            if temperature != self.temperature:
-                err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
-                raise ThermodynamicsError(err_code)
-            is_thermostated = True
+        for _integrator in self._loop_over_integrators(integrator):
+            try:
+                temperature = _integrator.getTemperature()
+            except AttributeError:
+                pass
+            else:
+                # Raise exception if the heat bath is at the wrong temperature.
+                if not utils.is_quantity_close(temperature, self.temperature):
+                    err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
+                    raise ThermodynamicsError(err_code)
+                is_thermostated = True
+                # We still need to loop over every integrator to make sure
+                # that the temperature is consistent for all of them.
         return is_thermostated
 
     def _set_integrator_temperature(self, integrator):
@@ -1017,21 +1066,19 @@ class ThermodynamicState(object):
         """
         def set_temp(_integrator):
             try:
-                if _integrator.getTemperature() != self.temperature:
+                if not utils.is_quantity_close(_integrator.getTemperature(),
+                                               self.temperature):
                     _integrator.setTemperature(self.temperature)
                     return True
             except AttributeError:
                 pass
             return False
 
-        if isinstance(integrator, openmm.CompoundIntegrator):
-            has_changed = False
-            for integrator_id in range(integrator.getNumIntegrators()):
-                _integrator = integrator.getIntegrator(integrator_id)
-                has_changed = has_changed or set_temp(_integrator)
-            return has_changed
-        else:
-            return set_temp(integrator)
+        # Loop over integrators to handle CompoundIntegrators.
+        has_changed = False
+        for _integrator in self._loop_over_integrators(integrator):
+            has_changed = has_changed or set_temp(_integrator)
+        return has_changed
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -1069,19 +1116,20 @@ class ThermodynamicState(object):
         return barostat
 
     @classmethod
-    def _remove_barostat(cls, system):
+    def _pop_barostat(cls, system):
         """Remove the system barostat.
 
         Returns
         -------
-        True if the barostat was found and removed, False otherwise.
+        The removed barostat if it was found, None otherwise.
 
         """
         barostat_id = cls._find_barostat_index(system)
         if barostat_id is not None:
+            barostat = system.getForce(barostat_id)
             system.removeForce(barostat_id)
-            return True
-        return False
+            return barostat
+        return None
 
     @staticmethod
     def _find_barostat_index(system):
@@ -1114,8 +1162,9 @@ class ThermodynamicState(object):
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat_temperature = barostat.getTemperature()
         barostat_pressure = barostat.getDefaultPressure()
-        is_consistent = barostat_temperature == self.temperature
-        is_consistent = is_consistent and barostat_pressure == self.pressure
+        is_consistent = utils.is_quantity_close(barostat_temperature, self.temperature)
+        is_consistent = is_consistent and utils.is_quantity_close(barostat_pressure,
+                                                                  self.pressure)
         return is_consistent
 
     def _set_system_pressure(self, system, pressure):
@@ -1145,7 +1194,7 @@ class ThermodynamicState(object):
 
         """
         if pressure is None:  # If new pressure is None, remove barostat.
-            self._remove_barostat(system)
+            self._pop_barostat(system)
             return None
 
         if not system.usesPeriodicBoundaryConditions():
@@ -1170,7 +1219,7 @@ class ThermodynamicState(object):
             configured with the correct pressure.
 
         """
-        if barostat.getDefaultPressure() != pressure:
+        if not utils.is_quantity_close(barostat.getDefaultPressure(), pressure):
             barostat.setDefaultPressure(pressure)
             return True
         return False
@@ -1189,11 +1238,12 @@ class ThermodynamicState(object):
         has_changed = False
         # TODO remove this when we OpenMM 7.0 drop support
         try:
-            if barostat.getDefaultTemperature() != temperature:
+            if not utils.is_quantity_close(barostat.getDefaultTemperature(),
+                                           temperature):
                 barostat.setDefaultTemperature(temperature)
                 has_changed = True
         except AttributeError:  # versions previous to OpenMM 7.1
-            if barostat.getTemperature() != temperature:
+            if not utils.is_quantity_close(barostat.getTemperature(), temperature):
                 barostat.setTemperature(temperature)
                 has_changed = True
         return has_changed
@@ -1250,7 +1300,7 @@ class ThermodynamicState(object):
 
     def _is_thermostat_consistent(self, thermostat):
         """Check thermostat temperature."""
-        return thermostat.getDefaultTemperature() == self.temperature
+        return utils.is_quantity_close(thermostat.getDefaultTemperature(), self.temperature)
 
     @classmethod
     def _set_system_thermostat(cls, system, temperature):
@@ -1283,7 +1333,8 @@ class ThermodynamicState(object):
                 thermostat = openmm.AndersenThermostat(temperature, 1.0/unit.picosecond)
                 system.addForce(thermostat)
                 has_changed = True
-            elif thermostat.getDefaultTemperature() != temperature:
+            elif not utils.is_quantity_close(thermostat.getDefaultTemperature(),
+                                             temperature):
                 thermostat.setDefaultTemperature(temperature)
                 has_changed = True
         return has_changed
@@ -1539,6 +1590,21 @@ class SamplerState(object):
             context.setVelocities(self._velocities_in_md_units)
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
+
+    def has_nan(self):
+        """Check that energies and positions are finite.
+
+        Returns
+        -------
+        True if the potential energy or any of the generalized coordinates
+        are nan.
+
+        """
+        if self.potential_energy is not None and np.isnan(self.potential_energy):
+            return True
+        if np.any(np.isnan(self._positions_in_md_units)):
+            return True
+        return False
 
     def __getitem__(self, item):
         sampler_state = SamplerState([])
