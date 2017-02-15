@@ -1702,6 +1702,11 @@ class SamplerState(object):
 # COMPOUND THERMODYNAMIC STATE
 # =============================================================================
 
+class ComposableStateError(Exception):
+    """Error raised by a ComposableState."""
+    pass
+
+
 class IComposableState(utils.SubhookedABCMeta):
     """A state composable through CompoundThermodynamicState.
 
@@ -1746,6 +1751,11 @@ class IComposableState(utils.SubhookedABCMeta):
         system : simtk.openmm.System
             The system to test.
 
+        Raises
+        ------
+        IComposableStateError
+            If the system is not consistent with this state.
+
         """
         pass
 
@@ -1774,8 +1784,8 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Raises
         ------
-        ValueError
-            If the system cannot be standardized.
+        IComposableStateError
+            If the system is not consistent with this state.
 
         """
         pass
@@ -1904,10 +1914,10 @@ class CompoundThermodynamicState(ThermodynamicState):
         """
         # We override ThermodynamicState.is_context_compatible to
         # handle the case in which one of the composable states
-        # raises ValueError when standardizing the context system.
+        # raises ComposableStateError when standardizing the context system.
         try:
             return super(CompoundThermodynamicState, self).is_context_compatible(context)
-        except ValueError:
+        except ComposableStateError:
             return False
 
     def apply_to_context(self, context):
@@ -1962,7 +1972,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         Raises
         ------
-        ValueError
+        ComposableStateError
             If it is impossible to standardize the system.
 
         See Also

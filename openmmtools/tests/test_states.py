@@ -929,7 +929,7 @@ class TestCompoundThermodynamicState(object):
             try:
                 cls.set_dummy_parameter(system, cls.standard_dummy_parameter)
             except TypeError:  # No parameter to set.
-                raise ValueError
+                raise ComposableStateError()
 
         def apply_to_system(self, system):
             self.set_dummy_parameter(system, self.dummy_parameter)
@@ -937,7 +937,7 @@ class TestCompoundThermodynamicState(object):
         def check_system_consistency(self, system):
             dummy_parameter = TestCompoundThermodynamicState.get_dummy_parameter(system)
             if dummy_parameter != self.dummy_parameter:
-                raise ValueError
+                raise ComposableStateError()
 
         @staticmethod
         def is_context_compatible(context):
@@ -1046,11 +1046,11 @@ class TestCompoundThermodynamicState(object):
         # Setting an inconsistent system for the dummy raises an error.
         system = compound_state.system
         self.DummyState.set_dummy_parameter(system, self.dummy_parameter + 1.0)
-        with nose.tools.assert_raises(ValueError):
+        with nose.tools.assert_raises(ComposableStateError):
             compound_state.system = system
 
         # Same for set_system when called with default arguments.
-        with nose.tools.assert_raises(ValueError):
+        with nose.tools.assert_raises(ComposableStateError):
             compound_state.set_system(system)
 
         # This doesn't happen if we fix the state.
