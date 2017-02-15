@@ -22,12 +22,12 @@ This repository contains a number of additional integrators for OpenMM in `openm
 
 The `openmmtools.testsystems` module contains a large suite of test systems---including many with simple exactly-computable properties---that can be used to test molecular simulation algorithms
 
-## Monte Carlo moves
+## Markov chain Monte Carlo proposal schemes and move compositions
 An implementation of an `MCMCMove` encodes how to propagate an OpenMM `System` to generate a new sample. Different `MCMCMove`s can be combined for more advanced schemes.
-- `LangevinDynamicsMove`: Langevin dynamics segment as a (pseudo) Monte Carlo move.
+- `LangevinDynamicsMove`: Langevin dynamics segment as a (pseudo) Monte Carlo move (WARNING: Does not preserve the true target distribution.).
 - `HMCMove`: Assigns velocities from the Maxwell-Boltzmann distribution and propagate through velocity Verlet steps.
 - `GHMCMove`: Generalized hybrid Monte Carlo Markov chain Monte Carlo.
-- `MonteCarloBarostatMove`: Attempts to update the box volume using Monte Carlo updates.
+- `MonteCarloBarostatMove`: Attempts to update the box volume using Metropolis-Hastings Monte Carlo updates.
 - `SequenceMove`: Combine multiple `MCMCMove`s to apply in sequence at each iteration.
 - `WeightedMove`: At each iteration, select one `MCMCMove`s to apply from a set with given probability.
 
