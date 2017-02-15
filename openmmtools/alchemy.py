@@ -1,8 +1,8 @@
 #!/usr/bin/python
 
-#=============================================================================================
+# =============================================================================
 # MODULE DOCSTRING
-#=============================================================================================
+# =============================================================================
 
 """
 Alchemical factory for free energy calculations that operates directly on OpenMM System objects.
@@ -31,31 +31,34 @@ TODO
 
 """
 
-#=============================================================================================
-# GLOBAL IMPORTS
-#=============================================================================================
 
-import numpy as np
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
 import copy
 import time
-import itertools
+import inspect
 
+import numpy as np
 import simtk.openmm as openmm
 import simtk.unit as unit
 
 import logging
 logger = logging.getLogger(__name__)
 
-#=============================================================================================
+
+# =============================================================================
 # PARAMETERS
-#=============================================================================================
+# =============================================================================
 
 ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                           # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
 
-#=============================================================================================
+
+# =============================================================================
 # MODULE UTILITIES
-#=============================================================================================
+# =============================================================================
 
 def _is_periodic(system):
     """
@@ -114,50 +117,154 @@ def _is_periodic(system):
     # Nothing we recognize was found, so assume system was not periodic.
     return False
 
-#=============================================================================================
-# AlchemicalState
-#=============================================================================================
 
-class AlchemicalState(dict):
-    """
-    Alchemical state description.
+# =============================================================================
+# ALCHEMICAL STATE
+# =============================================================================
 
-    These parameters describe the parameters that affect computation of the energy.
+class AlchemicalState(object):
+    """Alchemical state description.
+
+    These parameters describe the parameters that affect computation of
+    the energy.
+
+    Parameters
+    ----------
+    lambda_sterics : float, optional
+        Scaling factor for ligand sterics (Lennard-Jones and Halgren)
+        interactions (default is 1.0).
+    lambda_electrostatics : float, optional
+        Scaling factor for ligand charges, intrinsic Born radii, and surface
+        area term (default is 1.0).
+    lambda_bonds : float, optional
+        Scaling factor for alchemically-softened bonds (default is 1.0).
+    lambda_angles : float, optional
+        Scaling factor for alchemically-softened angles (default is 1.0).
+    lambda_torsions : float, optional
+        Scaling factor for alchemically-softened torsions (default is 1.0).
+    lambda_restraints : float, optional
+        Scaling factor for remaining receptor-ligand relative restraint
+        terms to help keep ligand near protein (default is 1.0).
 
     Attributes
     ----------
-    lambda_restraints : float
-        Scaling factor for remaining receptor-ligand relative restraint terms (to help keep ligand near protein).
-    lambda_electrostatics : float
-        Scaling factor for ligand charges, intrinsic Born radii, and surface area term.
-    lambda_sterics : float
-        Scaling factor for ligand sterics (Lennard-Jones and Halgren) interactions.
-    labmda_torsions : float
-        Scaling factor for alchemically-softened torsions.
-    labmda_angles : float
-        Scaling factor for alchemically-softened angles.
-    labmda_bonds : float
-        Scaling factor for alchemically-softened bonds.
+    lambda_sterics
+    lambda_electrostatics
+    lambda_bonds
+    lambda_angles
+    lambda_torsions
+    lambda_restraints
 
     """
+
+    # -------------------------------------------------------------------------
+    # Public members
+    # -------------------------------------------------------------------------
+
     def __init__(self, **kwargs):
-        self['lambda_restraints'] = 1.0
-        self['lambda_electrostatics'] = 1.0
-        self['lambda_sterics'] = 1.0
-        self['lambda_torsions'] = 1.0
-        self['lambda_angles'] = 1.0
-        self['lambda_bonds'] = 1.0
+        # Get supported parameters from properties introspection.
+        supported_parameters = self._get_supported_parameters()
 
-        for key in kwargs.keys():
-            # Raise an exception if we don't know how to handle a specified parameter.
-            if key not in self:
-                raise Exception("AlchemicalState parameter '%s' unknown" % key)
+        # Default value for all parameters is 1.0.
+        self._parameters = dict.fromkeys(supported_parameters, 1.0)
 
-            self[key] = kwargs[key]
+        # Update parameters with constructor arguments.
+        self._parameters.update(kwargs)
 
-#=============================================================================================
-# AbsoluteAlchemicalFactory
-#=============================================================================================
+        # Check for unknown parameters
+        unknown_parameters = set(self._parameters) - supported_parameters
+        if len(unknown_parameters) > 0:
+            err_msg = "Unknown AlchemicalState parameters {}".format(unknown_parameters)
+            raise RuntimeError(err_msg)
+
+    @classmethod
+    def create_noninteracting(cls):
+        """Constructor creating a non-interacting AlchemicalState"""
+        noninteracting_parameters = {}
+        for parameter in cls._get_supported_parameters():
+            noninteracting_parameters[parameter] = 0.0
+        return AlchemicalState(**noninteracting_parameters)
+
+    @classmethod
+    def from_system(cls, system):
+        """Constructor reading the state from an alchemical system.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            An alchemically modified system in a defined alchemical state.
+
+        Returns
+        -------
+        The AlchemicalState object of the system.
+
+        """
+        # Retrieve all the global parameters from a reference context.
+        platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
+        context = openmm.Context(system, integrator, platform)
+        global_parameters = context.getState(getParameters=True).getParameters()
+        del context, integrator
+
+        # Retrieve supported parameters.
+        supported_parameters = cls._get_supported_parameters()
+        alchemical_parameters = {parameter: value
+                                 for parameter, value in global_parameters.items()
+                                 if parameter in supported_parameters}
+        return AlchemicalState(**alchemical_parameters)
+
+    @property
+    def lambda_sterics(self):
+        return self._parameters['lambda_sterics']
+
+    @property
+    def lambda_electrostatics(self):
+        return self._parameters['lambda_electrostatics']
+
+    @property
+    def lambda_bonds(self):
+        return self._parameters['lambda_bonds']
+
+    @property
+    def lambda_angles(self):
+        return self._parameters['lambda_angles']
+
+    @property
+    def lambda_torsions(self):
+        return self._parameters['lambda_torsions']
+
+    @property
+    def lambda_restraints(self):
+        return self._parameters['lambda_restraints']
+
+    def __eq__(self, other):
+        is_equal = True
+        for parameter, self_value in self._parameters.items():
+            other_value = getattr(other, parameter)
+            is_equal = is_equal and self_value == other_value
+        return is_equal
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def _get_supported_parameters(cls):
+        """Return a set of the supported alchemical parameters.
+
+        This is based on the exposed properties. This ways we keep autocompletion
+        working and avoid silent bugs due to possible monkey patching caused by
+        a typo in the name of the variable.
+
+        """
+        properties = {name for name, _ in inspect.getmembers(
+            cls, lambda o: isinstance(o, property))}
+        return {parameter for parameter in properties if parameter.startswith('lambda_')}
+
+
+# =============================================================================
+# ABSOLUTE ALCHEMICAL FACTORY
+# =============================================================================
 
 class AbsoluteAlchemicalFactory(object):
     """

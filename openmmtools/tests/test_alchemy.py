@@ -20,13 +20,14 @@ import time
 import logging
 from functools import partial
 
+import nose
 import scipy
 import numpy as np
 from simtk import unit, openmm
 from simtk.openmm import app
 from nose.plugins.attrib import attr
 
-from openmmtools import testsystems
+from openmmtools import testsystems, states
 from openmmtools.alchemy import AlchemicalState, AbsoluteAlchemicalFactory, ONE_4PI_EPS0
 
 logger = logging.getLogger(__name__)
@@ -1233,6 +1234,54 @@ def lambda_trace(reference_system, positions, platform_name=None, precision=None
 def generate_trace(test_system):
     lambda_trace(test_system['test'].system, test_system['test'].positions, test_system['receptor_atoms'], test_system['ligand_atoms'])
     return
+
+
+# =============================================================================
+# TEST ALCHEMICAL STATE
+# =============================================================================
+
+class TestAlchemicalState(object):
+    """Test AlchemicalState compatibility with CompoundThermodynamicState."""
+
+    @classmethod
+    def setup_class(cls):
+        """Create test systems and shared objects."""
+        alanine_explicit = testsystems.AlanineDipeptideExplicit()
+        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_explicit.system,
+                                                       ligand_atoms=range(0, 22))
+        alchemical_alanine_system = alchemical_factory.alchemically_modified_system
+        cls.alanine_state = states.ThermodynamicState(alchemical_alanine_system,
+                                                      temperature=300*unit.kelvin)
+
+    @staticmethod
+    def test_constructors():
+        """Interacting/noninteracting AlchemicalState constructors behave as expected."""
+        interacting_state = AlchemicalState()
+        for parameter in AlchemicalState._get_supported_parameters():
+            assert getattr(interacting_state, parameter) == 1
+        noninteracting_state = AlchemicalState().create_noninteracting()
+        for parameter in AlchemicalState._get_supported_parameters():
+            assert getattr(noninteracting_state, parameter) == 0
+
+        with nose.tools.assert_raises(RuntimeError):
+            AlchemicalState(lambda_electro=1.0)
+
+    @staticmethod
+    def test_equality_operator():
+        """Test equality operator between AlchemicalStates."""
+        state1 = AlchemicalState(lambda_electrostatics=1.0)
+        state2 = AlchemicalState(lambda_electrostatics=1.0)
+        state3 = AlchemicalState(lambda_electrostatics=0.9)
+        assert state1 == state2
+        assert state2 != state3
+
+    def test_constructor_set_state(self):
+        """The AlchemicalState is set on construction of the compound state."""
+        alanine_state = copy.deepcopy(self.alanine_state)
+
+        # Test precondition: the original system is in fully interacting state.
+        system_state = AlchemicalState.from_system(alanine_state.system)
+        assert system_state == AlchemicalState()
 
 
 # =============================================================================
