@@ -1350,6 +1350,23 @@ class TestAlchemicalState(object):
             with nose.tools.assert_raises(AlchemicalStateError):
                 alchemical_state.apply_to_system(state.system)
 
+    def test_check_system_consistency(self):
+        """Test method AlchemicalState.check_system_consistency()."""
+        # Raise error if system has MORE lambda parameters.
+        alchemical_state = AlchemicalState.from_system(self.alanine_state.system)
+        with nose.tools.assert_raises(AlchemicalStateError):
+            alchemical_state.check_system_consistency(self.full_alanine_state.system)
+
+        # Raise error if system has LESS lambda parameters.
+        alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
+        with nose.tools.assert_raises(AlchemicalStateError):
+            alchemical_state.check_system_consistency(self.alanine_state.system)
+
+        # Raise error if system has different lambda values.
+        alchemical_state.lambda_bonds = 0.5
+        with nose.tools.assert_raises(AlchemicalStateError):
+            alchemical_state.check_system_consistency(self.full_alanine_state.system)
+
     def test_constructor_compound_state(self):
         """The AlchemicalState is set on construction of the CompoundState."""
         test_cases = copy.deepcopy(self.test_cases)

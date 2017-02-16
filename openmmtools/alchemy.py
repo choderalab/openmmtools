@@ -165,7 +165,7 @@ class AlchemicalState(object):
     """
 
     # -------------------------------------------------------------------------
-    # Public members
+    # Constructors
     # -------------------------------------------------------------------------
 
     def __init__(self, **kwargs):
@@ -227,29 +227,35 @@ class AlchemicalState(object):
         # Create and return the AlchemicalState.
         return AlchemicalState(**alchemical_parameters)
 
-    @property
-    def lambda_sterics(self):
-        return self._parameters['lambda_sterics']
+    # -------------------------------------------------------------------------
+    # Lambda properties
+    # -------------------------------------------------------------------------
 
-    @property
-    def lambda_electrostatics(self):
-        return self._parameters['lambda_electrostatics']
+    # Lambda properties. The set of supported parameters is dynamically
+    # discovered by _get_supported_parameters() based on this list. We
+    # list them explicitly to preserve auto-completion and prevent silent
+    # bugs due to monkey-patching.
+    class _LambdaProperty(object):
+        """Descriptor of a lambda parameter."""
+        def __init__(self, parameter_name):
+            self._parameter_name = parameter_name
 
-    @property
-    def lambda_bonds(self):
-        return self._parameters['lambda_bonds']
+        def __get__(self, instance, owner_class):
+            return instance._parameters[self._parameter_name]
 
-    @property
-    def lambda_angles(self):
-        return self._parameters['lambda_angles']
+        def __set__(self, instance, value):
+            instance._parameters[self._parameter_name] = value
 
-    @property
-    def lambda_torsions(self):
-        return self._parameters['lambda_torsions']
+    lambda_sterics = _LambdaProperty('lambda_sterics')
+    lambda_electrostatics = _LambdaProperty('lambda_electrostatics')
+    lambda_bonds = _LambdaProperty('lambda_bonds')
+    lambda_angles = _LambdaProperty('lambda_angles')
+    lambda_torsions = _LambdaProperty('lambda_torsions')
+    lambda_restraints = _LambdaProperty('lambda_restraints')
 
-    @property
-    def lambda_restraints(self):
-        return self._parameters['lambda_restraints']
+    # -------------------------------------------------------------------------
+    # Operators
+    # -------------------------------------------------------------------------
 
     def __eq__(self, other):
         is_equal = True
@@ -257,6 +263,9 @@ class AlchemicalState(object):
             other_value = getattr(other, parameter)
             is_equal = is_equal and self_value == other_value
         return is_equal
+
+    def __str__(self):
+        return str(self._parameters)
 
     # -------------------------------------------------------------------------
     # IComposableState interface
@@ -280,7 +289,7 @@ class AlchemicalState(object):
         for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
             parameter_value = self._parameters[parameter_name]
             if parameter_value is None:
-                err_msg = 'The system has parameter {} that is not defined in this state.'
+                err_msg = 'The system parameter {} is not defined in this state.'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
             else:
                 parameters_applied.add(parameter_name)
@@ -310,7 +319,14 @@ class AlchemicalState(object):
             If the system is not consistent with this state.
 
         """
-        pass
+        system_alchemical_state = AlchemicalState.from_system(system)
+
+        # Check if parameters are all the same.
+        if self != system_alchemical_state:
+            err_msg = ('Consistency check failed:\n'
+                       '\tSystem parameters          {}\n'
+                       '\tAlchemicalState parameters {}')
+            raise AlchemicalStateError(err_msg.format(self, system_alchemical_state))
 
     def apply_to_context(self, context):
         """Put the Context into this AlchemicalState.
@@ -360,9 +376,8 @@ class AlchemicalState(object):
         a typo in the name of the variable.
 
         """
-        properties = {name for name, _ in inspect.getmembers(
-            cls, lambda o: isinstance(o, property))}
-        return {parameter for parameter in properties if parameter.startswith('lambda_')}
+        return {name for name, _ in inspect.getmembers(
+            cls, lambda o: isinstance(o, cls._LambdaProperty))}
 
     @classmethod
     def _get_system_lambda_parameters(cls, system):
