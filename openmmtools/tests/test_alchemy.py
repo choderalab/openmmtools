@@ -1388,9 +1388,26 @@ class TestAlchemicalState(object):
         context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
         alchemical_state.set_all_parameters(0.5)
         alchemical_state.apply_to_context(context)
-        for parameter_name, value in context.getParameters().items():
+        for parameter_name, parameter_value in context.getParameters().items():
             if parameter_name in alchemical_state._parameters:
-                assert value == 0.5
+                assert parameter_value == 0.5
+
+    def test_standardize_system(self):
+        """Test method AlchemicalState.standardize_system."""
+        # First create a non-standard system.
+        system = copy.deepcopy(self.full_alanine_state.system)
+        alchemical_state = AlchemicalState.from_system(system)
+        alchemical_state.set_all_parameters(0.5)
+        alchemical_state.apply_to_system(system)
+
+        # Check that standardize_system() sets all parameters back to 1.0.
+        AlchemicalState.standardize_system(system)
+        standard_alchemical_state = AlchemicalState.from_system(system)
+        assert alchemical_state != standard_alchemical_state
+        for parameter_name in alchemical_state._parameters:
+            value = alchemical_state._parameters[parameter_name]
+            standard_value = standard_alchemical_state._parameters[parameter_name]
+            assert (value is None and standard_value is None) or (standard_value == 1.0)
 
     def test_constructor_compound_state(self):
         """The AlchemicalState is set on construction of the CompoundState."""

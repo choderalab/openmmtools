@@ -391,7 +391,9 @@ class AlchemicalState(object):
             If the system is not consistent with this state.
 
         """
-        pass
+        alchemical_state = AlchemicalState.from_system(system)
+        alchemical_state.set_all_parameters(1.0)
+        alchemical_state.apply_to_system(system)
 
     # -------------------------------------------------------------------------
     # Internal-usage
