@@ -1427,7 +1427,91 @@ class TestAlchemicalState(object):
             system_state = AlchemicalState.from_system(compound_state.system)
             assert system_state == alchemical_state
 
-    # TODO implement set_noninteracting() function
+    def test_lambda_properties_compound_state(self):
+        """Lambda properties setters/getters work in the CompoundState system."""
+        test_cases = copy.deepcopy(self.test_cases)
+
+        for state, defined_lambdas in test_cases:
+            undefined_lambdas = AlchemicalState._get_supported_parameters() - defined_lambdas
+            alchemical_state = AlchemicalState.from_system(state.system)
+            compound_state = states.CompoundThermodynamicState(state, [alchemical_state])
+
+            # Defined properties can be assigned and read.
+            for parameter_name in defined_lambdas:
+                assert getattr(compound_state, parameter_name) == 1.0
+                setattr(compound_state, parameter_name, 0.5)
+                assert getattr(compound_state, parameter_name) == 0.5
+
+            # Undefined properties raise an exception when assigned.
+            for parameter_name in undefined_lambdas:
+                assert getattr(compound_state, parameter_name) is None
+                with nose.tools.assert_raises(AlchemicalStateError):
+                    setattr(compound_state, parameter_name, 0.4)
+                setattr(compound_state, parameter_name, None)  # Keep state consistent.
+
+            # System global variables are updated correctly
+            system_alchemical_state = AlchemicalState.from_system(compound_state.system)
+            for parameter_name in defined_lambdas:
+                assert getattr(system_alchemical_state, parameter_name) == 0.5
+            for parameter_name in undefined_lambdas:
+                assert getattr(system_alchemical_state, parameter_name) is None
+
+    def test_set_system_compound_state(self):
+        """Setting inconsistent system in compound state raise errors."""
+        alanine_state = copy.deepcopy(self.alanine_state)
+        alchemical_state = AlchemicalState.from_system(alanine_state.system)
+        compound_state = states.CompoundThermodynamicState(alanine_state, [alchemical_state])
+
+        # We create an inconsistent state that has different parameters.
+        incompatible_state = copy.deepcopy(alchemical_state)
+        incompatible_state.lambda_electrostatics = 0.5
+
+        # Setting an inconsistent alchemical system raise an error.
+        system = compound_state.system
+        incompatible_state.apply_to_system(system)
+        with nose.tools.assert_raises(AlchemicalStateError):
+            compound_state.system = system
+
+        # Same for set_system when called with default arguments.
+        with nose.tools.assert_raises(AlchemicalStateError):
+            compound_state.set_system(system)
+
+        # This doesn't happen if we fix the state.
+        compound_state.set_system(system, fix_state=True)
+        assert AlchemicalState.from_system(compound_state.system) != incompatible_state
+
+    def test_method_compatibility_compound_state(self):
+        """Compatibility between states is handled correctly in compound state."""
+        alanine_state = copy.deepcopy(self.alanine_state)
+        alchemical_state = AlchemicalState.from_system(alanine_state.system)
+        compound_state = states.CompoundThermodynamicState(alanine_state, [alchemical_state])
+
+        # A compatible state has the same defined lambda parameters,
+        # but their values can be different.
+        alchemical_state_compatible = copy.deepcopy(alchemical_state)
+        alchemical_state_compatible.lambda_electrostatics = 0.5
+        compound_state_compatible = states.CompoundThermodynamicState(copy.deepcopy(alanine_state),
+                                                                      [alchemical_state_compatible])
+
+        # An incompatible state has a different set of defined lambdas.
+        full_alanine_state = copy.deepcopy(self.full_alanine_state)
+        alchemical_state_incompatible = AlchemicalState.from_system(full_alanine_state.system)
+        compound_state_incompatible = states.CompoundThermodynamicState(full_alanine_state,
+                                                                        [alchemical_state_incompatible])
+
+        # Test states compatibility.
+        assert compound_state.is_state_compatible(compound_state_compatible)
+        assert not compound_state.is_state_compatible(compound_state_incompatible)
+
+        # Test context compatibility.
+        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        context = compound_state_compatible.create_context(copy.deepcopy(integrator))
+        assert compound_state.is_context_compatible(context)
+
+        context = compound_state_incompatible.create_context(copy.deepcopy(integrator))
+        assert not compound_state.is_context_compatible(context)
+
+
     # TODO implement alchemical functions in pure python
 
 
