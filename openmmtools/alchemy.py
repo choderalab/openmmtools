@@ -253,6 +253,22 @@ class AlchemicalState(object):
     lambda_torsions = _LambdaProperty('lambda_torsions')
     lambda_restraints = _LambdaProperty('lambda_restraints')
 
+    def set_all_parameters(self, value):
+        """Set all defined parameters to the given value.
+
+        The undefined parameters (i.e. those being set to None) remain
+        undefined.
+
+        Parameters
+        ----------
+        value : float
+            The new value for all defined parameters.
+
+        """
+        for parameter_name in self._parameters:
+            if self._parameters[parameter_name] is not None:
+                self._parameters[parameter_name] = value
+
     # -------------------------------------------------------------------------
     # Operators
     # -------------------------------------------------------------------------
@@ -342,7 +358,21 @@ class AlchemicalState(object):
             If the context does not have the required lambda global variables.
 
         """
-        pass
+        context_parameters = context.getParameters()
+
+        # Set parameters in Context.
+        for parameter, value in self._parameters.items():
+            if value is None:
+                # Check that Context does not have this parameter.
+                if parameter in context_parameters:
+                    err_msg = 'Context has parameter {} which is undefined in this state'
+                    raise AlchemicalStateError(err_msg.format(parameter))
+                continue
+            try:
+                context.setParameter(parameter, value)
+            except Exception:
+                err_msg = 'Could not find parameter {} in context'
+                raise AlchemicalStateError(err_msg.format(parameter))
 
     @classmethod
     def standardize_system(cls, system):
@@ -402,6 +432,7 @@ class AlchemicalState(object):
                 parameter_name = force.getGlobalParameterName(parameter_id)
                 if parameter_name in supported_parameters:
                     yield force, parameter_name, parameter_id
+
 
 # =============================================================================
 # ABSOLUTE ALCHEMICAL FACTORY

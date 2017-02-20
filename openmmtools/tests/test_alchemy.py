@@ -1241,17 +1241,17 @@ class TestAlchemicalState(object):
     @classmethod
     def setup_class(cls):
         """Create test systems and shared objects."""
-        alanine_explicit = testsystems.AlanineDipeptideExplicit()
+        alanine_vacuum = testsystems.AlanineDipeptideVacuum()
 
         # System with only lambda_sterics and lambda_electrostatics.
-        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_explicit.system,
+        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_vacuum.system,
                                                        ligand_atoms=range(0, 22))
         alchemical_alanine_system = alchemical_factory.alchemically_modified_system
         cls.alanine_state = states.ThermodynamicState(alchemical_alanine_system,
                                                       temperature=300*unit.kelvin)
 
         # System with all lambdas except for lambda_restraints.
-        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_explicit.system,
+        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_vacuum.system,
                                                        ligand_atoms=range(0, 22), alchemical_torsions=True,
                                                        alchemical_angles=True, alchemical_bonds=True)
         fully_alchemical_alanine_system = alchemical_factory.alchemically_modified_system
@@ -1366,6 +1366,31 @@ class TestAlchemicalState(object):
         alchemical_state.lambda_bonds = 0.5
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.check_system_consistency(self.full_alanine_state.system)
+
+    def test_apply_to_context(self):
+        """Test method AlchemicalState.apply_to_context."""
+        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+
+        # Raise error if Context has more parameters than AlchemicalState.
+        alchemical_state = AlchemicalState.from_system(self.alanine_state.system)
+        context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
+        with nose.tools.assert_raises(AlchemicalStateError):
+            alchemical_state.apply_to_context(context)
+
+        # Raise error if AlchemicalState is applied to a Context with missing parameters.
+        alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
+        context = self.alanine_state.create_context(copy.deepcopy(integrator))
+        with nose.tools.assert_raises(AlchemicalStateError):
+            alchemical_state.apply_to_context(context)
+
+        # Correctly sets Context's parameters.
+        alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
+        context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
+        alchemical_state.set_all_parameters(0.5)
+        alchemical_state.apply_to_context(context)
+        for parameter_name, value in context.getParameters().items():
+            if parameter_name in alchemical_state._parameters:
+                assert value == 0.5
 
     def test_constructor_compound_state(self):
         """The AlchemicalState is set on construction of the CompoundState."""
