@@ -20,6 +20,20 @@ from openmmtools.utils import *
 
 
 # =============================================================================
+# TEST STRING PARSING UTILITIES
+# =============================================================================
+
+def test_math_eval():
+    """Test math_eval method."""
+    test_cases = [('1 + 3', None, 4),
+                  ('x + y', {'x': 1.5, 'y': 2}, 3.5),
+                  ('(x + y) / z * 4', {'x': 1, 'y': 2, 'z': 3}, 4.0),
+                  ('-((x + y) / z * 4)**2', {'x': 1, 'y': 2, 'z': 3}, -16.0)]
+    for expression, variables, result in test_cases:
+        assert math_eval(expression, variables) == result
+
+
+# =============================================================================
 # TEST QUANTITY UTILITIES
 # =============================================================================
 

@@ -14,9 +14,11 @@ General utility functions for the repo.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import ast
 import abc
 import time
 import logging
+import operator
 
 import numpy as np
 from simtk import openmm, unit
@@ -83,6 +85,61 @@ class Timer(object):
 
         if clear is True:
             self.reset_timing_statistics()
+
+
+# =============================================================================
+# STRING PARSING UTILITIES
+# =============================================================================
+
+def math_eval(expression, variables=None):
+    """Evaluate a mathematical expression with variables.
+
+    Parameters
+    ----------
+    expression : str
+        The mathematical expression as a string.
+    variables : dict of str: float, optional
+        The variables in the expression, if any (default is None).
+
+    Returns
+    -------
+    float
+        The result of the evaluated expression.
+
+    Examples
+    --------
+    >>> expr = '-((x + y) / z * 4)**2'
+    >>> vars = {'x': 1, 'y': 2, 'z': 3}
+    >>> math_eval(expr, vars)
+    -16.0
+
+    """
+    # Operators allowed.
+    unary_operators = {ast.USub: operator.neg}
+    binary_operators = {ast.Add: operator.add, ast.Sub: operator.sub,
+                        ast.Mult: operator.mul, ast.Div: operator.truediv,
+                        ast.Pow: operator.pow}
+
+    def _math_eval(node):
+        if isinstance(node, ast.Num):
+            return node.n
+        elif isinstance(node, ast.UnaryOp):
+            return unary_operators[type(node.op)](_math_eval(node.operand))
+        elif isinstance(node, ast.BinOp):
+            return binary_operators[type(node.op)](_math_eval(node.left),
+                                                   _math_eval(node.right))
+        elif isinstance(node, ast.Name):
+            try:
+                return variables[node.id]
+            except KeyError:
+                raise ValueError('Variable {} was not provided'.format(node.id))
+        else:
+            raise TypeError('Cannot parse expression: {}'.format(expression))
+
+    if variables is None:
+        variables = {}
+
+    return _math_eval(ast.parse(expression, mode='eval').body)
 
 
 # =============================================================================
