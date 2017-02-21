@@ -240,11 +240,11 @@ class AlchemicalState(object):
         def __init__(self, parameter_name):
             self._parameter_name = parameter_name
 
-        def __get__(self, instance, owner_class):
-            return instance._parameters[self._parameter_name]
+        def __get__(self, instance, owner_class=None):
+            return instance.get_alchemical_parameter(self._parameter_name)
 
-        def __set__(self, instance, value):
-            instance._parameters[self._parameter_name] = value
+        def __set__(self, instance, new_value):
+            instance.set_alchemical_parameter(self._parameter_name, new_value)
 
     lambda_sterics = _LambdaProperty('lambda_sterics')
     lambda_electrostatics = _LambdaProperty('lambda_electrostatics')
@@ -253,7 +253,79 @@ class AlchemicalState(object):
     lambda_torsions = _LambdaProperty('lambda_torsions')
     lambda_restraints = _LambdaProperty('lambda_restraints')
 
-    def set_all_parameters(self, value):
+    def get_alchemical_parameter(self, parameter_name):
+        """Return the value of the alchemical parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+            The name of the alchemical parameter.
+
+        Returns
+        -------
+        parameter_value : float or None
+            The value of the alchemical parameter, or None if it is
+            undefined for this state.
+
+        """
+        try:
+            parameter_value = self._parameters[parameter_name]
+        except KeyError:
+            raise AlchemicalStateError('Unknown alchemical parameter {}'.format(parameter_name))
+        assert parameter_value is None or 0.0 <= parameter_value <= 1.0
+        return parameter_value
+
+    def set_alchemical_parameter(self, parameter_name, new_value):
+        """Return the value of the alchemical parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+            The name of the alchemical parameter.
+        new_value : float or None
+            The new value for the parameter. If None, the parameter will
+            be considered undefined.
+
+        """
+        assert new_value is None or 0.0 <= new_value <= 1.0
+        try:
+            self._parameters[parameter_name] = new_value
+        except KeyError:
+            raise AlchemicalStateError('Unknown alchemical parameter {}'.format(parameter_name))
+
+    def get_alchemical_parameters(self, get_undefined=False, get_alchemical_variables=False):
+        """Return a dictionary with all the state parameters.
+
+        By default, this function return only defined lambda parameters.
+
+        Parameters
+        ----------
+        get_undefined : bool, optional
+            If True, undefined parameters (i.e. those set to None will
+            be returned as well (default is False).
+        get_alchemical_variables : bool, optional
+            If True, alchemical variables will be returned as well (default
+            is False)
+
+        Returns
+        -------
+        A dictionary parameter_name: value for each requested parameters.
+
+        """
+        # Check if we need to gather also undefined parameters.
+        if get_undefined:
+            parameters = self._parameters.copy()
+        else:
+            parameters = {name: value for name, value in self._parameters.items()
+                          if value is not None}
+
+        # Gather all AlchemicalVariables if requested.
+        if get_alchemical_variables:
+            parameters.update(self._alchemical_variables)
+
+        return parameters
+
+    def set_alchemical_parameters(self, value):
         """Set all defined parameters to the given value.
 
         The undefined parameters (i.e. those being set to None) remain
@@ -392,7 +464,7 @@ class AlchemicalState(object):
 
         """
         alchemical_state = AlchemicalState.from_system(system)
-        alchemical_state.set_all_parameters(1.0)
+        alchemical_state.set_alchemical_parameters(1.0)
         alchemical_state.apply_to_system(system)
 
     # -------------------------------------------------------------------------

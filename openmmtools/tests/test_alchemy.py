@@ -1386,10 +1386,10 @@ class TestAlchemicalState(object):
         # Correctly sets Context's parameters.
         alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
         context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
-        alchemical_state.set_all_parameters(0.5)
+        alchemical_state.set_alchemical_parameters(0.5)
         alchemical_state.apply_to_context(context)
         for parameter_name, parameter_value in context.getParameters().items():
-            if parameter_name in alchemical_state._parameters:
+            if parameter_name in alchemical_state.get_alchemical_parameters(get_undefined=True):
                 assert parameter_value == 0.5
 
     def test_standardize_system(self):
@@ -1397,16 +1397,15 @@ class TestAlchemicalState(object):
         # First create a non-standard system.
         system = copy.deepcopy(self.full_alanine_state.system)
         alchemical_state = AlchemicalState.from_system(system)
-        alchemical_state.set_all_parameters(0.5)
+        alchemical_state.set_alchemical_parameters(0.5)
         alchemical_state.apply_to_system(system)
 
         # Check that standardize_system() sets all parameters back to 1.0.
         AlchemicalState.standardize_system(system)
         standard_alchemical_state = AlchemicalState.from_system(system)
         assert alchemical_state != standard_alchemical_state
-        for parameter_name in alchemical_state._parameters:
-            value = alchemical_state._parameters[parameter_name]
-            standard_value = standard_alchemical_state._parameters[parameter_name]
+        for parameter_name, value in alchemical_state.get_alchemical_parameters(get_undefined=True).items():
+            standard_value = standard_alchemical_state.get_alchemical_parameter(parameter_name)
             assert (value is None and standard_value is None) or (standard_value == 1.0)
 
     def test_constructor_compound_state(self):
@@ -1436,25 +1435,33 @@ class TestAlchemicalState(object):
             alchemical_state = AlchemicalState.from_system(state.system)
             compound_state = states.CompoundThermodynamicState(state, [alchemical_state])
 
+            # Undefined properties raise an exception when assigned.
+            for parameter_name in undefined_lambdas:
+                assert getattr(compound_state, parameter_name) is None
+                with nose.tools.assert_raises(AlchemicalStateError):
+                    setattr(compound_state, parameter_name, 0.4)
+                with nose.tools.assert_raises(AlchemicalStateError):
+                    compound_state.set_alchemical_parameter(parameter_name, 0.4)
+                setattr(compound_state, parameter_name, None)  # Keep state consistent.
+
             # Defined properties can be assigned and read.
             for parameter_name in defined_lambdas:
                 assert getattr(compound_state, parameter_name) == 1.0
                 setattr(compound_state, parameter_name, 0.5)
                 assert getattr(compound_state, parameter_name) == 0.5
 
-            # Undefined properties raise an exception when assigned.
-            for parameter_name in undefined_lambdas:
-                assert getattr(compound_state, parameter_name) is None
-                with nose.tools.assert_raises(AlchemicalStateError):
-                    setattr(compound_state, parameter_name, 0.4)
-                setattr(compound_state, parameter_name, None)  # Keep state consistent.
-
             # System global variables are updated correctly
             system_alchemical_state = AlchemicalState.from_system(compound_state.system)
             for parameter_name in defined_lambdas:
                 assert getattr(system_alchemical_state, parameter_name) == 0.5
-            for parameter_name in undefined_lambdas:
-                assert getattr(system_alchemical_state, parameter_name) is None
+
+            # Same for parameters getter/setters.
+            for parameter_name in defined_lambdas:
+                compound_state.set_alchemical_parameter(parameter_name, 1.0)
+                assert compound_state.get_alchemical_parameter(parameter_name) == 1.0
+            system_alchemical_state = AlchemicalState.from_system(compound_state.system)
+            for parameter_name in defined_lambdas:
+                assert getattr(system_alchemical_state, parameter_name) == 1.0
 
     def test_set_system_compound_state(self):
         """Setting inconsistent system in compound state raise errors."""
@@ -1510,9 +1517,6 @@ class TestAlchemicalState(object):
 
         context = compound_state_incompatible.create_context(copy.deepcopy(integrator))
         assert not compound_state.is_context_compatible(context)
-
-
-    # TODO implement alchemical functions in pure python
 
 
 # =============================================================================
