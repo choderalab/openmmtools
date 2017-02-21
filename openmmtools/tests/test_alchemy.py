@@ -1266,6 +1266,21 @@ class TestAlchemicalState(object):
         ]
 
     @staticmethod
+    def test_sanitize_expression():
+        """Test that lambda variable is substituted correctly."""
+        test_cases = [('lambda', '_AlchemicalFunction__lambda'),
+                      ('(lambda)', '(_AlchemicalFunction__lambda)'),
+                      ('( lambda )', '( _AlchemicalFunction__lambda )'),
+                      ('lambda_sterics', 'lambda_sterics'),
+                      ('sterics_lambda', 'sterics_lambda'),
+                      ('2+lambda-lambda_angles', '2+_AlchemicalFunction__lambda-lambda_angles'),
+                      ('2+lambda-lambda_angles/lambda',
+                       '2+_AlchemicalFunction__lambda-lambda_angles/_AlchemicalFunction__lambda')]
+        for expression, result in test_cases:
+            substituted_expression = AlchemicalFunction._sanitize_expression(expression)
+            assert substituted_expression == result, '{}, {}, {}'.format(expression, substituted_expression, result)
+
+    @staticmethod
     def test_constructor():
         """Test AlchemicalState constructor behave as expected."""
         # Raise an exception if parameter is not recognized.
@@ -1389,7 +1404,7 @@ class TestAlchemicalState(object):
         alchemical_state.set_alchemical_parameters(0.5)
         alchemical_state.apply_to_context(context)
         for parameter_name, parameter_value in context.getParameters().items():
-            if parameter_name in alchemical_state.get_alchemical_parameters(get_undefined=True):
+            if parameter_name in alchemical_state._parameters:
                 assert parameter_value == 0.5
 
     def test_standardize_system(self):
@@ -1404,9 +1419,34 @@ class TestAlchemicalState(object):
         AlchemicalState.standardize_system(system)
         standard_alchemical_state = AlchemicalState.from_system(system)
         assert alchemical_state != standard_alchemical_state
-        for parameter_name, value in alchemical_state.get_alchemical_parameters(get_undefined=True).items():
-            standard_value = standard_alchemical_state.get_alchemical_parameter(parameter_name)
+        for parameter_name, value in alchemical_state._parameters.items():
+            standard_value = getattr(standard_alchemical_state, parameter_name)
             assert (value is None and standard_value is None) or (standard_value == 1.0)
+
+    def test_alchemical_functions(self):
+        """Test alchemical variables and functions work correctly."""
+        system = copy.deepcopy(self.full_alanine_state.system)
+        alchemical_state = AlchemicalState.from_system(system)
+
+        # Add two alchemical variables to the state.
+        alchemical_state.set_alchemical_variable('lambda', 1.0)
+        alchemical_state.set_alchemical_variable('lambda2', 0.5)
+        assert alchemical_state.get_alchemical_variable('lambda') == 1.0
+        assert alchemical_state.get_alchemical_variable('lambda2') == 0.5
+
+        # Cannot call an alchemical variable as a supported parameter.
+        with nose.tools.assert_raises(AlchemicalStateError):
+            alchemical_state.set_alchemical_variable('lambda_sterics', 0.5)
+
+        # Assign string alchemical functions to parameters.
+        alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
+        alchemical_state.lambda_electrostatics = AlchemicalFunction('(lambda + lambda2) / 2.0')
+        assert alchemical_state.lambda_sterics == 1.0
+        assert alchemical_state.lambda_electrostatics == 0.75
+
+        # Setting alchemical variables updates alchemical parameter as well.
+        alchemical_state.set_alchemical_variable('lambda2', 0)
+        assert alchemical_state.lambda_electrostatics == 0.5
 
     def test_constructor_compound_state(self):
         """The AlchemicalState is set on construction of the CompoundState."""
@@ -1440,8 +1480,6 @@ class TestAlchemicalState(object):
                 assert getattr(compound_state, parameter_name) is None
                 with nose.tools.assert_raises(AlchemicalStateError):
                     setattr(compound_state, parameter_name, 0.4)
-                with nose.tools.assert_raises(AlchemicalStateError):
-                    compound_state.set_alchemical_parameter(parameter_name, 0.4)
                 setattr(compound_state, parameter_name, None)  # Keep state consistent.
 
             # Defined properties can be assigned and read.
@@ -1455,13 +1493,21 @@ class TestAlchemicalState(object):
             for parameter_name in defined_lambdas:
                 assert getattr(system_alchemical_state, parameter_name) == 0.5
 
-            # Same for parameters getter/setters.
-            for parameter_name in defined_lambdas:
-                compound_state.set_alchemical_parameter(parameter_name, 1.0)
-                assert compound_state.get_alchemical_parameter(parameter_name) == 1.0
+            # Same for parameters setters.
+            compound_state.set_alchemical_parameters(1.0)
             system_alchemical_state = AlchemicalState.from_system(compound_state.system)
             for parameter_name in defined_lambdas:
+                assert getattr(compound_state, parameter_name) == 1.0
                 assert getattr(system_alchemical_state, parameter_name) == 1.0
+
+            # Same for alchemical variables setters.
+            compound_state.set_alchemical_variable('lambda', 0.25)
+            for parameter_name in defined_lambdas:
+                setattr(compound_state, parameter_name, AlchemicalFunction('lambda'))
+            system_alchemical_state = AlchemicalState.from_system(compound_state.system)
+            for parameter_name in defined_lambdas:
+                assert getattr(compound_state, parameter_name) == 0.25
+                assert getattr(system_alchemical_state, parameter_name) == 0.25
 
     def test_set_system_compound_state(self):
         """Setting inconsistent system in compound state raise errors."""

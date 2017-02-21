@@ -36,6 +36,7 @@ TODO
 # GLOBAL IMPORTS
 # =============================================================================
 
+import re
 import copy
 import time
 import inspect
@@ -45,7 +46,7 @@ import numpy as np
 import simtk.openmm as openmm
 import simtk.unit as unit
 
-from openmmtools import states
+from openmmtools import states, utils
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +130,33 @@ class AlchemicalStateError(states.ComposableStateError):
     pass
 
 
+class AlchemicalFunction(object):
+    """A function of alchemical variables."""
+    def __init__(self, expression):
+        # lambda is a reserved word in Python so we create an alias
+        self._expression = self._sanitize_expression(expression)
+
+    def __call__(self, variables):
+        # Substitute 'lambda' variable if necessary.
+        if 'lambda' in variables:
+            variables = copy.deepcopy(variables)
+            lambda_value = variables.pop('lambda')
+            variables[self._LAMBDA_MANGLED] = lambda_value
+        return utils.math_eval(self._expression, variables)
+
+    # -------------------------------------------------------------------------
+    # Internal usage
+    # -------------------------------------------------------------------------
+
+    _LAMBDA_RE = re.compile(r'(?<![a-zA-Z0-9_])lambda(?![a-zA-Z0-9_])')
+    _LAMBDA_MANGLED = '_AlchemicalFunction__lambda'
+
+    @classmethod
+    def _sanitize_expression(cls, expression):
+        """Substitute variables named 'lambda' to avoid problems."""
+        return cls._LAMBDA_RE.sub(cls._LAMBDA_MANGLED, expression)
+
+
 class AlchemicalState(object):
     """Alchemical state description.
 
@@ -169,6 +197,8 @@ class AlchemicalState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, **kwargs):
+        self._alchemical_variables = {}
+
         # Get supported parameters from properties introspection.
         supported_parameters = self._get_supported_parameters()
 
@@ -241,10 +271,16 @@ class AlchemicalState(object):
             self._parameter_name = parameter_name
 
         def __get__(self, instance, owner_class=None):
-            return instance.get_alchemical_parameter(self._parameter_name)
+            parameter_value = instance._parameters[self._parameter_name]
+            if isinstance(parameter_value, AlchemicalFunction):
+                parameter_value = parameter_value(instance._alchemical_variables)
+            assert parameter_value is None or 0.0 <= parameter_value <= 1.0
+            return parameter_value
 
         def __set__(self, instance, new_value):
-            instance.set_alchemical_parameter(self._parameter_name, new_value)
+            assert (new_value is None or isinstance(new_value, AlchemicalFunction) or
+                    0.0 <= new_value <= 1.0)
+            instance._parameters[self._parameter_name] = new_value
 
     lambda_sterics = _LambdaProperty('lambda_sterics')
     lambda_electrostatics = _LambdaProperty('lambda_electrostatics')
@@ -253,79 +289,7 @@ class AlchemicalState(object):
     lambda_torsions = _LambdaProperty('lambda_torsions')
     lambda_restraints = _LambdaProperty('lambda_restraints')
 
-    def get_alchemical_parameter(self, parameter_name):
-        """Return the value of the alchemical parameter.
-
-        Parameters
-        ----------
-        parameter_name : str
-            The name of the alchemical parameter.
-
-        Returns
-        -------
-        parameter_value : float or None
-            The value of the alchemical parameter, or None if it is
-            undefined for this state.
-
-        """
-        try:
-            parameter_value = self._parameters[parameter_name]
-        except KeyError:
-            raise AlchemicalStateError('Unknown alchemical parameter {}'.format(parameter_name))
-        assert parameter_value is None or 0.0 <= parameter_value <= 1.0
-        return parameter_value
-
-    def set_alchemical_parameter(self, parameter_name, new_value):
-        """Return the value of the alchemical parameter.
-
-        Parameters
-        ----------
-        parameter_name : str
-            The name of the alchemical parameter.
-        new_value : float or None
-            The new value for the parameter. If None, the parameter will
-            be considered undefined.
-
-        """
-        assert new_value is None or 0.0 <= new_value <= 1.0
-        try:
-            self._parameters[parameter_name] = new_value
-        except KeyError:
-            raise AlchemicalStateError('Unknown alchemical parameter {}'.format(parameter_name))
-
-    def get_alchemical_parameters(self, get_undefined=False, get_alchemical_variables=False):
-        """Return a dictionary with all the state parameters.
-
-        By default, this function return only defined lambda parameters.
-
-        Parameters
-        ----------
-        get_undefined : bool, optional
-            If True, undefined parameters (i.e. those set to None will
-            be returned as well (default is False).
-        get_alchemical_variables : bool, optional
-            If True, alchemical variables will be returned as well (default
-            is False)
-
-        Returns
-        -------
-        A dictionary parameter_name: value for each requested parameters.
-
-        """
-        # Check if we need to gather also undefined parameters.
-        if get_undefined:
-            parameters = self._parameters.copy()
-        else:
-            parameters = {name: value for name, value in self._parameters.items()
-                          if value is not None}
-
-        # Gather all AlchemicalVariables if requested.
-        if get_alchemical_variables:
-            parameters.update(self._alchemical_variables)
-
-        return parameters
-
-    def set_alchemical_parameters(self, value):
+    def set_alchemical_parameters(self, new_value):
         """Set all defined parameters to the given value.
 
         The undefined parameters (i.e. those being set to None) remain
@@ -333,13 +297,53 @@ class AlchemicalState(object):
 
         Parameters
         ----------
-        value : float
+        new_value : float
             The new value for all defined parameters.
 
         """
         for parameter_name in self._parameters:
             if self._parameters[parameter_name] is not None:
-                self._parameters[parameter_name] = value
+                setattr(self, parameter_name, new_value)
+
+    # -------------------------------------------------------------------------
+    # Alchemical variables
+    # -------------------------------------------------------------------------
+
+    def get_alchemical_variable(self, variable_name):
+        """Return the value of the alchemical parameter.
+
+        Parameters
+        ----------
+        variable_name : str
+            The name of the alchemical variable.
+
+        Returns
+        -------
+        variable_value : float
+            The value of the alchemical variable.
+
+        """
+        try:
+            variable_value = self._alchemical_variables[variable_name]
+        except KeyError:
+            raise AlchemicalStateError('Unknown alchemical variable {}'.format(variable_name))
+        return variable_value
+
+    def set_alchemical_variable(self, variable_name, new_value):
+        """Set the value of the alchemical variable.
+
+        Parameters
+        ----------
+        variable_name : str
+            The name of the alchemical variable.
+        new_value : float
+            The new value for the variable.
+
+        """
+        if variable_name in self._parameters:
+            raise AlchemicalStateError('Cannot have an alchemical variable with the same name '
+                                       'of the predefined alchemical parameter {}.'.format(variable_name))
+        self._alchemical_variables[variable_name] = new_value
 
     # -------------------------------------------------------------------------
     # Operators
@@ -347,8 +351,9 @@ class AlchemicalState(object):
 
     def __eq__(self, other):
         is_equal = True
-        for parameter, self_value in self._parameters.items():
-            other_value = getattr(other, parameter)
+        for parameter_name in self._parameters:
+            self_value = getattr(self, parameter_name)
+            other_value = getattr(other, parameter_name)
             is_equal = is_equal and self_value == other_value
         return is_equal
 
@@ -375,7 +380,7 @@ class AlchemicalState(object):
         """
         parameters_applied = set()
         for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
-            parameter_value = self._parameters[parameter_name]
+            parameter_value = getattr(self, parameter_name)
             if parameter_value is None:
                 err_msg = 'The system parameter {} is not defined in this state.'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
@@ -433,18 +438,19 @@ class AlchemicalState(object):
         context_parameters = context.getParameters()
 
         # Set parameters in Context.
-        for parameter, value in self._parameters.items():
-            if value is None:
+        for parameter_name in self._parameters:
+            parameter_value = getattr(self, parameter_name)
+            if parameter_value is None:
                 # Check that Context does not have this parameter.
-                if parameter in context_parameters:
+                if parameter_name in context_parameters:
                     err_msg = 'Context has parameter {} which is undefined in this state'
-                    raise AlchemicalStateError(err_msg.format(parameter))
+                    raise AlchemicalStateError(err_msg.format(parameter_name))
                 continue
             try:
-                context.setParameter(parameter, value)
+                context.setParameter(parameter_name, parameter_value)
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
-                raise AlchemicalStateError(err_msg.format(parameter))
+                raise AlchemicalStateError(err_msg.format(parameter_name))
 
     @classmethod
     def standardize_system(cls, system):
