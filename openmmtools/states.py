@@ -1989,10 +1989,10 @@ class CompoundThermodynamicState(ThermodynamicState):
                 if any(name in C.__dict__ for C in s.__class__.__mro__):
                     s.__setattr__(name, value)
                     s.apply_to_system(self._system)
-                    break
+                    return
 
-        # Monkey patching.
-        super(CompoundThermodynamicState, self).__setattr__(name, value)
+            # No attribute found. This is monkey patching.
+            super(CompoundThermodynamicState, self).__setattr__(name, value)
 
     @classmethod
     def _standardize_system(cls, system):
