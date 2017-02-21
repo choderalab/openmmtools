@@ -1725,7 +1725,8 @@ class IComposableState(utils.SubhookedABCMeta):
 
         This method is called on CompoundThermodynamicState init to update
         the system stored in the main ThermodynamicState, and every time
-        an attribute/property of the composable state is set.
+        an attribute/property of the composable state is set or a setter
+        method (i.e. a method that starts with 'set_') is called.
 
         This is the system that will be used during context creation, so
         it is important that it is up-to-date.
@@ -1735,6 +1736,11 @@ class IComposableState(utils.SubhookedABCMeta):
         system : simtk.openmm.System
             The system to modify.
 
+        Raises
+        ------
+        CompatibleStateError
+            If the system is not compatible with the state.
+
         """
         pass
 
@@ -1742,9 +1748,9 @@ class IComposableState(utils.SubhookedABCMeta):
     def check_system_consistency(self, system):
         """Check if the system is consistent with the state.
 
-        It raises an Exception if the system is not consistent with the
-        state. This is called when the system of the ThermodynamicState
-        is set.
+        It raises a ComposableStateError if the system is not consistent
+        with the state. This is called when the ThermodynamicState's
+        system is set.
 
         Parameters
         ----------
@@ -1753,7 +1759,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Raises
         ------
-        IComposableStateError
+        ComposableStateError
             If the system is not consistent with this state.
 
         """
@@ -1761,7 +1767,19 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def apply_to_context(self, context):
-        """Apply changes to the context to be consistent with the state."""
+        """Apply changes to the context to be consistent with the state.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to set.
+
+        Raises
+        ------
+        ComposableStateError
+            If the context is not compatible with the state.
+
+        """
         pass
 
     @classmethod
@@ -1784,8 +1802,8 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Raises
         ------
-        IComposableStateError
-            If the system is not consistent with this state.
+        CompatibleStateError
+            If the system is not compatible with the state.
 
         """
         pass
@@ -1865,9 +1883,9 @@ class CompoundThermodynamicState(ThermodynamicState):
 
     @system.setter
     def system(self, value):
-        super(CompoundThermodynamicState, self.__class__).system.fset(self, value)
         for s in self._composable_states:
-            s.check_system_consistency(self._system)
+            s.check_system_consistency(value)
+        super(CompoundThermodynamicState, self.__class__).system.fset(self, value)
 
     def set_system(self, system, fix_state=False):
         """Allow to set the system and fix its thermodynamic state.
@@ -1933,13 +1951,26 @@ class CompoundThermodynamicState(ThermodynamicState):
             s.apply_to_context(context)
 
     def __getattr__(self, name):
+        def setter_decorator(func, composable_state):
+            def _setter_decorator(*args, **kwargs):
+                func(*args, **kwargs)
+                composable_state.apply_to_system(self._system)
+            return _setter_decorator
+
         # Called only if the attribute couldn't be found in __dict__.
         # In this case we fall back to composable state, in the given order.
         for s in self._composable_states:
             try:
-                return getattr(s, name)
+                attr = getattr(s, name)
             except AttributeError:
                 pass
+            else:
+                if name.startswith('set_'):
+                    # Decorate the setter so that apply_to_system is called
+                    # after the attribute is modified.
+                    attr = setter_decorator(attr, s)
+                return attr
+
         # Attribute not found, fall back to normal behavior.
         return super(CompoundThermodynamicState, self).__getattribute__(name)
 
