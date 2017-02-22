@@ -43,8 +43,7 @@ import inspect
 import logging
 
 import numpy as np
-import simtk.openmm as openmm
-import simtk.unit as unit
+from simtk import openmm, unit
 
 from openmmtools import states, utils
 
@@ -57,68 +56,6 @@ logger = logging.getLogger(__name__)
 
 ONE_4PI_EPS0 = 138.935456 # OpenMM constant for Coulomb interactions (openmm/platforms/reference/include/SimTKOpenMMRealType.h) in OpenMM units
                           # TODO: Replace this with an import from simtk.openmm.constants once these constants are available there
-
-
-# =============================================================================
-# MODULE UTILITIES
-# =============================================================================
-
-def _is_periodic(system):
-    """
-    Determine whether the specified system is periodic.
-
-    Parameters
-    ----------
-    system : simtk.openmm.System
-         The system to check.
-
-    Returns
-    -------
-    is_periodic : bool
-        If True, the system uses a nonbonded method recognized as being periodic.
-
-    Examples
-    --------
-
-    >>> from openmmtools import testsystems
-
-    Periodic water box.
-
-    >>> waterbox = testsystems.WaterBox()
-    >>> print(_is_periodic(waterbox.system))
-    True
-
-    Non-periodic Lennard-Jones cluster.
-
-    >>> cluster = testsystems.LennardJonesCluster()
-    >>> print(_is_periodic(cluster.system))
-    False
-
-    Notes
-    -----
-    This method simply checks to see if any nonbonded methods recognized to be periodic are in use.
-    Addition of new nonbonded methods or force types may require adding to recognized_periodic_methods.
-
-    """
-    forces = { system.getForce(index).__class__.__name__ for index in range(system.getNumForces()) }
-
-    # Only the following nonbonded methods are recognized as being periodic.
-    recognized_periodic_methods = {
-        'NonbondedForce' : [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME],
-        'CustomNonbondedForce' : [openmm.CustomNonbondedForce.CutoffPeriodic],
-        'AmoebaVdwForce' : [openmm.AmoebaVdwForce.CutoffPeriodic],
-        }
-
-    for force_index in range(system.getNumForces()):
-        force = system.getForce(force_index)
-        force_name = force.__class__.__name__
-        if force_name in recognized_periodic_methods:
-            method = force.getNonbondedMethod()
-            if method in recognized_periodic_methods[force_name]:
-                return True
-
-    # Nothing we recognize was found, so assume system was not periodic.
-    return False
 
 
 # =============================================================================
