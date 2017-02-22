@@ -29,7 +29,8 @@ def test_math_eval():
                   ('x + y', {'x': 1.5, 'y': 2}, 3.5),
                   ('(x + y) / z * 4', {'x': 1, 'y': 2, 'z': 3}, 4.0),
                   ('-((x + y) / z * 4)**2', {'x': 1, 'y': 2, 'z': 3}, -16.0),
-                  ('ceil(0.8) + acos(x) + step(-0.4) + step(0.5)', {'x': 1}, 2)]
+                  ('ceil(0.8) + acos(x) + step(0.5 - x) + step(0.5)', {'x': 1}, 2),
+                  ('step_hm(x)', {'x': 0}, 0.5)]
     for expression, variables, result in test_cases:
         evaluated_expression = math_eval(expression, variables)
         assert evaluated_expression == result, '{}, {}, {}'.format(

@@ -95,6 +95,11 @@ class Timer(object):
 def math_eval(expression, variables=None):
     """Evaluate a mathematical expression with variables.
 
+    All the functions in the standard module math are available together with
+    - step(x) : Heaviside step function (1.0 for x=0)
+    - step_hm(x) : Heaviside step function with half-maximum convention.
+    - sign(x) : sign function (0.0 for x=0.0)
+
     Parameters
     ----------
     expression : str
@@ -121,7 +126,9 @@ def math_eval(expression, variables=None):
                  ast.Pow: operator.pow, ast.USub: operator.neg}
 
     # Supported functions, not defined in math.
-    functions = {'step': lambda x: 1 * (x >= 0)}
+    functions = {'step': lambda x: 1 * (x >= 0),
+                 'step_hm': lambda x: 0.5 * (np.sign(x) + 1),
+                 'sign': lambda x: np.sign(x)}
 
     def _math_eval(node):
         if isinstance(node, ast.Num):
