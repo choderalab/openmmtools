@@ -17,6 +17,7 @@ General utility functions for the repo.
 import ast
 import abc
 import time
+import math
 import logging
 import operator
 
@@ -108,31 +109,42 @@ def math_eval(expression, variables=None):
 
     Examples
     --------
-    >>> expr = '-((x + y) / z * 4)**2'
-    >>> vars = {'x': 1, 'y': 2, 'z': 3}
+    >>> expr = '-((x + ceil(y)) / z * 4 + step(-0.2))**2'
+    >>> vars = {'x': 1, 'y': 1.9, 'z': 3}
     >>> math_eval(expr, vars)
     -16.0
 
     """
-    # Operators allowed.
-    unary_operators = {ast.USub: operator.neg}
-    binary_operators = {ast.Add: operator.add, ast.Sub: operator.sub,
-                        ast.Mult: operator.mul, ast.Div: operator.truediv,
-                        ast.Pow: operator.pow}
+    # Supported operators.
+    operators = {ast.Add: operator.add, ast.Sub: operator.sub,
+                 ast.Mult: operator.mul, ast.Div: operator.truediv,
+                 ast.Pow: operator.pow, ast.USub: operator.neg}
+
+    # Supported functions, not defined in math.
+    functions = {'step': lambda x: 1 * (x >= 0)}
 
     def _math_eval(node):
         if isinstance(node, ast.Num):
             return node.n
         elif isinstance(node, ast.UnaryOp):
-            return unary_operators[type(node.op)](_math_eval(node.operand))
+            return operators[type(node.op)](_math_eval(node.operand))
         elif isinstance(node, ast.BinOp):
-            return binary_operators[type(node.op)](_math_eval(node.left),
-                                                   _math_eval(node.right))
+            return operators[type(node.op)](_math_eval(node.left),
+                                            _math_eval(node.right))
         elif isinstance(node, ast.Name):
             try:
                 return variables[node.id]
             except KeyError:
                 raise ValueError('Variable {} was not provided'.format(node.id))
+        elif isinstance(node, ast.Call):
+            args = [_math_eval(arg) for arg in node.args]
+            try:
+                return getattr(math, node.func.id)(*args)
+            except AttributeError:
+                try:
+                    return functions[node.func.id](*args)
+                except KeyError:
+                    raise ValueError('Function {} is not supported'.format(node.func.id))
         else:
             raise TypeError('Cannot parse expression: {}'.format(expression))
 
