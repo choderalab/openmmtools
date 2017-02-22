@@ -1846,8 +1846,45 @@ class CompoundThermodynamicState(ThermodynamicState):
         Each element represent a portion of the overall thermodynamic
         state.
 
+    Examples
+    --------
+    Create an alchemically modified system.
+
+    >>> from openmmtools import testsystems, alchemy
+    >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
+    >>> alchemical_factory = alchemy.AbsoluteAlchemicalFactory(reference_system=alanine_vacuum,
+    ...                                                ligand_atoms=range(0, 22))
+    >>> alanine_alchemical_system = alchemical_factory.alchemically_modified_system
+    >>> alchemical_state = alchemy.AlchemicalState.from_system(alanine_alchemical_system)
+
+    AlchemicalState implement the IComposableState interface, so it can be
+    used with CompoundThermodynamicState. All the alchemical parameters are
+    accessible through the compound state.
+
+    >>> from simtk import openmm, unit
+    >>> thermodynamic_state = ThermodynamicState(system=alanine_alchemical_system,
+    ...                                                 temperature=300*unit.kelvin)
+    >>> compound_state = CompoundThermodynamicState(thermodynamic_state=thermodynamic_state,
+    ...                                                    composable_states=[alchemical_state])
+    >>> compound_state.lambda_sterics
+    1.0
+    >>> compound_state.lambda_electrostatics
+    1.0
+
+    You can control the parameters in the OpenMM Context in this state by
+    setting the state attributes.
+
+    >>> compound_state.lambda_sterics = 0.5
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> context = compound_state.create_context(integrator)
+    >>> context.getParameter('lambda_sterics')
+    0.5
+    >>> compound_state.lambda_sterics = 1.0
+    >>> compound_state.apply_to_context(context)
+    >>> context.getParameter('lambda_sterics')
+    1.0
+
     """
-    # TODO add examples to docs once AlchemicalState has been implemented
     def __init__(self, thermodynamic_state, composable_states):
         # Check that composable states expose the correct interface.
         for composable_state in composable_states:
