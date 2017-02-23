@@ -328,13 +328,11 @@ class ThermodynamicState(object):
         --------
 
         """
-        return copy.deepcopy(self._system)
+        return self.get_system()
 
     @system.setter
     def system(self, value):
-        self._check_system_consistency(value)
-        self._system = copy.deepcopy(value)
-        self._cached_standard_system_hash = None  # Invalidate cache.
+        self.set_system(value)
 
     def set_system(self, system, fix_state=False):
         """Manipulate and set the system.
@@ -391,7 +389,10 @@ class ThermodynamicState(object):
             barostat = self._set_system_pressure(system, self.pressure)
             if barostat is not None:
                 self._set_barostat_temperature(barostat, self.temperature)
-        self.system = system
+        else:
+            self._check_system_consistency(system)
+        self._system = system
+        self._cached_standard_system_hash = None  # Invalidate cache.
 
     def get_system(self, remove_thermostat=False, remove_barostat=False):
         """Manipulate and return the system.
@@ -1907,23 +1908,6 @@ class CompoundThermodynamicState(ThermodynamicState):
         for s in self._composable_states:
             s.apply_to_system(self._system)
 
-    @property
-    def system(self):
-        """The system in this thermodynamic state.
-
-        See Also
-        --------
-        ThermodynamicState.system
-
-        """
-        return super(CompoundThermodynamicState, self).system
-
-    @system.setter
-    def system(self, value):
-        for s in self._composable_states:
-            s.check_system_consistency(value)
-        super(CompoundThermodynamicState, self.__class__).system.fset(self, value)
-
     def set_system(self, system, fix_state=False):
         """Allow to set the system and fix its thermodynamic state.
 
@@ -1944,9 +1928,11 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState.set_system
 
         """
-        if fix_state is True:
-            for s in self._composable_states:
+        for s in self._composable_states:
+            if fix_state is True:
                 s.apply_to_system(system)
+            else:
+                s.check_system_consistency(system)
         super(CompoundThermodynamicState, self).set_system(system, fix_state)
 
     def is_context_compatible(self, context):
