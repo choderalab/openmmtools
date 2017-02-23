@@ -36,7 +36,6 @@ TODO
 # GLOBAL IMPORTS
 # =============================================================================
 
-import re
 import copy
 import time
 import inspect
@@ -82,28 +81,10 @@ class AlchemicalFunction(object):
 
     """
     def __init__(self, expression):
-        # lambda is a reserved word in Python so we create an alias
-        self._expression = self._sanitize_expression(expression)
+        self._expression = expression
 
     def __call__(self, variables):
-        # Substitute 'lambda' variable if necessary.
-        if 'lambda' in variables:
-            variables = copy.deepcopy(variables)
-            lambda_value = variables.pop('lambda')
-            variables[self._LAMBDA_MANGLED] = lambda_value
         return utils.math_eval(self._expression, variables)
-
-    # -------------------------------------------------------------------------
-    # Internal usage
-    # -------------------------------------------------------------------------
-
-    _LAMBDA_RE = re.compile(r'(?<![a-zA-Z0-9_])lambda(?![a-zA-Z0-9_])')
-    _LAMBDA_MANGLED = '_AlchemicalFunction__lambda'
-
-    @classmethod
-    def _sanitize_expression(cls, expression):
-        """Substitute variables named 'lambda' to avoid problems."""
-        return cls._LAMBDA_RE.sub(cls._LAMBDA_MANGLED, expression)
 
 
 class AlchemicalState(object):
@@ -479,7 +460,7 @@ class AlchemicalState(object):
                 raise AlchemicalStateError(err_msg.format(parameter_name))
 
     @classmethod
-    def standardize_system(cls, system):
+    def _standardize_system(cls, system):
         """Standardize the given system.
 
         Set all global lambda parameters of the system to 1.0.

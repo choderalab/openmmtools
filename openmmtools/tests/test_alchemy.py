@@ -1266,21 +1266,6 @@ class TestAlchemicalState(object):
         ]
 
     @staticmethod
-    def test_sanitize_expression():
-        """Test that lambda variable is substituted correctly."""
-        test_cases = [('lambda', '_AlchemicalFunction__lambda'),
-                      ('(lambda)', '(_AlchemicalFunction__lambda)'),
-                      ('( lambda )', '( _AlchemicalFunction__lambda )'),
-                      ('lambda_sterics', 'lambda_sterics'),
-                      ('sterics_lambda', 'sterics_lambda'),
-                      ('2+lambda-lambda_angles', '2+_AlchemicalFunction__lambda-lambda_angles'),
-                      ('2+lambda-lambda_angles/lambda',
-                       '2+_AlchemicalFunction__lambda-lambda_angles/_AlchemicalFunction__lambda')]
-        for expression, result in test_cases:
-            substituted_expression = AlchemicalFunction._sanitize_expression(expression)
-            assert substituted_expression == result, '{}, {}, {}'.format(expression, substituted_expression, result)
-
-    @staticmethod
     def test_constructor():
         """Test AlchemicalState constructor behave as expected."""
         # Raise an exception if parameter is not recognized.
@@ -1415,8 +1400,8 @@ class TestAlchemicalState(object):
         alchemical_state.set_alchemical_parameters(0.5)
         alchemical_state.apply_to_system(system)
 
-        # Check that standardize_system() sets all parameters back to 1.0.
-        AlchemicalState.standardize_system(system)
+        # Check that _standardize_system() sets all parameters back to 1.0.
+        AlchemicalState._standardize_system(system)
         standard_alchemical_state = AlchemicalState.from_system(system)
         assert alchemical_state != standard_alchemical_state
         for parameter_name, value in alchemical_state._parameters.items():
