@@ -2133,49 +2133,6 @@ class AbsoluteAlchemicalFactory(object):
 
         return systems
 
-    def _is_restraint(self, valence_atoms):
-        """
-        Determine whether specified valence term connects the ligand with its environment.
-
-        Parameters
-        ----------
-        valence_atoms : list of int
-            Atom indices involved in valence term (bond, angle or torsion).
-
-        Returns
-        -------
-        is_restraint : bool
-            True if the set of atoms includes at least one ligand atom and at least one non-ligand atom; False otherwise
-
-        Examples
-        --------
-
-        Various tests for a simple system.
-
-        >>> # Create a reference system.
-        >>> from openmmtools import testsystems
-        >>> alanine_dipeptide = testsystems.AlanineDipeptideImplicit()
-        >>> [reference_system, positions] = [alanine_dipeptide.system, alanine_dipeptide.positions]
-        >>> # Create a factory.
-        >>> factory = AbsoluteAlchemicalFactory(reference_system, ligand_atoms=[0, 1, 2])
-        >>> factory._is_restraint([0,1,2])
-        False
-        >>> factory._is_restraint([1,2,3])
-        True
-        >>> factory._is_restraint([3,4])
-        False
-        >>> factory._is_restraint([2,3,4,5])
-        True
-
-        """
-
-        valence_atomset = set(valence_atoms)
-        intersection = set.intersection(valence_atomset, self.ligand_atomset)
-        if (len(intersection) >= 1) and (len(intersection) < len(valence_atomset)):
-            return True
-
-        return False
-
 
 if __name__ == '__main__':
     import doctest
