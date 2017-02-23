@@ -1785,14 +1785,14 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @classmethod
     @abc.abstractmethod
-    def standardize_system(cls, system):
+    def _standardize_system(cls, system):
         """Standardize the given system.
 
         ThermodynamicState relies on this method to create a standard
         system that defines compatibility with another state or context.
         The definition of a standard system is tied to the implementation
         of apply_to_context. For example, if apply_to_context sets a
-        global parameter of the context, standardize_system should
+        global parameter of the context, _standardize_system should
         set the default value of the parameter in the system to a
         standard value.
 
@@ -2036,7 +2036,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         """
         super(CompoundThermodynamicState, cls)._standardize_system(system)
         for composable_cls in cls._composable_bases:
-            composable_cls.standardize_system(system)
+            composable_cls._standardize_system(system)
 
 
 if __name__ == '__main__':

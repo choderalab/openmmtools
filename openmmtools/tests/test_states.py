@@ -925,7 +925,7 @@ class TestCompoundThermodynamicState(object):
             self._dummy_parameter = value
 
         @classmethod
-        def standardize_system(cls, system):
+        def _standardize_system(cls, system):
             try:
                 cls.set_dummy_parameter(system, cls.standard_dummy_parameter)
             except TypeError:  # No parameter to set.
