@@ -14,10 +14,12 @@ General utility functions for the repo.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import re
 import ast
 import abc
 import time
 import math
+import copy
 import logging
 import operator
 
@@ -89,8 +91,56 @@ class Timer(object):
 
 
 # =============================================================================
-# STRING PARSING UTILITIES
+# STRING MATHEMATICAL EXPRESSION PARSING UTILITIES
 # =============================================================================
+
+# Dict reserved_keyword: compiled_regex_pattern. This is used by
+_RESERVED_WORDS_PATTERNS = {
+    'lambda': re.compile(r'(?<![a-zA-Z0-9_])lambda(?![a-zA-Z0-9_])')
+}
+
+
+def sanitize_expression(expression, variables):
+    """Sanitize variables with an illegal Python name.
+
+    Transform variable names in the string expression that are illegal in
+    Python so that the expression can be evaluated in pure Python. Currently
+    this just handle variables called with the reserved word 'lambda'.
+
+    Parameters
+    ----------
+    expression : str
+        The mathematical expression as a string.
+    variables : dict of str: float
+        The variables in the expression.
+
+    Returns
+    -------
+    sanitized_expression : str
+        The same mathematical expression that can be executed in Python.
+    sanitized_variables : dict of str: float
+        The updated variable names with their values.
+
+    """
+    sanitized_variables = None
+    sanitized_expression = expression
+
+    # Substitute all reserved words in expression and variables.
+    for word, pattern in _RESERVED_WORDS_PATTERNS.items():
+        if word in variables:  # Don't make unneeded substitutions.
+            if sanitized_variables is None:
+                sanitized_variables = copy.deepcopy(variables)
+            sanitized_word = '_sanitized__' + word
+            sanitized_expression = pattern.sub(sanitized_word, sanitized_expression)
+            variable_value = sanitized_variables.pop(word)
+            sanitized_variables[sanitized_word] = variable_value
+
+    # If no substitutions are made return same variables.
+    if sanitized_variables is None:
+        sanitized_variables = variables
+
+    return sanitized_expression, sanitized_variables
+
 
 def math_eval(expression, variables=None):
     """Evaluate a mathematical expression with variables.
@@ -157,6 +207,9 @@ def math_eval(expression, variables=None):
 
     if variables is None:
         variables = {}
+
+    # Sanitized reserved words.
+    expression, variables = sanitize_expression(expression, variables)
 
     return _math_eval(ast.parse(expression, mode='eval').body)
 
