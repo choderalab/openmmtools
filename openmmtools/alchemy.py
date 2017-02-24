@@ -40,6 +40,7 @@ import copy
 import time
 import inspect
 import logging
+import collections
 
 import numpy as np
 from simtk import openmm, unit
@@ -519,6 +520,53 @@ class AlchemicalState(object):
                 parameter_name = force.getGlobalParameterName(parameter_id)
                 if parameter_name in supported_parameters:
                     yield force, parameter_name, parameter_id
+
+
+# =============================================================================
+# ALCHEMICAL REGION
+# =============================================================================
+
+_ALCHEMICAL_REGION_ARGS = ['alchemical_atoms', 'alchemical_bonds', 'alchemical_angles',
+                           'alchemical_torsions', 'annihilate_sterics', 'annihilate_electrostatics']
+
+
+# The class is just a way to document the namedtuple.
+class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_REGION_ARGS)):
+    """Alchemical region.
+
+    This is a namedtuple used to tell the AlchemicalFactory which region
+    of the system to alchemically modify and how.
+
+    Parameters
+    ----------
+    alchemical_atoms : list of int
+        List of atoms to be designated for which the nonbonded forces (both
+        sterics and electrostatics components) have to be alchemically
+        modified.
+    alchemical_bonds : bool or list of int, optional
+        If a list of bond indices are specified, these HarmonicBondForce
+        entries are softened with 'lambda_bonds'. If set to True, this list
+        is auto-generated to include all bonds involving any alchemical
+        atoms (default is False).
+    alchemical_angles : bool or list of int, optional
+        If a list of angle indices are specified, these HarmonicAngleForce
+        entries are softened with 'lambda_angles'. If set to True, this
+        list is auto-generated to include all angles involving any alchemical
+        atoms (default is False).
+    alchemical_torsions : bool or list of int, optional
+        If a list of torsion indices are specified, these PeriodicTorsionForce
+        entries are softened with 'lambda_torsions'. If set to True, this list
+        is auto-generated to include al proper torsions involving any alchemical
+        atoms. Improper torsions are not softened (default is False).
+    annihilate_electrostatics : bool
+        If True, electrostatics should be annihilated, rather than decoupled.
+    annihilate_sterics : bool
+        If True, sterics (Lennard-Jones or Halgren potential) will be annihilated,
+        rather than decoupled.
+
+    """
+# No default for alchemical_atoms.
+AlchemicalRegion.__new__.__defaults__ = (False,) * (len(_ALCHEMICAL_REGION_ARGS) - 2) + (True,)
 
 
 # =============================================================================
