@@ -1680,7 +1680,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         # This feature is incompletely implemented, so raise an exception.
-        raise Exception("Not implemented")
+        raise NotImplemented()
 
         # Softcore Halgren potential from Eq. 3 of
         # Shi, Y., Jiao, D., Schnieders, M.J., and Ren, P. (2009). Trypsin-ligand binding free energy calculation with AMOEBA. Conf Proc IEEE Eng Med Biol Soc 2009, 2328-2331.
@@ -1884,50 +1884,149 @@ class AbsoluteAlchemicalFactory(object):
 
         return [system, force_labels]
 
-    def getEnergyComponents(self, alchemical_state, positions, box_vectors=None, use_all_parameters=True):
-        """
-        Compute potential energy by Force component for the corresponding alchemically-modified system.
+    @classmethod
+    def get_energy_components(cls, alchemical_system, alchemical_state, positions):
+        """Compute potential energy of the alchemical system by Force.
+
+        This can be useful for debug and analysis.
 
         Parameters
         ----------
+        alchemical_system : simtk.openmm.AlchemicalSystem
+            An alchemically modified system.
         alchemical_state : AlchemicalState
-            The alchemical state to est the Context to.
-        use_all_parameters : bool, optional, default=False
-            If True, will ensure that all parameters are used or raise an Exception if not.
+            The alchemical state to set the Context to.
+        positions : simtk.unit.Quantity of dimension (natoms, 3)
+            Coordinates to use for energy test (units of distance).
+
+        Returns
+        -------
+        energy_components : dict str: simtk.unit.Quantity
+            A string label describing the role of the force associated to
+            its contribution to the potential energy.
 
         """
-        if not hasattr(self, 'alchemically_modified_system_with_force_groups'):
-            # Create deep copy of alchemical system.
-            system = copy.deepcopy(self.alchemically_modified_system)
-            # Separate all forces into separate force groups.
-            assert system.getNumForces() <= 32, "self.alchemically_modified_system has more than 32 force groups; " \
-                                                "can't compute individual force component energies."
-            for (force_index, force) in enumerate(system.getForces()):
-                force.setForceGroup(force_index)
-            # Store system
-            self.alchemically_modified_system_with_force_groups = system
+        # Find and label all forces.
+        force_labels = cls._find_force_components(alchemical_system)
+        assert len(force_labels) <= 32, ("The alchemical system has more than 32 force groups; "
+                                         "can't compute individual force component energies.")
 
-        # Retrieve system with distinct force groups
-        system = self.alchemically_modified_system_with_force_groups
+        # Create deep copy of alchemical system.
+        system = copy.deepcopy(alchemical_system)
 
-        # Create a Context
+        # Separate all forces into separate force groups.
+        for force_index, force in enumerate(system.getForces()):
+            force.setForceGroup(force_index)
+
+        # Create a Context in the given state.
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
         context = openmm.Context(system, integrator)
-        # Set alchemical state
-        AbsoluteAlchemicalFactory.perturbContext(context, alchemical_state, use_all_parameters=use_all_parameters)
-        # Set positions and box vectors
-        if box_vectors is not None:
-            context.setDefaultPeriodicBoxVectors(*box_vectors)
         context.setPositions(positions)
-        # Get energy component  s
-        from collections import OrderedDict
-        energy_components = OrderedDict()
-        for (force_label, force_index) in self.force_labels.items():
-            energy_components[force_label] = context.getState(getEnergy=True,groups=2**force_index).getPotentialEnergy()
+        alchemical_state.apply_to_context(context)
+
+        # Get energy components
+        energy_components = collections.OrderedDict()
+        for force_label, force_index in force_labels.items():
+            energy_components[force_label] = context.getState(getEnergy=True,
+                                                              groups=2**force_index).getPotentialEnergy()
         # Clean up
         del context, integrator
-        # Return energy components
+
         return energy_components
+
+    @staticmethod
+    def _find_force_components(alchemical_system):
+        """Return force labels and indices for each force."""
+        def add_label(label, index):
+            assert label not in force_labels
+            force_labels[label] = index
+
+        def check_parameter(custom_force, parameter):
+            for parameter_id in range(custom_force.getNumGlobalParameters()):
+                parameter_name = custom_force.getGlobalParameterName(parameter_id)
+                if parameter == parameter_name:
+                    return True
+            return False
+
+        def check_function(custom_force, parameter):
+            energy_function = custom_force.getEnergyFunction()
+            return parameter in energy_function
+
+        force_labels = {}
+        nonbonded_forces = []
+        sterics_bond_forces = []
+        electro_bond_forces = []
+
+        # We save CustomBondForces and CustomNonbondedForces used for nonbonded
+        # forces and exceptions to distinguish them later
+        for force_index, force in enumerate(alchemical_system.getForces()):
+            if isinstance(force, openmm.CustomAngleForce) and check_parameter(force, 'lambda_angles'):
+                add_label('alchemically modified HarmonicAngleForce', force_index)
+            elif isinstance(force, openmm.CustomBondForce) and check_parameter(force, 'lambda_bonds'):
+                add_label('alchemically modified HarmonicBondForce', force_index)
+            elif isinstance(force, openmm.CustomTorsionForce) and check_parameter(force, 'lambda_torsions'):
+                add_label('alchemically modified PeriodicTorsionForce', force_index)
+            elif isinstance(force, openmm.CustomGBForce) and check_parameter(force, 'lambda_electrostatics'):
+                add_label('alchemically modified GBSAOBCForce', force_index)
+            elif isinstance(force, openmm.CustomBondForce) and check_function(force, 'lambda'):
+                if check_function(force, 'lambda_sterics'):
+                    sterics_bond_forces.append(force_index, force)
+                else:
+                    electro_bond_forces.append(force_index, force)
+            elif isinstance(force, openmm.CustomNonbondedForce) and check_function(force, 'lambda'):
+                if check_function(force, 'lambda_sterics'):
+                    nonbonded_forces.append('sterics', force_index, force)
+                else:
+                    nonbonded_forces.append('electrostatics', force_index, force)
+            else:
+                add_label('unmodified ' + force.__class__.__name__)
+
+        # Differentiate between na/aa nonbonded forces.
+        for force_type, (force_index, force) in nonbonded_forces:
+            label = 'alchemically modified NonbondedForce for {}alchemical/alchemical ' + force_type
+            interacting_atoms, alchemical_atoms = force.getInteractionGroupParameters()
+            if interacting_atoms == alchemical_atoms:  # alchemical-alchemical atoms
+                add_label(label.format(''), force_index)
+            else:
+                add_label(label.format('non-'), force_index)
+
+        # Differentiate between na/aa bond forces for exceptions.
+        for force_type, bond_forces in [('sterics', sterics_bond_forces), ('electrostatics', electro_bond_forces)]:
+            assert len(bond_forces) == 2
+            label = 'alchemically modified BondForce for {}alchemical/alchemical ' + force_type + ' exceptions'
+
+            # Sort forces by number of bonds.
+            bond_forces = sorted(bond_forces, key=lambda x: x[1].getNumBonds())
+            (force_index1, force1), (force_index2, force2) = bond_forces
+
+            # Check if both define their parameters (with decoupling the lambda
+            # parameter doesn't exist in the alchemical-alchemical force)
+            parameter_name = 'lambda_' + force_type
+            if check_parameter(force1, parameter_name) != check_parameter(force2, parameter_name):
+                if check_parameter(force1, parameter_name):
+                    add_label(label.format('non-'), force_index1)
+                    add_label(label.format(''), force_index2)
+                else:
+                    add_label(label.format(''), force_index1)
+                    add_label(label.format('non-'), force_index2)
+
+            # If they are both empty they are identical and any label works.
+            elif force1.getNumBonds() == 0:
+                add_label(label.format(''), force_index1)
+                add_label(label.format('non-'), force_index2)
+
+            # We check that the bond atoms are both alchemical or not.
+            else:
+                atom_i, atom_j = force1.getBondParameters(0)
+                both_alchemical = atom_i in alchemical_atoms and atom_j in alchemical_atoms
+                if both_alchemical:
+                    add_label(label.format(''), force_index1)
+                    add_label(label.format('non-'), force_index2)
+                else:
+                    add_label(label.format('non-'), force_index1)
+                    add_label(label.format(''), force_index2)
+
+        return force_labels
 
     def createPerturbedSystem(self, alchemical_state=None, mm=None):
         """
