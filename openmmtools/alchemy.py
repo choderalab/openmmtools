@@ -526,12 +526,17 @@ class AlchemicalState(object):
 # ALCHEMICAL REGION
 # =============================================================================
 
-_ALCHEMICAL_REGION_ARGS = ['alchemical_atoms', 'alchemical_bonds', 'alchemical_angles',
-                           'alchemical_torsions', 'annihilate_sterics', 'annihilate_electrostatics']
+_ALCHEMICAL_REGION_ARGS = collections.OrderedDict(
+    [('alchemical_atoms', 'mandatory'), ('alchemical_bonds', False),
+     ('alchemical_angles', False), ('alchemical_torsions', False),
+     ('annihilate_electrostatics', True), ('annihilate_sterics', False),
+     ('softcore_alpha', 0.5), ('softcore_beta', 0.0), ('softcore_a', 1), ('softcore_b', 1),
+     ('softcore_c', 6), ('softcore_d', 1), ('softcore_e', 1), ('softcore_f', 2)]
+)
 
 
 # The class is just a way to document the namedtuple.
-class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_REGION_ARGS)):
+class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_REGION_ARGS.keys())):
     """Alchemical region.
 
     This is a namedtuple used to tell the AlchemicalFactory which region
@@ -563,11 +568,33 @@ class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_RE
     annihilate_sterics : bool
         If True, sterics (Lennard-Jones or Halgren potential) will be annihilated,
         rather than decoupled.
+    softcore_alpha : float, optional
+        Alchemical softcore parameter for Lennard-Jones (default is 0.5).
+    softcore_beta : float, optional
+        Alchemical softcore parameter for electrostatics. Set this to zero
+        to recover standard electrostatic scaling (default is 0.0).
+    softcore_a, softcore_b, softcore_c : float, optional
+        Parameters modifying softcore Lennard-Jones form. Introduced in
+        Eq. 13 of Ref. [1] (default is 1).
+    softcore_d, softcore_e, softcore_f : float, optional
+        Parameters modifying softcore electrostatics form (default is 1).
+
+    Notes
+    -----
+    The parameters softcore_e and softcore_f determine the effective distance
+    between point charges according to
+
+    r_eff = sigma*((softcore_beta*(lambda_electrostatics-1)^softcore_e + (r/sigma)^softcore_f))^(1/softcore_f)
+
+    References
+    ----------
+    [1] Pham TT and Shirts MR. Identifying low variance pathways for free
+    energy calculations of molecular transformations in solution phase.
+    JCP 135:034114, 2011. http://dx.doi.org/10.1063/1.3607597
 
     """
-# No default for alchemical_atoms.
-AlchemicalRegion.__new__.__defaults__ = (False,) * (len(_ALCHEMICAL_REGION_ARGS) - 2) + (True,)
-
+AlchemicalRegion.__new__.__defaults__ = (default for default in _ALCHEMICAL_REGION_ARGS.values()
+                                         if default != 'mandatory')
 
 # =============================================================================
 # ABSOLUTE ALCHEMICAL FACTORY
