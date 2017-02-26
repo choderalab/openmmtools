@@ -527,8 +527,8 @@ class AlchemicalState(object):
 # =============================================================================
 
 _ALCHEMICAL_REGION_ARGS = collections.OrderedDict(
-    [('alchemical_atoms', 'mandatory'), ('alchemical_bonds', False),
-     ('alchemical_angles', False), ('alchemical_torsions', False),
+    [('alchemical_atoms', None), ('alchemical_bonds', None),
+     ('alchemical_angles', None), ('alchemical_torsions', None),
      ('annihilate_electrostatics', True), ('annihilate_sterics', False),
      ('softcore_alpha', 0.5), ('softcore_beta', 0.0), ('softcore_a', 1), ('softcore_b', 1),
      ('softcore_c', 6), ('softcore_d', 1), ('softcore_e', 1), ('softcore_f', 2)]
@@ -544,25 +544,25 @@ class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_RE
 
     Parameters
     ----------
-    alchemical_atoms : list of int
+    alchemical_atoms : list of int, optional
         List of atoms to be designated for which the nonbonded forces (both
         sterics and electrostatics components) have to be alchemically
-        modified.
+        modified (default is None).
     alchemical_bonds : bool or list of int, optional
         If a list of bond indices are specified, these HarmonicBondForce
         entries are softened with 'lambda_bonds'. If set to True, this list
         is auto-generated to include all bonds involving any alchemical
-        atoms (default is False).
+        atoms (default is None).
     alchemical_angles : bool or list of int, optional
         If a list of angle indices are specified, these HarmonicAngleForce
         entries are softened with 'lambda_angles'. If set to True, this
         list is auto-generated to include all angles involving any alchemical
-        atoms (default is False).
+        atoms (default is None).
     alchemical_torsions : bool or list of int, optional
         If a list of torsion indices are specified, these PeriodicTorsionForce
         entries are softened with 'lambda_torsions'. If set to True, this list
         is auto-generated to include al proper torsions involving any alchemical
-        atoms. Improper torsions are not softened (default is False).
+        atoms. Improper torsions are not softened (default is None).
     annihilate_electrostatics : bool
         If True, electrostatics should be annihilated, rather than decoupled.
     annihilate_sterics : bool
@@ -593,8 +593,8 @@ class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_RE
     JCP 135:034114, 2011. http://dx.doi.org/10.1063/1.3607597
 
     """
-AlchemicalRegion.__new__.__defaults__ = (default for default in _ALCHEMICAL_REGION_ARGS.values()
-                                         if default != 'mandatory')
+AlchemicalRegion.__new__.__defaults__ = tuple(_ALCHEMICAL_REGION_ARGS.values())
+
 
 # =============================================================================
 # ABSOLUTE ALCHEMICAL FACTORY
@@ -823,8 +823,100 @@ class AbsoluteAlchemicalFactory(object):
 
         return
 
+    # -------------------------------------------------------------------------
+    # Internal usage: AlchemicalRegion
+    # -------------------------------------------------------------------------
+
     @classmethod
-    def _tabulateBonds(cls, system):
+    def _resolve_alchemical_region(cls, system, alchemical_region):
+        """Return a new AlchemicalRegion with sets of bonds/angles/torsions resolved.
+
+        Also transform any list of indices into a frozenset.
+
+        Parameters
+        ----------
+        system : simtk.openmm.System
+            The system.
+        alchemical_region : AlchemicalRegion
+            The alchemical region of the system.
+
+        Returns
+        -------
+        AlchemicalRegion
+            A new AlchemicalRegion object in which all alchemical_X (where X is
+            atoms, bonds, angles, or torsions) have been converted to a frozenset
+            of indices that belong to the System.
+
+        Raises
+        ------
+        ValueError
+            If the indices in the AlchemicalRegion can't be found in the system.
+
+        """
+        # TODO move to AlchemicalRegion?
+        # TODO process also custom forces? (also in _build_alchemical_X_list methods)
+        # Find and cache the reference forces.
+        reference_forces = {force.__class__.__name__: force for force in system.getForces()}
+
+        # Count number of particles, angles, etc. in system. Atoms
+        # must be processed first since the others build on that.
+        reference_counts = collections.OrderedDict([
+            ('atom', system.getNumParticles()),
+            ('bond', reference_forces['HarmonicBondForce'].getNumBonds()
+             if 'HarmonicBondForce' in reference_forces else 0),
+            ('angle', reference_forces['HarmonicAngleForce'].getNumAngles()
+             if 'HarmonicAngleForce' in reference_forces else 0),
+            ('torsion', reference_forces['PeriodicTorsionForce'].getNumTorsions()
+             if 'PeriodicTorsionForce' in reference_forces else 0)
+        ])
+
+        # Transform named tuple to dict for easy modification.
+        alchemical_region = alchemical_region._asdict()
+
+        for region in reference_counts:
+            region_name = 'alchemical_' + region + 's'
+            region_indices = alchemical_region[region_name]
+
+            # Convert None and False to empty lists.
+            if region_indices is None or region_indices is False:
+                region_indices = set()
+
+            # Automatically build indices list if True.
+            elif region_indices is True:
+                if reference_counts[region] == 0:
+                    region_indices = set()
+                else:
+                    builder_function = getattr(cls, '_build_alchemical_{}_list'.format(region))
+                    region_indices = builder_function(alchemical_region['alchemical_atoms'],
+                                                      reference_forces, system)
+
+            # Convert numpy arrays to Python lists since SWIG
+            # have problems with np.int (see openmm#1650).
+            elif isinstance(region_indices, np.ndarray):
+                region_indices = region_indices.tolist()
+
+            # Convert to set and update alchemical region.
+            region_indices = frozenset(region_indices)
+            alchemical_region[region_name] = region_indices
+
+            # Check that the given indices are in the system.
+            indices_diff = region_indices - set(range(reference_counts[region]))
+            if len(indices_diff) > 0:
+                err_msg = 'Indices {} in {} cannot be found in the system'
+                raise ValueError(err_msg.format(indices_diff, region_name))
+
+        # Check that an alchemical region is defined.
+        total_alchemically_modified = 0
+        for region in reference_counts:
+            total_alchemically_modified += len(alchemical_region['alchemical_' + region + 's'])
+        if total_alchemically_modified == 0:
+            raise ValueError('The AlchemicalRegion is empty.')
+
+        # Return a new AlchemicalRegion with the resolved indices lists.
+        return AlchemicalRegion(**alchemical_region)
+
+    @staticmethod
+    def _tabulate_bonds(system):
         """
         Tabulate bonds for the specified system.
 
@@ -862,14 +954,19 @@ class AbsoluteAlchemicalFactory(object):
 
         return bonds
 
-    def _buildAlchemicalTorsionList(self, alchemical_atomset):
+    @classmethod
+    def _build_alchemical_torsion_list(cls, alchemical_atoms, reference_forces, system):
         """
         Build a list of proper torsion indices that involve any alchemical atom.
 
         Parameters
         ----------
-        alchemical_atomset : set of int
-            The set of alchemically modified atoms
+        alchemical_atoms : set of int
+            The set of alchemically modified atoms.
+        reference_forces : dict str: force
+            A dictionary of cached forces in the system accessible by names.
+        system : simtk.openmm.System
+            The system.
 
         Returns
         -------
@@ -879,7 +976,7 @@ class AbsoluteAlchemicalFactory(object):
         """
 
         # Tabulate all bonds
-        bonds = self._tabulateBonds(self.reference_system)
+        bonds = cls._tabulate_bonds(system)
         def is_bonded(i,j):
             if j in bonds[i]:
                 return True
@@ -891,23 +988,28 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create a list of proper torsions that involve any alchemical atom.
         torsion_list = list()
-        force = self.reference_forces['PeriodicTorsionForce']
+        force = reference_forces['PeriodicTorsionForce']
         for torsion_index in range(force.getNumTorsions()):
             [particle1, particle2, particle3, particle4, periodicity, phase, k] = force.getTorsionParameters(torsion_index)
-            if set([particle1,particle2,particle3,particle4]).intersection(alchemical_atomset):
+            if set([particle1,particle2,particle3,particle4]).intersection(alchemical_atoms):
                 if is_proper_torsion(particle1,particle2,particle3,particle4):
                     torsion_list.append(torsion_index)
 
         return torsion_list
 
-    def _buildAlchemicalAngleList(self, alchemical_atomset):
+    @staticmethod
+    def _build_alchemical_angle_list(alchemical_atoms, reference_forces, system):
         """
         Build a list of angle indices that involve any alchemical atom.
 
         Parameters
         ----------
-        alchemical_atomset : set of int
-            The set of alchemically modified atoms
+        alchemical_atoms : set of int
+            The set of alchemically modified atoms.
+        reference_forces : dict str: force
+            A dictionary of cached forces in the system accessible by names.
+        system : simtk.openmm.System
+            The system (unused).
 
         Returns
         -------
@@ -916,22 +1018,27 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         angle_list = list()
-        force = self.reference_forces['HarmonicAngleForce']
+        force = reference_forces['HarmonicAngleForce']
         for angle_index in range(force.getNumAngles()):
             [particle1, particle2, particle3, theta0, K] = force.getAngleParameters(angle_index)
-            if set([particle1,particle2,particle3]).intersection(alchemical_atomset):
+            if set([particle1,particle2,particle3]).intersection(alchemical_atoms):
                 angle_list.append(angle_index)
 
         return angle_list
 
-    def _buildAlchemicalBondList(self, alchemical_atomset):
+    @staticmethod
+    def _build_alchemical_bond_list(alchemical_atoms, reference_forces, system):
         """
         Build a list of bond indices that involve any alchemical atom, allowing a list of bonds to override.
 
         Parameters
         ----------
-        alchemical_atomset : set of int
-            The set of alchemically modified atoms
+        alchemical_atoms : set of int
+            The set of alchemically modified atoms.
+        reference_forces : dict str: force
+            A dictionary of cached forces in the system accessible by names.
+        system : simtk.openmm.System
+            The system (unused).
 
         Returns
         -------
@@ -940,10 +1047,10 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         bond_list = list()
-        force = self.reference_forces['HarmonicBondForce']
+        force = reference_forces['HarmonicBondForce']
         for bond_index in range(force.getNumBonds()):
             [particle1, particle2, r, K] = force.getBondParameters(bond_index)
-            if set([particle1,particle2]).intersection(alchemical_atomset):
+            if set([particle1,particle2]).intersection(alchemical_atoms):
                 bond_list.append(bond_index)
 
         return bond_list
@@ -1531,7 +1638,6 @@ class AbsoluteAlchemicalFactory(object):
 
     def _alchemicallyModifyAmoebaMultipoleForce(self, system, reference_force):
         raise Exception("Not implemented; needs CustomMultipleForce")
-        alchemical_atom_indices = self.ligand_atoms
 
 
     def _alchemicallyModifyAmoebaVdwForce(self, system, reference_force, force_labels):
@@ -1554,7 +1660,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         # This feature is incompletely implemented, so raise an exception.
-        raise NotImplemented()
+        raise NotImplemented('Alchemical modification of Amoeba VdW Forces is not supported.')
 
         # Softcore Halgren potential from Eq. 3 of
         # Shi, Y., Jiao, D., Schnieders, M.J., and Ren, P. (2009). Trypsin-ligand binding free energy calculation with AMOEBA. Conf Proc IEEE Eng Med Biol Soc 2009, 2328-2331.

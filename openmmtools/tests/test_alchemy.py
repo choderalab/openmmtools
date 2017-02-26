@@ -1232,6 +1232,67 @@ def generate_trace(test_system):
 
 
 # =============================================================================
+# TEST ALCHEMICAL FACTORY SUITE
+# =============================================================================
+
+class TestAlchemicalFactory(object):
+    """Test AbsoluteAlchemicalFactory class."""
+
+    @classmethod
+    def setup_class(cls):
+        """Create test systems and shared objects."""
+        cls.test_systems = dict()
+        cls.test_systems['AlanineDipeptideVacuum'] = testsystems.AlanineDipeptideVacuum()
+        cls.test_systems['LennardJonesCluster'] = testsystems.LennardJonesCluster()
+
+    def test_resolve_alchemical_region(self):
+        """Test the method _resolve_alchemical_region."""
+        # TODO test systems with no HarmonicBondForce etc.
+        test_cases = [
+            ('AlanineDipeptideVacuum', range(22), 9, 36, 48),
+            ('AlanineDipeptideVacuum', range(11, 22), 4, 21, 31),
+            ('LennardJonesCluster', range(27), 0, 0, 0)
+        ]
+
+        for i, (test_name, atoms, n_bonds, n_angles, n_torsions) in enumerate(test_cases):
+            system = self.test_systems[test_name].system
+
+            # Default arguments are converted to empty list.
+            alchemical_region = AlchemicalRegion(alchemical_atoms=atoms)
+            resolved_region = AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+            for region in ['bonds', 'angles', 'torsions']:
+                assert getattr(resolved_region, 'alchemical_' + region) == set()
+
+            # Numpy arrays are converted to sets.
+            alchemical_region = AlchemicalRegion(alchemical_atoms=np.array(atoms),
+                                                 alchemical_bonds=np.array(range(n_bonds)),
+                                                 alchemical_angles=np.array(range(n_angles)),
+                                                 alchemical_torsions=np.array(range(n_torsions)))
+            resolved_region = AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+            for region in ['atoms', 'bonds', 'angles', 'torsions']:
+                assert isinstance(getattr(resolved_region, 'alchemical_' + region), frozenset)
+
+            # Bonds, angles and torsions are inferred correctly.
+            alchemical_region = AlchemicalRegion(alchemical_atoms=atoms, alchemical_bonds=True,
+                                                 alchemical_angles=True, alchemical_torsions=True)
+            resolved_region = AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+            for j, region in enumerate(['bonds', 'angles', 'torsions']):
+                assert len(getattr(resolved_region, 'alchemical_' + region)) == test_cases[i][j+2]
+
+            # An exception is if indices are not part of the system.
+            alchemical_region = AlchemicalRegion(alchemical_atoms=[10000000])
+            with nose.tools.assert_raises(ValueError):
+                AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+
+            # An exception is raised if nothing is defined.
+            alchemical_region = AlchemicalRegion()
+            with nose.tools.assert_raises(ValueError):
+                AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+
+
+
+
+# =============================================================================
 # TEST ALCHEMICAL STATE
 # =============================================================================
 
