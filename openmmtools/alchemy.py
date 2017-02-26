@@ -1399,12 +1399,6 @@ class AbsoluteAlchemicalFactory(object):
         # Determine energy expression for all custom forces
         # --------------------------------------------------
 
-        # Form energy expression for slaved context parameters.
-        alchemical_function_expression = ""
-        for variable in self.alchemical_functions:
-            expression = self.alchemical_functions[variable]
-            alchemical_function_expression = " %s = %s;" % (variable, expression)
-
         # Soft-core Lennard-Jones
         sterics_energy_expression = "U_sterics = (lambda_sterics^softcore_a)*4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
 
@@ -1502,8 +1496,7 @@ class AbsoluteAlchemicalFactory(object):
         # Create CustomNonbondedForces to handle sterics particle interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
         # to 1.0 for decoupled interactions
-        basic_sterics_expression = "U_sterics;" + sterics_energy_expression +\
-                                   sterics_mixing_rules + alchemical_function_expression
+        basic_sterics_expression = "U_sterics;" + sterics_energy_expression + sterics_mixing_rules
 
         na_sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_sterics_expression)
         na_sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 1.0)
@@ -1535,7 +1528,7 @@ class AbsoluteAlchemicalFactory(object):
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
         # to 1.0 for decoupled interactions
         basic_electrostatics_expression = "U_electrostatics;" + electrostatics_energy_expression +\
-                                          electrostatics_mixing_rules + alchemical_function_expression
+                                          electrostatics_mixing_rules
 
         na_electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_electrostatics_expression)
         na_electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 1.0)
@@ -1562,7 +1555,7 @@ class AbsoluteAlchemicalFactory(object):
         # Create CustomBondForces to handle sterics 1,4 exceptions interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
         # to 1.0 for decoupled interactions
-        basic_sterics_expression = "U_sterics;" + sterics_energy_expression + alchemical_function_expression
+        basic_sterics_expression = "U_sterics;" + sterics_energy_expression
 
         na_sterics_custom_bond_force = openmm.CustomBondForce(basic_sterics_expression)
         na_sterics_custom_bond_force.addGlobalParameter("lambda_sterics", 1.0)
@@ -1580,11 +1573,9 @@ class AbsoluteAlchemicalFactory(object):
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
         # to 1.0 for decoupled interactions
         if self.consistent_exceptions:
-            basic_electrostatics_expression = "U_electrostatics;" + electrostatics_energy_expression +\
-                                              alchemical_function_expression
+            basic_electrostatics_expression = "U_electrostatics;" + electrostatics_energy_expression
         else:
-            basic_electrostatics_expression = "U_electrostatics;" + exceptions_electrostatics_energy_expression +\
-                                              alchemical_function_expression
+            basic_electrostatics_expression = "U_electrostatics;" + exceptions_electrostatics_energy_expression
 
         na_electrostatics_custom_bond_force = openmm.CustomBondForce(basic_electrostatics_expression)
         na_electrostatics_custom_bond_force.addGlobalParameter("lambda_electrostatics", 1.0)
@@ -1711,11 +1702,6 @@ class AbsoluteAlchemicalFactory(object):
             force.addGlobalParameter('softcore_d', self.softcore_d)
             force.addGlobalParameter('softcore_e', self.softcore_e)
             force.addGlobalParameter('softcore_f', self.softcore_f)
-
-            # Add control variables.
-            control_variables = set(self.alchemical_functions.values())
-            for variable in control_variables:
-                force.addGlobalParameter(variable, 1.0)
 
         all_custom_forces = [na_sterics_custom_nonbonded_force, na_electrostatics_custom_nonbonded_force,
                              aa_sterics_custom_nonbonded_force, aa_electrostatics_custom_nonbonded_force,
