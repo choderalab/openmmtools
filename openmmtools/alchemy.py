@@ -926,9 +926,10 @@ class AlchemicalFactory(object):
         * Could we use a Topology object to simplify this?
 
         """
-        bonds = [ set() for particle_index in range(system.getNumParticles()) ]
+        bonds = [set() for _ in range(system.getNumParticles())]
 
-        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index)
+                  for index in range(system.getNumForces())}
 
         # Process HarmonicBondForce
         bond_force = forces['HarmonicBondForce']
@@ -969,12 +970,14 @@ class AlchemicalFactory(object):
 
         # Tabulate all bonds
         bonds = cls._tabulate_bonds(system)
-        def is_bonded(i,j):
+
+        def is_bonded(i, j):
             if j in bonds[i]:
                 return True
             return False
-        def is_proper_torsion(i,j,k,l):
-            if is_bonded(i,j) and is_bonded(j,k) and is_bonded(k,l):
+
+        def is_proper_torsion(i, j, k, l):
+            if is_bonded(i, j) and is_bonded(j, k) and is_bonded(k, l):
                 return True
             return False
 
@@ -982,9 +985,9 @@ class AlchemicalFactory(object):
         torsion_list = list()
         force = reference_forces['PeriodicTorsionForce']
         for torsion_index in range(force.getNumTorsions()):
-            [particle1, particle2, particle3, particle4, periodicity, phase, k] = force.getTorsionParameters(torsion_index)
-            if set([particle1,particle2,particle3,particle4]).intersection(alchemical_atoms):
-                if is_proper_torsion(particle1,particle2,particle3,particle4):
+            particle1, particle2, particle3, particle4, periodicity, phase, k = force.getTorsionParameters(torsion_index)
+            if set([particle1, particle2, particle3, particle4]).intersection(alchemical_atoms):
+                if is_proper_torsion(particle1, particle2, particle3, particle4):
                     torsion_list.append(torsion_index)
 
         return torsion_list
@@ -1013,7 +1016,7 @@ class AlchemicalFactory(object):
         force = reference_forces['HarmonicAngleForce']
         for angle_index in range(force.getNumAngles()):
             [particle1, particle2, particle3, theta0, K] = force.getAngleParameters(angle_index)
-            if set([particle1,particle2,particle3]).intersection(alchemical_atoms):
+            if set([particle1, particle2, particle3]).intersection(alchemical_atoms):
                 angle_list.append(angle_index)
 
         return angle_list
@@ -1042,7 +1045,7 @@ class AlchemicalFactory(object):
         force = reference_forces['HarmonicBondForce']
         for bond_index in range(force.getNumBonds()):
             [particle1, particle2, r, K] = force.getBondParameters(bond_index)
-            if set([particle1,particle2]).intersection(alchemical_atoms):
+            if set([particle1, particle2]).intersection(alchemical_atoms):
                 bond_list.append(bond_index)
 
         return bond_list
@@ -1090,7 +1093,7 @@ class AlchemicalFactory(object):
         # Process reference torsions.
         for torsion_index in range(reference_force.getNumTorsions()):
             # Retrieve parameters.
-            [particle1, particle2, particle3, particle4, periodicity, phase, k] = reference_force.getTorsionParameters(torsion_index)
+            particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(torsion_index)
             # Create torsions.
             if torsion_index in alchemical_region.alchemical_torsions:
                 # Alchemically modified torsion.
@@ -1584,7 +1587,8 @@ class AlchemicalFactory(object):
         raise NotImplemented('Alchemical modification of Amoeba VdW Forces is not supported.')
 
         # Softcore Halgren potential from Eq. 3 of
-        # Shi, Y., Jiao, D., Schnieders, M.J., and Ren, P. (2009). Trypsin-ligand binding free energy calculation with AMOEBA. Conf Proc IEEE Eng Med Biol Soc 2009, 2328-2331.
+        # Shi, Y., Jiao, D., Schnieders, M.J., and Ren, P. (2009). Trypsin-ligand binding free
+        # energy calculation with AMOEBA. Conf Proc IEEE Eng Med Biol Soc 2009, 2328-2331.
         energy_expression = 'lambda^5 * epsilon * (1.07^7 / (0.7*(1-lambda)^2+(rho+0.07)^7)) * (1.12 / (0.7*(1-lambda)^2 + rho^7 + 0.12) - 2);'
         energy_expression += 'epsilon = 4*epsilon1*epsilon2 / (sqrt(epsilon1) + sqrt(epsilon2))^2;'
         energy_expression += 'rho = r / R0;'
