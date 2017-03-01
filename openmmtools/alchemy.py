@@ -12,7 +12,7 @@ DESCRIPTION
 This module contains enumerative factories for generating alchemically-modified System objects
 usable for the calculation of free energy differences of hydration or ligand binding.
 
-* `AbsoluteAlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
+* `AlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
 
 TODO
 
@@ -37,7 +37,6 @@ TODO
 # =============================================================================
 
 import copy
-import time
 import inspect
 import logging
 import collections
@@ -130,7 +129,7 @@ class AlchemicalState(object):
 
     >>> from openmmtools import testsystems
     >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
-    >>> alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_vacuum,
+    >>> alchemical_factory = AlchemicalFactory(reference_system=alanine_vacuum,
     ...                                                ligand_atoms=range(0, 22))
     >>> alanine_alchemical_system = alchemical_factory.alchemically_modified_system
 
@@ -600,7 +599,7 @@ AlchemicalRegion.__new__.__defaults__ = tuple(_ALCHEMICAL_REGION_ARGS.values())
 # ABSOLUTE ALCHEMICAL FACTORY
 # =============================================================================
 
-class AbsoluteAlchemicalFactory(object):
+class AlchemicalFactory(object):
     """
     Factory for generating OpenMM System objects that have been alchemically perturbed for absolute binding free energy calculation.
 
@@ -634,7 +633,7 @@ class AbsoluteAlchemicalFactory(object):
     >>> # Create a factory to produce alchemical intermediates.
     >>> receptor_atoms = range(0,2603) # T4 lysozyme L99A
     >>> ligand_atoms = range(2603,2621) # p-xylene
-    >>> factory = AbsoluteAlchemicalFactory(reference_system, ligand_atoms=ligand_atoms)
+    >>> factory = AlchemicalFactory(reference_system, ligand_atoms=ligand_atoms)
     >>> # Get the default protocol for 'denihilating' in complex in explicit solvent.
     >>> protocol = factory.defaultComplexProtocolImplicit()
     >>> # Create the perturbed systems using this protocol.
@@ -647,7 +646,7 @@ class AbsoluteAlchemicalFactory(object):
     >>> waterbox = testsystems.WaterBox()
     >>> [reference_system, positions] = [waterbox.system, waterbox.positions]
     >>> # Create a factory to produce alchemical intermediates.
-    >>> factory = AbsoluteAlchemicalFactory(reference_system, ligand_atoms=[0, 1, 2])
+    >>> factory = AlchemicalFactory(reference_system, ligand_atoms=[0, 1, 2])
     >>> # Get the default protocol for 'denihilating' in solvent.
     >>> protocol = factory.defaultSolventProtocolExplicit()
     >>> # Create the perturbed systems using this protocol.
@@ -658,7 +657,7 @@ class AbsoluteAlchemicalFactory(object):
     >>> # Create an alchemically-perturbed test system
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=True)
+    >>> factory = AlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create a Context to make sure this works.
@@ -671,7 +670,7 @@ class AbsoluteAlchemicalFactory(object):
     >>> # Create an alchemically-perturbed test system.
     >>> from openmmtools import testsystems
     >>> testsystem = testsystems.TolueneImplicit()
-    >>> factory = AbsoluteAlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
+    >>> factory = AlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
     >>> # Create an alchemically-perturbed system.
     >>> alchemical_system = factory.createPerturbedSystem()
     >>> # Create a Context to make sure this works.

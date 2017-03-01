@@ -447,8 +447,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     print("Computing alchemical system components energies")
     alchemical_state = AlchemicalState.from_system(alchemical_system)
     alchemical_state.set_alchemical_parameters(1.0)
-    energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
-                                                                        positions, platform=GLOBAL_ALCHEMY_PLATFORM)
+    energy_components = AlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
+                                                                positions, platform=GLOBAL_ALCHEMY_PLATFORM)
     na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics']
     aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics']
     na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics']
@@ -566,8 +566,8 @@ def check_noninteracting_energy_components(alchemical_system, alchemical_regions
     # Set state to non-interacting.
     alchemical_state = AlchemicalState.from_system(alchemical_system)
     alchemical_state.set_alchemical_parameters(0.0)
-    energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
-                                                                        positions, platform=GLOBAL_ALCHEMY_PLATFORM)
+    energy_components = AlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
+                                                                positions, platform=GLOBAL_ALCHEMY_PLATFORM)
 
     def assert_zero_energy(label):
         print('testing {}'.format(label))
@@ -622,7 +622,7 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
     timer = utils.Timer()
 
     # Create the perturbed system.
-    factory = AbsoluteAlchemicalFactory()
+    factory = AlchemicalFactory()
     timer.start('Create alchemical system')
     alchemical_system = factory.create_alchemical_system(reference_system, alchemical_regions)
     timer.stop('Create alchemical system')
@@ -696,7 +696,7 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
         reference_system.addForce(openmm.MonteCarloBarostat(pressure, temperature))
 
     # Create a fully-interacting alchemical state.
-    factory = AbsoluteAlchemicalFactory()
+    factory = AlchemicalFactory()
     alchemical_system = factory.create_alchemical_system(reference_system, alchemical_regions)
 
     # Create integrators.
@@ -836,7 +836,7 @@ def lambda_trace(reference_system, alchemical_regions, positions, nsteps=100):
     """
 
     # Create a factory to produce alchemical intermediates.
-    factory = AbsoluteAlchemicalFactory()
+    factory = AlchemicalFactory()
     alchemical_system = factory.create_alchemical_system(reference_system, alchemical_regions)
     alchemical_state = AlchemicalState.from_system(alchemical_system)
 
@@ -896,7 +896,7 @@ def test_resolve_alchemical_region():
 
         # Default arguments are converted to empty list.
         alchemical_region = AlchemicalRegion(alchemical_atoms=atoms)
-        resolved_region = AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+        resolved_region = AlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
         for region in ['bonds', 'angles', 'torsions']:
             assert getattr(resolved_region, 'alchemical_' + region) == set()
 
@@ -905,30 +905,30 @@ def test_resolve_alchemical_region():
                                              alchemical_bonds=np.array(range(n_bonds)),
                                              alchemical_angles=np.array(range(n_angles)),
                                              alchemical_torsions=np.array(range(n_torsions)))
-        resolved_region = AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+        resolved_region = AlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
         for region in ['atoms', 'bonds', 'angles', 'torsions']:
             assert isinstance(getattr(resolved_region, 'alchemical_' + region), frozenset)
 
         # Bonds, angles and torsions are inferred correctly.
         alchemical_region = AlchemicalRegion(alchemical_atoms=atoms, alchemical_bonds=True,
                                              alchemical_angles=True, alchemical_torsions=True)
-        resolved_region = AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+        resolved_region = AlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
         for j, region in enumerate(['bonds', 'angles', 'torsions']):
             assert len(getattr(resolved_region, 'alchemical_' + region)) == test_cases[i][j+2]
 
         # An exception is if indices are not part of the system.
         alchemical_region = AlchemicalRegion(alchemical_atoms=[10000000])
         with nose.tools.assert_raises(ValueError):
-            AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+            AlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
 
         # An exception is raised if nothing is defined.
         alchemical_region = AlchemicalRegion()
         with nose.tools.assert_raises(ValueError):
-            AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
+            AlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
 
 
 class TestAlchemicalFactory(object):
-    """Test AbsoluteAlchemicalFactory class."""
+    """Test AlchemicalFactory class."""
 
     @classmethod
     def setup_class(cls):
@@ -977,7 +977,7 @@ class TestAlchemicalFactory(object):
     def generate_cases(cls):
         """Generate all test cases in cls.test_cases combinatorially."""
         cls.test_cases = dict()
-        factory = AbsoluteAlchemicalFactory()
+        factory = AlchemicalFactory()
 
         # We generate all possible combinations of annihilate_sterics/electrostatics
         # for each test system. We also annihilate bonds, angles and torsions every
@@ -1102,7 +1102,7 @@ class TestAlchemicalFactory(object):
 
 @attr('slow')
 class TestAlchemicalFactorySlow(TestAlchemicalFactory):
-    """Test AbsoluteAlchemicalFactory class with a more comprehensive set of systems."""
+    """Test AlchemicalFactory class with a more comprehensive set of systems."""
 
     @classmethod
     def define_systems(cls):
@@ -1147,19 +1147,18 @@ class TestAlchemicalState(object):
     def setup_class(cls):
         """Create test systems and shared objects."""
         alanine_vacuum = testsystems.AlanineDipeptideVacuum()
+        factory = AlchemicalFactory()
 
         # System with only lambda_sterics and lambda_electrostatics.
-        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_vacuum.system,
-                                                       ligand_atoms=range(0, 22))
-        alchemical_alanine_system = alchemical_factory.alchemically_modified_system
+        alchemical_region = AlchemicalRegion(alchemical_atoms=range(22))
+        alchemical_alanine_system = factory.create_alchemical_system(alanine_vacuum.system, alchemical_region)
         cls.alanine_state = states.ThermodynamicState(alchemical_alanine_system,
                                                       temperature=300*unit.kelvin)
 
         # System with all lambdas except for lambda_restraints.
-        alchemical_factory = AbsoluteAlchemicalFactory(reference_system=alanine_vacuum.system,
-                                                       ligand_atoms=range(0, 22), alchemical_torsions=True,
-                                                       alchemical_angles=True, alchemical_bonds=True)
-        fully_alchemical_alanine_system = alchemical_factory.alchemically_modified_system
+        alchemical_region = AlchemicalRegion(alchemical_atoms=range(22), alchemical_torsions=True,
+                                             alchemical_angles=True, alchemical_bonds=True)
+        fully_alchemical_alanine_system = factory.create_alchemical_system(alanine_vacuum.system, alchemical_region)
         cls.full_alanine_state = states.ThermodynamicState(fully_alchemical_alanine_system,
                                                            temperature=300*unit.kelvin)
 
@@ -1195,7 +1194,7 @@ class TestAlchemicalState(object):
         with nose.tools.assert_raises(AlchemicalStateError):
             AlchemicalState.from_system(testsystems.AlanineDipeptideVacuum().system)
 
-        # Valid parameters are 1.0 by default in AbsoluteAlchemicalFactory,
+        # Valid parameters are 1.0 by default in AlchemicalFactory,
         # and all the others must be None.
         for state, defined_lambdas in self.test_cases:
             alchemical_state = AlchemicalState.from_system(state.system)
