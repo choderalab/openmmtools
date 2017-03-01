@@ -1,9 +1,9 @@
 #!/usr/local/bin/env python
 
 """
-YANK Storage submodule
+Storage submodule
 
-This submodule is YANK's primary storage driver which relies on two major classes from the user perspective:
+This submodule is a user-friendly storage driver which relies on two major classes from the user perspective:
 StorageIODriver and StorageInterface
 
 StorageIODriver
