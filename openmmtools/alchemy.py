@@ -14,22 +14,20 @@ usable for the calculation of free energy differences of hydration or ligand bin
 
 * `AlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
 
-TODO
-
-* Remove default protocol class methods, since these are no longer needed.
-* Generalize treatment of nonbonded sterics/electrostatics intra-alchemical forces to support arbitrary mixing rules.
-  Can we eliminate decoupling to something simpler?
-* Add support for other GBSA models.
-* Add functions for the automatic optimization of alchemical states?
-* Can we store serialized form of Force objects so that we can save time in reconstituting
-  Force objects when we make copies?  We can even manipulate the XML representation directly.
-* Allow protocols to automatically be resized to arbitrary number of states, to
-  allow number of states to be enlarged to be an integral multiple of number of GPUs.
-* Finish AMOEBA support.
-* Can alchemically-modified System objects share unmodified Force objects to avoid overhead
-  of duplicating Forces that are not modified?
-
 """
+
+# TODO
+# - Generalize treatment of nonbonded sterics/electrostatics intra-alchemical
+#   forces to support arbitrary mixing rules. Can we eliminate decoupling to something simpler?
+# - Add support for other GBSA models.
+# - Add functions for the automatic optimization of alchemical states?
+# - Can we store serialized form of Force objects so that we can save time in reconstituting
+#   Force objects when we make copies?  We can even manipulate the XML representation directly.
+# - Allow protocols to automatically be resized to arbitrary number of states, to
+#   allow number of states to be enlarged to be an integral multiple of number of GPUs.
+# - Finish AMOEBA support.
+# - Can alchemically-modified System objects share unmodified Force objects to avoid overhead
+#   of duplicating Forces that are not modified?
 
 
 # =============================================================================
@@ -600,18 +598,17 @@ AlchemicalRegion.__new__.__defaults__ = tuple(_ALCHEMICAL_REGION_ARGS.values())
 # =============================================================================
 
 class AlchemicalFactory(object):
-    """
-    Factory for generating OpenMM System objects that have been alchemically perturbed for absolute binding free energy calculation.
+    """Factory of alchemically modified OpenMM Systems.
 
     The context parameters created are:
-    * softcore_alpha - factor controlling softcore lengthscale for Lennard-Jones
-    * softcore_beta - factor controlling softcore lengthscale for Coulomb
-    * softcore_a - softcore Lennard-Jones parameter from Eq. 13 of Ref [1]
-    * softcore_b - softcore Lennard-Jones parameter from Eq. 13 of Ref [1]
-    * softcore_c - softcore Lennard-Jones parameter from Eq. 13 of Ref [1]
-    * softcore_d - softcore electrostatics parameter
-    * softcore_e - softcore electrostatics parameter
-    * softcore_f - softcore electrostatics parameter
+    - softcore_alpha: factor controlling softcore lengthscale for Lennard-Jones
+    - softcore_beta: factor controlling softcore lengthscale for Coulomb
+    - softcore_a: softcore Lennard-Jones parameter from Eq. 13 of Ref [1]
+    - softcore_b: softcore Lennard-Jones parameter from Eq. 13 of Ref [1]
+    - softcore_c: softcore Lennard-Jones parameter from Eq. 13 of Ref [1]
+    - softcore_d: softcore electrostatics parameter
+    - softcore_e: softcore electrostatics parameter
+    - softcore_f: softcore electrostatics parameter
 
     Parameters
     ----------
@@ -624,63 +621,64 @@ class AlchemicalFactory(object):
     Examples
     --------
 
-    Create alchemical intermediates for default alchemical protocol for p-xylene in T4 lysozyme L99A in GBSA.
+    Create an alchemical factory to alchemically modify OpenMM System objects.
+
+    >>> factory = AlchemicalFactory(consistent_exceptions=False)
+
+    Create an alchemically modified version of p-xylene in T4 lysozyme L99A in GBSA.
 
     >>> # Create a reference system.
     >>> from openmmtools import testsystems
-    >>> complex = testsystems.LysozymeImplicit()
-    >>> [reference_system, positions] = [complex.system, complex.positions]
-    >>> # Create a factory to produce alchemical intermediates.
-    >>> receptor_atoms = range(0,2603) # T4 lysozyme L99A
-    >>> ligand_atoms = range(2603,2621) # p-xylene
-    >>> factory = AlchemicalFactory(reference_system, ligand_atoms=ligand_atoms)
-    >>> # Get the default protocol for 'denihilating' in complex in explicit solvent.
-    >>> protocol = factory.defaultComplexProtocolImplicit()
-    >>> # Create the perturbed systems using this protocol.
-    >>> systems = factory.createPerturbedSystems(protocol)
+    >>> reference_system = testsystems.LysozymeImplicit().system
+    >>> # Alchemically soften the pxylene atoms
+    >>> pxylene_atoms = range(2603,2621) # p-xylene
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=pxylene_atoms)
+    >>> alchemical_system = factory.create_alchemical_system(reference_system, alchemical_region)
 
-    Create alchemical intermediates for default alchemical protocol for one water in a water box.
+    Alchemically modify one water in a water box.
 
-    >>> # Create a reference system.
-    >>> from openmmtools import testsystems
-    >>> waterbox = testsystems.WaterBox()
-    >>> [reference_system, positions] = [waterbox.system, waterbox.positions]
-    >>> # Create a factory to produce alchemical intermediates.
-    >>> factory = AlchemicalFactory(reference_system, ligand_atoms=[0, 1, 2])
-    >>> # Get the default protocol for 'denihilating' in solvent.
-    >>> protocol = factory.defaultSolventProtocolExplicit()
-    >>> # Create the perturbed systems using this protocol.
-    >>> systems = factory.createPerturbedSystems(protocol)
+    >>> reference_system = testsystems.WaterBox().system
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=[0, 1, 2])
+    >>> alchemical_system = factory.create_alchemical_system(reference_system, alchemical_region)
 
-    Alchemically modify some angles and torsions in alanine dipeptide
+    Alchemically modify some angles and torsions in alanine dipeptide and
+    annihilate both sterics and electrostatics.
 
-    >>> # Create an alchemically-perturbed test system
-    >>> from openmmtools import testsystems
-    >>> testsystem = testsystems.AlanineDipeptideVacuum()
-    >>> factory = AlchemicalFactory(testsystem.system, ligand_atoms=[0], alchemical_torsions=[0,1,2], alchemical_angles=[0,1,2], annihilate_sterics=True, annihilate_electrostatics=True)
-    >>> # Create an alchemically-perturbed system.
-    >>> alchemical_system = factory.createPerturbedSystem()
-    >>> # Create a Context to make sure this works.
-    >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtosecond)
+    >>> reference_system = testsystems.AlanineDipeptideVacuum().system
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=[0], alchemical_torsions=[0,1,2],
+    ...                                      alchemical_angles=[0,1,2], annihilate_sterics=True,
+    ...                                      annihilate_electrostatics=True)
+    >>> alchemical_system = factory.create_alchemical_system(reference_system, alchemical_region)
+
+    Alchemically modify a bond, angles, and torsions in toluene by automatically
+    selecting bonds involving alchemical atoms.
+
+    >>> toluene_implicit = testsystems.TolueneImplicit()
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=[0,1], alchemical_torsions=True,
+    ...                                      alchemical_angles=True, annihilate_sterics=True)
+    >>> alchemical_system = factory.create_alchemical_system(reference_system, alchemical_region)
+
+    Once the alchemical system is created, you can modify its Hamiltonian
+    through AlchemicalState
+
+    >>> alchemical_state = AlchemicalState.from_system(alchemical_system)
+    >>> alchemical_state.lambda_sterics
+    1.0
+    >>> alchemical_state.lambda_electrostatics = 0.5
+    >>> alchemical_state.apply_to_system(alchemical_system)
+
+    You can also modify its Hamiltonian directly into a context
+
+    >>> from simtk import openmm, unit
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
     >>> context = openmm.Context(alchemical_system, integrator)
-    >>> del context
-
-    Alchemically modify a bond, angles, and torsions in toluene by automatically selecting bonds involving alchemical atoms.
-
-    >>> # Create an alchemically-perturbed test system.
-    >>> from openmmtools import testsystems
-    >>> testsystem = testsystems.TolueneImplicit()
-    >>> factory = AlchemicalFactory(testsystem.system, ligand_atoms=[0,1], alchemical_torsions=True, alchemical_angles=True, annihilate_sterics=True, annihilate_electrostatics=True)
-    >>> # Create an alchemically-perturbed system.
-    >>> alchemical_system = factory.createPerturbedSystem()
-    >>> # Create a Context to make sure this works.
-    >>> integrator = openmm.VerletIntegrator(1.0 * unit.femtosecond)
-    >>> context = openmm.Context(alchemical_system, integrator)
-    >>> del context
+    >>> alchemical_state.set_alchemical_parameters(0.0)  # Set all lambda to 0
+    >>> alchemical_state.apply_to_context(context)
 
     References
     ----------
-    [1] Pham TT and Shirts MR. Identifying low variance pathways for free energy calculations of molecular transformations in solution phase.
+    [1] Pham TT and Shirts MR. Identifying low variance pathways for free
+    energy calculations of molecular transformations in solution phase.
     JCP 135:034114, 2011. http://dx.doi.org/10.1063/1.3607597
 
     """
@@ -1235,17 +1233,16 @@ class AlchemicalFactory(object):
             The force responsible for electrostatics exceptions of non-alchemical/alchemical
             atoms.
 
-        TODO
-        ----
-        Change softcore_beta to a dimensionless scalar to multiply some intrinsic length-scale, like Lennard-Jones alpha.
-        Try using a single, common "reff" effective softcore distance for both Lennard-Jones and Coulomb.
-
         References
         ----------
-        [1] Pham TT and Shirts MR. Identifying low variance pathways for free energy calculations of molecular transformations in solution phase.
+        [1] Pham TT and Shirts MR. Identifying low variance pathways for free
+        energy calculations of molecular transformations in solution phase.
         JCP 135:034114, 2011. http://dx.doi.org/10.1063/1.3607597
 
         """
+        # TODO Change softcore_beta to a dimensionless scalar to multiply some intrinsic length-scale, like Lennard-Jones alpha.
+        # TODO Try using a single, common "reff" effective softcore distance for both Lennard-Jones and Coulomb.
+
         # Don't create a force if there are no alchemical atoms.
         if len(alchemical_region.alchemical_atoms) == 0:
             return [copy.deepcopy(reference_force)]
