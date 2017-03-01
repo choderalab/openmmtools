@@ -186,13 +186,12 @@ class AlchemicalState(object):
     >>> compound_state.lambda_electrostatics = AlchemicalFunction('2*(lambda - 0.5) * step(lambda - 0.5)')
     >>> for l in [0.0, 0.25, 0.5, 0.75, 1.0]:
     ...     compound_state.set_alchemical_variable('lambda', l)
-    ...     # The zero here is added only to avoid printing -0.0.
-    ...     print(compound_state.lambda_sterics + 0, compound_state.lambda_electrostatics + 0)
-    0.0 0.0
-    0.5 0.0
-    1.0 0.0
-    1.0 0.5
-    1.0 1.0
+    ...     print(compound_state.lambda_sterics)
+    0.0
+    0.5
+    1.0
+    1.0
+    1.0
 
 
     """
