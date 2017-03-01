@@ -530,16 +530,16 @@ class IntegratorMove(object):
         self._before_integration(context, thermodynamic_state)
 
         # Run dynamics.
-        timer.start("{}: step()".format(move_name))
+        timer.start("{}: step({})".format(move_name, self.n_steps))
         integrator.step(self.n_steps)
-        timer.stop("{}: step()".format(move_name))
+        timer.stop("{}: step({})".format(move_name), self.n_steps)
 
         self._after_integration(context)
 
         # Get updated sampler state.
         timer.start("{}: update sampler state".format(move_name))
         sampler_state.update_from_context(context)
-        timer.start("{}: update sampler state".format(move_name))
+        timer.stop("{}: update sampler state".format(move_name))
 
         timer.report_timing()
 
