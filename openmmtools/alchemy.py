@@ -762,7 +762,7 @@ class AbsoluteAlchemicalFactory(object):
         return alchemical_system
 
     @classmethod
-    def get_energy_components(cls, alchemical_system, alchemical_state, positions):
+    def get_energy_components(cls, alchemical_system, alchemical_state, positions, platform=None):
         """Compute potential energy of the alchemical system by Force.
 
         This can be useful for debug and analysis.
@@ -775,6 +775,9 @@ class AbsoluteAlchemicalFactory(object):
             The alchemical state to set the Context to.
         positions : simtk.unit.Quantity of dimension (natoms, 3)
             Coordinates to use for energy test (units of distance).
+        platform : simtk.openmm.Platform, optional
+            The OpenMM platform to use to compute the energy. If None,
+            OpenMM tries to select the fastest available.
 
         Returns
         -------
@@ -797,7 +800,10 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create a Context in the given state.
         integrator = openmm.VerletIntegrator(1.0 * unit.femtoseconds)
-        context = openmm.Context(system, integrator)
+        if platform is None:
+            context = openmm.Context(system, integrator)
+        else:
+            context = openmm.Context(system, integrator, platform)
         context.setPositions(positions)
         alchemical_state.apply_to_context(context)
 
@@ -1741,21 +1747,21 @@ class AbsoluteAlchemicalFactory(object):
                 add_label('alchemically modified GBSAOBCForce', force_index)
             elif isinstance(force, openmm.CustomBondForce) and check_function(force, 'lambda'):
                 if check_function(force, 'lambda_sterics'):
-                    sterics_bond_forces.append(force_index, force)
+                    sterics_bond_forces.append([force_index, force])
                 else:
-                    electro_bond_forces.append(force_index, force)
+                    electro_bond_forces.append([force_index, force])
             elif isinstance(force, openmm.CustomNonbondedForce) and check_function(force, 'lambda'):
                 if check_function(force, 'lambda_sterics'):
-                    nonbonded_forces.append('sterics', force_index, force)
+                    nonbonded_forces.append(['sterics', force_index, force])
                 else:
-                    nonbonded_forces.append('electrostatics', force_index, force)
+                    nonbonded_forces.append(['electrostatics', force_index, force])
             else:
-                add_label('unmodified ' + force.__class__.__name__)
+                add_label('unmodified ' + force.__class__.__name__, force_index)
 
         # Differentiate between na/aa nonbonded forces.
-        for force_type, (force_index, force) in nonbonded_forces:
+        for force_type, force_index, force in nonbonded_forces:
             label = 'alchemically modified NonbondedForce for {}alchemical/alchemical ' + force_type
-            interacting_atoms, alchemical_atoms = force.getInteractionGroupParameters()
+            interacting_atoms, alchemical_atoms = force.getInteractionGroupParameters(0)
             if interacting_atoms == alchemical_atoms:  # alchemical-alchemical atoms
                 add_label(label.format(''), force_index)
             else:
