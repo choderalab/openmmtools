@@ -532,7 +532,7 @@ class IntegratorMove(object):
         # Run dynamics.
         timer.start("{}: step({})".format(move_name, self.n_steps))
         integrator.step(self.n_steps)
-        timer.stop("{}: step({})".format(move_name), self.n_steps)
+        timer.stop("{}: step({})".format(move_name, self.n_steps))
 
         self._after_integration(context)
 
