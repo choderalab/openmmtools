@@ -492,8 +492,10 @@ class AlchemicalState(object):
         a typo in the name of the variable.
 
         """
-        return {name for name, _ in inspect.getmembers(
-            cls, lambda o: isinstance(o, cls._LambdaProperty))}
+        # TODO just use inspect.getmembers when dropping Python 2
+        supported_parameters = {name for name, value in cls.__dict__.items()
+                                if isinstance(value, cls._LambdaProperty)}
+        return supported_parameters
 
     @classmethod
     def _get_system_lambda_parameters(cls, system):
