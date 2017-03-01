@@ -123,13 +123,14 @@ class AlchemicalState(object):
 
     Examples
     --------
-    Create an alchemically modified system
+    Create an alchemically modified system.
 
     >>> from openmmtools import testsystems
+    >>> factory = AlchemicalFactory(consistent_exceptions=False)
     >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
-    >>> alchemical_factory = AlchemicalFactory(reference_system=alanine_vacuum,
-    ...                                                ligand_atoms=range(0, 22))
-    >>> alanine_alchemical_system = alchemical_factory.alchemically_modified_system
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=range(22))
+    >>> alanine_alchemical_system = factory.create_alchemical_system(reference_system=alanine_vacuum,
+    ...                                                              alchemical_regions=alchemical_region)
 
     Create a completely undefined alchemical state.
 
@@ -1809,3 +1810,4 @@ class AlchemicalFactory(object):
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
+    # doctest.run_docstring_examples(AlchemicalFunction, globals())
