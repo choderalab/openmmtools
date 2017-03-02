@@ -84,6 +84,51 @@ def test_is_quantity_close():
 
 
 # =============================================================================
+# TEST SERIALIZATION UTILITIES
+# =============================================================================
+
+class MyClass(object):
+    """Example of serializable class used by test_serialize_deserialize."""
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def __getstate__(self):
+        serialization = dict()
+        serialization['a'] = self.a
+        serialization['b'] = self.b
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.a = serialization['a']
+        self.b = serialization['b']
+
+    def add(self):
+        return self.a + self.b
+
+
+def test_serialize_deserialize():
+    """Test serialize method."""
+
+    my_instance = MyClass(a=4, b=5)
+
+    # Test serialization.
+    serialization = serialize(my_instance)
+    expected_serialization = {'_serialized__module_name': 'test_utils',
+                              '_serialized__class_name': 'MyClass',
+                              'a': 4, 'b': 5}
+    assert serialization == expected_serialization
+
+    # Test deserialization.
+    deserialized_instance = deserialize(serialization)
+    assert deserialized_instance is not my_instance  # this is a new instantiation
+    assert isinstance(deserialized_instance, MyClass)
+    assert deserialized_instance.a == 4
+    assert deserialized_instance.b == 5
+    assert deserialized_instance.add() == 9
+
+
+# =============================================================================
 # TEST METACLASS UTILITIES
 # =============================================================================
 
