@@ -278,27 +278,7 @@ class ThermodynamicState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, system, temperature=None, pressure=None):
-        # The standard system hash is cached and computed on-demand.
-        self._cached_standard_system_hash = None
-
-        # Do not modify original system.
-        self._system = copy.deepcopy(system)
-
-        # If temperature is None, the user must specify a thermostat.
-        if temperature is None:
-            if self._thermostat is None:
-                raise ThermodynamicsError(ThermodynamicsError.NO_THERMOSTAT)
-            # Read temperature from thermostat and pass it to barostat.
-            temperature = self.temperature
-
-        # Set thermostat and barostat temperature.
-        self.temperature = temperature
-
-        # Set barostat pressure.
-        if pressure is not None:
-            self.pressure = pressure
-
-        self._check_internal_consistency()
+        self._initialize(system, temperature, pressure)
 
     @property
     def system(self):
@@ -874,6 +854,46 @@ class ThermodynamicState(object):
             integrator = context.getIntegrator()
             self._set_integrator_temperature(integrator)
 
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        # We just need to serialize the system since everything
+        # else is inferred from thermostat and barostat state.
+        serialized_system = openmm.XmlSerializer.serialize(self._system)
+        return dict(system=serialized_system)
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        deserialized_system = openmm.XmlSerializer.deserialize(serialization['system'])
+        self._initialize(deserialized_system)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage: initialization
+    # -------------------------------------------------------------------------
+
+    def _initialize(self, system, temperature=None, pressure=None):
+        """Initialize the thermodynamic state."""
+        # The standard system hash is cached and computed on-demand.
+        self._cached_standard_system_hash = None
+
+        # Do not modify original system.
+        self._system = copy.deepcopy(system)
+
+        # If temperature is None, the user must specify a thermostat.
+        if temperature is None:
+            if self._thermostat is None:
+                raise ThermodynamicsError(ThermodynamicsError.NO_THERMOSTAT)
+            # Read temperature from thermostat and pass it to barostat.
+            temperature = self.temperature
+
+        # Set thermostat and barostat temperature.
+        self.temperature = temperature
+
+        # Set barostat pressure.
+        if pressure is not None:
+            self.pressure = pressure
+
+        self._check_internal_consistency()
+
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
     # -------------------------------------------------------------------------
@@ -1436,14 +1456,7 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, positions, velocities=None, box_vectors=None):
-        self._positions = positions
-        self._cached_positions_in_md_units = None
-        self._velocities = None
-        self._cached_velocities_in_md_units = None
-        self.velocities = velocities  # Checks consistency and units.
-        self.box_vectors = box_vectors
-        self.potential_energy = None
-        self.kinetic_energy = None
+        self._initialize(positions, velocities, box_vectors)
 
     @staticmethod
     def from_context(context):
@@ -1626,9 +1639,34 @@ class SamplerState(object):
         sampler_state.kinetic_energy = self.kinetic_energy
         return sampler_state
 
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        serialization = dict(
+            positions=self.positions, velocities=self.velocities,
+            box_vectors=self.box_vectors, potential_energy=self.potential_energy,
+            kinetic_energy=self.kinetic_energy
+        )
+        return serialization
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        self._initialize(**serialization)
+
     # -------------------------------------------------------------------------
     # Internal-usage
     # -------------------------------------------------------------------------
+
+    def _initialize(self, positions, velocities, box_vectors,
+                    potential_energy=None, kinetic_energy=None):
+        """Initialize the sampler state."""
+        self._positions = positions
+        self._cached_positions_in_md_units = None
+        self._velocities = None
+        self._cached_velocities_in_md_units = None
+        self.velocities = velocities  # Checks consistency and units.
+        self.box_vectors = box_vectors
+        self.potential_energy = potential_energy
+        self.kinetic_energy = kinetic_energy
 
     @property
     def _positions_in_md_units(self):
@@ -1888,26 +1926,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
     """
     def __init__(self, thermodynamic_state, composable_states):
-        # Check that composable states expose the correct interface.
-        for composable_state in composable_states:
-            assert isinstance(composable_state, IComposableState)
-
-        # Dynamically inherit from thermodynamic_state class and
-        # store the types of composable_states to be able to call
-        # class methods.
-        composable_bases = [s.__class__ for s in composable_states]
-        self.__class__ = type(self.__class__.__name__,
-                              (self.__class__, thermodynamic_state.__class__),
-                              {'_composable_bases': composable_bases})
-        self.__dict__ = thermodynamic_state.__dict__
-
-        # Set the stored system to the given states. Setting
-        # self._composable_states signals __setattr__ to start
-        # searching in composable states as well, so this must
-        # be the last new attribute set in the constructor.
-        self._composable_states = composable_states
-        for s in self._composable_states:
-            s.apply_to_system(self._system)
+        self._initialize(thermodynamic_state, composable_states)
 
     def set_system(self, system, fix_state=False):
         """Allow to set the system and fix its thermodynamic state.
@@ -2017,6 +2036,52 @@ class CompoundThermodynamicState(ThermodynamicState):
 
             # No attribute found. This is monkey patching.
             super(CompoundThermodynamicState, self).__setattr__(name, value)
+
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        # Create original ThermodynamicState to serialize
+        thermodynamic_state = object.__new__(self.__class__.__bases__[1])
+        thermodynamic_state.__dict__ = copy.deepcopy(self.__dict__)
+        serialization = dict(
+            thermodynamic_state=utils.serialize(thermodynamic_state),
+            composable_states=[utils.serialize(composable_state)
+                               for composable_state in self._composable_states]
+        )
+        return serialization
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        thermodynamic_state = utils.deserialize(serialization['thermodynamic_state'])
+        composable_states = [utils.deserialize(composable_state)
+                             for composable_state in serialization['composable_states']]
+        self._initialize(thermodynamic_state, composable_states)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    def _initialize(self, thermodynamic_state, composable_states):
+        """Initialize the sampler state."""
+        # Check that composable states expose the correct interface.
+        for composable_state in composable_states:
+            assert isinstance(composable_state, IComposableState)
+
+        # Dynamically inherit from thermodynamic_state class and
+        # store the types of composable_states to be able to call
+        # class methods.
+        composable_bases = [s.__class__ for s in composable_states]
+        self.__class__ = type(self.__class__.__name__,
+                              (self.__class__, thermodynamic_state.__class__),
+                              {'_composable_bases': composable_bases})
+        self.__dict__ = thermodynamic_state.__dict__
+
+        # Set the stored system to the given states. Setting
+        # self._composable_states signals __setattr__ to start
+        # searching in composable states as well, so this must
+        # be the last new attribute set in the constructor.
+        self._composable_states = composable_states
+        for s in self._composable_states:
+            s.apply_to_system(self._system)
 
     @classmethod
     def _standardize_system(cls, system):

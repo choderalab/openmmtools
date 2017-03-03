@@ -14,6 +14,7 @@ Test State classes in states.py.
 # =============================================================================
 
 import nose
+import pickle
 
 from openmmtools import testsystems
 from openmmtools.states import *
@@ -1105,3 +1106,23 @@ class TestCompoundThermodynamicState(object):
         compound_state.apply_to_context(context)
         assert context.getParameter('dummy_parameter') == self.dummy_parameter
         assert context.getParameter(barostat.Pressure()) == new_pressure / unit.bar
+
+
+# =============================================================================
+# TEST SERIALIZATION
+# =============================================================================
+
+def test_states_serialization():
+    """Test serialization compatibility with utils.serialize."""
+
+    test_system = testsystems.AlanineDipeptideImplicit()
+    thermodynamic_state = ThermodynamicState(test_system.system, temperature=300*unit.kelvin)
+    sampler_state = SamplerState(positions=test_system.positions)
+
+    test_cases = [thermodynamic_state, sampler_state]
+    for test_state in test_cases:
+        serialization = utils.serialize(test_state)
+        deserialized_state = utils.deserialize(serialization)
+        original_pickle = pickle.dumps(test_state)
+        deserialized_pickle = pickle.dumps(deserialized_state)
+        assert original_pickle == deserialized_pickle
