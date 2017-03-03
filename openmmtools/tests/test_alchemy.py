@@ -1453,6 +1453,33 @@ class TestAlchemicalState(object):
         context = compound_state_incompatible.create_context(copy.deepcopy(integrator))
         assert not compound_state.is_context_compatible(context)
 
+    def test_serialization(self):
+        """Test AlchemicalState serialization alone and in a compound state."""
+        alchemical_state = AlchemicalState(lambda_electrostatics=0.5, lambda_angles=None)
+        alchemical_state.set_alchemical_variable('lambda', 0.0)
+        alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
+
+        # Test serialization/deserialization of AlchemicalState.
+        serialization = utils.serialize(alchemical_state)
+        deserialized_state = utils.deserialize(serialization)
+        original_pickle = pickle.dumps(alchemical_state)
+        deserialized_pickle = pickle.dumps(deserialized_state)
+        assert original_pickle == deserialized_pickle
+
+        # Test serialization/deserialization of AlchemicalState in CompoundState.
+        alanine_state = copy.deepcopy(self.alanine_state)
+        compound_state = states.CompoundThermodynamicState(alanine_state, [alchemical_state])
+
+        serialization = utils.serialize(compound_state)
+        deserialized_state = utils.deserialize(serialization)
+        original_system_pickle = pickle.dumps(compound_state.system)
+        original_alchemical_state_pickle = pickle.dumps(compound_state._composable_states[0])
+        deserialized_system_pickle = pickle.dumps(deserialized_state.system)
+        deserialized_alchemical_state_pickle = pickle.dumps(deserialized_state._composable_states[0])
+        assert original_system_pickle == deserialized_system_pickle
+        assert original_alchemical_state_pickle == deserialized_alchemical_state_pickle
+
+
 
 # =============================================================================
 # MAIN FOR MANUAL DEBUGGING

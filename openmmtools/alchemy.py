@@ -201,22 +201,7 @@ class AlchemicalState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, **kwargs):
-        self._alchemical_variables = {}
-
-        # Get supported parameters from properties introspection.
-        supported_parameters = self._get_supported_parameters()
-
-        # Default value for all parameters is None.
-        self._parameters = dict.fromkeys(supported_parameters, None)
-
-        # Update parameters with constructor arguments.
-        self._parameters.update(kwargs)
-
-        # Check for unknown parameters
-        unknown_parameters = set(self._parameters) - supported_parameters
-        if len(unknown_parameters) > 0:
-            err_msg = "Unknown parameters {}".format(unknown_parameters)
-            raise AlchemicalStateError(err_msg)
+        self._initialize(**kwargs)
 
     @classmethod
     def from_system(cls, system):
@@ -365,6 +350,41 @@ class AlchemicalState(object):
     def __str__(self):
         return str(self._parameters)
 
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        serialization = dict(parameters={}, alchemical_variables={})
+
+        # Copy parameters and convert AlchemicalFunctions to string expressions.
+        for parameter_class in ['parameters', 'alchemical_variables']:
+            parameters = getattr(self, '_' + parameter_class)
+            for parameter, value in parameters.items():
+                if isinstance(value, AlchemicalFunction):
+                    serialization[parameter_class][parameter] = value._expression
+                else:
+                    serialization[parameter_class][parameter] = value
+        return serialization
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        parameters = serialization['parameters']
+        alchemical_variables = serialization['alchemical_variables']
+        alchemical_functions = dict()
+
+        # Temporarily store alchemical functions.
+        for parameter_name, value in parameters.items():
+            if isinstance(value, str):
+                alchemical_functions[parameter_name] = value
+                parameters[parameter_name] = None
+
+        # Initialize parameters and add all alchemical variables.
+        self._initialize(**parameters)
+        for variable_name, value in alchemical_variables.items():
+            self.set_alchemical_variable(variable_name, value)
+
+        # Add back alchemical functions.
+        for parameter_name, expression in alchemical_functions.items():
+            setattr(self, parameter_name, AlchemicalFunction(expression))
+
     # -------------------------------------------------------------------------
     # IComposableState interface
     # -------------------------------------------------------------------------
@@ -481,6 +501,27 @@ class AlchemicalState(object):
     # -------------------------------------------------------------------------
     # Internal-usage
     # -------------------------------------------------------------------------
+
+    def _initialize(self, **kwargs):
+        """Initialize the alchemical state."""
+        self._alchemical_variables = {}
+
+        # Get supported parameters from properties introspection.
+        supported_parameters = self._get_supported_parameters()
+
+        # Check for unknown parameters
+        unknown_parameters = set(kwargs) - supported_parameters
+        if len(unknown_parameters) > 0:
+            err_msg = "Unknown parameters {}".format(unknown_parameters)
+            raise AlchemicalStateError(err_msg)
+
+        # Default value for all parameters is None.
+        self._parameters = dict.fromkeys(supported_parameters, None)
+
+        # Update parameters with constructor arguments. Calling
+        # the properties perform type check on the values.
+        for parameter_name, value in kwargs.items():
+            setattr(self, parameter_name, value)
 
     @classmethod
     def _get_supported_parameters(cls):
