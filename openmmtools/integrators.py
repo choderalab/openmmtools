@@ -230,8 +230,12 @@ class ThermostatedIntegrator(mm.CustomIntegrator):
 
         # Compute the hash table for all subclasses.
         if not hasattr(cls, '_cached_hash_subclasses'):
+            # Recursive function to find all subclasses.
+            def all_subclasses(c):
+                return c.__subclasses__() + [subsubcls for subcls in c.__subclasses__()
+                                             for subsubcls in all_subclasses(subcls)]
             cls._cached_hash_subclasses = {cls._compute_class_hash(sc): sc
-                                           for sc in cls.__subclasses__()}
+                                           for sc in all_subclasses(cls)}
         # Retrieve integrator class.
         try:
             integrator_class = cls._cached_hash_subclasses[integrator_hash]
