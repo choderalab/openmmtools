@@ -1724,17 +1724,12 @@ class SamplerState(object):
         else:
             # The positions in md units cache is updated below.
             self._positions = openmm_state.getPositions(asNumpy=True)
+            self._cached_positions_in_md_units = None
 
         self.velocities = openmm_state.getVelocities(asNumpy=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
         self.potential_energy = openmm_state.getPotentialEnergy()
         self.kinetic_energy = openmm_state.getKineticEnergy()
-
-        # We need to set the cached positions and velocities at the end
-        # because every call to the properties invalidate the cache. I
-        # know this is ugly but it saves us A LOT of time in unit stripping.
-        self._cached_positions_in_md_units = openmm_state._coordList
-        self._cached_velocities_in_md_units = openmm_state._velList
 
 
 # =============================================================================

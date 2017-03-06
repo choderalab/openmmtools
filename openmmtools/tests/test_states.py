@@ -880,20 +880,22 @@ class TestSamplerState(object):
         assert sampler_state._cached_positions_in_md_units is not None
         assert sampler_state._cached_velocities_in_md_units is None
 
-        # When using update_from_context() or from_context() constructor,
-        # we directly cache the unit-less state.
+        # apply_to_context() forces the unitless positions to be cached.
+        sampler_state = SamplerState(self.alanine_explicit_positions)
+        assert sampler_state._cached_positions_in_md_units is None
         context = self.create_context(self.alanine_explicit_state)
-        sampler_state.apply_to_context(context)  # Set positions.
+        sampler_state.apply_to_context(context)
+        assert sampler_state._cached_positions_in_md_units is not None
 
+        # Caches are invalidated on update_from_context()
+        assert sampler_state._cached_positions_in_md_units is not None
         sampler_state.update_from_context(context)
         for state in [SamplerState.from_context(context), sampler_state]:
-            assert state._cached_positions_in_md_units is not None
-            assert state._cached_velocities_in_md_units is not None
-            assert np.allclose(state._positions_in_md_units, test_pos)
-            assert np.allclose(state._velocities_in_md_units,
-                               np.zeros((len(test_pos), 3)))
+            assert state._cached_positions_in_md_units is None
 
         # Cache is correctly invalidated on assignment/update.
+        sampler_state._positions_in_md_units  # Force caching
+        sampler_state._velocities_in_md_units  # Force caching
         assert sampler_state._cached_positions_in_md_units is not None
         sampler_state.positions = self.alanine_explicit_positions
         assert sampler_state._cached_positions_in_md_units is None
