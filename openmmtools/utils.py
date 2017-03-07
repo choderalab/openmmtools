@@ -143,7 +143,7 @@ def sanitize_expression(expression, variables):
     return sanitized_expression, sanitized_variables
 
 
-def math_eval(expression, variables=None):
+def math_eval(expression, variables=None, functions=None):
     """Evaluate a mathematical expression with variables.
 
     All the functions in the standard module math are available together with
@@ -157,6 +157,9 @@ def math_eval(expression, variables=None):
         The mathematical expression as a string.
     variables : dict of str: float, optional
         The variables in the expression, if any (default is None).
+    functions : dict of str: callable function, optional
+        Additional functions to teach the math eval statement how to handle.
+        Built-in functions are 'step', 'step_hm', and 'sign'
 
     Returns
     -------
@@ -177,9 +180,12 @@ def math_eval(expression, variables=None):
                  ast.Pow: operator.pow, ast.USub: operator.neg}
 
     # Supported functions, not defined in math.
-    functions = {'step': lambda x: 1 * (x >= 0),
-                 'step_hm': lambda x: 0.5 * (np.sign(x) + 1),
-                 'sign': lambda x: np.sign(x)}
+    if functions is None:
+        functions = {}
+    functions.update({'step': lambda x: 1 * (x >= 0),
+                      'step_hm': lambda x: 0.5 * (np.sign(x) + 1),
+                      'sign': lambda x: np.sign(x)}
+                     )
 
     def _math_eval(node):
         if isinstance(node, ast.Num):
@@ -219,6 +225,15 @@ def math_eval(expression, variables=None):
 # QUANTITY UTILITIES
 # =============================================================================
 
+# List of simtk.unit methods that are actually units and functions instead of base classes
+# Pre-computed to reduce run-time cost
+# Get the built-in units
+_VALID_UNITS = {method: getattr(unit, method) for method in dir(unit) if type(getattr(unit, method)) is unit.Unit}
+# Get the built in unit functions and make sure they are not just types
+_VALID_UNIT_FUNCTIONS = {method: getattr(unit, method) for method in dir(unit)
+                         if callable(getattr(unit, method)) and type(getattr(unit, method)) is not type}
+
+
 def is_quantity_close(quantity1, quantity2):
     """Check if the quantities are equal up to floating-point precision errors.
 
@@ -251,6 +266,82 @@ def is_quantity_close(quantity1, quantity2):
         return np.isclose(value1, value2, rtol=1e-10, atol=0.0)
     else:
         return np.isclose(value2, value1, rtol=1e-10, atol=0.0)
+
+
+def quantity_from_string(expression):
+    """Special call to the math_eval function designed to handle simtk.unit Quantity strings
+
+    All the functions in the standard module math are available together with
+    most of the methods inside the simtk.unit module.
+
+    Parameters
+    ----------
+    expression : str
+        The mathematical expression to rebuild a Quantityas a string.
+
+    Returns
+    -------
+    Quantity
+        The result of the evaluated expression.
+
+    Examples
+    --------
+    >>> expr = '4 * kilojoules / mole'
+    >>> quantity_from_string(expr)
+    Quantity(value=4.0, unit=kilojoule/mole)
+
+    """
+
+    # Supported functions, not defined in math.
+    functions = _VALID_UNIT_FUNCTIONS
+
+    # Define the units from simtk.unit as the variables
+    variables = _VALID_UNITS
+
+    # Eliminate nested quotes and excess whitespace
+    expression = expression.strip('\'" ')
+
+    # Handle a special case of the unit when it is just "inverse unit", e.g. Hz == /second
+    if expression[0] == '/':
+        expression = '(' + expression[1:] + ')**(-1)'
+
+    return math_eval(expression, variables=variables, functions=functions)
+
+
+def typename(atype):
+    """Convert a type object into a fully qualified typename.
+
+    Parameters
+    ----------
+    atype : type
+        The type to convert
+
+    Returns
+    -------
+    typename : str
+        The string typename.
+
+    For example,
+
+    >>> typename(type(1))
+    'int'
+
+    >>> import numpy
+    >>> x = numpy.array([1,2,3], numpy.float32)
+    >>> typename(type(x))
+    'numpy.ndarray'
+
+    """
+    if not isinstance(atype, type):
+        raise Exception('Argument is not a type')
+
+    modulename = atype.__module__
+    typename = atype.__name__
+
+    if modulename != '__builtin__':
+        typename = modulename + '.' + typename
+
+    return typename
 
 
 # =============================================================================

@@ -1373,9 +1373,9 @@ class NCQuantity(NCVariableTypeHandler):
         # Handle variable size objects
         # This line will not happen unless target is real, so output_mode will return the correct value
         if self._output_mode is 'a':
-             self._save_shape = self._bound_target.shape[1:]
+            self._save_shape = self._bound_target.shape[1:]
         else:
-             self._save_shape = self._bound_target.shape
+            self._save_shape = self._bound_target.shape
         self._unit = self._bound_target.getncattr('IODriver_Unit')
         self._set_codifiers(self._bound_target.getncattr('type'))
 
@@ -1455,9 +1455,6 @@ class NCQuantity(NCVariableTypeHandler):
         self._output_mode
         data = self._decoder(self._bound_target)
         unit_name = self._bound_target.getncattr('IODriver_Unit')
-        # Do some things to handle the way quantity_from_string parses units that only have a denominator (e.g. Hz)
-        if unit_name[0] == '/':
-            unit_name = "(" + unit_name[1:] + ")**(-1)"
         cast_unit = quantity_from_string(unit_name)
         if isinstance(cast_unit, unit.Quantity):
             cast_unit = cast_unit.unit
@@ -1651,8 +1648,6 @@ class NCDict(NCVariableTypeHandler):
             # If Quantity, assign unit.
             if 'units' in output_ncvar.ncattrs():
                 output_unit_name = output_ncvar.getncattr('units')
-                if output_unit_name[0] == '/':
-                    output_unit_name = '(' + output_unit_name[1:] + ')**(-1)'
                 output_unit = quantity_from_string(output_unit_name)
                 output_value = output_value * output_unit
             # Store output.

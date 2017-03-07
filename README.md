@@ -53,3 +53,13 @@ The module `openmmtools.cache` implements a shared LRU cache for `Context` objec
 If differences in energies in excess of `ENERGY_TOLERANCE` (default: 0.06 kcal/mol) are detected, these systems will be serialized to XML for further debugging.
 
 This is installed onto the command line when the repository is installed.
+
+## Storage
+
+This module `openmmtools.storage` provides a user-friendly storage IO interface to store data to disk. The primary 
+function of this module is to remove the need for the user to define how to format and configure Python variables and 
+OpenMM Quantities to and from the disk. The module is extensible to any type of data a user wants. Currently supports 
+NetCDF storage types for now.
+- `StorageIODriver`: Abstract extendable class to write format-specific IO drivers such as the `NetCDFIODriver`
+- `NetCDFIODriver`: User-configurable IO driver for NetCDF files. Handles built in Python types and `simtk.unit.Quantity`'s
+- `StorageInterface`: A layer which runs on top of a provided `StorageIODriver` to create an way for users to interface with the disk with as minimal effort as possible. 
