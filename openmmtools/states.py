@@ -278,27 +278,7 @@ class ThermodynamicState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, system, temperature=None, pressure=None):
-        # The standard system hash is cached and computed on-demand.
-        self._cached_standard_system_hash = None
-
-        # Do not modify original system.
-        self._system = copy.deepcopy(system)
-
-        # If temperature is None, the user must specify a thermostat.
-        if temperature is None:
-            if self._thermostat is None:
-                raise ThermodynamicsError(ThermodynamicsError.NO_THERMOSTAT)
-            # Read temperature from thermostat and pass it to barostat.
-            temperature = self.temperature
-
-        # Set thermostat and barostat temperature.
-        self.temperature = temperature
-
-        # Set barostat pressure.
-        if pressure is not None:
-            self.pressure = pressure
-
-        self._check_internal_consistency()
+        self._initialize(system, temperature, pressure)
 
     @property
     def system(self):
@@ -328,13 +308,11 @@ class ThermodynamicState(object):
         --------
 
         """
-        return copy.deepcopy(self._system)
+        return self.get_system()
 
     @system.setter
     def system(self, value):
-        self._check_system_consistency(value)
-        self._system = copy.deepcopy(value)
-        self._cached_standard_system_hash = None  # Invalidate cache.
+        self.set_system(value)
 
     def set_system(self, system, fix_state=False):
         """Manipulate and set the system.
@@ -391,7 +369,10 @@ class ThermodynamicState(object):
             barostat = self._set_system_pressure(system, self.pressure)
             if barostat is not None:
                 self._set_barostat_temperature(barostat, self.temperature)
-        self.system = system
+        else:
+            self._check_system_consistency(system)
+        self._system = system
+        self._cached_standard_system_hash = None  # Invalidate cache.
 
     def get_system(self, remove_thermostat=False, remove_barostat=False):
         """Manipulate and return the system.
@@ -872,6 +853,46 @@ class ThermodynamicState(object):
         else:
             integrator = context.getIntegrator()
             self._set_integrator_temperature(integrator)
+
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        # We just need to serialize the system since everything
+        # else is inferred from thermostat and barostat state.
+        serialized_system = openmm.XmlSerializer.serialize(self._system)
+        return dict(system=serialized_system)
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        deserialized_system = openmm.XmlSerializer.deserialize(serialization['system'])
+        self._initialize(deserialized_system)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage: initialization
+    # -------------------------------------------------------------------------
+
+    def _initialize(self, system, temperature=None, pressure=None):
+        """Initialize the thermodynamic state."""
+        # The standard system hash is cached and computed on-demand.
+        self._cached_standard_system_hash = None
+
+        # Do not modify original system.
+        self._system = copy.deepcopy(system)
+
+        # If temperature is None, the user must specify a thermostat.
+        if temperature is None:
+            if self._thermostat is None:
+                raise ThermodynamicsError(ThermodynamicsError.NO_THERMOSTAT)
+            # Read temperature from thermostat and pass it to barostat.
+            temperature = self.temperature
+
+        # Set thermostat and barostat temperature.
+        self.temperature = temperature
+
+        # Set barostat pressure.
+        if pressure is not None:
+            self.pressure = pressure
+
+        self._check_internal_consistency()
 
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
@@ -1435,14 +1456,7 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, positions, velocities=None, box_vectors=None):
-        self._positions = positions
-        self._cached_positions_in_md_units = None
-        self._velocities = None
-        self._cached_velocities_in_md_units = None
-        self.velocities = velocities  # Checks consistency and units.
-        self.box_vectors = box_vectors
-        self.potential_energy = None
-        self.kinetic_energy = None
+        self._initialize(positions, velocities, box_vectors)
 
     @staticmethod
     def from_context(context):
@@ -1625,9 +1639,34 @@ class SamplerState(object):
         sampler_state.kinetic_energy = self.kinetic_energy
         return sampler_state
 
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        serialization = dict(
+            positions=self.positions, velocities=self.velocities,
+            box_vectors=self.box_vectors, potential_energy=self.potential_energy,
+            kinetic_energy=self.kinetic_energy
+        )
+        return serialization
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        self._initialize(**serialization)
+
     # -------------------------------------------------------------------------
     # Internal-usage
     # -------------------------------------------------------------------------
+
+    def _initialize(self, positions, velocities, box_vectors,
+                    potential_energy=None, kinetic_energy=None):
+        """Initialize the sampler state."""
+        self._positions = positions
+        self._cached_positions_in_md_units = None
+        self._velocities = None
+        self._cached_velocities_in_md_units = None
+        self.velocities = velocities  # Checks consistency and units.
+        self.box_vectors = box_vectors
+        self.potential_energy = potential_energy
+        self.kinetic_energy = kinetic_energy
 
     @property
     def _positions_in_md_units(self):
@@ -1685,22 +1724,22 @@ class SamplerState(object):
         else:
             # The positions in md units cache is updated below.
             self._positions = openmm_state.getPositions(asNumpy=True)
+            self._cached_positions_in_md_units = None
 
         self.velocities = openmm_state.getVelocities(asNumpy=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
         self.potential_energy = openmm_state.getPotentialEnergy()
         self.kinetic_energy = openmm_state.getKineticEnergy()
 
-        # We need to set the cached positions and velocities at the end
-        # because every call to the properties invalidate the cache. I
-        # know this is ugly but it saves us A LOT of time in unit stripping.
-        self._cached_positions_in_md_units = openmm_state._coordList
-        self._cached_velocities_in_md_units = openmm_state._velList
-
 
 # =============================================================================
 # COMPOUND THERMODYNAMIC STATE
 # =============================================================================
+
+class ComposableStateError(Exception):
+    """Error raised by a ComposableState."""
+    pass
+
 
 class IComposableState(utils.SubhookedABCMeta):
     """A state composable through CompoundThermodynamicState.
@@ -1715,12 +1754,13 @@ class IComposableState(utils.SubhookedABCMeta):
     """
 
     @abc.abstractmethod
-    def set_system_state(self, system):
+    def apply_to_system(self, system):
         """Change the system properties to be consistent with this state.
 
         This method is called on CompoundThermodynamicState init to update
         the system stored in the main ThermodynamicState, and every time
-        an attribute/property of the composable state is set.
+        an attribute/property of the composable state is set or a setter
+        method (i.e. a method that starts with 'set_') is called.
 
         This is the system that will be used during context creation, so
         it is important that it is up-to-date.
@@ -1730,6 +1770,11 @@ class IComposableState(utils.SubhookedABCMeta):
         system : simtk.openmm.System
             The system to modify.
 
+        Raises
+        ------
+        CompatibleStateError
+            If the system is not compatible with the state.
+
         """
         pass
 
@@ -1737,33 +1782,50 @@ class IComposableState(utils.SubhookedABCMeta):
     def check_system_consistency(self, system):
         """Check if the system is consistent with the state.
 
-        It raises an Exception if the system is not consistent with the
-        state. This is called when the system of the ThermodynamicState
-        is set.
+        It raises a ComposableStateError if the system is not consistent
+        with the state. This is called when the ThermodynamicState's
+        system is set.
 
         Parameters
         ----------
         system : simtk.openmm.System
             The system to test.
 
+        Raises
+        ------
+        ComposableStateError
+            If the system is not consistent with this state.
+
         """
         pass
 
     @abc.abstractmethod
     def apply_to_context(self, context):
-        """Apply changes to the context to be consistent with the state."""
+        """Apply changes to the context to be consistent with the state.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The context to set.
+
+        Raises
+        ------
+        ComposableStateError
+            If the context is not compatible with the state.
+
+        """
         pass
 
     @classmethod
     @abc.abstractmethod
-    def standardize_system(cls, system):
+    def _standardize_system(cls, system):
         """Standardize the given system.
 
         ThermodynamicState relies on this method to create a standard
         system that defines compatibility with another state or context.
         The definition of a standard system is tied to the implementation
         of apply_to_context. For example, if apply_to_context sets a
-        global parameter of the context, standardize_system should
+        global parameter of the context, _standardize_system should
         set the default value of the parameter in the system to a
         standard value.
 
@@ -1774,8 +1836,8 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Raises
         ------
-        ValueError
-            If the system cannot be standardized.
+        CompatibleStateError
+            If the system is not compatible with the state.
 
         """
         pass
@@ -1818,46 +1880,48 @@ class CompoundThermodynamicState(ThermodynamicState):
         Each element represent a portion of the overall thermodynamic
         state.
 
+    Examples
+    --------
+    Create an alchemically modified system.
+
+    >>> from openmmtools import testsystems, alchemy
+    >>> factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
+    >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
+    >>> alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=range(22))
+    >>> alanine_alchemical_system = factory.create_alchemical_system(reference_system=alanine_vacuum,
+    ...                                                              alchemical_regions=alchemical_region)
+    >>> alchemical_state = alchemy.AlchemicalState.from_system(alanine_alchemical_system)
+
+    AlchemicalState implement the IComposableState interface, so it can be
+    used with CompoundThermodynamicState. All the alchemical parameters are
+    accessible through the compound state.
+
+    >>> from simtk import openmm, unit
+    >>> thermodynamic_state = ThermodynamicState(system=alanine_alchemical_system,
+    ...                                                 temperature=300*unit.kelvin)
+    >>> compound_state = CompoundThermodynamicState(thermodynamic_state=thermodynamic_state,
+    ...                                                    composable_states=[alchemical_state])
+    >>> compound_state.lambda_sterics
+    1.0
+    >>> compound_state.lambda_electrostatics
+    1.0
+
+    You can control the parameters in the OpenMM Context in this state by
+    setting the state attributes.
+
+    >>> compound_state.lambda_sterics = 0.5
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> context = compound_state.create_context(integrator)
+    >>> context.getParameter('lambda_sterics')
+    0.5
+    >>> compound_state.lambda_sterics = 1.0
+    >>> compound_state.apply_to_context(context)
+    >>> context.getParameter('lambda_sterics')
+    1.0
+
     """
-    # TODO add examples to docs once AlchemicalState has been implemented
     def __init__(self, thermodynamic_state, composable_states):
-        # Check that composable states expose the correct interface.
-        for composable_state in composable_states:
-            assert isinstance(composable_state, IComposableState)
-
-        # Dynamically inherit from thermodynamic_state class and
-        # store the types of composable_states to be able to call
-        # class methods.
-        composable_bases = [s.__class__ for s in composable_states]
-        self.__class__ = type(self.__class__.__name__,
-                              (self.__class__, thermodynamic_state.__class__),
-                              {'_composable_bases': composable_bases})
-        self.__dict__ = thermodynamic_state.__dict__
-
-        # Set the stored system to the given states. Setting
-        # self._composable_states signals __setattr__ to start
-        # searching in composable states as well, so this must
-        # be the last new attribute set in the constructor.
-        self._composable_states = composable_states
-        for s in self._composable_states:
-            s.set_system_state(self._system)
-
-    @property
-    def system(self):
-        """The system in this thermodynamic state.
-
-        See Also
-        --------
-        ThermodynamicState.system
-
-        """
-        return super(CompoundThermodynamicState, self).system
-
-    @system.setter
-    def system(self, value):
-        super(CompoundThermodynamicState, self.__class__).system.fset(self, value)
-        for s in self._composable_states:
-            s.check_system_consistency(self._system)
+        self._initialize(thermodynamic_state, composable_states)
 
     def set_system(self, system, fix_state=False):
         """Allow to set the system and fix its thermodynamic state.
@@ -1879,9 +1943,11 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState.set_system
 
         """
-        if fix_state is True:
-            for s in self._composable_states:
-                s.set_system_state(system)
+        for s in self._composable_states:
+            if fix_state is True:
+                s.apply_to_system(system)
+            else:
+                s.check_system_consistency(system)
         super(CompoundThermodynamicState, self).set_system(system, fix_state)
 
     def is_context_compatible(self, context):
@@ -1904,10 +1970,10 @@ class CompoundThermodynamicState(ThermodynamicState):
         """
         # We override ThermodynamicState.is_context_compatible to
         # handle the case in which one of the composable states
-        # raises ValueError when standardizing the context system.
+        # raises ComposableStateError when standardizing the context system.
         try:
             return super(CompoundThermodynamicState, self).is_context_compatible(context)
-        except ValueError:
+        except ComposableStateError:
             return False
 
     def apply_to_context(self, context):
@@ -1923,13 +1989,26 @@ class CompoundThermodynamicState(ThermodynamicState):
             s.apply_to_context(context)
 
     def __getattr__(self, name):
+        def setter_decorator(func, composable_state):
+            def _setter_decorator(*args, **kwargs):
+                func(*args, **kwargs)
+                composable_state.apply_to_system(self._system)
+            return _setter_decorator
+
         # Called only if the attribute couldn't be found in __dict__.
         # In this case we fall back to composable state, in the given order.
         for s in self._composable_states:
             try:
-                return getattr(s, name)
+                attr = getattr(s, name)
             except AttributeError:
                 pass
+            else:
+                if name.startswith('set_'):
+                    # Decorate the setter so that apply_to_system is called
+                    # after the attribute is modified.
+                    attr = setter_decorator(attr, s)
+                return attr
+
         # Attribute not found, fall back to normal behavior.
         return super(CompoundThermodynamicState, self).__getattribute__(name)
 
@@ -1947,11 +2026,57 @@ class CompoundThermodynamicState(ThermodynamicState):
             for s in self._composable_states:
                 if any(name in C.__dict__ for C in s.__class__.__mro__):
                     s.__setattr__(name, value)
-                    s.set_system_state(self._system)
-                    break
+                    s.apply_to_system(self._system)
+                    return
 
-        # Monkey patching.
-        super(CompoundThermodynamicState, self).__setattr__(name, value)
+            # No attribute found. This is monkey patching.
+            super(CompoundThermodynamicState, self).__setattr__(name, value)
+
+    def __getstate__(self):
+        """Return a dictionary representation of the state."""
+        # Create original ThermodynamicState to serialize
+        thermodynamic_state = object.__new__(self.__class__.__bases__[1])
+        thermodynamic_state.__dict__ = copy.deepcopy(self.__dict__)
+        serialization = dict(
+            thermodynamic_state=utils.serialize(thermodynamic_state),
+            composable_states=[utils.serialize(composable_state)
+                               for composable_state in self._composable_states]
+        )
+        return serialization
+
+    def __setstate__(self, serialization):
+        """Set the state from a dictionary representation."""
+        thermodynamic_state = utils.deserialize(serialization['thermodynamic_state'])
+        composable_states = [utils.deserialize(composable_state)
+                             for composable_state in serialization['composable_states']]
+        self._initialize(thermodynamic_state, composable_states)
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    def _initialize(self, thermodynamic_state, composable_states):
+        """Initialize the sampler state."""
+        # Check that composable states expose the correct interface.
+        for composable_state in composable_states:
+            assert isinstance(composable_state, IComposableState)
+
+        # Dynamically inherit from thermodynamic_state class and
+        # store the types of composable_states to be able to call
+        # class methods.
+        composable_bases = [s.__class__ for s in composable_states]
+        self.__class__ = type(self.__class__.__name__,
+                              (self.__class__, thermodynamic_state.__class__),
+                              {'_composable_bases': composable_bases})
+        self.__dict__ = thermodynamic_state.__dict__
+
+        # Set the stored system to the given states. Setting
+        # self._composable_states signals __setattr__ to start
+        # searching in composable states as well, so this must
+        # be the last new attribute set in the constructor.
+        self._composable_states = composable_states
+        for s in self._composable_states:
+            s.apply_to_system(self._system)
 
     @classmethod
     def _standardize_system(cls, system):
@@ -1962,7 +2087,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         Raises
         ------
-        ValueError
+        ComposableStateError
             If it is impossible to standardize the system.
 
         See Also
@@ -1972,9 +2097,10 @@ class CompoundThermodynamicState(ThermodynamicState):
         """
         super(CompoundThermodynamicState, cls)._standardize_system(system)
         for composable_cls in cls._composable_bases:
-            composable_cls.standardize_system(system)
+            composable_cls._standardize_system(system)
 
 
 if __name__ == '__main__':
     import doctest
-    doctest.testmod()
+    # doctest.testmod()
+    doctest.run_docstring_examples(CompoundThermodynamicState, globals())

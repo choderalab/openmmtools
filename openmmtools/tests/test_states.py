@@ -14,6 +14,7 @@ Test State classes in states.py.
 # =============================================================================
 
 import nose
+import pickle
 
 from openmmtools import testsystems
 from openmmtools.states import *
@@ -879,20 +880,22 @@ class TestSamplerState(object):
         assert sampler_state._cached_positions_in_md_units is not None
         assert sampler_state._cached_velocities_in_md_units is None
 
-        # When using update_from_context() or from_context() constructor,
-        # we directly cache the unit-less state.
+        # apply_to_context() forces the unitless positions to be cached.
+        sampler_state = SamplerState(self.alanine_explicit_positions)
+        assert sampler_state._cached_positions_in_md_units is None
         context = self.create_context(self.alanine_explicit_state)
-        sampler_state.apply_to_context(context)  # Set positions.
+        sampler_state.apply_to_context(context)
+        assert sampler_state._cached_positions_in_md_units is not None
 
+        # Caches are invalidated on update_from_context()
+        assert sampler_state._cached_positions_in_md_units is not None
         sampler_state.update_from_context(context)
         for state in [SamplerState.from_context(context), sampler_state]:
-            assert state._cached_positions_in_md_units is not None
-            assert state._cached_velocities_in_md_units is not None
-            assert np.allclose(state._positions_in_md_units, test_pos)
-            assert np.allclose(state._velocities_in_md_units,
-                               np.zeros((len(test_pos), 3)))
+            assert state._cached_positions_in_md_units is None
 
         # Cache is correctly invalidated on assignment/update.
+        sampler_state._positions_in_md_units  # Force caching
+        sampler_state._velocities_in_md_units  # Force caching
         assert sampler_state._cached_positions_in_md_units is not None
         sampler_state.positions = self.alanine_explicit_positions
         assert sampler_state._cached_positions_in_md_units is None
@@ -925,19 +928,19 @@ class TestCompoundThermodynamicState(object):
             self._dummy_parameter = value
 
         @classmethod
-        def standardize_system(cls, system):
+        def _standardize_system(cls, system):
             try:
                 cls.set_dummy_parameter(system, cls.standard_dummy_parameter)
             except TypeError:  # No parameter to set.
-                raise ValueError
+                raise ComposableStateError()
 
-        def set_system_state(self, system):
+        def apply_to_system(self, system):
             self.set_dummy_parameter(system, self.dummy_parameter)
 
         def check_system_consistency(self, system):
             dummy_parameter = TestCompoundThermodynamicState.get_dummy_parameter(system)
             if dummy_parameter != self.dummy_parameter:
-                raise ValueError
+                raise ComposableStateError()
 
         @staticmethod
         def is_context_compatible(context):
@@ -1046,11 +1049,11 @@ class TestCompoundThermodynamicState(object):
         # Setting an inconsistent system for the dummy raises an error.
         system = compound_state.system
         self.DummyState.set_dummy_parameter(system, self.dummy_parameter + 1.0)
-        with nose.tools.assert_raises(ValueError):
+        with nose.tools.assert_raises(ComposableStateError):
             compound_state.system = system
 
         # Same for set_system when called with default arguments.
-        with nose.tools.assert_raises(ValueError):
+        with nose.tools.assert_raises(ComposableStateError):
             compound_state.set_system(system)
 
         # This doesn't happen if we fix the state.
@@ -1105,3 +1108,23 @@ class TestCompoundThermodynamicState(object):
         compound_state.apply_to_context(context)
         assert context.getParameter('dummy_parameter') == self.dummy_parameter
         assert context.getParameter(barostat.Pressure()) == new_pressure / unit.bar
+
+
+# =============================================================================
+# TEST SERIALIZATION
+# =============================================================================
+
+def test_states_serialization():
+    """Test serialization compatibility with utils.serialize."""
+
+    test_system = testsystems.AlanineDipeptideImplicit()
+    thermodynamic_state = ThermodynamicState(test_system.system, temperature=300*unit.kelvin)
+    sampler_state = SamplerState(positions=test_system.positions)
+
+    test_cases = [thermodynamic_state, sampler_state]
+    for test_state in test_cases:
+        serialization = utils.serialize(test_state)
+        deserialized_state = utils.deserialize(serialization)
+        original_pickle = pickle.dumps(test_state)
+        deserialized_pickle = pickle.dumps(deserialized_state)
+        assert original_pickle == deserialized_pickle
