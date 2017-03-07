@@ -437,8 +437,8 @@ class StorageInterface(object):
     >>> mydata = [-1, 24, 5]
     >>> my_storage = StorageInterface(my_driver)
     >>> for i in range(10):
-    >>>     mydata = i**2
-    >>>     my_storage.looper.append(mydata)
+    ...     mydata = i**2
+    ...     my_storage.looper.append(mydata)
     """
     def __init__(self, storage_system):
         """

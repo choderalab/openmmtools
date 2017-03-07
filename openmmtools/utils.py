@@ -288,7 +288,7 @@ def quantity_from_string(expression):
     --------
     >>> expr = '4 * kilojoules / mole'
     >>> quantity_from_string(expr)
-    Quantity(value=4.0, unit=kilojoule/mole)
+    Quantity(value=4.000000000000002, unit=kilojoule/mole)
 
     """
 
