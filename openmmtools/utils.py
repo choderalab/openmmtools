@@ -338,7 +338,7 @@ def typename(atype):
     modulename = atype.__module__
     typename = atype.__name__
 
-    if modulename != '__builtin__':
+    if modulename not in ['__builtin__', 'builtins']:
         typename = modulename + '.' + typename
 
     return typename
