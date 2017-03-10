@@ -389,6 +389,21 @@ class ContextCache(object):
         thermodynamic_state.apply_to_context(context)
         return context, context_integrator
 
+    def __getstate__(self):
+        if self.platform is not None:
+            platform_serialization = self.platform.getName()
+        else:
+            platform_serialization = None
+        return dict(platform=platform_serialization, capacity=self.capacity,
+                    time_to_live=self.time_to_live)
+
+    def __setstate__(self, serialization):
+        if serialization['platform'] is None:
+            self._platform = None
+        else:
+            self._platform = openmm.Platform.getPlatformByName(serialization['platform'])
+        self._lru = LRUCache(serialization['capacity'], serialization['time_to_live'])
+
     # -------------------------------------------------------------------------
     # Internal usage
     # -------------------------------------------------------------------------
@@ -489,6 +504,19 @@ class DummyContextCache(object):
         """Create a new context in the given thermodynamic state."""
         context = thermodynamic_state.create_context(integrator, self.platform)
         return context, integrator
+
+    def __getstate__(self):
+        if self.platform is not None:
+            platform_serialization = self.platform.getName()
+        else:
+            platform_serialization = None
+        return dict(platform=platform_serialization)
+
+    def __setstate__(self, serialization):
+        if serialization['platform'] is None:
+            self.platform = None
+        else:
+            self.platform = openmm.Platform.getPlatformByName(serialization['platform'])
 
 
 # =============================================================================
