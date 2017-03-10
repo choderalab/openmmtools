@@ -177,16 +177,16 @@ def test_integrator_decorators():
 
 
 def test_vvvr_shadow_work_accumulation():
-    """When `monitor_work==True`, assert that global `shadow_work` is initialized to zero and
+    """When `measure_shadow_work==True`, assert that global `shadow_work` is initialized to zero and
     reaches a nonzero value after integrating a few dozen steps.
 
-    By default (`monitor_work=False`), assert that there is no global name for `shadow_work`."""
+    By default (`measure_shadow_work=False`), assert that there is no global name for `shadow_work`."""
 
-    # test `monitor_work=True` --> accumulation of a nonzero value in global `shadow_work`
+    # test `measure_shadow_work=True` --> accumulation of a nonzero value in global `shadow_work`
     testsystem = testsystems.HarmonicOscillator()
     system, topology = testsystem.system, testsystem.topology
     temperature = 298.0 * unit.kelvin
-    integrator = integrators.VVVRIntegrator(temperature, monitor_work=True)
+    integrator = integrators.VVVRIntegrator(temperature, measure_shadow_work=True)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
@@ -194,7 +194,7 @@ def test_vvvr_shadow_work_accumulation():
     integrator.step(25)
     assert(integrator.getGlobalVariableByName('shadow_work') != 0)
 
-    # test default (`monitor_work=False`, `monitor_heat=False`) --> absence of a global `shadow_work`
+    # test default (`measure_shadow_work=False`, `measure_heat=True`) --> absence of a global `shadow_work`
     integrator = integrators.VVVRIntegrator(temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
