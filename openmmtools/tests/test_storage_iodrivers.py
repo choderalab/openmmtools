@@ -80,12 +80,12 @@ def test_netcdf_driver_metadata_creation():
 
 
 # =============================================================================================
-# NETCDF TYPE HANDLER TESTING FUNCTIONS
+# NETCDF TYPE codec TESTING FUNCTIONS
 # =============================================================================================
 
 
-def generic_type_handler_check(input_data, with_append=True):
-    """Generic type handler test to ensure all callable functions are working"""
+def generic_type_codec_check(input_data, with_append=True):
+    """Generic type codec test to ensure all callable functions are working"""
     with temporary_directory() as tmp_dir:
         file_path = tmp_dir + '/test.nc'
         nc_io_driver = NetCDFIODriver(file_path)
@@ -128,9 +128,9 @@ def generic_type_handler_check(input_data, with_append=True):
             del data_append, data_append_out
         # Reopen and test reading actions
         nc_io_driver = NetCDFIODriver(file_path, access_mode='r')
-        data_write = nc_io_driver.get_variable_handler(write_path)
+        data_write = nc_io_driver.get_storage_variable(write_path)
         if with_append:
-            data_append = nc_io_driver.get_variable_handler(append_path)
+            data_append = nc_io_driver.get_storage_variable(append_path)
         # Test unbound read
         data_write_out = data_write.read()
         if with_append:
@@ -150,54 +150,54 @@ def generic_type_handler_check(input_data, with_append=True):
                 assert np.all(data_append_out[1] == input_data)
 
 
-def test_netcdf_int_type_handler():
-    """Test that the Int type handler can read/write/append"""
+def test_netcdf_int_type_codec():
+    """Test that the Int type codec can read/write/append"""
     input_data = 4
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_float_type_handler():
-    """Test that the Float type handler can read/write/append"""
+def test_netcdf_float_type_codec():
+    """Test that the Float type codec can read/write/append"""
     input_data = 4.0
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_string_type_handler():
-    """Test that the String type handler can read/write/append"""
+def test_netcdf_string_type_codec():
+    """Test that the String type codec can read/write/append"""
     input_data = 'four point oh'
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_list_type_handler():
-    """Test that the List type handler can read/write/append"""
+def test_netcdf_list_type_codec():
+    """Test that the List type codec can read/write/append"""
     input_data = [4, 4, 4]
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_tuple_type_handler():
-    """Test that the tuple type handler can read/write/append"""
+def test_netcdf_tuple_type_codec():
+    """Test that the tuple type codec can read/write/append"""
     input_data = (4, 4, 4)
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_array_type_handler():
-    """Test that the ndarray type handler can read/write/append"""
+def test_netcdf_array_type_codec():
+    """Test that the ndarray type codec can read/write/append"""
     input_data = np.array([4, 4.0, 4])
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_quantity_type_handler():
-    """Test that the simtk.unit.Quantity type handler can read/write/append with various unit and _value types"""
+def test_netcdf_quantity_type_codec():
+    """Test that the simtk.unit.Quantity type codec can read/write/append with various unit and _value types"""
     input_data = 4 * unit.kelvin
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
     input_data = [4, 4, 4] * unit.kilojoules_per_mole
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
     input_data = np.array([4, 4, 4]) / unit.nanosecond
-    generic_type_handler_check(input_data)
+    generic_type_codec_check(input_data)
 
 
-def test_netcdf_dictionary_type_handler():
-    """Test that the simtk.unit.Quantity type handler can read/write/append with various unit and _value types"""
+def test_netcdf_dictionary_type_codec():
+    """Test that the simtk.unit.Quantity type codec can read/write/append with various unit and _value types"""
     input_data = {
         'count': 4,
         'ratio': 0.4,
@@ -206,4 +206,4 @@ def test_netcdf_dictionary_type_handler():
         'temperature': 4 * unit.kelvin,
         'box_vectors': (np.eye(3) * 4.0) * unit.nanometer
     }
-    generic_type_handler_check(input_data, with_append=False)
+    generic_type_codec_check(input_data, with_append=False)

@@ -180,12 +180,13 @@ def math_eval(expression, variables=None, functions=None):
                  ast.Pow: operator.pow, ast.USub: operator.neg}
 
     # Supported functions, not defined in math.
-    if functions is None:
-        functions = {}
-    functions.update({'step': lambda x: 1 * (x >= 0),
-                      'step_hm': lambda x: 0.5 * (np.sign(x) + 1),
-                      'sign': lambda x: np.sign(x)}
-                     )
+    stock_functions = {'step': lambda x: 1 * (x >= 0),
+                       'step_hm': lambda x: 0.5 * (np.sign(x) + 1),
+                       'sign': lambda x: np.sign(x)}
+    # Allow overwrite of stock_functions
+    if functions is not None:
+        stock_functions.update(functions)
+    functions = stock_functions
 
     def _math_eval(node):
         if isinstance(node, ast.Num):

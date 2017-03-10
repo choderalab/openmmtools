@@ -45,29 +45,27 @@ class StorageInterfaceDirVar(object):
 
     """
 
-    def __init__(self, name, storage_driver, storage_interface, predecessor=None):
+    def __init__(self, name, storage_interface, predecessor=None):
         """
         Parameters
         ----------
         name : string
             Specify the name of the storage variable on the disk. Full path is determined from the predecessor chain
-        storage_driver : instanced storage driver of top level StorageInterface object
-            This is the driver where commands are issued to fetch/create the variables as needed
         storage_interface : StorageInterface instance
             Acting interface which is handling top level IO operations on the file itself
+            The storage driver which handles all the commands is derived from this interface
         predecessor : StorageInterfaceDirVar
             Directory-like SIDV above this instance
 
         """
         self._name = name
-        self._storage_driver = storage_driver
         self._storage_interface = storage_interface
+        self._storage_driver = self._storage_interface.storage_driver
         self._predecessor = predecessor
         # Define the object this instance is attached to
         self._variable = None
-        # initially undetermined type
+        # initially undetermined if var or dir
         self._directory = None
-        self._variable = None
         self._metadata_buffer = {}
 
     """
@@ -116,8 +114,9 @@ class StorageInterfaceDirVar(object):
 
         """
         if not self.bound_target:
-            self._bind_write_append()
+            self._bind_to_variable_with_write_or_append()
         previously_written = True  # Assume this is true until proven otherwise
+        dump_metadata = False  # Flag to dump metadata after write-protection check
         if not self._variable:
             path = self.path
             # Try to get already on disk variable
@@ -127,12 +126,14 @@ class StorageInterfaceDirVar(object):
                 self._variable = self._storage_driver.create_storage_variable(path, type(data))
                 previously_written = False
             self._directory = False
-            self._dump_metadata_buffer()
+            dump_metadata = True
         # Protect variable if already written
         if previously_written and protected_write:
             # Lock ability to protect the variable
             raise IOError("Cannot write to protected object on disk! Set 'protected_write = False` to overwrite "
                           "this protection.")
+        if dump_metadata:
+            self._dump_metadata_buffer()
         self._variable.write(data)
 
     def append(self, data):
@@ -160,7 +161,7 @@ class StorageInterfaceDirVar(object):
         >>> my_store.IAmADir.AnInt.append(x+2)
         """
         if not self.bound_target:
-            self._bind_write_append()
+            self._bind_to_variable_with_write_or_append()
         if not self._variable:
             path = self.path
             # Try to get already on disk variable
@@ -186,7 +187,7 @@ class StorageInterfaceDirVar(object):
             and possibly through the UNIT logic to recast into Quantity before being handed to the user.
         """
         if not self.bound_target:
-            self._bind_read()
+            self._bind_to_variable_with_read()
         if not self._variable:
             path = self.path
             # Try to get variable on disk
@@ -272,14 +273,12 @@ class StorageInterfaceDirVar(object):
             The complete path of this variable as it is seen on the storage file_name, returned as / separated values.
 
         """
-        path = []
         # Cascade the path
         if self.predecessor is not None:
-            path = self.predecessor.path.split('/')  # Break path-like string to list to process
-        # Add self to the end
-        path.extend([self.name])  # Wrap in list or it iterates over the name chars
-        # Reduce to a path-like string
-        return '/'.join(path)
+            path = self.predecessor.path + ('/' + self.name)  # the parenthesis just makes it a little faster
+        else:
+            path = self.name
+        return path
 
     @property
     def predecessor(self):
@@ -292,20 +291,6 @@ class StorageInterfaceDirVar(object):
             Returns this instance's parent SIDV instance or None if it is the top level SIDV.
         """
         return self._predecessor
-
-    @property
-    def storage_driver(self):
-        """
-        Pointer to the object which actually handles read/write operations
-
-        Returns
-        -------
-        storage_driver :
-            Instance of the module which handles IO actions to specific storage type requested by storage_system
-            string at initialization.
-
-        """
-        return self._storage_driver
 
     @property
     def name(self):
@@ -348,11 +333,11 @@ class StorageInterfaceDirVar(object):
         if self._variable:  # None and False will both ignore this
             raise AttributeError("Cannot take directory actions on a variable object!")
 
-    def _bind_write_append(self):
+    def _bind_to_variable_with_write_or_append(self):
         self._check_variable()
         # Check instanced storage driver, accessing its protected ability to bind write/append (user should not do this)
         if self._predecessor is not None:
-            self._predecessor._write_append_directory()
+            self._predecessor._set_predecessor_as_directory(create_if_missing=True)
 
     def _check_read_file(self):
         """Check that the file exists before trying to read"""
@@ -360,11 +345,11 @@ class StorageInterfaceDirVar(object):
         if not os.path.isfile(file_name):
             raise NameError("No such file exists at {}! Cannot read from non-existent file!".format(file_name))
 
-    def _bind_read(self):
+    def _bind_to_variable_with_read(self):
         """Check that we are not a directory and all predecessors can read as well"""
         self._check_variable()
         if self._predecessor is not None:
-            self._predecessor._read_directory()
+            self._predecessor._set_predecessor_as_directory(create_if_missing=False)
 
     def _dump_metadata_buffer(self):
         """Dump the metadata buffer to file, this is only ever called once bound"""
@@ -373,28 +358,27 @@ class StorageInterfaceDirVar(object):
             self.add_metadata(key, data)
         self._metadata_buffer = {}
 
-    def _read_directory(self):
-        """Special function of a predecessor to try and fetch the directory from file"""
-        self._check_read_file()
+    def _set_predecessor_as_directory(self, create_if_missing=None):
+        """Special function executed by the child on the predecessor to cast predecessor as directory"""
+        if create_if_missing is None:
+            # create_if_missing is a kwarg instead of arg because _set_predecessor_as_directory(False) is confusing
+            raise KeyError("create_if_missing must be a bool!")
         self._check_directory()
+        if not create_if_missing:
+            self._check_read_file()
         if self._directory is None or self._directory is True:
-            self._directory = self._storage_driver.get_directory(self.path, create=False)
-
-    def _write_append_directory(self):
-        """Special function of a predecessor to try and fetch the directory from file"""
-        self._check_directory()
-        if self._directory is None or self._directory is True:
-            self._directory = self._storage_driver.get_directory(self.path, create=True)
-        self._dump_metadata_buffer()
+            self._directory = self._storage_driver.get_directory(self.path, create=create_if_missing)
+        if create_if_missing:
+            self._dump_metadata_buffer()
 
     def __getattr__(self, name):
+        """This method is only called if __getattribute__ fails, meaning that the attribute is not already defined"""
         if self._variable:
             raise AttributeError("Cannot convert this object to a directory as its already bound to a variable!")
         if not self._directory:
             # Assign directory features
             self._directory = True
-        setattr(self, name, StorageInterfaceDirVar(name, self._storage_driver, self._storage_interface,
-                                                   predecessor=self))
+        setattr(self, name, StorageInterfaceDirVar(name, self._storage_interface, predecessor=self))
         return getattr(self, name)
 
 # =============================================================================
@@ -453,7 +437,6 @@ class StorageInterface(object):
 
         """
         self._storage_system = storage_system
-        self._file_name = storage_system.file_name
         # Used for logic checks
 
     def add_metadata(self, name, data):
@@ -490,7 +473,7 @@ class StorageInterface(object):
             Name of the file on the disk
 
         """
-        return self._file_name
+        return self.storage_system.file_name
 
     @property
     def storage_system(self):
@@ -509,6 +492,7 @@ class StorageInterface(object):
     def __getattr__(self, name):
         """
         Workhorse function to handle all the auto-magical path and variable assignments
+        This method is only called if __getattribute__ fails, meaning that the attribute is not already defined
 
         Parameters
         ----------
@@ -517,5 +501,5 @@ class StorageInterface(object):
 
         """
         # Instance storage system
-        setattr(self, name, StorageInterfaceDirVar(name, self.storage_system, self))
+        setattr(self, name, StorageInterfaceDirVar(name, self))
         return getattr(self, name)
