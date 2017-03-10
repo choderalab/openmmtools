@@ -36,6 +36,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # ============================================================================================
 
 import numpy
+import logging
 
 import simtk.unit
 
@@ -44,6 +45,8 @@ import simtk.openmm as mm
 
 from openmmtools.constants import kB
 from openmmtools import respa
+
+logger = logging.getLogger(__name__)
 
 
 # ============================================================================================
@@ -299,6 +302,40 @@ class ThermostatedIntegrator(RestorableIntegrator):
         except Exception:
             return False
         return super(ThermostatedIntegrator, cls).is_restorable(integrator)
+
+    @classmethod
+    def restore_interface(cls, integrator):
+        """Restore the original interface of a CustomIntegrator.
+
+        The function restore the methods of the original class that
+        inherited from ThermostatedIntegrator. Return False if the interface
+        could not be restored.
+
+        Parameters
+        ----------
+        integrator : simtk.openmm.CustomIntegrator
+            The integrator to which add methods.
+
+        Returns
+        -------
+        True if the original class interface could be restored, False otherwise.
+
+        """
+        restored = super(ThermostatedIntegrator, cls).restore_interface(integrator)
+        # Warn the user if he is implementing a CustomIntegrator
+        # that may keep the stationary distribution at a certain
+        # temperature without exposing getters and setters.
+        if not restored:
+            try:
+                integrator.getGlobalVariableByName('kT')
+            except Exception:
+                pass
+            else:
+                if not hasattr(integrator, 'getTemperature'):
+                    logger.warning("The integrator {} has a global variable 'kT' variable "
+                                   "but does not expose getter and setter for the temperature. "
+                                   "Consider inheriting from ThermostatedIntegrator.")
+        return restored
 
 # ============================================================================================
 # INTEGRATORS
