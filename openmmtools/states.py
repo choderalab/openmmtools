@@ -514,6 +514,11 @@ class ThermodynamicState(object):
         """Number of particles (read-only)."""
         return self._system.getNumParticles()
 
+    @property
+    def is_periodic(self):
+        """True if the system is in a periodic box (read-only)."""
+        return self._system.usesPeriodicBoundaryConditions()
+
     def reduced_potential(self, context_state):
         """Reduced potential in this thermodynamic state.
 
@@ -1528,6 +1533,23 @@ class SamplerState(object):
         self._cached_velocities_in_md_units = None  # Invalidate cache.
 
     @property
+    def box_vectors(self):
+        """Box vectors.
+
+        An 3x3 simtk.unit.Quantity object.
+
+        """
+        return self._box_vectors
+
+    @box_vectors.setter
+    def box_vectors(self, value):
+        # Make sure this is a Quantity. System.getDefaultPeriodicBoxVectors
+        # returns a list of Quantity objects instead for example.
+        if value is not None and not isinstance(value, unit.Quantity):
+            value = unit.Quantity(value)
+        self._box_vectors = value
+
+    @property
     def total_energy(self):
         """The sum of potential and kinetic energy (read-only)."""
         if self.potential_energy is None or self.kinetic_energy is None:
@@ -1664,7 +1686,8 @@ class SamplerState(object):
         self._velocities = None
         self._cached_velocities_in_md_units = None
         self.velocities = velocities  # Checks consistency and units.
-        self.box_vectors = box_vectors
+        self._box_vectors = None
+        self.box_vectors = box_vectors  # Make sure box vectors is Quantity.
         self.potential_energy = potential_energy
         self.kinetic_energy = kinetic_energy
 
@@ -1714,8 +1737,9 @@ class SamplerState(object):
             particles than the current state.
 
         """
-        openmm_state = context.getState(getPositions=True, getVelocities=True,
-                                        getEnergy=True)
+        context_system = context.getSystem()
+        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                        enforcePeriodicBox=context_system.usesPeriodicBoundaryConditions())
 
         # We assign positions first, since the velocities
         # property will check its length for consistency
