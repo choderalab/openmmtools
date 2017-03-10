@@ -13,8 +13,11 @@ Test State classes in mcmc.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
-from pymbar import timeseries
+import pickle
+import inspect
 from functools import partial
+
+from pymbar import timeseries
 
 from openmmtools import testsystems, utils
 from openmmtools.states import SamplerState, ThermodynamicState
@@ -249,6 +252,29 @@ def test_context_cache():
         move = LangevinDynamicsMove(n_steps=5, context_cache=dummy_cache)
         move.apply(thermodynamic_state, sampler_state)
     assert len(cache.global_context_cache) == 0
+
+
+def test_moves_serialization():
+    """Test serialization of various MCMCMoves."""
+    # Test cases.
+    platform = openmm.Platform.getPlatformByName('Reference')
+    context_cache = cache.ContextCache(capacity=1, time_to_live=1)
+    dummy_cache = cache.DummyContextCache(platform=platform)
+    test_cases = [
+        IntegratorMove(openmm.VerletIntegrator(1.0*unit.femtosecond), n_steps=10),
+        LangevinDynamicsMove(),
+        GHMCMove(),
+        HMCMove(context_cache=context_cache),
+        MonteCarloBarostatMove(context_cache=dummy_cache),
+        SequenceMove(move_list=[LangevinDynamicsMove(), GHMCMove()]),
+        WeightedMove(move_set={HMCMove(): 0.5, MonteCarloBarostatMove(): 0.5})
+    ]
+    for move in test_cases:
+        original_pickle = pickle.dumps(move)
+        serialized_move = utils.serialize(move)
+        deserialized_move = utils.deserialize(serialized_move)
+        deserialized_pickle = pickle.dumps(deserialized_move)
+        assert original_pickle == deserialized_pickle
 
 
 # =============================================================================

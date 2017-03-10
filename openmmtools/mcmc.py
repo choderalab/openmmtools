@@ -117,7 +117,7 @@ import logging
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import integrators, cache
+from openmmtools import integrators, cache, utils
 from openmmtools.utils import SubhookedABCMeta, Timer
 
 logger = logging.getLogger(__name__)
@@ -359,6 +359,18 @@ class SequenceMove(object):
     def __iter__(self):
         return iter(self.move_list)
 
+    def __getstate__(self):
+        serialization = dict()
+        for i, move in enumerate(self.move_list):
+            serialization['move' + str(i)] = utils.serialize(move)
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.move_list = [None for _ in range(len(serialization))]
+        # Restore moves in the correct order.
+        for i in range(len(serialization)):
+            self.move_list[i] = utils.deserialize(serialization['move' + str(i)])
+
 
 class WeightedMove(object):
     """Pick an MCMC move out of set with given probability at each iteration.
@@ -420,6 +432,20 @@ class WeightedMove(object):
         move = np.random.choice(moves, p=weights)
         move.apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = dict()
+        for i, (move, weight) in enumerate(self.move_set.items()):
+            serialization['move' + str(i)] = utils.serialize(move)
+            serialization['move' + str(i) + '_weight'] = weight
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.move_set = dict()
+        # Restore moves in the correct order.
+        for i in range(int(len(serialization) / 2)):
+            move = utils.deserialize(serialization['move' + str(i)])
+            self.move_set[move] = serialization['move' + str(i) + '_weight']
+
     def __str__(self):
         return str(self.move_set)
 
@@ -431,7 +457,7 @@ class WeightedMove(object):
 # INTEGRATOR MCMC MOVE BASE CLASS
 # =============================================================================
 
-class IntegratorMove(object):
+class BaseIntegratorMove(object):
     """A general MCMC move that applies an integrator.
 
     This class is intended to be inherited by MCMCMoves that need to integrate
@@ -560,11 +586,72 @@ class IntegratorMove(object):
         """
         pass
 
+    def __getstate__(self):
+        if self.context_cache is None:
+            context_cache_serialized = None
+        else:
+            context_cache_serialized = utils.serialize(self.context_cache)
+        return dict(n_steps=self.n_steps, context_cache=context_cache_serialized)
+
+    def __setstate__(self, serialization):
+        self.n_steps = serialization['n_steps']
+        if serialization['context_cache'] is None:
+            self.context_cache = None
+        else:
+            self.context_cache = utils.deserialize(serialization['context_cache'])
+
+
+class IntegratorMove(BaseIntegratorMove):
+    """An MCMCMove that propagate the system with an integrator.
+
+    This class makes it easy to convert OpenMM Integrator objects to
+    MCMCMove objects.
+
+    Parameters
+    ----------
+    integrator : simtk.openmm.Integrator
+        An instance of an OpenMM Integrator object to use for propagation.
+    n_steps : int
+        The number of integration steps to take each time the move is applied.
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    integrator
+    n_steps
+    context_cache
+
+    """
+    def __init__(self, integrator, n_steps, context_cache=None):
+        super(IntegratorMove, self).__init__(n_steps, context_cache)
+        self.integrator = integrator
+
+    def _get_integrator(self, thermodynamic_state):
+        """Implement BaseIntegratorMove._get_integrator abstract method."""
+        # We copy the integrator to make sure that the MCMCMove
+        # can be applied to multiple Contexts.
+        copied_integrator = copy.deepcopy(self.integrator)
+        # Restore eventual extra methods for custom forces.
+        integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
+        return copied_integrator
+
+    def __getstate__(self):
+        serialization = super(IntegratorMove, self).__getstate__()
+        serialization['integrator'] = openmm.XmlSerializer.serialize(self.integrator)
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.integrator = openmm.XmlSerializer.deserialize(serialization.pop('integrator'))
+        super(IntegratorMove, self).__setstate__(serialization)
+
+
 # =============================================================================
 # LANGEVIN DYNAMICS MOVE
 # =============================================================================
 
-class LangevinDynamicsMove(IntegratorMove):
+class LangevinDynamicsMove(BaseIntegratorMove):
     """Langevin dynamics segment as a (pseudo) Monte Carlo move.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution
@@ -680,13 +767,26 @@ class LangevinDynamicsMove(IntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = super(LangevinDynamicsMove, self).__getstate__()
+        serialization['timestep'] = self.timestep
+        serialization['collision_rate'] = self.collision_rate
+        serialization['reassign_velocities'] = self.reassign_velocities
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.timestep = serialization.pop('timestep')
+        self.collision_rate = serialization.pop('collision_rate')
+        self.reassign_velocities = serialization.pop('reassign_velocities')
+        super(LangevinDynamicsMove, self).__setstate__(serialization)
+
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         return openmm.LangevinIntegrator(thermodynamic_state.temperature,
                                          self.collision_rate, self.timestep)
 
     def _before_integration(self, context, thermodynamic_state):
-        """Override IntegratorMove._before_integration()."""
+        """Override BaseIntegratorMove._before_integration()."""
         if self.reassign_velocities:
             # Assign Maxwell-Boltzmann velocities.
             context.setVelocitiesToTemperature(thermodynamic_state.temperature)
@@ -696,7 +796,7 @@ class LangevinDynamicsMove(IntegratorMove):
 # GENERALIZED HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class GHMCMove(IntegratorMove):
+class GHMCMove(BaseIntegratorMove):
     """Generalized hybrid Monte Carlo (GHMC) Markov chain Monte Carlo move.
 
     This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized
@@ -822,15 +922,30 @@ class GHMCMove(IntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(GHMCMove, self).apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = super(GHMCMove, self).__getstate__()
+        serialization['timestep'] = self.timestep
+        serialization['collision_rate'] = self.collision_rate
+        serialization['n_accepted'] = self.n_accepted
+        serialization['n_attempted'] = self.n_attempted
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.timestep = serialization.pop('timestep')
+        self.collision_rate = serialization.pop('collision_rate')
+        self.n_accepted = serialization.pop('n_accepted')
+        self.n_attempted = serialization.pop('n_attempted')
+        super(GHMCMove, self).__setstate__(serialization)
+
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         # Store lastly generated integrator to collect statistics.
         return integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature,
                                           collision_rate=self.collision_rate,
                                           timestep=self.timestep)
 
     def _after_integration(self, context):
-        """Implement IntegratorMove._after_integration()."""
+        """Implement BaseIntegratorMove._after_integration()."""
         integrator = context.getIntegrator()
 
         # Accumulate acceptance statistics.
@@ -846,7 +961,7 @@ class GHMCMove(IntegratorMove):
 # HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class HMCMove(IntegratorMove):
+class HMCMove(BaseIntegratorMove):
     """Hybrid Monte Carlo dynamics.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution
@@ -935,8 +1050,17 @@ class HMCMove(IntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(HMCMove, self).apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = super(HMCMove, self).__getstate__()
+        serialization['timestep'] = self.timestep
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.timestep = serialization.pop('timestep')
+        super(HMCMove, self).__setstate__(serialization)
+
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         return integrators.HMCIntegrator(temperature=thermodynamic_state.temperature,
                                          timestep=self.timestep, nsteps=self.n_steps)
 
@@ -945,7 +1069,7 @@ class HMCMove(IntegratorMove):
 # MONTE CARLO BAROSTAT MOVE
 # =============================================================================
 
-class MonteCarloBarostatMove(IntegratorMove):
+class MonteCarloBarostatMove(BaseIntegratorMove):
     """Monte Carlo barostat move.
 
     This move makes one or more attempts to update the box volume using
@@ -1049,7 +1173,7 @@ class MonteCarloBarostatMove(IntegratorMove):
             thermodynamic_state.barostat = barostat
 
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         return integrators.DummyIntegrator()
 
 
