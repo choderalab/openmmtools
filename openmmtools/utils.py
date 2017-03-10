@@ -22,7 +22,9 @@ import math
 import copy
 import logging
 import operator
+import functools
 import importlib
+import contextlib
 
 import numpy as np
 from simtk import openmm, unit
@@ -33,6 +35,41 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # BENCHMARKING UTILITIES
 # =============================================================================
+
+@contextlib.contextmanager
+def time_it(task_name):
+    """Context manager to log execution time of a block of code.
+
+    Parameters
+    ----------
+    task_name : str
+        The name of the task that will be reported.
+
+    """
+    timer = Timer()
+    timer.start(task_name)
+    yield  # Resume program
+    timer.stop(task_name)
+    timer.report_timing()
+
+
+def with_timer(task_name):
+    """Decorator that logs the execution time of a function.
+
+    Parameters
+    ----------
+    task_name : str
+        The name of the task that will be reported.
+
+    """
+    def _with_timer(func):
+        @functools.wraps(func)
+        def _wrapper(*args, **kwargs):
+            with time_it(task_name):
+                return func(*args, **kwargs)
+        return _wrapper
+    return _with_timer
+
 
 class Timer(object):
     """A class with stopwatch-style timing functions.
@@ -82,10 +119,8 @@ class Timer(object):
             If True, the stored timings are deleted after being reported.
 
         """
-        logger.debug('Saved timings:')
-
         for benchmark_id, elapsed_time in self._elapsed.items():
-            logger.debug('{:.24}: {:8.3f}s'.format(benchmark_id, elapsed_time))
+            logger.debug('{} took {:8.3f}s'.format(benchmark_id, elapsed_time))
 
         if clear is True:
             self.reset_timing_statistics()
