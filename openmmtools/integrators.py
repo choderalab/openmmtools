@@ -50,7 +50,104 @@ from openmmtools import respa
 # BASE CLASSES
 # ============================================================================================
 
-class ThermostatedIntegrator(mm.CustomIntegrator):
+class RestorableIntegrator(mm.CustomIntegrator):
+    """A CustomIntegrator that can be restored after being copied.
+
+    Normally, a CustomIntegrator loses its specific class (and all its
+    methods) when it is copied. This happens for example when obtaining
+    the integrator from a Context with getIntegrator(). This class
+    offers a method restore_interface() that restore the original class.
+
+    Parameters
+    ----------
+    temperature : simtk.unit.Quantity
+        The temperature of the integrator heat bath (temperature units).
+    timestep : simtk.unit.Quantity
+        The timestep to pass to the CustomIntegrator constructor (time
+        units)
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(RestorableIntegrator, self).__init__(*args, **kwargs)
+        self.addGlobalVariable('_restorable__class_hash',
+                               self._compute_class_hash(self.__class__))
+
+    @staticmethod
+    def is_restorable(integrator):
+        """Check if the integrator has a restorable interface.
+
+        Parameters
+        ----------
+        integrator : simtk.openmm.CustomIntegrator
+            The custom integrator to check.
+
+        Returns
+        -------
+        True if the integrator has a restorable interface, False otherwise.
+
+        """
+        try:
+            integrator.getGlobalVariableByName('_restorable__class_hash')
+        except Exception:
+            return False
+        return True
+
+    @classmethod
+    def restore_interface(cls, integrator):
+        """Restore the original interface of a CustomIntegrator.
+
+        The function restore the methods of the original class that
+        inherited from RestorableIntegrator. Return False if the interface
+        could not be restored.
+
+        Parameters
+        ----------
+        integrator : simtk.openmm.CustomIntegrator
+            The integrator to which add methods.
+
+        Returns
+        -------
+        True if the original class interface could be restored, False otherwise.
+
+        """
+        try:
+            integrator_hash = integrator.getGlobalVariableByName('_restorable__class_hash')
+        except Exception:
+            return False
+
+        # Compute the hash table for all subclasses.
+        if cls._cached_hash_subclasses is None:
+            # Recursive function to find all subclasses.
+            def all_subclasses(c):
+                return c.__subclasses__() + [subsubcls for subcls in c.__subclasses__()
+                                             for subsubcls in all_subclasses(subcls)]
+            cls._cached_hash_subclasses = {cls._compute_class_hash(sc): sc
+                                           for sc in all_subclasses(cls)}
+        # Retrieve integrator class.
+        try:
+            integrator_class = cls._cached_hash_subclasses[integrator_hash]
+        except KeyError:
+            return False
+
+        # Restore class interface.
+        integrator.__class__ = integrator_class
+        return True
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    _cached_hash_subclasses = None
+
+    @staticmethod
+    def _compute_class_hash(integrator_class):
+        """Return a numeric hash for the integrator class."""
+        # We need to convert to float because some digits may be lost in the conversion
+        return float(hash(integrator_class.__name__))
+
+
+class ThermostatedIntegrator(RestorableIntegrator):
     """Add temperature functions to a CustomIntegrator.
 
     This class is intended to be inherited by integrators that maintain the
@@ -125,8 +222,6 @@ class ThermostatedIntegrator(mm.CustomIntegrator):
     def __init__(self, temperature, *args, **kwargs):
         super(ThermostatedIntegrator, self).__init__(*args, **kwargs)
         self.addGlobalVariable('kT', kB * temperature)  # thermal energy
-        self.addGlobalVariable('thermostated_class_hash',
-                               self._compute_class_hash(self.__class__))
 
     def getTemperature(self):
         """Return the temperature of the heat bath.
@@ -181,8 +276,8 @@ class ThermostatedIntegrator(mm.CustomIntegrator):
         self.addComputeGlobal('has_kT_changed', '0')
         self.endBlock()
 
-    @staticmethod
-    def is_thermostated(integrator):
+    @classmethod
+    def is_thermostated(cls, integrator):
         """Return true if the integrator is a ThermostatedIntegrator.
 
         This can be useful when you only have access to the Context
@@ -200,57 +295,10 @@ class ThermostatedIntegrator(mm.CustomIntegrator):
 
         """
         try:
-            integrator.getGlobalVariableByName('thermostated_class_hash')
-            return True
+            integrator.getGlobalVariableByName('kT')
         except Exception:
             return False
-
-    @classmethod
-    def restore_interface(cls, integrator):
-        """Restore the original interface to a CustomIntegrator.
-
-        The function restore the interface of the original class that
-        inherited from ThermostatedIntegrator. Return False if the interface
-        could not be restored.
-
-        Parameters
-        ----------
-        integrator : simtk.openmm.CustomIntegrator
-            The integrator to which add setters and getters.
-
-        Returns
-        -------
-        True if the original class interface could be restored, False otherwise.
-
-        """
-        try:
-            integrator_hash = integrator.getGlobalVariableByName('thermostated_class_hash')
-        except Exception:
-            return False
-
-        # Compute the hash table for all subclasses.
-        if not hasattr(cls, '_cached_hash_subclasses'):
-            # Recursive function to find all subclasses.
-            def all_subclasses(c):
-                return c.__subclasses__() + [subsubcls for subcls in c.__subclasses__()
-                                             for subsubcls in all_subclasses(subcls)]
-            cls._cached_hash_subclasses = {cls._compute_class_hash(sc): sc
-                                           for sc in all_subclasses(cls)}
-        # Retrieve integrator class.
-        try:
-            integrator_class = cls._cached_hash_subclasses[integrator_hash]
-        except KeyError:
-            return False
-
-        # Restore class interface.
-        integrator.__class__ = integrator_class
-        return True
-
-    @staticmethod
-    def _compute_class_hash(integrator_class):
-        """Return a numeric hash for the integrator class."""
-        # We need to convert to float because some digits may be lost in the conversion
-        return float(hash(integrator_class.__name__))
+        return super(ThermostatedIntegrator, cls).is_restorable(integrator)
 
 # ============================================================================================
 # INTEGRATORS
