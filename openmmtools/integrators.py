@@ -230,8 +230,12 @@ class ThermostatedIntegrator(mm.CustomIntegrator):
 
         # Compute the hash table for all subclasses.
         if not hasattr(cls, '_cached_hash_subclasses'):
+            # Recursive function to find all subclasses.
+            def all_subclasses(c):
+                return c.__subclasses__() + [subsubcls for subcls in c.__subclasses__()
+                                             for subsubcls in all_subclasses(subcls)]
             cls._cached_hash_subclasses = {cls._compute_class_hash(sc): sc
-                                           for sc in cls.__subclasses__()}
+                                           for sc in all_subclasses(cls)}
         # Retrieve integrator class.
         try:
             integrator_class = cls._cached_hash_subclasses[integrator_hash]
@@ -870,42 +874,250 @@ class GHMCIntegrator(ThermostatedIntegrator):
         # Reset statistics to ensure 'sigma' is updated on step 0
         self.resetStatistics()
 
-class VVVRIntegrator(ThermostatedIntegrator):
+class LangevinSplittingIntegrator(ThermostatedIntegrator):
+    """Integrates Langevin dynamics with a prescribed operator splitting.
 
+    One way to divide the Langevin system is into three parts which can each be solved "exactly:"
+        - R: Linear "drift" / Constrained "drift"
+            Deterministic update of *positions*, using current velocities
+            x <- x + v dt
+
+        - V: Linear "kick" / Constrained "kick"
+            Deterministic update of *velocities*, using current forces
+            v <- v + (f/m) dt
+                where f = force, m = mass
+
+        - O: Ornstein-Uhlenbeck
+            Stochastic update of velocities, simulating interaction with a heat bath
+            v <- av + b sqrt(kT/m) R
+                where
+                a = e^(-gamma dt)
+                b = sqrt(1 - e^(-2gamma dt))
+                R is i.i.d. standard normal
+
+    We can then construct integrators by solving each part for a certain timestep in sequence.
+    (We can further split up the V step by force group, evaluating cheap but fast-fluctuating
+    forces more frequently than expensive but slow-fluctuating forces. Since forces are only
+    evaluated in the V step, we represent this by including in our "alphabet" V0, V1, ...)
+
+    When the system contains holonomic constraints, these steps are confined to the constraint
+    manifold.
+
+    Examples
+    --------
+        - VVVR
+            splitting="O V R V O"
+        - BAOAB:
+            splitting="V R O R V"
+        - g-BAOAB, with K_r=3:
+            splitting="V R R R O R R R V"
+        - g-BAOAB with solvent-solute splitting, K_r=K_p=2:
+            splitting="V0 V1 R R O R R V1 R R O R R V1 V0"
+
+    References
+    ----------
+    [Leimkuhler and Matthews, 2015] Molecular dynamics: with deterministic and stochastic numerical methods, Chapter 7
     """
-    Create a velocity Verlet with velocity randomization (VVVR) integrator.
 
-    """
-
-    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds, monitor_heat = False, monitor_work = False):
-        """
-        Create a velocity verlet with velocity randomization (VVVR) integrator.
+    def __init__(self,
+                 splitting="V R O R V",
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 override_splitting_checks=False,
+                 measure_shadow_work=False,
+                 measure_heat=True
+                 ):
+        """Create a Langevin integrator with the prescribed operator splitting.
 
         Parameters
         ----------
-        temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
-           The temperature.
-        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
-           The collision rate.
-        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
-           The integration timestep.
-        monitor_heat : boolean, default: False
-           Accumulate the heat exchanged with the bath in each step, in the global `heat`.
-        monitor_work : boolean, default: False
-           Accumulate the shadow work of each step, in the global `shadow_work`.
+        splitting : string
+            Sequence of R, V, O (and optionally V{i}) substeps to be executed each timestep.
 
-        Notes
+            Forces are only used in V-step. Handle multiple force groups by appending the force group index
+            to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
+
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+           Fictitious "bath" temperature
+
+        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+           Collision rate
+
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+           Integration timestep
+
+        constraint_tolerance : float
+            Tolerance for constraint solver
+
+        override_splitting_checks : boolean
+            If True, skip sanity-checks on `splitting` string.
+
+        measure_shadow_work : boolean
+            Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
+
+        measure_heat : boolean
+            Accumulate the heat exchanged with the bath in each step, in the global `heat`
+        """
+
+        # Compute constants
+        kT = kB * temperature
+        gamma = collision_rate
+        kinetic_energy = "0.5 * m * v * v"
+
+        # Convert splitting string into a list of all-caps strings
+        splitting = splitting.upper().split()
+
+        # Count how many times each step appears, so we know how big each R/V/O substep will be
+        n_R = sum([letter == "R" for letter in splitting])
+        n_V = sum([letter == "V" for letter in splitting])
+        n_O = sum([letter == "O" for letter in splitting])
+
+        # Check if the splitting string asks for multi-time-stepping.
+        # If so, each force group should be integrated for a total length equal to dt
+        if len(set([step for step in splitting if step[0] == "V"])) > 1:
+            mts = True
+            fgs = set([step[1:] for step in splitting if step[0] == "V"])
+            n_Vs = dict()
+            for fg in fgs:
+                n_Vs[fg] = sum([step[1:] == fg for step in splitting])
+        else:
+            mts = False
+
+        # Do a couple sanity checks on the splitting string
+        if override_splitting_checks == False:
+            # Make sure we contain at least one of R, V, O steps
+            assert ("R" in splitting)
+            assert ("V" in [s[0] for s in splitting])
+            assert ("O" in splitting)
+
+            # Make sure it contains no invalid steps
+            assert (set(splitting).issubset(set("RVO").union(set(["V{}".format(i) for i in range(32)]))))
+
+            # If the splitting string contains both "V" and a force-group-specific V0,V1,etc.,
+            # then raise an error
+            if mts and ("V" in splitting):
+                raise (ValueError("Splitting string includes an evaluation of all forces and "
+                                  "evaluation of subsets of forces."))
+
+        # Define substep functions
+        def R_step():
+            if measure_shadow_work:
+                self.addComputeGlobal("old_pe", "energy")
+                self.addComputeSum("old_ke", kinetic_energy)
+
+            # update positions (and velocities, if there are constraints)
+            self.addComputePerDof("x", "x + ((dt / {}) * v)".format(n_R))
+            self.addComputePerDof("x1", "x")  # save pre-constraint positions in x1
+            self.addConstrainPositions()  # x is now constrained
+            self.addComputePerDof("v", "v + ((x - x1) / (dt / {}))".format(n_R))
+            self.addConstrainVelocities()
+
+            if measure_shadow_work:
+                self.addComputeSum("new_ke", kinetic_energy)
+                self.addComputeGlobal("shadow_work", "shadow_work + (new_ke + new_pe) - (old_ke + old_pe)")
+
+        def V_step(fg):
+            """Deterministic velocity update, using only forces from force-group fg.
+
+            Parameters
+            ----------
+            fg : string
+                Force group to use in this substep.
+                "" means all forces, "0" means force-group 0, etc.
+            """
+            if measure_shadow_work:
+                self.addComputeSum("old_ke", kinetic_energy)
+
+            # update velocities
+            if mts:
+                self.addComputePerDof("v", "v + ((dt / {}) * f{} / m)".format(n_Vs[fg], fg))
+            else:
+                self.addComputePerDof("v", "v + (dt / {}) * f / m".format(n_V))
+
+            self.addConstrainVelocities()
+
+            if measure_shadow_work:
+                self.addComputeSum("new_ke", kinetic_energy)
+                self.addComputeGlobal("shadow_work", "shadow_work + (new_ke - old_ke)")
+
+        def O_step():
+            if measure_heat:
+                self.addComputeSum("old_ke", kinetic_energy)
+
+            # update velocities
+            self.addComputePerDof("v", "(a * v) + (b * sigma * gaussian)")
+            self.addConstrainVelocities()
+
+            if measure_heat:
+                self.addComputeSum("new_ke", kinetic_energy)
+                self.addComputeGlobal("heat", "heat + (new_ke - old_ke)")
+
+        def substep_function(step_string):
+            if step_string == "O":
+                O_step()
+            elif step_string == "R":
+                R_step()
+            elif step_string[0] == "V":
+                V_step(step_string[1:])
+
+
+        # Create a new CustomIntegrator
+        super(LangevinSplittingIntegrator, self).__init__(temperature, timestep)
+
+        # Initialize
+        self.addPerDofVariable("sigma", 0)
+
+        # Velocity mixing parameter: current velocity component
+        h = timestep / max(1, n_O)
+        self.addGlobalVariable("a", numpy.exp(-gamma * h))
+
+        # Velocity mixing parameter: random velocity component
+        self.addGlobalVariable("b", numpy.sqrt(1 - numpy.exp(- 2 * gamma * h)))
+
+        # Positions before application of position constraints
+        self.addPerDofVariable("x1", 0)
+
+        # Set constraint tolerance
+        self.setConstraintTolerance(constraint_tolerance)
+
+        # Add bookkeeping variables
+        if measure_heat:
+            self.addGlobalVariable("heat", 0)
+
+        if measure_shadow_work or measure_heat:
+            self.addGlobalVariable("old_ke", 0)
+            self.addGlobalVariable("new_ke", 0)
+
+        if measure_shadow_work:
+            self.addGlobalVariable("old_pe", 0)
+            self.addGlobalVariable("new_pe", 0)
+            self.addGlobalVariable("shadow_work", 0)
+
+        # Integrate
+        self.addUpdateContextState()
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+        for i, step in enumerate(splitting):
+            substep_function(step)
+
+
+class VVVRIntegrator(LangevinSplittingIntegrator):
+    """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
+    def __init__(self,
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 measure_shadow_work=False,
+                 measure_heat=True
+                 ):
+        """Create a velocity verlet with velocity randomization (VVVR) integrator.
         -----
         This integrator is equivalent to a Langevin integrator in the velocity Verlet discretization with a
         timestep correction to ensure that the field-free diffusion constant is timestep invariant.
-
-        The global 'shadow_work' keeps track of the shadow_work accumulated during integration, and can be
+        The global 'heat' keeps track of the heat accumulated during integration, and can be
         used to correct the sampled statistics or in a Metropolization scheme.
-
-        TODO
-        ----
-        Move initialization of 'sigma' to setting the per-particle variables.
 
         References
         ----------
@@ -915,109 +1127,140 @@ class VVVRIntegrator(ThermostatedIntegrator):
 
         Examples
         --------
-
         Create a VVVR integrator.
-
         >>> temperature = 298.0 * simtk.unit.kelvin
         >>> collision_rate = 91.0 / simtk.unit.picoseconds
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
-
         """
-        # Compute constants.
-        gamma = collision_rate
+        LangevinSplittingIntegrator.__init__(self, splitting="O V R V O",
+                                             temperature=temperature,
+                                             collision_rate=collision_rate,
+                                             timestep=timestep,
+                                             constraint_tolerance=constraint_tolerance,
+                                             measure_shadow_work=measure_shadow_work,
+                                             measure_heat=measure_heat
+                                             )
 
-        # Create a new custom integrator.
-        super(VVVRIntegrator, self).__init__(temperature, timestep)
+class BAOABIntegrator(LangevinSplittingIntegrator):
+    """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
+    def __init__(self,
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 measure_shadow_work=False,
+                 measure_heat=True
+                 ):
+        """Create an integrator of Langevin dynamics using the BAOAB operator splitting.
 
-        #
-        # Integrator initialization.
-        #
-        self.addGlobalVariable("b", numpy.exp(-gamma * timestep))  # velocity mixing parameter
-        self.addPerDofVariable("sigma", 0)
-        self.addPerDofVariable("x1", 0)  # position before application of constraints
+        Parameters
+        ----------
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+           Fictitious "bath" temperature
 
-        # bookkeeping variables
-        if monitor_heat and monitor_work:
-            self.addGlobalVariable("heat", 0)
-            self.addGlobalVariable("kinetic_energy_0", 0)
-            self.addGlobalVariable("kinetic_energy_1", 0)
-            self.addGlobalVariable("kinetic_energy_2", 0)
-            self.addGlobalVariable("kinetic_energy_3", 0)
-            self.addGlobalVariable("energy_before_symplectic", 0)
-            self.addGlobalVariable("energy_after_symplectic", 0)
-            self.addGlobalVariable("shadow_work", 0)
-        elif monitor_heat:
-            self.addGlobalVariable("heat", 0)
-            self.addGlobalVariable("kinetic_energy_0", 0)
-            self.addGlobalVariable("kinetic_energy_1", 0)
-            self.addGlobalVariable("kinetic_energy_2", 0)
-            self.addGlobalVariable("kinetic_energy_3", 0)
-        elif monitor_work:
-            self.addGlobalVariable("kinetic_energy_1", 0)
-            self.addGlobalVariable("kinetic_energy_2", 0)
-            self.addGlobalVariable("energy_before_symplectic", 0)
-            self.addGlobalVariable("energy_after_symplectic", 0)
-            self.addGlobalVariable("shadow_work", 0)
+        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+           Collision rate
 
-        #
-        # Allow context updating here.
-        #
-        self.addUpdateContextState()
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+           Integration timestep
 
-        #
-        # Pre-computation.
-        # This only needs to be done once, but it needs to be done for each degree of freedom.
-        # Could move this to initialization?
-        #
-        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+        constraint_tolerance : float
+            Tolerance for constraint solver
 
-        #
-        # Velocity perturbation.
-        #
+        override_splitting_checks : boolean
+            If True, skip sanity-checks on `splitting` string.
 
-        if monitor_heat:
-            self.addComputeSum("kinetic_energy_0", "0.5 * m * v * v")
+        measure_shadow_work : boolean
+            Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities()
+        measure_heat : boolean
+            Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
-        if monitor_heat or monitor_work:
-            self.addComputeSum("kinetic_energy_1", "0.5 * m * v * v")
+        References
+        ----------
+        [Leimkuhler and Matthews, 2013] Rational construction of stochastic numerical methods for molecular sampling
+        https://academic.oup.com/amrx/article-abstract/2013/1/34/166771/Rational-Construction-of-Stochastic-Numerical
 
-        if monitor_heat:
-            self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0)")
+        Examples
+        --------
+        Create a BAOAB integrator.
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> integrator = BAOABIntegrator(temperature, collision_rate, timestep)
+        """
+        LangevinSplittingIntegrator.__init__(self, splitting="V R O R V",
+                                             temperature=temperature,
+                                             collision_rate=collision_rate,
+                                             timestep=timestep,
+                                             constraint_tolerance=constraint_tolerance,
+                                             measure_shadow_work=measure_shadow_work,
+                                             measure_heat=measure_heat
+                                             )
 
-        if monitor_work:
-            self.addComputeGlobal("energy_before_symplectic", "energy + kinetic_energy_1")
 
-        #
-        # Symplectic steps
-        #
-        self.addComputePerDof("v", "v + 0.5*dt*f/m")
-        self.addComputePerDof("x", "x + v*dt")
-        self.addComputePerDof("x1", "x")
-        self.addConstrainPositions()
-        self.addComputePerDof("v", "v + 0.5*dt*f/m + (x-x1)/dt")
-        self.addConstrainVelocities()
+class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
+    """Create a geodesic-BAOAB integrator."""
 
-        if monitor_heat or monitor_work:
-            self.addComputeSum("kinetic_energy_2", "0.5 * m * v * v")
+    def __init__(self, K_r=2,
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 measure_shadow_work=False,
+                 measure_heat=True
+                 ):
+        """Create a geodesic BAOAB Langevin integrator.
 
-        if monitor_work:
-            self.addComputeGlobal("energy_after_symplectic", "energy + kinetic_energy_2")
-            self.addComputeGlobal("shadow_work", "shadow_work + (energy_after_symplectic - energy_before_symplectic)")
+        Parameters
+        ----------
+        K_r : integer
+            Number of geodesic drift steps.
 
-        #
-        # Velocity randomization
-        #
+        temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+           Fictitious "bath" temperature
 
-        self.addComputePerDof("v", "sqrt(b)*v + sqrt(1-b)*sigma*gaussian")
-        self.addConstrainVelocities()
+        collision_rate : numpy.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+           Collision rate
 
-        if monitor_heat:
-            self.addComputeSum("kinetic_energy_3", "0.5 * m * v * v")
-            self.addComputeGlobal("heat", "heat + (kinetic_energy_1 - kinetic_energy_0) + (kinetic_energy_3 - kinetic_energy_2)")
+        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+           Integration timestep
+
+        constraint_tolerance : float
+            Tolerance for constraint solver
+
+        override_splitting_checks : boolean
+            If True, skip sanity-checks on `splitting` string.
+
+        measure_shadow_work : boolean
+            Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
+
+        measure_heat : boolean
+            Accumulate the heat exchanged with the bath in each step, in the global `heat`
+
+        References
+        ----------
+        [Leimkuhler and Matthews, 2016] Efficient molecular dynamics using geodesic integration and solvent-solute splitting
+        http://rspa.royalsocietypublishing.org/content/472/2189/20160138
+
+        Examples
+        --------
+        Create a geodesic BAOAB integrator.
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
+        """
+        splitting = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
+        LangevinSplittingIntegrator.__init__(self, splitting=splitting,
+                                             temperature=temperature,
+                                             collision_rate=collision_rate,
+                                             timestep=timestep,
+                                             constraint_tolerance=constraint_tolerance,
+                                             measure_shadow_work=measure_shadow_work,
+                                             measure_heat=measure_heat
+                                             )
 
 
 if __name__ == '__main__':
