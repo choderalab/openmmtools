@@ -848,7 +848,8 @@ def scalar_decoder_generator(casting_type):
 def determine_appendable_chunk_size(data, max_iteration=128, max_memory=104857600):
     """
     Determine the chunk size of the appendable dimension, it will either be max_iterations in count or max_memory in
-    bytes where the system will try to
+    bytes where the function will try to reduce the number of iterations until it is under the max chunk size down to
+    a single iteration.
 
     Parameters
     ----------
@@ -1533,7 +1534,7 @@ class NCQuantity(NCVariableCodec):
         return data_shape, data_base_type, data_type_name
 
     def _set_codifiers(self, stype):
-        # Assign the coders in a single block
+        # Assign the codecs in a single block
         if stype == 'int':
             self._encoder = simple_encoder
             self._decoder = scalar_decoder_generator(int)
