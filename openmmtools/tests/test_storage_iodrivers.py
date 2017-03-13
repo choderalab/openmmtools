@@ -197,13 +197,13 @@ def test_netcdf_quantity_type_codec():
 
 
 def test_netcdf_dictionary_type_codec():
-    """Test that the simtk.unit.Quantity type codec can read/write/append with various unit and _value types"""
+    """Test that the dictionary type codec can read/write/append with various unit and _value types"""
     input_data = {
         'count': 4,
         'ratio': 0.4,
         'name': 'four',
-        'repeated': [4,4,4],
+        'repeated': [4, 4, 4],
         'temperature': 4 * unit.kelvin,
         'box_vectors': (np.eye(3) * 4.0) * unit.nanometer
     }
-    generic_type_codec_check(input_data, with_append=False)
+    generic_type_codec_check(input_data)
