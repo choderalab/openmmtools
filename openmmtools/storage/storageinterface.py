@@ -231,7 +231,7 @@ class StorageInterfaceDirVar(object):
     @property
     def variable(self):
         """
-        Checks if the object can be used in the .write, .append, .fetch functions can be used. Once this is set, this
+        Checks if the object can be used in the .write, .append, .read functions can be used. Once this is set, this
         instance cannot be converted to a directory type.
 
         Returns
@@ -247,14 +247,15 @@ class StorageInterfaceDirVar(object):
     @property
     def directory(self):
         """
-        Checks if the object can be used as a directory for accepting other SIDV objects. Once this is set, the
-        .write, .append, and .fetch functions are locked out.
+        Checks if the object can be used as a directory for accepting other SIDV objects. Once this is True or bound,
+        the .write, .append, and .read functions are locked out.
 
         Returns
         -------
-        directory_pointer : None, or storage_system specific directory of storage
-            Returns None if this instance is a variable, or if its functionality has not been determined yet (this
-                includes the directory not being assigned yet)
+        directory_pointer : None, True, or storage_system specific directory of storage
+            Returns None if this instance is a variable, or if its functionality has not been determined yet.
+            Returns True if this SIDV will be a directory, but is not yet bound.
+                i.e. has additional SIDV children spawned by __getattr__ method.
             Returns the storage_system specific directory that this instance is bound to once assigned
 
         """
