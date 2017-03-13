@@ -18,6 +18,7 @@ saved which special instructions for each.
 
 import os
 import abc
+import yaml
 import warnings
 import importlib
 import collections
@@ -327,7 +328,7 @@ class NetCDFIODriver(StorageIODriver):
                     storage_object = self._bind_group(head_path)
                 uninstanced_codec = self._IOMetaDataReaders[data_type]
                 self._variables[path] = uninstanced_codec(self, target_name, storage_object=storage_object)
-                condec = self._variables[path]
+                codec = self._variables[path]
             except AttributeError:
                 raise AttributeError("Cannot auto-detect variable type, ensure that 'IODriver_Type' is a set ncattr")
             except KeyError:
@@ -934,7 +935,7 @@ class NCScalar(NCVariableCodec, ABC):
             self._bind_read()
         except KeyError:
             self._parent_driver.check_scalar_dimension()
-            self._bound_target = self._storage_object.createVariable(self._target, self.dtype,
+            self._bound_target = self._storage_object.createVariable(self._target, self._get_on_disk_dtype,
                                                                      dimensions='scalar',
                                                                      chunksizes=(1,))
             # Specify a way for the IO Driver stores data
@@ -956,7 +957,7 @@ class NCScalar(NCVariableCodec, ABC):
             self._parent_driver.check_scalar_dimension()
             infinite_name = self._parent_driver.generate_infinite_dimension()
             appendable_chunk_size = determine_appendable_chunk_size(data)
-            self._bound_target = self._storage_object.createVariable(self._target, self.dtype,
+            self._bound_target = self._storage_object.createVariable(self._target, self._get_on_disk_dtype,
                                                                      dimensions=[infinite_name, 'scalar'],
                                                                      chunksizes=(appendable_chunk_size, 1))
             # Specify a way for the IO Driver stores data
@@ -1015,6 +1016,23 @@ class NCScalar(NCVariableCodec, ABC):
     @property
     def storage_type(self):
         return 'variables'
+
+    @property
+    def _get_on_disk_dtype(self):
+        """Function to process None for _on_disk_dtype"""
+        if self._on_disk_dtype is None:
+            return_type = self.dtype
+        else:
+            return_type = self._on_disk_dtype
+        return return_type
+
+    @property
+    def _on_disk_dtype(self):
+        """
+        Allow overwriting the dtype for storage for extending this method to cast data as a different type on disk
+        This is the property to overwrite the cast dtype
+        """
+        return None
 
 
 class NCInt(NCScalar):
@@ -1555,11 +1573,73 @@ class NCQuantity(NCVariableCodec):
         return 'variables'
 
 
-class NCDict(NCVariableCodec):
+# =============================================================================
+# NETCDF DICT YAML HANDLERS
+# =============================================================================
+
+class NCYamlLoader(yaml.Loader):
+    """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
+    def __init__(self, *args, **kwargs):
+        super(NCYamlLoader, self).__init__(*args, **kwargs)
+        self.add_constructor(u'!Quantity', self.quantity_constructor)
+
+    @staticmethod
+    def quantity_constructor(loader, node):
+        loaded_mapping = loader.construct_mapping(node)
+        data_unit = quantity_from_string(loaded_mapping['NCUnit'])
+        data_value = loaded_mapping['NCValue']
+        return data_value * data_unit
+
+
+class NCYamlDumper(yaml.Dumper):
+    """PyYAML Dumper that convert from Python -> YAML output"""
+    def __init__(self, *args, **kwargs):
+        super(NCYamlDumper, self).__init__(*args, **kwargs)
+        self.add_representer(unit.Quantity, self.quantity_representer)
+
+    @staticmethod
+    def quantity_representer(dumper, data):
+        """YAML Quantity representer."""
+        data_unit = data.unit
+        data_value = data / data_unit
+        data_dump = {'NCUnit': str(data_unit), 'NCValue': data_value}
+        # Uses "self (NCYamlDumper)" as the dumper to allow nested !Quantitity types
+        return yaml.Dumper.represent_mapping(dumper, u'!Quantity', data_dump)
+
+
+class NCDict(NCScalar):
     """
-    NetCDF handling of dictionaries
-    This is by in-large the most complicated object to store since its the combination of all types
+    NetCDF codec for Dict, which we store in YAML as a glorified String with some extra processing
     """
+
+    @staticmethod
+    def _nc_dict_decoder(nc_variable):
+        decoded_string = nc_string_decoder(nc_variable)
+        # Handle array type
+        try:
+            output = yaml.load(decoded_string, Loader=NCYamlLoader)
+        except AttributeError:  # Appended data
+            n_entries = decoded_string.shape[0]
+            output = np.empty(n_entries, dtype=dict)
+            for n in range(n_entries):
+                output[n] = yaml.load(decoded_string[n, 0], Loader=NCYamlLoader)
+        return output
+
+    @staticmethod
+    def _nc_dict_encoder(data):
+        dump_options = {'Dumper': NCYamlDumper, 'line_break': '\n', 'indent': 4}
+        data_as_string = yaml.dump(data, **dump_options)
+        packaged_string = nc_string_encoder(data_as_string)
+        return packaged_string
+
+    @property
+    def _encoder(self):
+        return self._nc_dict_encoder
+
+    @property
+    def _decoder(self):
+        return self._nc_dict_decoder
+
     @property
     def dtype(self):
         return dict
@@ -1568,172 +1648,6 @@ class NCDict(NCVariableCodec):
     def dtype_string():
         return "dict"
 
-    def _bind_read(self):
-        try:
-            self._attempt_storage_read()
-        except KeyError as e:
-            raise e
-
-    def _bind_write(self, data):
-        # Because the _bound_target in this case is a NetCDF group, no initial data is writen.
-        # The write() function handles that though
-        try:
-            self._bind_read()
-        except KeyError:
-            self._bound_target = self._storage_object.createGroup(self._target)
-        # Specify a way for the IO Driver stores data
-        self.add_metadata('IODriver_Type', self.dtype_string())
-        # Specify the type of storage object this should tie to
-        self.add_metadata('IODriver_Storage_Type', self.storage_type)
-        self.add_metadata('IODriver_Appendable', 0)
-        self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
-
-    def _bind_append(self, data):
-        # TODO: Determine how to do this eventually
-        raise NotImplementedError("Dictionaries cannot be appended to!")
-
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        return self._decode_dict()
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        self._encode_dict(data)
-
-    def append(self, data):
-        self._bind_append(data)
-
-    def _decode_dict(self):
-        """
-
-        Returns
-        -------
-        output_dict : dict
-            The restored dictionary as a dict.
-
-        """
-        output_dict = dict()
-        for output_name in self._bound_target.variables.keys():
-            # Get NetCDF variable.
-            output_ncvar = self._bound_target.variables[output_name]
-            type_name = output_ncvar.getncattr('type')
-            # TODO: Remove the if/elseif structure into one handy function
-            # Get output value.
-            if type_name == 'NoneType':
-                output_value = None
-            else:  # Handle all Types not None
-                output_type = NCVariableCodec._convert_netcdf_store_type(type_name)
-                if output_ncvar.shape == ():
-                    # Handle Standard Types
-                    output_value = output_type(output_ncvar.getValue())
-                elif output_ncvar.shape[0] >= 0:
-                    # Handle array types
-                    output_value = np.array(output_ncvar[:], output_type)
-                    # TODO: Deal with values that are actually scalar constants.
-                    # TODO: Cast to appropriate type
-                else:
-                    # Handle iterable types?
-                    # TODO: Figure out what is actually cast here
-                    output_value = output_type(output_ncvar[0])
-            # If Quantity, assign unit.
-            if 'units' in output_ncvar.ncattrs():
-                output_unit_name = output_ncvar.getncattr('units')
-                output_unit = quantity_from_string(output_unit_name)
-                output_value = output_value * output_unit
-            # Store output.
-            output_dict[output_name] = output_value
-
-        return output_dict
-
-    def _encode_dict(self, data):
-        """
-        Store the contents of a dict in a NetCDF file.
-
-        Parameters
-        ----------
-        data : dict
-            The dict to store.
-
-        """
-        self._parent_driver.check_scalar_dimension()
-        for datum_name in data.keys():
-            # Get entry value.
-            datum_value = data[datum_name]
-            # If Quantity, strip off units first.
-            datum_unit = None
-            if type(datum_value) == unit.Quantity:
-                datum_unit = datum_value.unit
-                datum_value = datum_value / datum_unit
-            # Store the Python type.
-            datum_type = type(datum_value)
-            datum_type_name = typename(datum_type)
-            # Handle booleans
-            if type(datum_value) == bool:
-                datum_value = int(datum_value)
-            # Store the variable.
-            if type(datum_value) == str:
-                if datum_name not in self._bound_target.variables:
-                    ncvar = self._bound_target.createVariable(datum_name, str,
-                                                              dimensions='scalar',
-                                                              chunksizes=(1,))
-                else:
-                    ncvar = self._bound_target[datum_name]
-                storable_data = nc_string_encoder(datum_value)
-                ncvar[:] = storable_data
-                ncvar.setncattr('type', datum_type_name)
-            elif type(datum_value) == np.ndarray:
-                shape = datum_value.shape
-                dims = []
-                for dimSize in shape:
-                    dim_name = datum_name + 'DimSz{}'.format(dimSize)
-                    dims.append(dim_name)
-                    if dim_name not in self._bound_target.dimensions:
-                        self._bound_target.createDimension(dim_name, dimSize)
-                if datum_name not in self._bound_target.variables:
-                    ncvar = self._bound_target.createVariable(datum_name, datum_value.dtype, dims)
-                else:
-                    ncvar = self._bound_target.variables[datum_name]
-                ncvar[:] = datum_value
-                ncvar.setncattr('type', datum_type_name)
-            elif isinstance(datum_value, collections.Iterable):
-                nelements = len(datum_value)
-                element_type = type(datum_value[0])
-                element_type_name = typename(element_type)
-                if datum_name not in self._bound_target.dimensions:
-                    self._bound_target.createDimension(datum_name, nelements)  # unlimited number of iterations
-                if datum_name not in self._bound_target.variables:
-                    ncvar = self._bound_target.createVariable(datum_name, element_type, (datum_name,))
-                else:
-                    ncvar = self._bound_target.variables[datum_name]
-                for (i, element) in enumerate(datum_value):
-                    ncvar[i] = element
-                ncvar.setncattr('type', element_type_name)
-            elif datum_value is None:
-                if datum_name not in self._bound_target.variables:
-                    ncvar = self._bound_target.createVariable(datum_name, int)
-                else:
-                    ncvar = self._bound_target.variables[datum_name]
-                ncvar.assignValue(0)
-                ncvar.setncattr('type', datum_type_name)
-            else:
-                if datum_name not in self._bound_target.variables:
-                    ncvar = self._bound_target.createVariable(datum_name, type(datum_value))
-                else:
-                    ncvar = self._bound_target.variables[datum_name]
-                ncvar.assignValue(datum_value)
-                ncvar.setncattr('type', datum_type_name)
-            if datum_unit:
-                ncvar.setncattr('units', str(datum_unit))
-        return
-
     @property
-    def storage_type(self):
-        return 'groups'
+    def _on_disk_dtype(self):
+        return str
