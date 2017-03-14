@@ -861,15 +861,24 @@ class ThermodynamicState(object):
 
     def __getstate__(self):
         """Return a dictionary representation of the state."""
-        # We just need to serialize the system since everything
-        # else is inferred from thermostat and barostat state.
-        serialized_system = openmm.XmlSerializer.serialize(self._system)
-        return dict(system=serialized_system)
+        # We serialize the standardized system, with temperature and pressure.
+        # This way, if the user wants to store multiple compatible ThermodynamicStates
+        # it is possible to store only one system for all of them, greatly reducing
+        # the hard disk consumption.
+        standardized_system = copy.deepcopy(self._system)
+        self._standardize_system(standardized_system)
+        serialized_system = openmm.XmlSerializer.serialize(standardized_system)
+        # We might as well update the cached hash.
+        if self._cached_standard_system_hash is None:
+            self._cached_standard_system_hash = serialized_system.__hash__()
+        return dict(standard_system=serialized_system, temperature=self.temperature,
+                    pressure=self.pressure)
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
-        deserialized_system = openmm.XmlSerializer.deserialize(serialization['system'])
-        self._initialize(deserialized_system)
+        deserialized_system = openmm.XmlSerializer.deserialize(serialization['standard_system'])
+        self._initialize(deserialized_system, temperature=serialization['temperature'],
+                         pressure=serialization['pressure'])
 
     # -------------------------------------------------------------------------
     # Internal-usage: initialization
@@ -1638,7 +1647,7 @@ class SamplerState(object):
         """
         if self.potential_energy is not None and np.isnan(self.potential_energy):
             return True
-        if np.any(np.isnan(self._positions_in_md_units)):
+        if np.any(np.isnan(self._positions)):
             return True
         return False
 
@@ -2058,21 +2067,27 @@ class CompoundThermodynamicState(ThermodynamicState):
 
     def __getstate__(self):
         """Return a dictionary representation of the state."""
-        # Create original ThermodynamicState to serialize
+        # Create original ThermodynamicState to serialize.
         thermodynamic_state = object.__new__(self.__class__.__bases__[1])
         thermodynamic_state.__dict__ = copy.deepcopy(self.__dict__)
-        serialization = dict(
-            thermodynamic_state=utils.serialize(thermodynamic_state),
-            composable_states=[utils.serialize(composable_state)
-                               for composable_state in self._composable_states]
-        )
+        # Set the instance _standardize_system method to CompoundState._standardize_system
+        # so that the composable states standardization will be called during serialization.
+        thermodynamic_state._standardize_system = self._standardize_system
+        serialization = dict(thermodynamic_state=utils.serialize(thermodynamic_state))
+
+        # TODO serialize as list of dicts when storage layer serialize dicts as strings
+        # Serialize composable states as nested dictionaries since
+        # list of dicts are harder to store on a file.
+        for i, composable_state in enumerate(self._composable_states):
+            serialization['composable_state' + str(i)] = utils.serialize(composable_state)
+
         return serialization
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
         thermodynamic_state = utils.deserialize(serialization['thermodynamic_state'])
-        composable_states = [utils.deserialize(composable_state)
-                             for composable_state in serialization['composable_states']]
+        composable_states = [utils.deserialize(serialization['composable_state' + str(i)])
+                             for i in range(len(serialization) - 1)]
         self._initialize(thermodynamic_state, composable_states)
 
     # -------------------------------------------------------------------------
@@ -2126,5 +2141,5 @@ class CompoundThermodynamicState(ThermodynamicState):
 
 if __name__ == '__main__':
     import doctest
-    # doctest.testmod()
-    doctest.run_docstring_examples(CompoundThermodynamicState, globals())
+    doctest.testmod()
+    # doctest.run_docstring_examples(CompoundThermodynamicState, globals())
