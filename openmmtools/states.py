@@ -1473,17 +1473,19 @@ class SamplerState(object):
         self._initialize(positions, velocities, box_vectors)
 
     @staticmethod
-    def from_context(context):
+    def from_context(context_state):
         """Alternative constructor.
 
-        Read all the configurational properties from a Context object.
-        This guarantees that all attributes (including energy attributes)
-        are initialized.
+        Read all the configurational properties from a Context object or
+        an OpenMM State object. This guarantees that all attributes
+        (including energy attributes) are initialized.
+
 
         Parameters
         ----------
-        context : simtk.openmm.Context
-            The context to read.
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read. If a State object, it must contain information
+            about positions, velocities and energy.
 
         Returns
         -------
@@ -1492,7 +1494,7 @@ class SamplerState(object):
 
         """
         sampler_state = SamplerState([])
-        sampler_state._read_context_state(context, check_consistency=False)
+        sampler_state._read_context_state(context_state, check_consistency=False)
         return sampler_state
 
     @property
@@ -1599,16 +1601,17 @@ class SamplerState(object):
         is_compatible = self.n_particles == context.getSystem().getNumParticles()
         return is_compatible
 
-    def update_from_context(self, context):
-        """Read the state from the given context.
+    def update_from_context(self, context_state):
+        """Read the state from the given Context or State object.
 
         The context must be compatible. Use SamplerState.from_context
         if you want to build a new sampler state from an incompatible.
 
         Parameters
         ----------
-        context : simtk.openmm.Context
-            The context to read.
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read. If a State, it must contain information
+            on positions, velocities and energies.
 
         Raises
         ------
@@ -1616,7 +1619,7 @@ class SamplerState(object):
             If the given context is not compatible.
 
         """
-        self._read_context_state(context, check_consistency=True)
+        self._read_context_state(context_state, check_consistency=True)
 
     def apply_to_context(self, context):
         """Set the context state.
@@ -1645,7 +1648,8 @@ class SamplerState(object):
         are nan.
 
         """
-        if self.potential_energy is not None and np.isnan(self.potential_energy):
+        if (self.potential_energy is not None and
+                np.isnan(self.potential_energy.value_in_unit(self.potential_energy.unit))):
             return True
         if np.any(np.isnan(self._positions)):
             return True
@@ -1728,13 +1732,13 @@ class SamplerState(object):
             self._cached_velocities_in_md_units = temp_vel
         return self._cached_velocities_in_md_units
 
-    def _read_context_state(self, context, check_consistency):
+    def _read_context_state(self, context_state, check_consistency):
         """Read the Context state.
 
         Parameters
         ----------
-        context : simtk.openmm.Context
-            The context to read.
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read.
         check_consistency : bool
             If True, raise an error if the context system have a
             different number of particles than the current state.
@@ -1746,12 +1750,15 @@ class SamplerState(object):
             particles than the current state.
 
         """
-        context_system = context.getSystem()
-        openmm_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
-                                        enforcePeriodicBox=context_system.usesPeriodicBoundaryConditions())
+        if isinstance(context_state, openmm.Context):
+            system = context_state.getSystem()
+            openmm_state = context_state.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                                  enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
+        else:
+            openmm_state = context_state
 
         # We assign positions first, since the velocities
-        # property will check its length for consistency
+        # property will check its length for consistency.
         if check_consistency:
             self.positions = openmm_state.getPositions(asNumpy=True)
         else:
