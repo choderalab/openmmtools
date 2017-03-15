@@ -1520,6 +1520,9 @@ class SamplerState(object):
         self._positions = value
         self._cached_positions_in_md_units = None  # Invalidate cache.
 
+        # Potential energy changes with different positions.
+        self.potential_energy = None
+
     @property
     def velocities(self):
         """Particle velocities.
@@ -1542,6 +1545,9 @@ class SamplerState(object):
             raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
         self._velocities = value
         self._cached_velocities_in_md_units = None  # Invalidate cache.
+
+        # Kinetic energy changes with different velocities.
+        self.kinetic_energy = None
 
     @property
     def box_vectors(self):
@@ -1658,10 +1664,12 @@ class SamplerState(object):
     def __getitem__(self, item):
         sampler_state = SamplerState([])
         if isinstance(item, slice):
-            sampler_state._positions = self._positions[item]
+            # Copy original values to avoid side effects.
+            sampler_state._positions = copy.deepcopy(self._positions[item])
             if self._velocities is not None:
-                sampler_state._velocities = self._velocities[item]
-        else:
+                sampler_state._velocities = copy.deepcopy(self._velocities[item].copy())
+        else:  # Single index.
+            # Here we don't need to copy since we instantiate a new array.
             pos_value = self._positions[item].value_in_unit(self._positions.unit)
             sampler_state._positions = unit.Quantity(np.array([pos_value]),
                                                      self._positions.unit)
@@ -1669,9 +1677,11 @@ class SamplerState(object):
                 vel_value = self._velocities[item].value_in_unit(self._velocities.unit)
                 sampler_state._velocities = unit.Quantity(np.array([vel_value]),
                                                           self._velocities.unit)
-        sampler_state.box_vectors = self.box_vectors
-        sampler_state.potential_energy = self.potential_energy
-        sampler_state.kinetic_energy = self.kinetic_energy
+        sampler_state.box_vectors = copy.deepcopy(self.box_vectors)
+
+        # Energies for only a subset of atoms is undefined.
+        sampler_state.potential_energy = None
+        sampler_state.kinetic_energy = None
         return sampler_state
 
     def __getstate__(self):

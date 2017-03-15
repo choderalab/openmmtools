@@ -852,6 +852,10 @@ class TestSamplerState(object):
         assert np.allclose(sliced_sampler_state.positions[0],
                            self.alanine_explicit_positions[0])
 
+        # Modifying the sliced sampler state doesn't modify original.
+        sliced_sampler_state.positions[0][0] += 1 * unit.angstrom
+        assert sliced_sampler_state.positions[0][0] == sampler_state.positions[0][0] + 1 * unit.angstrom
+
         sliced_sampler_state = sampler_state[2:10]
         assert sliced_sampler_state.n_particles == 8
         assert len(sliced_sampler_state.velocities) == 8
@@ -864,9 +868,17 @@ class TestSamplerState(object):
         assert np.allclose(sliced_sampler_state.positions,
                            self.alanine_explicit_positions[2:10:2])
 
+        # Modifying the sliced sampler state doesn't modify original. We check
+        # this here too since the algorithm for slice objects is different.
+        sliced_sampler_state.positions[0][0] += 1 * unit.angstrom
+        assert sliced_sampler_state.positions[0][0] == sampler_state.positions[2][0] + 1 * unit.angstrom
+
         # The other attributes are copied correctly.
         assert sliced_sampler_state.volume == sampler_state.volume
-        assert sliced_sampler_state.total_energy == sampler_state.total_energy
+
+        # Energies are undefined for as subset of atoms.
+        assert sliced_sampler_state.kinetic_energy is None
+        assert sliced_sampler_state.potential_energy is None
 
     def test_cache_positions_velocities_md_units(self):
         """Test caching positions and velocities in md units."""
