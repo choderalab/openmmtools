@@ -14,12 +14,12 @@ Test State classes in mcmc.py.
 # =============================================================================
 
 import pickle
-import inspect
 from functools import partial
 
+import nose
 from pymbar import timeseries
 
-from openmmtools import testsystems, utils
+from openmmtools import testsystems
 from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.mcmc import *
 
@@ -275,6 +275,56 @@ def test_moves_serialization():
         deserialized_move = utils.deserialize(serialized_move)
         deserialized_pickle = pickle.dumps(deserialized_move)
         assert original_pickle == deserialized_pickle
+
+
+def test_move_restart():
+    """Test optional restart move if NaN is detected."""
+    n_restart_attempts = 5
+
+    # We define a Move that counts the times it is attempted.
+    class MyMove(BaseIntegratorMove):
+        def __init__(self):
+            super(MyMove, self).__init__(n_steps=1, n_restart_attempts=n_restart_attempts)
+            self.attempted_count = 0
+
+        def _get_integrator(self, thermodynamic_state):
+            return integrators.GHMCIntegrator(temperature=300*unit.kelvin)
+
+        def _before_integration(self, context, thermodynamic_state):
+            self.attempted_count += 1
+
+    # Create a system with an extra NaN particle.
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    system = testsystem.system
+    for force in system.getForces():
+        if isinstance(force, openmm.NonbondedForce):
+            break
+
+    # Add a non-interacting particle to the system at NaN position.
+    system.addParticle(39.9 * unit.amu)
+    force.addParticle(0.0, 1.0, 0.0)
+    particle_position = np.array([np.nan, 0.2, 0.2])
+    positions = unit.Quantity(np.vstack((testsystem.positions, particle_position)),
+                              unit=testsystem.positions.unit)
+
+    # Create and run move. An IntegratoMoveError is raised.
+    sampler_state = SamplerState(positions)
+    thermodynamic_state = ThermodynamicState(system, 300*unit.kelvin)
+    move = MyMove()
+    with nose.tools.assert_raises(IntegratorMoveError) as cm:
+        move.apply(thermodynamic_state, sampler_state)
+
+    # We have counted the correct number of restart attempts.
+    assert move.attempted_count == n_restart_attempts + 1
+
+    # Test serialization of the error.
+    with utils.temporary_directory() as tmp_dir:
+        prefix = os.path.join(tmp_dir, 'prefix')
+        cm.exception.serialize_error(prefix)
+        assert os.path.exists(prefix + '-move.json')
+        assert os.path.exists(prefix + '-system.xml')
+        assert os.path.exists(prefix + '-integrator.xml')
+        assert os.path.exists(prefix + '-state.xml')
 
 
 # =============================================================================

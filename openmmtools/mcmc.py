@@ -110,6 +110,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import os
 import abc
 import copy
 import logging
@@ -457,6 +458,64 @@ class WeightedMove(object):
 # INTEGRATOR MCMC MOVE BASE CLASS
 # =============================================================================
 
+class IntegratorMoveError(Exception):
+    """An error raised when NaN is found after applying a move.
+
+    Parameters
+    ----------
+    message : str
+        A description of the error.
+    move : MCMCMove
+        The MCMCMove that raised the error.
+    context : simtk.openmm.Context, optional
+        The context after the integration.
+
+    """
+    def __init__(self, message, move, context=None):
+        super(IntegratorMoveError, self).__init__(message)
+        self.move = move
+        self.context = context
+
+    def serialize_error(self, path_files_prefix):
+        """Serializes and save the state of the simulation causing the error.
+
+        This creates several files:
+        - path_files_prefix-move.yaml
+            A YAML serialization of the MCMCMove.
+        - path_files_prefix-system.xml
+            The serialized system in the Context.
+        - path_files_prefix-integrator.xml
+            The serialized integrator in the Context.
+        - path_files_prefix-state.xml
+            The serialized OpenMM State object before the integration.
+
+        Parameters
+        ----------
+        path_files_prefix : str
+            The prefix (including eventually a directory) for the files. Existing
+            files will be overwritten.
+
+        """
+        directory_path = os.path.dirname(path_files_prefix)
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+
+        # Serialize MCMCMove.
+        import json
+        serialized_move = utils.serialize(self.move)
+        with open(os.path.join(path_files_prefix + '-move.json'), 'w') as f:
+            json.dump(serialized_move, f)
+
+        # Serialize Context.
+        openmm_state = self.context.getState(getPositions=True, getVelocities=True,
+                                             getEnergy=True, getForces=True, getParameters=True)
+        to_serialize = [self.context.getSystem(), self.context.getIntegrator(), openmm_state]
+        for name, openmm_object in zip(['system', 'integrator', 'state'], to_serialize):
+            serialized_object = openmm.XmlSerializer.serialize(openmm_object)
+            with open(os.path.join(path_files_prefix + '-' + name + '.xml'), 'w') as f:
+                f.write(serialized_object)
+
+
 class BaseIntegratorMove(object):
     """A general MCMC move that applies an integrator.
 
@@ -474,14 +533,17 @@ class BaseIntegratorMove(object):
     context_cache : openmmtools.cache.ContextCache, optional
         The ContextCache to use for Context creation. If None, the global cache
         openmmtools.cache.global_context_cache is used (default is None).
+    restart_attempts : int, optional
+        When greater than 0, if after the integration there are NaNs in energies,
+        the move will restart. When the integrator has a random component, this
+        may help recovering. An IntegratorMoveError is raised after the given
+        number of attempts if there are still NaNs.
 
     Attributes
     ----------
     n_steps : int
-        The number of integration steps to take each time the move is applied.
     context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used.
+    restart_attempts : int or None
 
     Examples
     --------
@@ -490,8 +552,8 @@ class BaseIntegratorMove(object):
     >>> from openmmtools import testsystems, states
     >>> from simtk.openmm import VerletIntegrator
     >>> class VerletMove(IntegratorMove):
-    ...     def __init__(self, timestep, n_steps, context_cache=None):
-    ...         super(VerletMove, self).__init__(n_steps, context_cache)
+    ...     def __init__(self, timestep, n_steps, **kwargs):
+    ...         super(VerletMove, self).__init__(n_steps, **kwargs)
     ...         self.timestep = timestep
     ...     def _get_integrator(self, thermodynamic_state):
     ...         return VerletIntegrator(self.timestep)
@@ -511,9 +573,10 @@ class BaseIntegratorMove(object):
 
     """
 
-    def __init__(self, n_steps, context_cache=None):
+    def __init__(self, n_steps, context_cache=None, n_restart_attempts=0):
         self.n_steps = n_steps
         self.context_cache = context_cache
+        self.n_restart_attempts = n_restart_attempts
 
     def apply(self, thermodynamic_state, sampler_state):
         """Propagate the state through the integrator.
@@ -548,23 +611,50 @@ class BaseIntegratorMove(object):
         # Create context.
         timer.start("{}: Context request".format(move_name))
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
-        sampler_state.apply_to_context(context)
         timer.stop("{}: Context request".format(move_name))
         logger.debug("{}: Context obtained, platform is {}".format(
             move_name, context.getPlatform().getName()))
 
-        self._before_integration(context, thermodynamic_state)
+        # Perform the integration.
+        for attempt_counter in range(self.n_restart_attempts + 1):
+            sampler_state.apply_to_context(context)
 
-        # Run dynamics.
-        timer.start("{}: step({})".format(move_name, self.n_steps))
-        integrator.step(self.n_steps)
-        timer.stop("{}: step({})".format(move_name, self.n_steps))
+            self._before_integration(context, thermodynamic_state)
 
+            # Run dynamics.
+            timer.start("{}: step({})".format(move_name, self.n_steps))
+            integrator.step(self.n_steps)
+            timer.stop("{}: step({})".format(move_name, self.n_steps))
+
+            # We get also velocities here even if we don't need them because we
+            # will recycle this State to update the sampler state object. This
+            # way we won't need a second call to Context.getState().
+            context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                             enforcePeriodicBox=thermodynamic_state.is_periodic)
+
+            # Check for NaNs in energies.
+            potential_energy = context_state.getPotentialEnergy()
+            if np.isnan(potential_energy.value_in_unit(potential_energy.unit)):
+                err_msg = ('Potential energy is NaN after {} attempts of integration '
+                           'with move {}'.format(attempt_counter, self.__class__.__name__))
+
+                # If we have hit the number of restart attempts, raise an exception.
+                if attempt_counter == self.n_restart_attempts:
+                    # Restore the context to the state right before the integration.
+                    sampler_state.apply_to_context(context)
+                    logger.error(err_msg)
+                    raise IntegratorMoveError(err_msg, self, context)
+                else:
+                    logger.warning(err_msg + ' Attempting a restart...')
+            else:
+                break
+
+        # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context)
 
-        # Get updated sampler state.
+        # Updated sampler state.
         timer.start("{}: update sampler state".format(move_name))
-        sampler_state.update_from_context(context)
+        sampler_state.update_from_context(context_state)
         timer.stop("{}: update sampler state".format(move_name))
 
         timer.report_timing()
@@ -591,15 +681,21 @@ class BaseIntegratorMove(object):
             context_cache_serialized = None
         else:
             context_cache_serialized = utils.serialize(self.context_cache)
-        return dict(n_steps=self.n_steps, context_cache=context_cache_serialized)
+        return dict(n_steps=self.n_steps, context_cache=context_cache_serialized,
+                    n_restart_attempts=self.n_restart_attempts)
 
     def __setstate__(self, serialization):
         self.n_steps = serialization['n_steps']
+        self.n_restart_attempts = serialization['n_restart_attempts']
         if serialization['context_cache'] is None:
             self.context_cache = None
         else:
             self.context_cache = utils.deserialize(serialization['context_cache'])
 
+
+# =============================================================================
+# GENERIC INTEGRATOR MOVE
+# =============================================================================
 
 class IntegratorMove(BaseIntegratorMove):
     """An MCMCMove that propagate the system with an integrator.
@@ -624,8 +720,8 @@ class IntegratorMove(BaseIntegratorMove):
     context_cache
 
     """
-    def __init__(self, integrator, n_steps, context_cache=None):
-        super(IntegratorMove, self).__init__(n_steps, context_cache)
+    def __init__(self, integrator, n_steps, **kwargs):
+        super(IntegratorMove, self).__init__(n_steps=n_steps, **kwargs)
         self.integrator = integrator
 
     def _get_integrator(self, thermodynamic_state):
@@ -744,8 +840,8 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
-                 n_steps=1000, reassign_velocities=False, context_cache=None):
-        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps, context_cache=context_cache)
+                 n_steps=1000, reassign_velocities=False, **kwargs):
+        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
         self.reassign_velocities = reassign_velocities
@@ -882,8 +978,8 @@ class GHMCMove(BaseIntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=20.0/unit.picoseconds,
-                 n_steps=1000, context_cache=None):
-        super(GHMCMove, self).__init__(n_steps=n_steps, context_cache=context_cache)
+                 n_steps=1000, **kwargs):
+        super(GHMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
         self.reset_statistics()
@@ -1030,8 +1126,8 @@ class HMCMove(BaseIntegratorMove):
 
     """
 
-    def __init__(self, timestep=1.0*unit.femtosecond, n_steps=1000, context_cache=None):
-        super(HMCMove, self).__init__(n_steps=n_steps, context_cache=context_cache)
+    def __init__(self, timestep=1.0*unit.femtosecond, n_steps=1000, **kwargs):
+        super(HMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
 
     def apply(self, thermodynamic_state, sampler_state):
@@ -1123,9 +1219,8 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
 
     """
 
-    def __init__(self, n_attempts=5, context_cache=None):
-        super(MonteCarloBarostatMove, self).__init__(n_steps=n_attempts,
-                                                     context_cache=context_cache)
+    def __init__(self, n_attempts=5, **kwargs):
+        super(MonteCarloBarostatMove, self).__init__(n_steps=n_attempts, **kwargs)
 
     @property
     def n_attempts(self):
