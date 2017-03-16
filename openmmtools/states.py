@@ -1518,7 +1518,6 @@ class SamplerState(object):
         if value is None or len(value) != self.n_particles:
             raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
         self._positions = value
-        self._cached_positions_in_md_units = None  # Invalidate cache.
 
         # Potential energy changes with different positions.
         self.potential_energy = None
@@ -1544,7 +1543,6 @@ class SamplerState(object):
         if value is not None and self.n_particles != len(value):
             raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
         self._velocities = value
-        self._cached_velocities_in_md_units = None  # Invalidate cache.
 
         # Kinetic energy changes with different velocities.
         self.kinetic_energy = None
@@ -1627,7 +1625,7 @@ class SamplerState(object):
         """
         self._read_context_state(context_state, check_consistency=True)
 
-    def apply_to_context(self, context):
+    def apply_to_context(self, context, ignore_velocities=False):
         """Set the context state.
 
         If velocities and box vectors have not been specified in the
@@ -1637,11 +1635,15 @@ class SamplerState(object):
         ----------
         context : simtk.openmm.Context
             The context to set.
+        ignore_velocities : bool, optional
+            If True, velocities are not set in the Context even if they
+            are defined. This can be useful if you only need to use the
+            Context only to compute energies.
 
         """
-        context.setPositions(self._positions_in_md_units)
-        if self._velocities is not None:
-            context.setVelocities(self._velocities_in_md_units)
+        context.setPositions(self._positions)
+        if self._velocities is not None and not ignore_velocities:
+            context.setVelocities(self._velocities)
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
 
@@ -1705,42 +1707,12 @@ class SamplerState(object):
                     potential_energy=None, kinetic_energy=None):
         """Initialize the sampler state."""
         self._positions = positions
-        self._cached_positions_in_md_units = None
         self._velocities = None
-        self._cached_velocities_in_md_units = None
         self.velocities = velocities  # Checks consistency and units.
         self._box_vectors = None
         self.box_vectors = box_vectors  # Make sure box vectors is Quantity.
         self.potential_energy = potential_energy
         self.kinetic_energy = kinetic_energy
-
-    @property
-    def _positions_in_md_units(self):
-        """Positions in md units system.
-
-        Handles a unitless cache that can reduce the time setting context
-        positions by more than half. The cache needs to be invalidated
-        when positions are changed.
-
-        """
-        if self._cached_positions_in_md_units is None:
-            temp_pos = self._positions.value_in_unit_system(unit.md_unit_system)
-            self._cached_positions_in_md_units = temp_pos
-        return self._cached_positions_in_md_units
-
-    @property
-    def _velocities_in_md_units(self):
-        """Velocities in md units system.
-
-        Handles a unitless cache that can reduce the time setting context
-        velocities by more than half. The cache needs to be invalidated
-        when velocities are changed.
-
-        """
-        if self._cached_velocities_in_md_units is None:
-            temp_vel = self._velocities.value_in_unit_system(unit.md_unit_system)
-            self._cached_velocities_in_md_units = temp_vel
-        return self._cached_velocities_in_md_units
 
     def _read_context_state(self, context_state, check_consistency):
         """Read the Context state.
@@ -1774,7 +1746,6 @@ class SamplerState(object):
         else:
             # The positions in md units cache is updated below.
             self._positions = openmm_state.getPositions(asNumpy=True)
-            self._cached_positions_in_md_units = None
 
         self.velocities = openmm_state.getVelocities(asNumpy=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)

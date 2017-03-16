@@ -880,41 +880,6 @@ class TestSamplerState(object):
         assert sliced_sampler_state.kinetic_energy is None
         assert sliced_sampler_state.potential_energy is None
 
-    def test_cache_positions_velocities_md_units(self):
-        """Test caching positions and velocities in md units."""
-        test_pos = self.alanine_explicit_positions.value_in_unit_system(
-            unit.md_unit_system)
-
-        # Types are correct and cached value is initialized on-demand.
-        sampler_state = SamplerState(self.alanine_explicit_positions)
-        assert sampler_state._cached_positions_in_md_units is None
-        assert np.allclose(sampler_state._positions_in_md_units, test_pos)
-        assert sampler_state._cached_positions_in_md_units is not None
-        assert sampler_state._cached_velocities_in_md_units is None
-
-        # apply_to_context() forces the unitless positions to be cached.
-        sampler_state = SamplerState(self.alanine_explicit_positions)
-        assert sampler_state._cached_positions_in_md_units is None
-        context = self.create_context(self.alanine_explicit_state)
-        sampler_state.apply_to_context(context)
-        assert sampler_state._cached_positions_in_md_units is not None
-
-        # Caches are invalidated on update_from_context()
-        assert sampler_state._cached_positions_in_md_units is not None
-        sampler_state.update_from_context(context)
-        for state in [SamplerState.from_context(context), sampler_state]:
-            assert state._cached_positions_in_md_units is None
-
-        # Cache is correctly invalidated on assignment/update.
-        sampler_state._positions_in_md_units  # Force caching
-        sampler_state._velocities_in_md_units  # Force caching
-        assert sampler_state._cached_positions_in_md_units is not None
-        sampler_state.positions = self.alanine_explicit_positions
-        assert sampler_state._cached_positions_in_md_units is None
-        assert sampler_state._cached_velocities_in_md_units is not None
-        sampler_state.velocities = sampler_state.velocities
-        assert sampler_state._cached_velocities_in_md_units is None
-
 
 # =============================================================================
 # TEST COMPOUND STATE
