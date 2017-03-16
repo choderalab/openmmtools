@@ -327,6 +327,42 @@ def test_move_restart():
         assert os.path.exists(prefix + '-state.xml')
 
 
+def test_metropolized_moves():
+    """Test Displacement and Rotation moves."""
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    original_sampler_state = SamplerState(testsystem.positions)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+
+    all_metropolized_moves = MetropolizedMove.__subclasses__()
+    for move_class in all_metropolized_moves:
+        move = move_class(atom_subset=range(thermodynamic_state.n_particles))
+        sampler_state = copy.deepcopy(original_sampler_state)
+
+        # Start applying the move and remove one at each iteration tyring
+        # to generate both an accepted and rejected move.
+        old_n_accepted, old_n_proposed = 0, 0
+        while len(move.atom_subset) > 0:
+            initial_positions = copy.deepcopy(sampler_state.positions)
+            move.apply(thermodynamic_state, sampler_state)
+            final_positions = copy.deepcopy(sampler_state.positions)
+
+            # If the move was accepted the positions should be different.
+            if move.n_accepted > old_n_accepted:
+                assert not np.allclose(initial_positions, final_positions)
+
+            # If we have generated a rejection and an acceptance, test next move.
+            if move.n_accepted > 0 and move.n_accepted != move.n_proposed:
+                break
+
+            # Try with a smaller subset.
+            move.atom_subset = move.atom_subset[:-1]
+            old_n_accepted, old_n_proposed = move.n_accepted, move.n_proposed
+
+        # Check that we were able to generate both an accepted and a rejected move.
+        assert len(move.atom_subset) != 0, ('Could not generate an accepted and rejected '
+                                            'move for class {}'.format(move_class.__name__))
+
+
 # =============================================================================
 # MAIN AND TESTS
 # =============================================================================

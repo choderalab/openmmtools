@@ -694,6 +694,152 @@ class BaseIntegratorMove(object):
 
 
 # =============================================================================
+# METROPOLIZED MOVE BASE CLASS
+# =============================================================================
+
+class MetropolizedMove(object):
+    """A base class for metropolized moves.
+
+    This class is intended to be inherited by MCMCMoves that needs to
+    accept or reject a proposed move with a Metropolis criterion. Only
+    the proposal needs to be specified by subclasses through the method
+    _propose_positions().
+
+    Parameters
+    ----------
+    atom_subset : slice or list of int, optional
+        If specified, the move is applied only to those atoms specified by these
+        indices. If None, the move is applied to all atoms (default is None).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    n_accept : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    atom_subset
+    context_cache
+
+    """
+    def __init__(self, atom_subset=None, context_cache=None):
+        self.n_accepted = 0
+        self.n_proposed = 0
+        self.atom_subset = atom_subset
+        self.context_cache = context_cache
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply a metropolized move to the sampler state.
+
+        Total number of acceptances and proposed move are updated.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to apply the move.
+        sampler_state : openmmtools.states.SamplerState
+           The initial sampler state to apply the move to. This is modified.
+
+        """
+        timer = Timer()
+        benchmark_id = 'Applying {}'.format(self.__class__.__name__ )
+        timer.start(benchmark_id)
+
+        # Check if we have to use the global cache.
+        if self.context_cache is None:
+            context_cache = cache.global_context_cache
+        else:
+            context_cache = self.context_cache
+
+        # Create context, any integrator works.
+        context, unused_integrator = context_cache.get_context(thermodynamic_state)
+
+        # Compute initial energy. We don't need to set velocities to compute the potential.
+        # TODO assume sampler_state.potential_energy is the correct potential if not None?
+        sampler_state.apply_to_context(context, ignore_velocities=True)
+        initial_energy = thermodynamic_state.reduced_potential(context)
+
+        # Handle default and weird cases for atom_subset.
+        if self.atom_subset is None:
+            atom_subset = slice(None)
+        elif not isinstance(self.atom_subset, slice) and len(self.atom_subset) == 1:
+            # Slice to maintain the 2D shape.
+            atom_subset = slice(self.atom_subset[0], self.atom_subset[0]+1)
+        else:
+            atom_subset = self.atom_subset
+
+        # Store initial positions of the atoms that are moved.
+        # We'll use this also to recover in case the move is rejected.
+        if isinstance(atom_subset, slice):
+            # Numpy array when sliced return a view, they are not copied.
+            initial_positions = copy.deepcopy(sampler_state.positions[atom_subset])
+        else:
+            # This automatically creates a copy.
+            initial_positions = sampler_state.positions[atom_subset]
+
+        # Propose perturbed positions. Modifying the reference changes the sampler state.
+        proposed_positions = self._propose_positions(initial_positions)
+
+        # Compute the energy of the proposed positions.
+        sampler_state.positions[atom_subset] = proposed_positions
+        sampler_state.apply_to_context(context)
+        proposed_energy = thermodynamic_state.reduced_potential(context)
+
+        # Accept or reject with Metropolis criteria.
+        delta_energy = proposed_energy - initial_energy
+        if (not np.isnan(proposed_energy) and
+                (delta_energy <= 0.0 or np.random.rand() < np.exp(-delta_energy))):
+            self.n_accepted += 1
+        else:
+            # Restore original positions.
+            sampler_state.positions[atom_subset] = initial_positions
+        self.n_proposed += 1
+
+        # Print timing information.
+        timer.stop(benchmark_id)
+        timer.report_timing()
+
+    def __getstate__(self):
+        if self.context_cache is None:
+            context_cache_serialized = None
+        else:
+            context_cache_serialized = utils.serialize(self.context_cache)
+        return dict(n_accepted=self.n_accepted, n_proposed=self.n_proposed,
+                    atom_subset=self.atom_subset, context_cache=context_cache_serialized)
+
+    def __setstate__(self, serialization):
+        self.n_accepted = serialization['n_accepted']
+        self.n_proposed = serialization['n_proposed']
+        self.atom_subset = serialization['atom_subset']
+        if serialization['context_cache'] is None:
+            self.context_cache = None
+        else:
+            self.context_cache = utils.deserialize(serialization['context_cache'])
+
+    @abc.abstractmethod
+    def _propose_positions(self, positions):
+        """Return new proposed positions.
+
+        These method must be implemented in subclasses.
+
+        Parameters
+        ----------
+        positions : nx3 numpy.ndarray
+            The original positions of the subset of atoms that these move
+            applied to.
+
+        Returns
+        -------
+        proposed_positions : nx3 numpy.ndarray
+            The new proposed positions.
+
+        """
+        pass
+
+
+# =============================================================================
 # GENERIC INTEGRATOR MOVE
 # =============================================================================
 
@@ -1270,6 +1416,220 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
         return integrators.DummyIntegrator()
+
+
+# =============================================================================
+# RANDOM DISPLACEMENT MOVE
+# =============================================================================
+
+class MCDisplacementMove(MetropolizedMove):
+    """A metropolized move that randomly displace a subset of atoms.
+
+    Parameters
+    ----------
+    displacement_sigma : simtk.unit.Quantity
+        The standard deviation of the normal distribution used to propose the
+        random displacement (units of length, default is 1.0*nanometer).
+    atom_subset : slice or list of int, optional
+        If specified, the move is applied only to those atoms specified by these
+        indices. If None, the move is applied to all atoms (default is None).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    n_accept : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    displacement_sigma
+    atom_subset
+    context_cache
+
+    """
+
+    def __init__(self, displacement_sigma=1.0*unit.nanometer, **kwargs):
+        super(MCDisplacementMove, self).__init__(**kwargs)
+        self.displacement_sigma = displacement_sigma
+
+    @staticmethod
+    def displace_positions(positions, displacement_sigma=1.0*unit.nanometer):
+        """Return the positions after applying a random displacement to them.
+
+        Parameters
+        ----------
+        positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The positions to displace.
+        displacement_sigma : simtk.unit.Quantity
+            The standard deviation of the normal distribution used to propose
+            the random displacement (units of length, default is 1.0*nanometer).
+
+        Returns
+        -------
+        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The displaced positions.
+
+        """
+        positions_unit = positions.unit
+        unitless_displacement_sigma = displacement_sigma / positions_unit
+        displacement_vector = unit.Quantity(np.random.randn(3) * unitless_displacement_sigma,
+                                            positions_unit)
+        return positions + displacement_vector
+
+    def __getstate__(self):
+        serialization = super(MCDisplacementMove, self).__getstate__()
+        serialization['displacement_sigma'] = self.displacement_sigma
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.displacement_sigma = serialization.pop('displacement_sigma')
+        super(MCDisplacementMove, self).__setstate__(serialization)
+
+    def _propose_positions(self, initial_positions):
+        """Implement MetropolizedMove._propose_positions for apply()."""
+        return self.displace_positions(initial_positions, self.displacement_sigma)
+
+
+# =============================================================================
+# RANDOM ROTATION MOVE
+# =============================================================================
+
+class MCRotationMove(MetropolizedMove):
+    """A metropolized move that randomly rotate a subset of atoms.
+
+    Parameters
+    ----------
+    atom_subset : slice or list of int, optional
+        If specified, the move is applied only to those atoms specified by these
+        indices. If None, the move is applied to all atoms (default is None).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    n_accept : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    atom_subset
+    context_cache
+
+    """
+
+    def __init__(self, **kwargs):
+        super(MCRotationMove, self).__init__(**kwargs)
+
+    @classmethod
+    def rotate_positions(cls, positions):
+        """Return the positions after applying a random rotation to them.
+
+        Parameters
+        ----------
+        positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The positions to rotate.
+
+        Returns
+        -------
+        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The rotated positions.
+
+        """
+        positions_unit = positions.unit
+        x_initial = positions / positions_unit
+
+        # Compute center of geometry of atoms to rotate.
+        x_initial_mean = x_initial.mean(0)
+
+        # Generate a random rotation matrix.
+        rotation_matrix = cls.generate_random_rotation_matrix()
+
+        # Apply rotation.
+        x_proposed = (rotation_matrix * np.matrix(x_initial - x_initial_mean).T).T + x_initial_mean
+        return unit.Quantity(x_proposed, positions_unit)
+
+    @classmethod
+    def generate_random_rotation_matrix(cls):
+        """Return a random 3x3 rotation matrix.
+
+        Returns
+        -------
+        Rq : 3x3 numpy.ndarray
+            The random rotation matrix.
+
+        """
+        q = cls._generate_uniform_quaternion()
+        return cls._rotation_matrix_from_quaternion(q)
+
+    @staticmethod
+    def _rotation_matrix_from_quaternion(q):
+        """Compute a 3x3 rotation matrix from a given quaternion (4-vector).
+
+        Parameters
+        ----------
+        q : 1x4 numpy.ndarray
+            Quaterion (need not be normalized, zero norm OK).
+
+        Returns
+        -------
+        Rq : 3x3 numpy.ndarray
+            Orthogonal rotation matrix corresponding to quaternion q.
+
+        Examples
+        --------
+        >>> q = np.array([0.1, 0.2, 0.3, -0.4])
+        >>> Rq = MCRotationMove._rotation_matrix_from_quaternion(q)
+
+        References
+        ----------
+        [1] http://en.wikipedia.org/wiki/Rotation_matrix#Quaternion
+
+        """
+
+        w, x, y, z = q
+        Nq = (q**2).sum()  # Squared norm.
+        if Nq > 0.0:
+            s = 2.0 / Nq
+        else:
+            s = 0.0
+
+        X = x*s;   Y = y*s;  Z = z*s
+        wX = w*X; wY = w*Y; wZ = w*Z
+        xX = x*X; xY = x*Y; xZ = x*Z
+        yY = y*Y; yZ = y*Z; zZ = z*Z
+
+        Rq = np.matrix([[1.0-(yY+zZ),     xY-wZ,          xZ+wY],
+                        [xY+wZ,        1.0-(xX+zZ),       yZ-wX],
+                        [xZ-wY,           yZ+wX,    1.0-(xX+yY)]])
+
+        return Rq
+
+    @staticmethod
+    def _generate_uniform_quaternion():
+        """Generate a uniform normalized quaternion 4-vector.
+
+        References
+        ----------
+        [1] K. Shoemake. Uniform random rotations. In D. Kirk, editor,
+        Graphics Gems III, pages 124-132. Academic, New York, 1992.
+        [2] Described briefly here: http://planning.cs.uiuc.edu/node198.html
+
+        Examples
+        --------
+        >>> q = MCRotationMove._generate_uniform_quaternion()
+
+        """
+        u = np.random.rand(3)
+        q = np.array([np.sqrt(1-u[0])*np.sin(2*np.pi*u[1]),
+                      np.sqrt(1-u[0])*np.cos(2*np.pi*u[1]),
+                      np.sqrt(u[0])*np.sin(2*np.pi*u[2]),
+                      np.sqrt(u[0])*np.cos(2*np.pi*u[2])])
+        return q
+
+    def _propose_positions(self, initial_positions):
+        """Implement MetropolizedMove._propose_positions for apply()"""
+        return self.rotate_positions(initial_positions)
 
 
 # =============================================================================
