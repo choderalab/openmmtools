@@ -473,7 +473,7 @@ class ContextCache(object):
         """
         state_id = cls._generate_state_id(thermodynamic_state)
         standard_integrator = cls._standardize_integrator(integrator)
-        integrator_id = openmm.XmlSerializer.serialize(standard_integrator)
+        integrator_id = openmm.XmlSerializer.serialize(standard_integrator).__hash__()
         return state_id, integrator_id
 
 
