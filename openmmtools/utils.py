@@ -20,8 +20,10 @@ import abc
 import time
 import math
 import copy
+import shutil
 import logging
 import operator
+import tempfile
 import functools
 import importlib
 import contextlib
@@ -30,6 +32,20 @@ import numpy as np
 from simtk import openmm, unit
 
 logger = logging.getLogger(__name__)
+
+
+# =============================================================================
+# MISCELLANEOUS
+# =============================================================================
+
+@contextlib.contextmanager
+def temporary_directory():
+    """Context for safe creation of temporary directories."""
+    tmp_dir = tempfile.mkdtemp()
+    try:
+        yield tmp_dir
+    finally:
+        shutil.rmtree(tmp_dir)
 
 
 # =============================================================================
@@ -48,7 +64,7 @@ def time_it(task_name):
     """
     timer = Timer()
     timer.start(task_name)
-    yield  # Resume program
+    yield timer  # Resume program
     timer.stop(task_name)
     timer.report_timing()
 
@@ -93,22 +109,48 @@ class Timer(object):
     def __init__(self):
         self.reset_timing_statistics()
 
-    def reset_timing_statistics(self):
-        """Reset the timing statistics."""
-        self._t0 = {}
-        self._t1 = {}
-        self._elapsed = {}
+    def reset_timing_statistics(self, benchmark_id=None):
+        """Reset the timing statistics.
+
+        Parameters
+        ----------
+        benchmark_id : str, optional
+            If specified, only the timings associated to this benchmark
+            id will be reset, otherwise all timing information are.
+
+        """
+        if benchmark_id is None:
+            self._t0 = {}
+            self._t1 = {}
+            self._completed = {}
+        else:
+            self._t0.pop(benchmark_id, None)
+            self._t1.pop(benchmark_id, None)
+            self._completed.pop(benchmark_id, None)
 
     def start(self, benchmark_id):
         """Start a timer with given benchmark_id."""
         self._t0[benchmark_id] = time.time()
 
     def stop(self, benchmark_id):
-        if benchmark_id in self._t0:
-            self._t1[benchmark_id] = time.time()
-            self._elapsed[benchmark_id] = self._t1[benchmark_id] - self._t0[benchmark_id]
+        try:
+            t0 = self._t0[benchmark_id]
+        except KeyError:
+            logger.warning("Can't stop timing for {}".format(benchmark_id))
         else:
-            logger.info("Can't stop timing for {}".format(benchmark_id))
+            self._t1[benchmark_id] = time.time()
+            elapsed_time = self._t1[benchmark_id] - t0
+            self._completed[benchmark_id] = elapsed_time
+            return elapsed_time
+
+    def partial(self, benchmark_id):
+        """Return the elapsed time of the given benchmark so far."""
+        try:
+            t0 = self._t0[benchmark_id]
+        except KeyError:
+            logger.warning("Couldn't return partial timing for {}".format(benchmark_id))
+        else:
+            return time.time() - t0
 
     def report_timing(self, clear=True):
         """Log all the timings at the debug level.
@@ -118,8 +160,13 @@ class Timer(object):
         clear : bool
             If True, the stored timings are deleted after being reported.
 
+        Returns
+        -------
+        elapsed_times : dict
+            The dictionary benchmark_id : elapsed time for all benchmarks.
+
         """
-        for benchmark_id, elapsed_time in self._elapsed.items():
+        for benchmark_id, elapsed_time in self._completed.items():
             logger.debug('{} took {:8.3f}s'.format(benchmark_id, elapsed_time))
 
         if clear is True:
