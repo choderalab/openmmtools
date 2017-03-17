@@ -283,8 +283,8 @@ def test_move_restart():
 
     # We define a Move that counts the times it is attempted.
     class MyMove(BaseIntegratorMove):
-        def __init__(self):
-            super(MyMove, self).__init__(n_steps=1, n_restart_attempts=n_restart_attempts)
+        def __init__(self, **kwargs):
+            super(MyMove, self).__init__(n_steps=1, n_restart_attempts=n_restart_attempts, **kwargs)
             self.attempted_count = 0
 
         def _get_integrator(self, thermodynamic_state):
@@ -310,7 +310,11 @@ def test_move_restart():
     # Create and run move. An IntegratoMoveError is raised.
     sampler_state = SamplerState(positions)
     thermodynamic_state = ThermodynamicState(system, 300*unit.kelvin)
-    move = MyMove()
+
+    # We use a local context cache with Reference platform since on the
+    # CPU platform CustomIntegrators raises an error with NaN particles.
+    reference_platform = openmm.Platform.getPlatformByName('Reference')
+    move = MyMove(context_cache=cache.ContextCache(platform=reference_platform))
     with nose.tools.assert_raises(IntegratorMoveError) as cm:
         move.apply(thermodynamic_state, sampler_state)
 

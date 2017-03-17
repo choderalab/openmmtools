@@ -96,12 +96,12 @@ class Timer(object):
     >>> timer.start('my benchmark')
     >>> for i in range(10):
     ...     pass
-    >>> timer.stop('my benchmark')
+    >>> elapsed_time = timer.stop('my benchmark')
     >>> timer.start('second benchmark')
     >>> for i in range(10):
     ...     for j in range(10):
     ...         pass
-    >>> timer.start('second benchmark')
+    >>> elsapsed_time = timer.stop('second benchmark')
     >>> timer.report_timing()
 
     """
