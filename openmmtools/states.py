@@ -744,8 +744,9 @@ class ThermodynamicState(object):
         >>> from openmmtools import testsystems
         >>> toluene = testsystems.TolueneVacuum()
         >>> state = ThermodynamicState(toluene.system, 300*unit.kelvin)
+        >>> platform = openmm.Platform.getPlatformByName('Reference')
         >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        >>> context = state.create_context(integrator)
+        >>> context = state.create_context(integrator, platform)
         >>> system = context.getSystem()
         >>> [force.__class__.__name__ for force in system.getForces()
         ...  if 'Thermostat' in force.__class__.__name__]
@@ -754,9 +755,10 @@ class ThermodynamicState(object):
         The thermostat is removed if we choose an integrator coupled
         to a heat bath.
 
+        >>> del context  # Delete previous context.
         >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond,
         ...                                        2.0*unit.femtosecond)
-        >>> context = state.create_context(integrator)
+        >>> context = state.create_context(integrator, platform)
         >>> system = context.getSystem()
         >>> [force.__class__.__name__ for force in system.getForces()
         ...  if 'Thermostat' in force.__class__.__name__]
