@@ -340,6 +340,23 @@ class SequenceMove(object):
             for move in self.move_list:
                 move.context_cache = context_cache
 
+    @property
+    def statistics(self):
+        """The statistics of all moves as a list of dictionaries."""
+        stats = [None for _ in range(len(self.move_list))]
+        for i, move in enumerate(self.move_list):
+            try:
+                stats[i] = move.statistics
+            except AttributeError:
+                stats[i] = {}
+        return stats
+
+    @statistics.setter
+    def statistics(self, value):
+        for i, move in enumerate(self.move_list):
+            if hasattr(move, 'statistics'):
+                move.statistics = value[i]
+
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the sequence of MCMC move in order.
 
@@ -416,6 +433,23 @@ class WeightedMove(object):
         if context_cache is not None:
             for move, weight in self.move_set:
                 move.context_cache = context_cache
+
+    @property
+    def statistics(self):
+        """The statistics of all moves as a list of dictionaries."""
+        stats = [None for _ in range(len(self.move_set))]
+        for i, (move, weight) in enumerate(self.move_set):
+            try:
+                stats[i] = move.statistics
+            except AttributeError:
+                stats[i] = {}
+        return stats
+
+    @statistics.setter
+    def statistics(self, value):
+        for i, (move, weight) in enumerate(self.move_set):
+            if hasattr(move, 'statistics'):
+                move.statistics = value[i]
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply one of the MCMC moves in the set to the state.
@@ -755,6 +789,16 @@ class MetropolizedMove(object):
         self.atom_subset = atom_subset
         self.context_cache = context_cache
 
+    @property
+    def statistics(self):
+        """The acceptance statistics as a dictionary."""
+        return dict(n_accepted=self.n_accepted, n_proposed=self.n_proposed)
+
+    @statistics.setter
+    def statistics(self, value):
+        self.n_accepted = value['n_accepted']
+        self.n_proposed = value['n_proposed']
+
     def apply(self, thermodynamic_state, sampler_state):
         """Apply a metropolized move to the sampler state.
 
@@ -831,17 +875,17 @@ class MetropolizedMove(object):
             context_cache_serialized = None
         else:
             context_cache_serialized = utils.serialize(self.context_cache)
-        return dict(n_accepted=self.n_accepted, n_proposed=self.n_proposed,
-                    atom_subset=self.atom_subset, context_cache=context_cache_serialized)
+        serialization = dict(atom_subset=self.atom_subset, context_cache=context_cache_serialized)
+        serialization.update(self.statistics)
+        return serialization
 
     def __setstate__(self, serialization):
-        self.n_accepted = serialization['n_accepted']
-        self.n_proposed = serialization['n_proposed']
         self.atom_subset = serialization['atom_subset']
         if serialization['context_cache'] is None:
             self.context_cache = None
         else:
             self.context_cache = utils.deserialize(serialization['context_cache'])
+        self.statistics = serialization
 
     @abc.abstractmethod
     def _propose_positions(self, positions):
@@ -910,8 +954,8 @@ class IntegratorMove(BaseIntegratorMove):
         return serialization
 
     def __setstate__(self, serialization):
-        self.integrator = openmm.XmlSerializer.deserialize(serialization.pop('integrator'))
         super(IntegratorMove, self).__setstate__(serialization)
+        self.integrator = openmm.XmlSerializer.deserialize(serialization['integrator'])
 
 
 # =============================================================================
@@ -1042,10 +1086,10 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         return serialization
 
     def __setstate__(self, serialization):
-        self.timestep = serialization.pop('timestep')
-        self.collision_rate = serialization.pop('collision_rate')
-        self.reassign_velocities = serialization.pop('reassign_velocities')
         super(LangevinDynamicsMove, self).__setstate__(serialization)
+        self.timestep = serialization['timestep']
+        self.collision_rate = serialization['collision_rate']
+        self.reassign_velocities = serialization['reassign_velocities']
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
@@ -1098,7 +1142,7 @@ class GHMCMove(BaseIntegratorMove):
         cache openmmtools.cache.global_context_cache is used.
     n_accepted : int
         The number of accepted steps.
-    n_attempted : int
+    n_proposed : int
         The number of attempted steps.
     fraction_accepted
 
@@ -1153,12 +1197,8 @@ class GHMCMove(BaseIntegratorMove):
         super(GHMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.reset_statistics()
-
-    def reset_statistics(self):
-        """Reset the internal statistics of number of accepted and attempted moves."""
-        self.n_accepted = 0  # number of accepted steps
-        self.n_attempted = 0  # number of attempted steps
+        self.n_accepted = 0  # Number of accepted steps.
+        self.n_proposed = 0  # Number of attempted steps.
 
     @property
     def fraction_accepted(self):
@@ -1167,10 +1207,25 @@ class GHMCMove(BaseIntegratorMove):
         If the number of attempted steps is 0, this is numpy.NaN.
 
         """
-        if self.n_attempted == 0:
+        if self.n_proposed == 0:
             return np.NaN
         # TODO drop the casting when stop Python2 support
-        return float(self.n_accepted) / self.n_attempted
+        return float(self.n_accepted) / self.n_proposed
+
+    @property
+    def statistics(self):
+        """The acceptance statistics as a dictionary."""
+        return dict(n_accepted=self.n_accepted, n_proposed=self.n_proposed)
+
+    @statistics.setter
+    def statistics(self, value):
+        self.n_accepted = value['n_accepted']
+        self.n_proposed = value['n_proposed']
+
+    def reset_statistics(self):
+        """Reset the internal statistics of number of accepted and attempted moves."""
+        self.n_accepted = 0
+        self.n_proposed = 0
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the GHMC MCMC move.
@@ -1193,16 +1248,14 @@ class GHMCMove(BaseIntegratorMove):
         serialization = super(GHMCMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
-        serialization['n_accepted'] = self.n_accepted
-        serialization['n_attempted'] = self.n_attempted
+        serialization.update(self.statistics)
         return serialization
 
     def __setstate__(self, serialization):
-        self.timestep = serialization.pop('timestep')
-        self.collision_rate = serialization.pop('collision_rate')
-        self.n_accepted = serialization.pop('n_accepted')
-        self.n_attempted = serialization.pop('n_attempted')
         super(GHMCMove, self).__setstate__(serialization)
+        self.timestep = serialization['timestep']
+        self.collision_rate = serialization['collision_rate']
+        self.statistics = serialization
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
@@ -1219,9 +1272,9 @@ class GHMCMove(BaseIntegratorMove):
         ghmc_global_variables = {integrator.getGlobalVariableName(index): index
                                  for index in range(integrator.getNumGlobalVariables())}
         n_accepted = integrator.getGlobalVariable(ghmc_global_variables['naccept'])
-        n_attempted = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
+        n_proposed = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
         self.n_accepted += n_accepted
-        self.n_attempted += n_attempted
+        self.n_proposed += n_proposed
 
 
 # =============================================================================
@@ -1323,8 +1376,8 @@ class HMCMove(BaseIntegratorMove):
         return serialization
 
     def __setstate__(self, serialization):
-        self.timestep = serialization.pop('timestep')
         super(HMCMove, self).__setstate__(serialization)
+        self.timestep = serialization['timestep']
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
@@ -1512,8 +1565,8 @@ class MCDisplacementMove(MetropolizedMove):
         return serialization
 
     def __setstate__(self, serialization):
-        self.displacement_sigma = serialization.pop('displacement_sigma')
         super(MCDisplacementMove, self).__setstate__(serialization)
+        self.displacement_sigma = serialization['displacement_sigma']
 
     def _propose_positions(self, initial_positions):
         """Implement MetropolizedMove._propose_positions for apply()."""
