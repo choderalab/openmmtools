@@ -737,32 +737,19 @@ class ThermodynamicState(object):
 
         Examples
         --------
-        Creating a context with a thermostated integrator means that
-        the context system will not have a thermostat.
+        When passing an integrator that does not expose getter and setter
+        for the temperature, the context will be created with a thermostat.
 
         >>> from simtk import openmm, unit
         >>> from openmmtools import testsystems
         >>> toluene = testsystems.TolueneVacuum()
         >>> state = ThermodynamicState(toluene.system, 300*unit.kelvin)
-        >>> platform = openmm.Platform.getPlatformByName('Reference')
         >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        >>> context = state.create_context(integrator, platform)
+        >>> context = state.create_context(integrator)
         >>> system = context.getSystem()
         >>> [force.__class__.__name__ for force in system.getForces()
         ...  if 'Thermostat' in force.__class__.__name__]
         ['AndersenThermostat']
-
-        The thermostat is removed if we choose an integrator coupled
-        to a heat bath.
-
-        >>> del context  # Delete previous context.
-        >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond,
-        ...                                        2.0*unit.femtosecond)
-        >>> context = state.create_context(integrator, platform)
-        >>> system = context.getSystem()
-        >>> [force.__class__.__name__ for force in system.getForces()
-        ...  if 'Thermostat' in force.__class__.__name__]
-        []
 
         """
         # Check that integrator is consistent and if it is thermostated.
