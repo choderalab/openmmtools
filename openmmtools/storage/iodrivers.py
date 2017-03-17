@@ -935,7 +935,7 @@ class NCScalar(NCVariableCodec, ABC):
             self._bind_read()
         except KeyError:
             self._parent_driver.check_scalar_dimension()
-            self._bound_target = self._storage_object.createVariable(self._target, self._get_on_disk_dtype,
+            self._bound_target = self._storage_object.createVariable(self._target, self._on_disk_dtype,
                                                                      dimensions='scalar',
                                                                      chunksizes=(1,))
             # Specify a way for the IO Driver stores data
@@ -957,7 +957,7 @@ class NCScalar(NCVariableCodec, ABC):
             self._parent_driver.check_scalar_dimension()
             infinite_name = self._parent_driver.generate_infinite_dimension()
             appendable_chunk_size = determine_appendable_chunk_size(data)
-            self._bound_target = self._storage_object.createVariable(self._target, self._get_on_disk_dtype,
+            self._bound_target = self._storage_object.createVariable(self._target, self._on_disk_dtype,
                                                                      dimensions=[infinite_name, 'scalar'],
                                                                      chunksizes=(appendable_chunk_size, 1))
             # Specify a way for the IO Driver stores data
@@ -1018,21 +1018,12 @@ class NCScalar(NCVariableCodec, ABC):
         return 'variables'
 
     @property
-    def _get_on_disk_dtype(self):
-        """Function to process None for _on_disk_dtype"""
-        if self._on_disk_dtype is None:
-            return_type = self.dtype
-        else:
-            return_type = self._on_disk_dtype
-        return return_type
-
-    @property
     def _on_disk_dtype(self):
         """
         Allow overwriting the dtype for storage for extending this method to cast data as a different type on disk
-        This is the property to overwrite the cast dtype
+        This is the property to overwrite the cast dtype if it is different than the input/output dtype
         """
-        return None
+        return self.dtype
 
 
 class NCInt(NCScalar):
@@ -1577,24 +1568,24 @@ class NCQuantity(NCVariableCodec):
 # NETCDF DICT YAML HANDLERS
 # =============================================================================
 
-class NCYamlLoader(yaml.Loader):
+class DictYamlLoader(yaml.Loader):
     """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
     def __init__(self, *args, **kwargs):
-        super(NCYamlLoader, self).__init__(*args, **kwargs)
+        super(DictYamlLoader, self).__init__(*args, **kwargs)
         self.add_constructor(u'!Quantity', self.quantity_constructor)
 
     @staticmethod
     def quantity_constructor(loader, node):
         loaded_mapping = loader.construct_mapping(node)
-        data_unit = quantity_from_string(loaded_mapping['NCUnit'])
-        data_value = loaded_mapping['NCValue']
+        data_unit = quantity_from_string(loaded_mapping['QuantityUnit'])
+        data_value = loaded_mapping['QuantityValue']
         return data_value * data_unit
 
 
-class NCYamlDumper(yaml.Dumper):
+class DictYamlDumper(yaml.Dumper):
     """PyYAML Dumper that convert from Python -> YAML output"""
     def __init__(self, *args, **kwargs):
-        super(NCYamlDumper, self).__init__(*args, **kwargs)
+        super(DictYamlDumper, self).__init__(*args, **kwargs)
         self.add_representer(unit.Quantity, self.quantity_representer)
 
     @staticmethod
@@ -1602,8 +1593,8 @@ class NCYamlDumper(yaml.Dumper):
         """YAML Quantity representer."""
         data_unit = data.unit
         data_value = data / data_unit
-        data_dump = {'NCUnit': str(data_unit), 'NCValue': data_value}
-        # Uses "self (NCYamlDumper)" as the dumper to allow nested !Quantitity types
+        data_dump = {'QuantityUnit': str(data_unit), 'QuantityValue': data_value}
+        # Uses "self (DictYamlDumper)" as the dumper to allow nested !Quantitity types
         return yaml.Dumper.represent_mapping(dumper, u'!Quantity', data_dump)
 
 
@@ -1617,17 +1608,17 @@ class NCDict(NCScalar):
         decoded_string = nc_string_decoder(nc_variable)
         # Handle array type
         try:
-            output = yaml.load(decoded_string, Loader=NCYamlLoader)
+            output = yaml.load(decoded_string, Loader=DictYamlLoader)
         except AttributeError:  # Appended data
             n_entries = decoded_string.shape[0]
             output = np.empty(n_entries, dtype=dict)
             for n in range(n_entries):
-                output[n] = yaml.load(decoded_string[n, 0], Loader=NCYamlLoader)
+                output[n] = yaml.load(decoded_string[n, 0], Loader=DictYamlLoader)
         return output
 
     @staticmethod
     def _nc_dict_encoder(data):
-        dump_options = {'Dumper': NCYamlDumper, 'line_break': '\n', 'indent': 4}
+        dump_options = {'Dumper': DictYamlDumper, 'line_break': '\n', 'indent': 4}
         data_as_string = yaml.dump(data, **dump_options)
         packaged_string = nc_string_encoder(data_as_string)
         return packaged_string
