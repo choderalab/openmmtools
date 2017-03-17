@@ -33,8 +33,8 @@ analytical_testsystems = [
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
         GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        WeightedMove({GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100): 0.5,
-                      HMCMove(timestep=10*unit.femtosecond, n_steps=10): 0.5})),
+        WeightedMove([(GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100), 0.5),
+                      (HMCMove(timestep=10*unit.femtosecond, n_steps=10), 0.5)])),
     ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
         LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("IdealGas", testsystems.IdealGas(nparticles=216),
@@ -267,7 +267,7 @@ def test_moves_serialization():
         HMCMove(context_cache=context_cache),
         MonteCarloBarostatMove(context_cache=dummy_cache),
         SequenceMove(move_list=[LangevinDynamicsMove(), GHMCMove()]),
-        WeightedMove(move_set={HMCMove(): 0.5, MonteCarloBarostatMove(): 0.5})
+        WeightedMove(move_set=[(HMCMove(), 0.5), (MonteCarloBarostatMove(), 0.5)])
     ]
     for move in test_cases:
         original_pickle = pickle.dumps(move)

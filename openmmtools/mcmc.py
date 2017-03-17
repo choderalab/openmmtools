@@ -53,7 +53,7 @@ You can combine them to form a sequence of moves
 or create a move that selects one of them at random with given probability
 at each iteration.
 
->>> weighted_move = WeightedMove({ghmc_move: 0.5, langevin_move: 0.5})
+>>> weighted_move = WeightedMove([(ghmc_move, 0.5), (langevin_move, 0.5)])
 >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=weighted_move)
 
 By default the MCMCMove use a global ContextCache that creates Context on the
@@ -208,7 +208,7 @@ class MCMCSampler(object):
     ...                                          temperature=298*unit.kelvin)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set specifying probabilities fo each type of move.
-    >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
+    >>> move = WeightedMove([(HMCMove(n_steps=10), 0.5), (LangevinDynamicsMove(n_steps=10), 0.5)])
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     >>> sampler.run(n_iterations=2)
@@ -378,16 +378,16 @@ class WeightedMove(object):
 
     Parameters
     ----------
-    move_set : dict of MCMCMove: float
-        The dict of MCMCMoves: probability of being selected at an iteration.
+    move_set : list of tuples (MCMCMove, float_
+        Each tuple associate an MCMCMoves to its probability of being
+        selected on apply().
     context_cache : openmmtools.cache.ContextCache, optional
         If not None, the context_cache of all the moves in the set will be
         set to this (default is None).
 
     Attributes
     ----------
-    move_set : dict of MCMCMove: float
-        The dict of MCMCMoves: probability of being selected at an iteration.
+    move_set
 
     Examples
     --------
@@ -402,7 +402,8 @@ class WeightedMove(object):
     ...                                          temperature=298*unit.kelvin)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set specifying probabilities fo each type of move.
-    >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
+    >>> move = WeightedMove([(HMCMove(n_steps=10), 0.5),
+    ...                      (LangevinDynamicsMove(n_steps=10), 0.5)])
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     >>> sampler.run(n_iterations=2)
@@ -413,7 +414,7 @@ class WeightedMove(object):
     def __init__(self, move_set, context_cache=None):
         self.move_set = move_set
         if context_cache is not None:
-            for move in self.move_set:
+            for move, weight in self.move_set:
                 move.context_cache = context_cache
 
     def apply(self, thermodynamic_state, sampler_state):
@@ -429,29 +430,30 @@ class WeightedMove(object):
            The sampler state to apply the move to.
 
         """
-        moves, weights = zip(*self.move_set.items())
+        moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
         move.apply(thermodynamic_state, sampler_state)
 
     def __getstate__(self):
         serialization = dict()
-        for i, (move, weight) in enumerate(self.move_set.items()):
+        for i, (move, weight) in enumerate(self.move_set):
             serialization['move' + str(i)] = utils.serialize(move)
             serialization['move' + str(i) + '_weight'] = weight
         return serialization
 
     def __setstate__(self, serialization):
-        self.move_set = dict()
+        self.move_set = []
         # Restore moves in the correct order.
         for i in range(int(len(serialization) / 2)):
             move = utils.deserialize(serialization['move' + str(i)])
-            self.move_set[move] = serialization['move' + str(i) + '_weight']
+            weight = serialization['move' + str(i) + '_weight']
+            self.move_set.append((move, weight))
 
     def __str__(self):
         return str(self.move_set)
 
     def __iter__(self):
-        return self.move_set.items()
+        return self.move_set
 
 
 # =============================================================================
@@ -551,7 +553,7 @@ class BaseIntegratorMove(object):
 
     >>> from openmmtools import testsystems, states
     >>> from simtk.openmm import VerletIntegrator
-    >>> class VerletMove(IntegratorMove):
+    >>> class VerletMove(BaseIntegratorMove):
     ...     def __init__(self, timestep, n_steps, **kwargs):
     ...         super(VerletMove, self).__init__(n_steps, **kwargs)
     ...         self.timestep = timestep
@@ -716,12 +718,35 @@ class MetropolizedMove(object):
 
     Attributes
     ----------
-    n_accept : int
+    n_accepted : int
         The number of proposals accepted.
     n_proposed : int
         The total number of attempted moves.
     atom_subset
     context_cache
+
+    Examples
+    --------
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems, states
+    >>> class AddOneVector(MetropolizedMove):
+    ...     def __init__(self, **kwargs):
+    ...         super(AddOneVector, self).__init__(**kwargs)
+    ...     def _propose_positions(self, initial_positions):
+    ...         print('Propose new positions')
+    ...         displacement = unit.Quantity(np.array([1.0, 1.0, 1.0]), initial_positions.unit)
+    ...         return initial_positions + displacement
+    ...
+    >>> alanine = testsystems.AlanineDipeptideVacuum()
+    >>> sampler_state = states.SamplerState(alanine.positions)
+    >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
+    >>> move = AddOneVector(atom_subset=list(range(sampler_state.n_particles)))
+    >>> move.apply(thermodynamic_state, sampler_state)
+    Propose new positions
+    >>> move.n_accepted
+    1
+    >>> move.n_proposed
+    1
 
     """
     def __init__(self, atom_subset=None, context_cache=None):
@@ -1439,13 +1464,17 @@ class MCDisplacementMove(MetropolizedMove):
 
     Attributes
     ----------
-    n_accept : int
+    n_accepted : int
         The number of proposals accepted.
     n_proposed : int
         The total number of attempted moves.
     displacement_sigma
     atom_subset
     context_cache
+
+    See Also
+    --------
+    MetropolizedMove
 
     """
 
@@ -1509,12 +1538,16 @@ class MCRotationMove(MetropolizedMove):
 
     Attributes
     ----------
-    n_accept : int
+    n_accepted : int
         The number of proposals accepted.
     n_proposed : int
         The total number of attempted moves.
     atom_subset
     context_cache
+
+    See Also
+    --------
+    MetropolizedMove
 
     """
 
