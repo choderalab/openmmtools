@@ -1015,6 +1015,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addConstrainVelocities()
 
             if measure_shadow_work:
+                self.addComputeGlobal("new_pe", "energy")
                 self.addComputeSum("new_ke", kinetic_energy)
                 self.addComputeGlobal("shadow_work", "shadow_work + (new_ke + new_pe) - (old_ke + old_pe)")
 
