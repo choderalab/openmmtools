@@ -14,7 +14,7 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.8.3"
+VERSION = "0.9.0"
 ISRELEASED = False
 __version__ = VERSION
 ########################
@@ -171,7 +171,8 @@ setup(
     packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts', "openmmtools.hmc_integrators"],
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
-    install_requires=['numpy', 'scipy', 'nose'],
+    install_requires=['numpy', 'scipy', 'openmm', 'parmed'],
+    tests_requires=['nose', 'pymbar'],
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,

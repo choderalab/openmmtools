@@ -70,7 +70,7 @@ def check_properties(testsystem):
 def test_properties_all_testsystems():
     """Testing computation of analytic properties for all systems.
     """
-    testsystem_classes = testsystems.TestSystem.__subclasses__()
+    testsystem_classes = get_all_subclasses(testsystems.TestSystem)
     logging.info("Testing analytical property computation:")
     for testsystem_class in testsystem_classes:
         class_name = testsystem_class.__name__
@@ -105,6 +105,8 @@ fast_testsystems = [
     "CustomGBForceSystem",
     "AlchemicalLennardJonesCluster",
     "LennardJonesPair",
+    "TolueneVacuum", "TolueneImplicit", "TolueneImplicitHCT", "TolueneImplicitOBC1", "TolueneImplicitOBC2", "TolueneImplicitGBn", "TolueneImplicitGBn2",
+    "HostGuestVacuum", "HostGuestImplicit", "HostGuestImplicitHCT", 'HostGuestImplicitOBC1',
     ]
 
 def check_potential_energy(system, positions):
@@ -190,4 +192,3 @@ def test_topology_all_testsystems():
         f = partial(check_topology, testsystem.system, testsystem.topology)
         f.description = "Testing topology for testsystem %s" % class_name
         yield f
-
