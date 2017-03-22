@@ -20,7 +20,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems
-from openmmtools.integrators import ThermostatedIntegrator
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -50,7 +50,8 @@ def get_all_custom_integrators(only_thermostated=False):
     """
     predicate = lambda x: (inspect.isclass(x) and
                            issubclass(x, openmm.CustomIntegrator) and
-                           x != integrators.ThermostatedIntegrator)
+                           x != integrators.ThermostatedIntegrator and
+                           x != integrators.RestorableIntegrator)
     if only_thermostated:
         old_predicate = predicate  # Avoid infinite recursion.
         predicate = lambda x: old_predicate(x) and issubclass(x, integrators.ThermostatedIntegrator)
@@ -256,8 +257,8 @@ def test_thermostated_integrator_hash():
     thermostated_integrators = get_all_custom_integrators(only_thermostated=True)
     all_hashes = set()
     for integrator_name, integrator_class in thermostated_integrators:
-        hash_float = ThermostatedIntegrator._compute_class_hash(integrator_class)
+        hash_float = RestorableIntegrator._compute_class_hash(integrator_class)
         all_hashes.add(hash_float)
         integrator = integrator_class()
-        assert integrator.getGlobalVariableByName('thermostated_class_hash') == hash_float
+        assert integrator.getGlobalVariableByName('_restorable__class_hash') == hash_float
     assert len(all_hashes) == len(thermostated_integrators)

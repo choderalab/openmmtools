@@ -514,6 +514,11 @@ class ThermodynamicState(object):
         """Number of particles (read-only)."""
         return self._system.getNumParticles()
 
+    @property
+    def is_periodic(self):
+        """True if the system is in a periodic box (read-only)."""
+        return self._system.usesPeriodicBoundaryConditions()
+
     def reduced_potential(self, context_state):
         """Reduced potential in this thermodynamic state.
 
@@ -732,8 +737,8 @@ class ThermodynamicState(object):
 
         Examples
         --------
-        Creating a context with a thermostated integrator means that
-        the context system will not have a thermostat.
+        When passing an integrator that does not expose getter and setter
+        for the temperature, the context will be created with a thermostat.
 
         >>> from simtk import openmm, unit
         >>> from openmmtools import testsystems
@@ -745,17 +750,6 @@ class ThermodynamicState(object):
         >>> [force.__class__.__name__ for force in system.getForces()
         ...  if 'Thermostat' in force.__class__.__name__]
         ['AndersenThermostat']
-
-        The thermostat is removed if we choose an integrator coupled
-        to a heat bath.
-
-        >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond,
-        ...                                        2.0*unit.femtosecond)
-        >>> context = state.create_context(integrator)
-        >>> system = context.getSystem()
-        >>> [force.__class__.__name__ for force in system.getForces()
-        ...  if 'Thermostat' in force.__class__.__name__]
-        []
 
         """
         # Check that integrator is consistent and if it is thermostated.
@@ -856,15 +850,24 @@ class ThermodynamicState(object):
 
     def __getstate__(self):
         """Return a dictionary representation of the state."""
-        # We just need to serialize the system since everything
-        # else is inferred from thermostat and barostat state.
-        serialized_system = openmm.XmlSerializer.serialize(self._system)
-        return dict(system=serialized_system)
+        # We serialize the standardized system, with temperature and pressure.
+        # This way, if the user wants to store multiple compatible ThermodynamicStates
+        # it is possible to store only one system for all of them, greatly reducing
+        # the hard disk consumption.
+        standardized_system = copy.deepcopy(self._system)
+        self._standardize_system(standardized_system)
+        serialized_system = openmm.XmlSerializer.serialize(standardized_system)
+        # We might as well update the cached hash.
+        if self._cached_standard_system_hash is None:
+            self._cached_standard_system_hash = serialized_system.__hash__()
+        return dict(standard_system=serialized_system, temperature=self.temperature,
+                    pressure=self.pressure)
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
-        deserialized_system = openmm.XmlSerializer.deserialize(serialization['system'])
-        self._initialize(deserialized_system)
+        deserialized_system = openmm.XmlSerializer.deserialize(serialization['standard_system'])
+        self._initialize(deserialized_system, temperature=serialization['temperature'],
+                         pressure=serialization['pressure'])
 
     # -------------------------------------------------------------------------
     # Internal-usage: initialization
@@ -1459,17 +1462,19 @@ class SamplerState(object):
         self._initialize(positions, velocities, box_vectors)
 
     @staticmethod
-    def from_context(context):
+    def from_context(context_state):
         """Alternative constructor.
 
-        Read all the configurational properties from a Context object.
-        This guarantees that all attributes (including energy attributes)
-        are initialized.
+        Read all the configurational properties from a Context object or
+        an OpenMM State object. This guarantees that all attributes
+        (including energy attributes) are initialized.
+
 
         Parameters
         ----------
-        context : simtk.openmm.Context
-            The context to read.
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read. If a State object, it must contain information
+            about positions, velocities and energy.
 
         Returns
         -------
@@ -1478,7 +1483,7 @@ class SamplerState(object):
 
         """
         sampler_state = SamplerState([])
-        sampler_state._read_context_state(context, check_consistency=False)
+        sampler_state._read_context_state(context_state, check_consistency=False)
         return sampler_state
 
     @property
@@ -1502,7 +1507,9 @@ class SamplerState(object):
         if value is None or len(value) != self.n_particles:
             raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
         self._positions = value
-        self._cached_positions_in_md_units = None  # Invalidate cache.
+
+        # Potential energy changes with different positions.
+        self.potential_energy = None
 
     @property
     def velocities(self):
@@ -1525,7 +1532,26 @@ class SamplerState(object):
         if value is not None and self.n_particles != len(value):
             raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
         self._velocities = value
-        self._cached_velocities_in_md_units = None  # Invalidate cache.
+
+        # Kinetic energy changes with different velocities.
+        self.kinetic_energy = None
+
+    @property
+    def box_vectors(self):
+        """Box vectors.
+
+        An 3x3 simtk.unit.Quantity object.
+
+        """
+        return self._box_vectors
+
+    @box_vectors.setter
+    def box_vectors(self, value):
+        # Make sure this is a Quantity. System.getDefaultPeriodicBoxVectors
+        # returns a list of Quantity objects instead for example.
+        if value is not None and not isinstance(value, unit.Quantity):
+            value = unit.Quantity(value)
+        self._box_vectors = value
 
     @property
     def total_energy(self):
@@ -1568,16 +1594,17 @@ class SamplerState(object):
         is_compatible = self.n_particles == context.getSystem().getNumParticles()
         return is_compatible
 
-    def update_from_context(self, context):
-        """Read the state from the given context.
+    def update_from_context(self, context_state):
+        """Read the state from the given Context or State object.
 
         The context must be compatible. Use SamplerState.from_context
         if you want to build a new sampler state from an incompatible.
 
         Parameters
         ----------
-        context : simtk.openmm.Context
-            The context to read.
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read. If a State, it must contain information
+            on positions, velocities and energies.
 
         Raises
         ------
@@ -1585,9 +1612,9 @@ class SamplerState(object):
             If the given context is not compatible.
 
         """
-        self._read_context_state(context, check_consistency=True)
+        self._read_context_state(context_state, check_consistency=True)
 
-    def apply_to_context(self, context):
+    def apply_to_context(self, context, ignore_velocities=False):
         """Set the context state.
 
         If velocities and box vectors have not been specified in the
@@ -1597,11 +1624,15 @@ class SamplerState(object):
         ----------
         context : simtk.openmm.Context
             The context to set.
+        ignore_velocities : bool, optional
+            If True, velocities are not set in the Context even if they
+            are defined. This can be useful if you only need to use the
+            Context only to compute energies.
 
         """
-        context.setPositions(self._positions_in_md_units)
-        if self._velocities is not None:
-            context.setVelocities(self._velocities_in_md_units)
+        context.setPositions(self._positions)
+        if self._velocities is not None and not ignore_velocities:
+            context.setVelocities(self._velocities)
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
 
@@ -1614,19 +1645,22 @@ class SamplerState(object):
         are nan.
 
         """
-        if self.potential_energy is not None and np.isnan(self.potential_energy):
+        if (self.potential_energy is not None and
+                np.isnan(self.potential_energy.value_in_unit(self.potential_energy.unit))):
             return True
-        if np.any(np.isnan(self._positions_in_md_units)):
+        if np.any(np.isnan(self._positions)):
             return True
         return False
 
     def __getitem__(self, item):
         sampler_state = SamplerState([])
         if isinstance(item, slice):
-            sampler_state._positions = self._positions[item]
+            # Copy original values to avoid side effects.
+            sampler_state._positions = copy.deepcopy(self._positions[item])
             if self._velocities is not None:
-                sampler_state._velocities = self._velocities[item]
-        else:
+                sampler_state._velocities = copy.deepcopy(self._velocities[item].copy())
+        else:  # Single index.
+            # Here we don't need to copy since we instantiate a new array.
             pos_value = self._positions[item].value_in_unit(self._positions.unit)
             sampler_state._positions = unit.Quantity(np.array([pos_value]),
                                                      self._positions.unit)
@@ -1634,9 +1668,11 @@ class SamplerState(object):
                 vel_value = self._velocities[item].value_in_unit(self._velocities.unit)
                 sampler_state._velocities = unit.Quantity(np.array([vel_value]),
                                                           self._velocities.unit)
-        sampler_state.box_vectors = self.box_vectors
-        sampler_state.potential_energy = self.potential_energy
-        sampler_state.kinetic_energy = self.kinetic_energy
+        sampler_state.box_vectors = copy.deepcopy(self.box_vectors)
+
+        # Energies for only a subset of atoms is undefined.
+        sampler_state.potential_energy = None
+        sampler_state.kinetic_energy = None
         return sampler_state
 
     def __getstate__(self):
@@ -1660,49 +1696,20 @@ class SamplerState(object):
                     potential_energy=None, kinetic_energy=None):
         """Initialize the sampler state."""
         self._positions = positions
-        self._cached_positions_in_md_units = None
         self._velocities = None
-        self._cached_velocities_in_md_units = None
         self.velocities = velocities  # Checks consistency and units.
-        self.box_vectors = box_vectors
+        self._box_vectors = None
+        self.box_vectors = box_vectors  # Make sure box vectors is Quantity.
         self.potential_energy = potential_energy
         self.kinetic_energy = kinetic_energy
 
-    @property
-    def _positions_in_md_units(self):
-        """Positions in md units system.
-
-        Handles a unitless cache that can reduce the time setting context
-        positions by more than half. The cache needs to be invalidated
-        when positions are changed.
-
-        """
-        if self._cached_positions_in_md_units is None:
-            temp_pos = self._positions.value_in_unit_system(unit.md_unit_system)
-            self._cached_positions_in_md_units = temp_pos
-        return self._cached_positions_in_md_units
-
-    @property
-    def _velocities_in_md_units(self):
-        """Velocities in md units system.
-
-        Handles a unitless cache that can reduce the time setting context
-        velocities by more than half. The cache needs to be invalidated
-        when velocities are changed.
-
-        """
-        if self._cached_velocities_in_md_units is None:
-            temp_vel = self._velocities.value_in_unit_system(unit.md_unit_system)
-            self._cached_velocities_in_md_units = temp_vel
-        return self._cached_velocities_in_md_units
-
-    def _read_context_state(self, context, check_consistency):
+    def _read_context_state(self, context_state, check_consistency):
         """Read the Context state.
 
         Parameters
         ----------
-        context : simtk.openmm.Context
-            The context to read.
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read.
         check_consistency : bool
             If True, raise an error if the context system have a
             different number of particles than the current state.
@@ -1714,17 +1721,20 @@ class SamplerState(object):
             particles than the current state.
 
         """
-        openmm_state = context.getState(getPositions=True, getVelocities=True,
-                                        getEnergy=True)
+        if isinstance(context_state, openmm.Context):
+            system = context_state.getSystem()
+            openmm_state = context_state.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                                  enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
+        else:
+            openmm_state = context_state
 
         # We assign positions first, since the velocities
-        # property will check its length for consistency
+        # property will check its length for consistency.
         if check_consistency:
             self.positions = openmm_state.getPositions(asNumpy=True)
         else:
             # The positions in md units cache is updated below.
             self._positions = openmm_state.getPositions(asNumpy=True)
-            self._cached_positions_in_md_units = None
 
         self.velocities = openmm_state.getVelocities(asNumpy=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
@@ -2034,21 +2044,27 @@ class CompoundThermodynamicState(ThermodynamicState):
 
     def __getstate__(self):
         """Return a dictionary representation of the state."""
-        # Create original ThermodynamicState to serialize
+        # Create original ThermodynamicState to serialize.
         thermodynamic_state = object.__new__(self.__class__.__bases__[1])
         thermodynamic_state.__dict__ = copy.deepcopy(self.__dict__)
-        serialization = dict(
-            thermodynamic_state=utils.serialize(thermodynamic_state),
-            composable_states=[utils.serialize(composable_state)
-                               for composable_state in self._composable_states]
-        )
+        # Set the instance _standardize_system method to CompoundState._standardize_system
+        # so that the composable states standardization will be called during serialization.
+        thermodynamic_state._standardize_system = self._standardize_system
+        serialization = dict(thermodynamic_state=utils.serialize(thermodynamic_state))
+
+        # TODO serialize as list of dicts when storage layer serialize dicts as strings
+        # Serialize composable states as nested dictionaries since
+        # list of dicts are harder to store on a file.
+        for i, composable_state in enumerate(self._composable_states):
+            serialization['composable_state' + str(i)] = utils.serialize(composable_state)
+
         return serialization
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
         thermodynamic_state = utils.deserialize(serialization['thermodynamic_state'])
-        composable_states = [utils.deserialize(composable_state)
-                             for composable_state in serialization['composable_states']]
+        composable_states = [utils.deserialize(serialization['composable_state' + str(i)])
+                             for i in range(len(serialization) - 1)]
         self._initialize(thermodynamic_state, composable_states)
 
     # -------------------------------------------------------------------------
@@ -2102,5 +2118,5 @@ class CompoundThermodynamicState(ThermodynamicState):
 
 if __name__ == '__main__':
     import doctest
-    # doctest.testmod()
-    doctest.run_docstring_examples(CompoundThermodynamicState, globals())
+    doctest.testmod()
+    # doctest.run_docstring_examples(CompoundThermodynamicState, globals())

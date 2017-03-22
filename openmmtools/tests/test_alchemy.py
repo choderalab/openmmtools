@@ -1470,7 +1470,12 @@ class TestAlchemicalState(object):
         alanine_state = copy.deepcopy(self.alanine_state)
         compound_state = states.CompoundThermodynamicState(alanine_state, [alchemical_state])
 
+        # The serialized system is standard.
         serialization = utils.serialize(compound_state)
+        serialized_standard_system = serialization['thermodynamic_state']['standard_system']
+        assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
+
+        # The object is deserialized correctly.
         deserialized_state = utils.deserialize(serialization)
         original_system_pickle = pickle.dumps(compound_state.system)
         original_alchemical_state_pickle = pickle.dumps(compound_state._composable_states[0])

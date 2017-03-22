@@ -852,6 +852,10 @@ class TestSamplerState(object):
         assert np.allclose(sliced_sampler_state.positions[0],
                            self.alanine_explicit_positions[0])
 
+        # Modifying the sliced sampler state doesn't modify original.
+        sliced_sampler_state.positions[0][0] += 1 * unit.angstrom
+        assert sliced_sampler_state.positions[0][0] == sampler_state.positions[0][0] + 1 * unit.angstrom
+
         sliced_sampler_state = sampler_state[2:10]
         assert sliced_sampler_state.n_particles == 8
         assert len(sliced_sampler_state.velocities) == 8
@@ -864,44 +868,17 @@ class TestSamplerState(object):
         assert np.allclose(sliced_sampler_state.positions,
                            self.alanine_explicit_positions[2:10:2])
 
+        # Modifying the sliced sampler state doesn't modify original. We check
+        # this here too since the algorithm for slice objects is different.
+        sliced_sampler_state.positions[0][0] += 1 * unit.angstrom
+        assert sliced_sampler_state.positions[0][0] == sampler_state.positions[2][0] + 1 * unit.angstrom
+
         # The other attributes are copied correctly.
         assert sliced_sampler_state.volume == sampler_state.volume
-        assert sliced_sampler_state.total_energy == sampler_state.total_energy
 
-    def test_cache_positions_velocities_md_units(self):
-        """Test caching positions and velocities in md units."""
-        test_pos = self.alanine_explicit_positions.value_in_unit_system(
-            unit.md_unit_system)
-
-        # Types are correct and cached value is initialized on-demand.
-        sampler_state = SamplerState(self.alanine_explicit_positions)
-        assert sampler_state._cached_positions_in_md_units is None
-        assert np.allclose(sampler_state._positions_in_md_units, test_pos)
-        assert sampler_state._cached_positions_in_md_units is not None
-        assert sampler_state._cached_velocities_in_md_units is None
-
-        # apply_to_context() forces the unitless positions to be cached.
-        sampler_state = SamplerState(self.alanine_explicit_positions)
-        assert sampler_state._cached_positions_in_md_units is None
-        context = self.create_context(self.alanine_explicit_state)
-        sampler_state.apply_to_context(context)
-        assert sampler_state._cached_positions_in_md_units is not None
-
-        # Caches are invalidated on update_from_context()
-        assert sampler_state._cached_positions_in_md_units is not None
-        sampler_state.update_from_context(context)
-        for state in [SamplerState.from_context(context), sampler_state]:
-            assert state._cached_positions_in_md_units is None
-
-        # Cache is correctly invalidated on assignment/update.
-        sampler_state._positions_in_md_units  # Force caching
-        sampler_state._velocities_in_md_units  # Force caching
-        assert sampler_state._cached_positions_in_md_units is not None
-        sampler_state.positions = self.alanine_explicit_positions
-        assert sampler_state._cached_positions_in_md_units is None
-        assert sampler_state._cached_velocities_in_md_units is not None
-        sampler_state.velocities = sampler_state.velocities
-        assert sampler_state._cached_velocities_in_md_units is None
+        # Energies are undefined for as subset of atoms.
+        assert sliced_sampler_state.kinetic_energy is None
+        assert sliced_sampler_state.potential_energy is None
 
 
 # =============================================================================
