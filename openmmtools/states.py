@@ -20,7 +20,7 @@ import copy
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import utils, integrators
+from openmmtools import utils, integrators, constants
 
 
 # =============================================================================
@@ -441,6 +441,14 @@ class ThermodynamicState(object):
             self._set_barostat_temperature(barostat, value)
 
     @property
+    def kT(self):
+        return constants.kB * self.temperature
+
+    @property
+    def beta(self):
+        return 1.0 / self.kT
+
+    @property
     def pressure(self):
         """Constant pressure of the thermodynamic state.
 
@@ -750,6 +758,18 @@ class ThermodynamicState(object):
         >>> [force.__class__.__name__ for force in system.getForces()
         ...  if 'Thermostat' in force.__class__.__name__]
         ['AndersenThermostat']
+
+        The thermostat is removed if we choose an integrator coupled
+        to a heat bath.
+
+        >>> del context  # Delete previous context to free memory.
+        >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond,
+        ...                                        2.0*unit.femtosecond)
+        >>> context = state.create_context(integrator)
+        >>> system = context.getSystem()
+        >>> [force.__class__.__name__ for force in system.getForces()
+        ...  if 'Thermostat' in force.__class__.__name__]
+        []
 
         """
         # Check that integrator is consistent and if it is thermostated.
