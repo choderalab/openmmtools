@@ -1262,7 +1262,8 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
                                              measure_shadow_work=measure_shadow_work,
                                              measure_heat=measure_heat
                                              )
-class CustomizableGHMC(mm.CustomIntegrator):
+
+class CustomizableGHMC(ThermostatedIntegrator):
     """Customizable GHMC: proposal can contain mix of deterministic and stochastic steps.
 
     If the provided `splitting` is deterministic, then we add the stochastic velocity update
@@ -1382,7 +1383,7 @@ class CustomizableGHMC(mm.CustomIntegrator):
             self.addComputeSum("old_ke", kinetic_energy)
 
             # update velocities
-            self.addComputePerDof("v", "(a * v) + (b * sqrt(kT / m) * gaussian)")
+            self.addComputePerDof("v", "(a * v) + (b * sigma * gaussian)")
             self.addConstrainVelocities()
 
             # measure heat
@@ -1432,8 +1433,11 @@ class CustomizableGHMC(mm.CustomIntegrator):
         self.addPerDofVariable("xold", 0)
         self.addPerDofVariable("vold", 0)
 
-        # Compute energy of current state
+        ### Integrator step ###
         self.addUpdateContextState()
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT / m)"})
+
+        # Compute energy of current state
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
         compute_total_energy("e_old")
