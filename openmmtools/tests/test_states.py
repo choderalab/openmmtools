@@ -576,6 +576,9 @@ class TestThermodynamicState(object):
                 assert toluene_str == context.getSystem().__getstate__()
                 assert state._find_thermostat(context.getSystem()) is not None
 
+            # Get rid of old context. This test can create a lot of them.
+            del context, integrator
+
     def test_method_is_compatible(self):
         """ThermodynamicState context and state compatibility methods."""
         def check_compatibility(state1, state2, is_compatible):
