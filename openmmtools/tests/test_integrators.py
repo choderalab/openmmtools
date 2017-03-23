@@ -222,10 +222,15 @@ def test_vvvr_protocol_work_accumulation():
     assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
     integrator.step(25)
     assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
+
+    pe_1 = context.getState(getEnergy=True).getPotentialEnergy()
     perturbed_K=99.0 * unit.kilocalories_per_mole / unit.angstroms**2
     context.setParameter('testsystems_HarmonicOscillator_K', perturbed_K)
+    pe_2 = context.getState(getEnergy=True).getPotentialEnergy()
     integrator.step(1)
     assert (integrator.getGlobalVariableByName('protocol_work') != 0), "There should be protocol work after perturbing."
+    assert (integrator.getGlobalVariableByName('protocol_work') == pe_2 - pe_1), \
+        "The potential energy difference should be equal to protocol work."
 
     # test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
     integrator = integrators.VVVRIntegrator(temperature)
