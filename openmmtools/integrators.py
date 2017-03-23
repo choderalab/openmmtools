@@ -1098,8 +1098,11 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         if measure_shadow_work:
             self.addGlobalVariable("old_pe", 0)
-            self.addGlobalVariable("new_pe", 0)
+
             self.addGlobalVariable("shadow_work", 0)
+
+        if measure_protocol_work or measure_shadow_work:
+            self.addGlobalVariable("new_pe", 0)
 
         if measure_protocol_work:
             self.addGlobalVariable("protocol_work", 0)
@@ -1117,6 +1120,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - new_pe)")
         for i, step in enumerate(splitting):
             substep_function(step)
+        if measure_protocol_work:
+            self.addComputeGlobal("new_pe", "energy")
+
 
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
