@@ -964,7 +964,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         measure_protocol_work : boolean
             Accumulate the protocol work, in the global `protocol_work`.
             Assumes that context parameters have been perturbed externally.
-            Note that it adds one energy computation per simulation step.
         """
 
         # Compute constants
@@ -1104,19 +1103,21 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         if measure_protocol_work:
             self.addGlobalVariable("protocol_work", 0)
             self.addGlobalVariable("perturbed_pe", 0)
+            self.addGlobalVariable("unperturbed_pe", 0)
 
         # Integrate
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
         # Protocol work is calculated by taking the potential energy in the perturbed system
-        # and subtracting the previous, unperturbed potential energy
-        # before any steps are taken.
+        # and subtracting the previous, unperturbed potential energy after the last iteration.
         if measure_protocol_work:
             self.addComputeGlobal("perturbed_pe", "energy")
-            self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - new_pe)")
+            self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
         for i, step in enumerate(splitting):
             substep_function(step)
+        if measure_protocol_work:
+            self.addComputeGlobal("unperturbed_pe", "energy")
 
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
