@@ -927,7 +927,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                  constraint_tolerance=1e-8,
                  override_splitting_checks=False,
                  measure_shadow_work=False,
-                 measure_heat=True
+                 measure_heat=True,
+                 measure_protocol_work=False
                  ):
         """Create a Langevin integrator with the prescribed operator splitting.
 
@@ -959,6 +960,11 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         measure_heat : boolean
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
+
+        measure_protocol_work : boolean
+            Accumulate the protocol work, in the global `protocol_work`.
+            Assumes that context parameters have been perturbed externally.
+            Note that it adds one energy computation per simulation step.
         """
 
         # Compute constants
@@ -1063,7 +1069,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             elif step_string[0] == "V":
                 V_step(step_string[1:])
 
-
         # Create a new CustomIntegrator
         super(LangevinSplittingIntegrator, self).__init__(temperature, timestep)
 
@@ -1096,9 +1101,20 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("new_pe", 0)
             self.addGlobalVariable("shadow_work", 0)
 
+        if measure_protocol_work:
+            self.addGlobalVariable("protocol_work", 0)
+            self.addGlobalVariable("perturbed_pe", 0)
+
         # Integrate
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+
+        # Protocol work is calculated by taking the potential energy in the perturbed system
+        # and subtracting the previous, unperturbed potential energy
+        # before any steps are taken.
+        if measure_protocol_work:
+            self.addComputeGlobal("perturbed_pe", "energy")
+            self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - new_pe)")
         for i, step in enumerate(splitting):
             substep_function(step)
 
