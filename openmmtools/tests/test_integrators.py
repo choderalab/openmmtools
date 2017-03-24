@@ -229,7 +229,7 @@ def test_vvvr_protocol_work_accumulation():
     pe_2 = context.getState(getEnergy=True).getPotentialEnergy()
     integrator.step(1)
     assert (integrator.getGlobalVariableByName('protocol_work') != 0), "There should be protocol work after perturbing."
-    assert (integrator.getGlobalVariableByName('protocol_work') == pe_2 - pe_1), \
+    assert (integrator.getGlobalVariableByName('protocol_work') * unit.kilojoule_per_mole == (pe_2 - pe_1)), \
         "The potential energy difference should be equal to protocol work."
 
     # test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
