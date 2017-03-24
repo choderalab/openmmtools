@@ -207,6 +207,44 @@ def test_vvvr_shadow_work_accumulation():
     assert('shadow_work' not in names_of_globals)
 
 
+def test_vvvr_protocol_work_accumulation():
+    """When `measure_protocol_work==True`, assert that global `protocol_work` is initialized to zero and
+    reaches a zero value after integrating a few dozen steps without perturbation.
+
+    By default (`measure_protocol_work=False`), assert that there is no global name for `protocol_work`."""
+
+    testsystem = testsystems.HarmonicOscillator()
+    system, topology = testsystem.system, testsystem.topology
+    temperature = 298.0 * unit.kelvin
+    integrator = integrators.VVVRIntegrator(temperature, measure_protocol_work=True)
+    context = openmm.Context(system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(temperature)
+    assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
+    integrator.step(25)
+    assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
+
+    pe_1 = context.getState(getEnergy=True).getPotentialEnergy()
+    perturbed_K=99.0 * unit.kilocalories_per_mole / unit.angstroms**2
+    context.setParameter('testsystems_HarmonicOscillator_K', perturbed_K)
+    pe_2 = context.getState(getEnergy=True).getPotentialEnergy()
+    integrator.step(1)
+    assert (integrator.getGlobalVariableByName('protocol_work') != 0), "There should be protocol work after perturbing."
+    assert (integrator.getGlobalVariableByName('protocol_work') * unit.kilojoule_per_mole == (pe_2 - pe_1)), \
+        "The potential energy difference should be equal to protocol work."
+
+    # test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
+    integrator = integrators.VVVRIntegrator(temperature)
+    context = openmm.Context(system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(temperature)
+    integrator.step(25)
+    # get the names of all global variables
+    n_globals = integrator.getNumGlobalVariables()
+    names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
+    assert('protocol_work' not in names_of_globals), "Protocol work should not be defined."
+
+
 def test_temperature_getter_setter():
     """Test that temperature setter and getter modify integrator variables."""
     temperature = 350*unit.kelvin

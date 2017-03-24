@@ -1012,7 +1012,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                  constraint_tolerance=1e-8,
                  override_splitting_checks=False,
                  measure_shadow_work=False,
-                 measure_heat=True
+                 measure_heat=True,
+                 measure_protocol_work=False
                  ):
         """Create a Langevin integrator with the prescribed operator splitting.
 
@@ -1044,6 +1045,10 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         measure_heat : boolean
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
+
+        measure_protocol_work : boolean
+            Accumulate the protocol work, in the global `protocol_work`.
+            Assumes that context parameters have been perturbed externally.
         """
 
         # Compute constants
@@ -1148,7 +1153,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             elif step_string[0] == "V":
                 V_step(step_string[1:])
 
-
         # Create a new CustomIntegrator
         super(LangevinSplittingIntegrator, self).__init__(temperature, timestep)
 
@@ -1181,11 +1185,24 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("new_pe", 0)
             self.addGlobalVariable("shadow_work", 0)
 
+        if measure_protocol_work:
+            self.addGlobalVariable("protocol_work", 0)
+            self.addGlobalVariable("perturbed_pe", 0)
+            self.addGlobalVariable("unperturbed_pe", 0)
+
         # Integrate
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+
+        # Protocol work is calculated by taking the potential energy in the perturbed system
+        # and subtracting the previous, unperturbed potential energy after the last iteration.
+        if measure_protocol_work:
+            self.addComputeGlobal("perturbed_pe", "energy")
+            self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
         for i, step in enumerate(splitting):
             substep_function(step)
+        if measure_protocol_work:
+            self.addComputeGlobal("unperturbed_pe", "energy")
 
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
@@ -1196,7 +1213,8 @@ class VVVRIntegrator(LangevinSplittingIntegrator):
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
-                 measure_heat=True
+                 measure_heat=True,
+                 measure_protocol_work=False,
                  ):
         """Create a velocity verlet with velocity randomization (VVVR) integrator.
         -----
@@ -1225,7 +1243,8 @@ class VVVRIntegrator(LangevinSplittingIntegrator):
                                              timestep=timestep,
                                              constraint_tolerance=constraint_tolerance,
                                              measure_shadow_work=measure_shadow_work,
-                                             measure_heat=measure_heat
+                                             measure_heat=measure_heat,
+                                             measure_protocol_work=measure_protocol_work
                                              )
 
 class BAOABIntegrator(LangevinSplittingIntegrator):
