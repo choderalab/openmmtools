@@ -625,11 +625,11 @@ class TestThermodynamicState(object):
         time_step = 2.0*unit.femtosecond
         state0 = ThermodynamicState(self.barostated_alanine, self.std_temperature)
 
-        integrator = openmm.LangevinIntegrator(self.std_temperature, friction, time_step)
-        context = state0.create_context(integrator)
+        langevin_integrator = openmm.LangevinIntegrator(self.std_temperature, friction, time_step)
+        context = state0.create_context(langevin_integrator)
 
-        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        thermostated_context = state0.create_context(integrator)
+        verlet_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        thermostated_context = state0.create_context(verlet_integrator)
 
         # Change context pressure.
         barostat = state0._find_barostat(context.getSystem())
@@ -680,10 +680,16 @@ class TestThermodynamicState(object):
             state2.apply_to_context(context)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
 
-        nvt_context = state2.create_context(openmm.VerletIntegrator(time_step))
+        # Clean up contexts.
+        del context, langevin_integrator
+        del thermostated_context, verlet_integrator
+
+        verlet_integrator = openmm.VerletIntegrator(time_step)
+        nvt_context = state2.create_context(verlet_integrator)
         with nose.tools.assert_raises(ThermodynamicsError) as cm:
             state1.apply_to_context(nvt_context)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
+        del nvt_context, verlet_integrator
 
     def test_method_reduced_potential(self):
         """ThermodynamicState.reduced_potential() method."""
