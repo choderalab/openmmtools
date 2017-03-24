@@ -1481,8 +1481,8 @@ class SamplerState(object):
     def __init__(self, positions, velocities=None, box_vectors=None):
         self._initialize(positions, velocities, box_vectors)
 
-    @staticmethod
-    def from_context(context_state):
+    @classmethod
+    def from_context(cls, context_state):
         """Alternative constructor.
 
         Read all the configurational properties from a Context object or
@@ -1502,7 +1502,7 @@ class SamplerState(object):
             A new SamplerState object.
 
         """
-        sampler_state = SamplerState([])
+        sampler_state = cls([])
         sampler_state._read_context_state(context_state, check_consistency=False)
         return sampler_state
 
@@ -1673,7 +1673,7 @@ class SamplerState(object):
         return False
 
     def __getitem__(self, item):
-        sampler_state = SamplerState([])
+        sampler_state = self.__class__([])
         if isinstance(item, slice):
             # Copy original values to avoid side effects.
             sampler_state._positions = copy.deepcopy(self._positions[item])
