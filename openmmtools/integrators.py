@@ -999,6 +999,11 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         - g-BAOAB with solvent-solute splitting, K_r=K_p=2:
             splitting="V0 V1 R R O R R V1 R R O R R V1 V0"
 
+    Attributes
+    ----------
+    _kinetic_energy : str
+        This is 0.5*m*v*v by default, and is the expression used for the kinetic energy
+
     References
     ----------
     [Leimkuhler and Matthews, 2015] Molecular dynamics: with deterministic and stochastic numerical methods, Chapter 7
@@ -1131,6 +1136,19 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("unperturbed_pe", "energy")
 
     def sanity_check(self, splitting, mts, allowed_characters="RVO0123456789"):
+        """
+        Perform a basic sanity check on the splitting string to ensure that it makes sense.
+
+        Parameters
+        ----------
+        splitting : str
+            The string specifying the integrator splitting
+        mts : bool
+            Whether the integrator is a multiple timestep integrator
+        allowed_characters : str, optional
+            The characters allowed to be present in the splitting string.
+            Default RVO and the digits 0-9.
+        """
 
         # Make sure we contain at least one of R, V, O steps
         assert ("R" in splitting)
@@ -1146,8 +1164,17 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             raise (ValueError("Splitting string includes an evaluation of all forces and "
                               "evaluation of subsets of forces."))
 
-    # Define substep functions
     def R_step(self, measure_shadow_work, n_R):
+        """
+        Add an R step (position update) given the velocities.
+
+        Parameters
+        ----------
+        measure_shadow_work : bool
+            Whether to compute the shadow work
+        n_R : int
+            Number of R steps in total (this determines the size of the timestep)
+        """
         if measure_shadow_work:
             self.addComputeGlobal("old_pe", "energy")
             self.addComputeSum("old_ke", self._kinetic_energy)
@@ -1165,13 +1192,20 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke + new_pe) - (old_ke + old_pe)")
 
     def V_step(self, fg, measure_shadow_work, n_V, mts):
-        """Deterministic velocity update, using only forces from force-group fg.
+        """
+        Deterministic velocity update, using only forces from force-group fg.
 
         Parameters
         ----------
         fg : string
             Force group to use in this substep.
             "" means all forces, "0" means force-group 0, etc.
+        measure_shadow_work : bool
+            Whether to compute shadow work
+        n_V : int
+            Number of V steps per integrator step--used to compute per-V timestep
+        mts : bool
+            Whether this integrator is a multiple timestep integrator
         """
         if measure_shadow_work:
             self.addComputeSum("old_ke", self._kinetic_energy)
@@ -1189,6 +1223,15 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke - old_ke)")
 
     def O_step(self, measure_heat):
+        """
+        Add an O step (stochastic velocity update)
+
+        Parameters
+        ----------
+        measure_heat : bool
+            Whether to compute the heat
+        """
+
         if measure_heat:
             self.addComputeSum("old_ke", self._kinetic_energy)
 
@@ -1201,6 +1244,26 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("heat", "heat + (new_ke - old_ke)")
 
     def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, n_V, mts):
+        """
+        Take step string, and add the appropriate R, V, O step with appropriate parameters.
+        The step string input here is a single character (or character + number, for MTS)
+
+        Parameters
+        ----------
+        step_string : str
+            R, O, V, or Vn (where n is a nonnegative integer specifying force group)
+        measure_shadow_work : bool
+            Whether the steps should measure shadow work
+        measure_heat : bool
+            Whether the O step should measure heat
+        n_R : int
+            The number of R steps per integrator step
+        n_V : int
+            The number of V steps per integrator step
+        mts : bool
+            Whether the integrator is a multiple timestep integrator
+        """
+        
         if step_string == "O":
             self.O_step(measure_heat)
         elif step_string == "R":
