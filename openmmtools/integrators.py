@@ -1062,27 +1062,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         kT = kB * temperature
         gamma = collision_rate
 
-        # Convert splitting string into a list of all-caps strings
-        splitting = splitting.upper().split()
-
-        # Count how many times each step appears, so we know how big each R/V/O substep will be
-        n_R = sum([letter == "R" for letter in splitting])
-        n_V = sum([letter == "V" for letter in splitting])
-        n_O = sum([letter == "O" for letter in splitting])
-
-        # Check if the splitting string asks for multi-time-stepping.
-        # If so, each force group should be integrated for a total length equal to dt
-        if len(set([step for step in splitting if step[0] == "V"])) > 1:
-            mts = True
-            fgs = set([step[1:] for step in splitting if step[0] == "V"])
-            n_Vs = dict()
-            for fg in fgs:
-                n_Vs[fg] = sum([step[1:] == fg for step in splitting])
-        else:
-            mts = False
-
-        # Do a couple sanity checks on the splitting string
-        self.sanity_check(splitting, mts)
+        ORV_counts, mts, force_group_nV = self.parse_splitting_string(splitting)
 
         # Create a new CustomIntegrator
         super(LangevinSplittingIntegrator, self).__init__(temperature, timestep)
@@ -1091,7 +1071,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addPerDofVariable("sigma", 0)
 
         # Velocity mixing parameter: current velocity component
-        h = timestep / max(1, n_O)
+        h = timestep / max(1, ORV_counts['O'])
         self.addGlobalVariable("a", numpy.exp(-gamma * h))
 
         # Velocity mixing parameter: random velocity component
@@ -1130,12 +1110,12 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         if measure_protocol_work:
             self.addComputeGlobal("perturbed_pe", "energy")
             self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
-        for i, step in enumerate(splitting):
-            self.substep_function(step, measure_shadow_work, measure_heat, n_R, n_V, mts)
+        for i, step in enumerate(splitting.split()):
+            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], ORV_counts['V'], mts)
         if measure_protocol_work:
             self.addComputeGlobal("unperturbed_pe", "energy")
 
-    def sanity_check(self, splitting, mts, allowed_characters="RVO0123456789"):
+    def sanity_check(self, splitting, allowed_characters="RVO0123456789"):
         """
         Perform a basic sanity check on the splitting string to ensure that it makes sense.
 
@@ -1150,19 +1130,15 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             Default RVO and the digits 0-9.
         """
 
+        #Space is just a delimiter--remove it
+        splitting_no_space = splitting.replace(" ", "")
         # Make sure we contain at least one of R, V, O steps
-        assert ("R" in splitting)
-        assert ("V" in [s[0] for s in splitting])
-        assert ("O" in splitting)
+        assert ("R" in splitting_no_space)
+        assert ("V" in [s[0] for s in splitting_no_space])
+        assert ("O" in splitting_no_space)
 
         # Make sure it contains no invalid steps
-        assert numpy.all([char in allowed_characters for char in splitting])
-
-        # If the splitting string contains both "V" and a force-group-specific V0,V1,etc.,
-        # then raise an error
-        if mts and ("V" in splitting):
-            raise (ValueError("Splitting string includes an evaluation of all forces and "
-                              "evaluation of subsets of forces."))
+        assert numpy.all([char in allowed_characters for char in splitting_no_space])
 
     def R_step(self, measure_shadow_work, n_R):
         """
@@ -1263,7 +1239,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         mts : bool
             Whether the integrator is a multiple timestep integrator
         """
-        
+
         if step_string == "O":
             self.O_step(measure_heat)
         elif step_string == "R":
@@ -1272,6 +1248,72 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             #get the force group for this update--it's the number after the V
             force_group = step_string[1:]
             self.V_step(force_group, measure_shadow_work, n_V, mts)
+
+    def parse_splitting_string(self, splitting_string):
+        """
+        Parse the splitting string to check for simple errors and extract necessary information
+
+        Parameters
+        ----------
+        splitting_string : str
+
+        Returns
+        -------
+
+        """
+        #convert the string to all caps
+        splitting_string = splitting_string.upper()
+
+        #sanity check the splitting string
+        self.sanity_check(splitting_string)
+
+        ORV_counts = dict()
+
+        #count number of R, V, O steps:
+        ORV_counts["R"] = splitting_string.count("R")
+        ORV_counts["V"] = splitting_string.count("V")
+        ORV_counts["O"] = splitting_string.count("O")
+
+        #split by delimiter (space)
+        step_list = splitting_string.split(" ")
+
+        #populate a list with all the force groups in the system
+        force_group_list = []
+        for step in step_list:
+            #if the length of the step is greater than one, it has a digit after it
+            if step[0] == "V" and len(step) > 1:
+                force_group_list.append(step[1:])
+
+        #Make a set to count distinct force groups
+        force_group_set = set(force_group_list)
+
+        #check if force group list cast to set is longer than one
+        #If it is, then multiple force groups are specified
+        if len(force_group_set) > 1:
+            mts = True
+        else:
+            mts = False
+
+
+        #If the integrator is MTS, count how many times the V steps appear for each
+        if mts:
+            force_group_n_V = {force_group: 0 for force_group in force_group_set}
+            for step in step_list:
+                if step[0] == "V":
+                    #ensure that there are no V-all steps if it's MTS
+                    assert len(step) > 1
+                    #extract the index of the force group from the step
+                    force_group_idx = step[1:]
+                    #increment the number of V calls for that force group
+                    force_group_n_V[force_group_idx] += 1
+        else:
+            force_group_n_V = {"0": 0}
+
+        return ORV_counts, mts, force_group_n_V
+
+
+
+
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
