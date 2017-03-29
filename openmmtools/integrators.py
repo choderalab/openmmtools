@@ -1259,10 +1259,16 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         Parameters
         ----------
         splitting_string : str
+            The string that specifies how to do the integrator splitting
 
         Returns
         -------
-
+        ORV_counts : dict
+            Number of O, R, and V steps
+        mts : bool
+            Whether the splitting specifies an MTS integrator
+        force_group_n_V : dict
+            Specifies the number of V steps per force group. {"0": nV} if not MTS
         """
         #convert the string to all caps
         splitting_string = splitting_string.upper()
