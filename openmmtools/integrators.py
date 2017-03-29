@@ -1111,7 +1111,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("perturbed_pe", "energy")
             self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
         for i, step in enumerate(splitting.split()):
-            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], ORV_counts['V'], mts)
+            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
         if measure_protocol_work:
             self.addComputeGlobal("unperturbed_pe", "energy")
 
@@ -1167,7 +1167,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeSum("new_ke", self._kinetic_energy)
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke + new_pe) - (old_ke + old_pe)")
 
-    def V_step(self, fg, measure_shadow_work, n_V, mts):
+    def V_step(self, fg, measure_shadow_work, force_group_nV, mts):
         """
         Deterministic velocity update, using only forces from force-group fg.
 
@@ -1178,8 +1178,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             "" means all forces, "0" means force-group 0, etc.
         measure_shadow_work : bool
             Whether to compute shadow work
-        n_V : int
-            Number of V steps per integrator step--used to compute per-V timestep
+        force_group_nV : dict
+            Number of V steps per integrator step per force group--used to compute per-V timestep.
+            In non-MTS setting, this is just {0: nV}
         mts : bool
             Whether this integrator is a multiple timestep integrator
         """
@@ -1188,9 +1189,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         # update velocities
         if mts:
-            self.addComputePerDof("v", "v + ((dt / {}) * f{} / m)".format(n_V[fg], fg))
+            self.addComputePerDof("v", "v + ((dt / {}) * f{} / m)".format(force_group_nV[fg], fg))
         else:
-            self.addComputePerDof("v", "v + (dt / {}) * f / m".format(n_V))
+            self.addComputePerDof("v", "v + (dt / {}) * f / m".format(force_group_nV["0"]))
 
         self.addConstrainVelocities()
 
@@ -1219,7 +1220,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeSum("new_ke", self._kinetic_energy)
             self.addComputeGlobal("heat", "heat + (new_ke - old_ke)")
 
-    def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, n_V, mts):
+    def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
         """
         Take step string, and add the appropriate R, V, O step with appropriate parameters.
         The step string input here is a single character (or character + number, for MTS)
@@ -1236,6 +1237,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             The number of R steps per integrator step
         n_V : int
             The number of V steps per integrator step
+        force_group_nV : dict
+            The number of V steps per integrator step per force group. {0: nV} if not mts
         mts : bool
             Whether the integrator is a multiple timestep integrator
         """
@@ -1247,7 +1250,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         elif step_string[0] == "V":
             #get the force group for this update--it's the number after the V
             force_group = step_string[1:]
-            self.V_step(force_group, measure_shadow_work, n_V, mts)
+            self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
 
     def parse_splitting_string(self, splitting_string):
         """
@@ -1307,12 +1310,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                     #increment the number of V calls for that force group
                     force_group_n_V[force_group_idx] += 1
         else:
-            force_group_n_V = {"0": 0}
+            force_group_n_V = {"0": ORV_counts["V"]}
 
         return ORV_counts, mts, force_group_n_V
-
-
-
 
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
