@@ -1021,17 +1021,18 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                  measure_shadow_work=False,
                  measure_heat=True,
                  measure_protocol_work=False,
-                 metropolize=False
                  ):
         """Create a Langevin integrator with the prescribed operator splitting.
 
         Parameters
         ----------
         splitting : string
-            Sequence of R, V, O (and optionally V{i}) substeps to be executed each timestep.
+            Sequence of R, V, O (and optionally V{i}), and M( ) substeps to be executed each timestep.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
+            M( will cause metropolization, and must be followed later by a ).
+
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
            Fictitious "bath" temperature
@@ -1133,7 +1134,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         if metropolize:
             self.metropolize()
 
-    def sanity_check(self, splitting, allowed_characters="RVO0123456789"):
+    def sanity_check(self, splitting, allowed_characters="M()RVO0123456789"):
         """
         Perform a basic sanity check on the splitting string to ensure that it makes sense.
 
@@ -1265,6 +1266,11 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.O_step(measure_heat)
         elif step_string == "R":
             self.R_step(measure_shadow_work, n_R)
+        elif step_string == "M(":
+            self.addComputePerDof("xold", "x")
+            self.addComputePerDof("vold", "v")
+        elif step_string == ")":
+            self.metropolize()
         elif step_string[0] == "V":
             #get the force group for this update--it's the number after the V
             force_group = step_string[1:]
@@ -1350,6 +1356,13 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("shadow_work", 0)
         self.endBlock()
 
+    def begin_metropolize(self):
+        """
+        Save the current x and v for a metropolization step later
+        """
+        self.addComputePerDof("xold", "x")
+        self.addComputePerDof("vold", "v")
+
 class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
     """
     This class performs nonequilibrium switching using the Perses-style lambda functions.
@@ -1398,19 +1411,11 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         # Store initial potential energy
         self.addComputeGlobal("Eold", "energy")
 
-        # Set the master 'lambda' alchemical parameter to the current fractional state
-        if self.nsteps == 0:
-            # Toggle alchemical state
-            if self._direction == 'forward':
-                self.addComputeGlobal('lambda', '1.0')
-            elif self._direction == 'reverse':
-                self.addComputeGlobal('lambda', '0.0')
-        else:
-            # Use fractional state
-            if self._direction == 'forward':
-                self.addComputeGlobal('lambda', '(step+1)/nsteps')
-            elif self._direction == 'reverse':
-                self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
+        # Use fractional state
+        if self._direction == 'forward':
+            self.addComputeGlobal('lambda', '(step+1)/nsteps')
+        elif self._direction == 'reverse':
+            self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
 
         # Update all slaved alchemical parameters
         self.addUpdateAlchemicalParametersStep()
