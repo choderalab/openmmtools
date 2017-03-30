@@ -1020,7 +1020,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                  override_splitting_checks=False,
                  measure_shadow_work=False,
                  measure_heat=True,
-                 measure_protocol_work=False
+                 measure_protocol_work=False,
+                 metropolize=False
                  ):
         """Create a Langevin integrator with the prescribed operator splitting.
 
@@ -1056,6 +1057,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         measure_protocol_work : boolean
             Accumulate the protocol work, in the global `protocol_work`.
             Assumes that context parameters have been perturbed externally.
+        metropolize : bool, optional
+            Whether to metropolize each step, based on the shadow work. If true, resets shadow work.
         """
 
         # Compute constants
@@ -1101,19 +1104,34 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("perturbed_pe", 0)
             self.addGlobalVariable("unperturbed_pe", 0)
 
+        #If we metropolize, we have to keep track of the before and after (x, v)
+        if metropolize:
+            self.addPerDofVariable("vold", 0)
+            self.addPerDofVariable("xold", 0)
+
         # Integrate
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+
+        if metropolize:
+            self.addComputePerDof("xold", "x")
+            self.addComputePerDof("vold", "v")
 
         # Protocol work is calculated by taking the potential energy in the perturbed system
         # and subtracting the previous, unperturbed potential energy after the last iteration.
         if measure_protocol_work:
             self.addComputeGlobal("perturbed_pe", "energy")
             self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
+
+        #Add the steps for integration
         for i, step in enumerate(splitting.split()):
             self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
+
         if measure_protocol_work:
             self.addComputeGlobal("unperturbed_pe", "energy")
+
+        if metropolize:
+            self.metropolize()
 
     def sanity_check(self, splitting, allowed_characters="RVO0123456789"):
         """
@@ -1320,6 +1338,17 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         return ORV_counts, mts, force_group_n_V
 
+    def metropolize(self):
+        """
+        Add a Metropolization (based on shadow work) step to the integrator. When Metropolization occurs, shadow work
+        is reset.
+        """
+        self.addComputeGlobal("accept", "step(exp(-(shadow_work)/kT) - uniform)")
+        self.beginIfBlock("accept != 1")
+        self.addComputePerDof("x", "xold")
+        self.addComputePerDof("v", "-vold")
+        self.addComputeGlobal("shadow_work", 0)
+        self.endBlock()
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
