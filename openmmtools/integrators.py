@@ -1350,6 +1350,76 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("shadow_work", 0)
         self.endBlock()
 
+class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
+    """
+    This class performs nonequilibrium switching using the Perses-style lambda functions.
+    """
+
+    def __init__(self,
+                 alchemical_functions,
+                 system,
+                 splitting="V R O R V",
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 override_splitting_checks=False,
+                 measure_shadow_work=False,
+                 measure_heat=True,
+                 measure_protocol_work=False,
+                 metropolize=False,
+                 direction="forward",
+                 nsteps_neq=100):
+
+        self._alchemical_functions = alchemical_functions
+        self._direction = direction
+        self._n_steps_neq = nsteps_neq
+
+        self._system_parameters = set()
+
+        for force_index in range(system.getNumForces()):
+            force = system.getForce(force_index)
+            if hasattr(force, 'getNumGlobalParameters'):
+                for parameter_index in range(force.getNumGlobalParameters()):
+                    self.system_parameters.add(force.getGlobalParameterName(parameter_index))
+
+    def addUpdateAlchemicalParametersStep(self):
+        """
+        Update Context parameters according to provided functions.
+        """
+        for context_parameter in self._alchemical_functions:
+            if context_parameter in self._system_parameters:
+                self.addComputeGlobal(context_parameter, self._alchemical_functions[context_parameter])
+
+    def addAlchemicalPerturbationStep(self):
+        """
+        Add alchemical perturbation step, accumulating protocol work.
+        """
+        # Store initial potential energy
+        self.addComputeGlobal("Eold", "energy")
+
+        # Set the master 'lambda' alchemical parameter to the current fractional state
+        if self.nsteps == 0:
+            # Toggle alchemical state
+            if self._direction == 'forward':
+                self.addComputeGlobal('lambda', '1.0')
+            elif self._direction == 'reverse':
+                self.addComputeGlobal('lambda', '0.0')
+        else:
+            # Use fractional state
+            if self._direction == 'forward':
+                self.addComputeGlobal('lambda', '(step+1)/nsteps')
+            elif self._direction == 'reverse':
+                self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
+
+        # Update all slaved alchemical parameters
+        self.addUpdateAlchemicalParametersStep()
+
+        # Accumulate protocol work
+        self.addComputeGlobal("Enew", "energy")
+        self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
+
+
 class VVVRIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
     def __init__(self,
