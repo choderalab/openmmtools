@@ -1017,7 +1017,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                  collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
-                 override_splitting_checks=False,
                  measure_shadow_work=False,
                  measure_heat=True,
                  ):
@@ -1045,9 +1044,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         constraint_tolerance : float
             Tolerance for constraint solver
 
-        override_splitting_checks : boolean
-            If True, skip sanity-checks on `splitting` string.
-
         measure_shadow_work : boolean
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
@@ -1056,7 +1052,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         """
 
         # Compute constants
-        kT = kB * temperature
         gamma = collision_rate
 
         #check if integrator is metropolized by checking for M step:
@@ -1387,10 +1382,69 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
 class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
     """
-    This class performs nonequilibrium switching using the Perses-style lambda functions.
+    Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
+    Propagator is based on Langevin splitting, as described below.
 
-    The type of propagator can be specified via the splitting string argument, described below.
+    One way to divide the Langevin system is into three parts which can each be solved "exactly:"
+        - R: Linear "drift" / Constrained "drift"
+            Deterministic update of *positions*, using current velocities
+            x <- x + v dt
 
+        - V: Linear "kick" / Constrained "kick"
+            Deterministic update of *velocities*, using current forces
+            v <- v + (f/m) dt
+                where f = force, m = mass
+
+        - O: Ornstein-Uhlenbeck
+            Stochastic update of velocities, simulating interaction with a heat bath
+            v <- av + b sqrt(kT/m) R
+                where
+                a = e^(-gamma dt)
+                b = sqrt(1 - e^(-2gamma dt))
+                R is i.i.d. standard normal
+
+    We can then construct integrators by solving each part for a certain timestep in sequence.
+    (We can further split up the V step by force group, evaluating cheap but fast-fluctuating
+    forces more frequently than expensive but slow-fluctuating forces. Since forces are only
+    evaluated in the V step, we represent this by including in our "alphabet" V0, V1, ...)
+
+    When the system contains holonomic constraints, these steps are confined to the constraint
+    manifold.
+
+    Examples
+    --------
+        - VVVR
+            splitting="O V R V O"
+        - BAOAB:
+            splitting="V R O R V"
+        - g-BAOAB, with K_r=3:
+            splitting="V R R R O R R R V"
+        - g-BAOAB with solvent-solute splitting, K_r=K_p=2:
+            splitting="V0 V1 R R O R R V1 R R O R R V1 V0"
+
+    Attributes
+    ----------
+    _kinetic_energy : str
+        This is 0.5*m*v*v by default, and is the expression used for the kinetic energy
+
+    References
+    ----------
+    [Nilmeier, et al. 2011] Nonequilibrium candidate Monte Carlo is an efficient tool for equilibrium simulation
+    [Leimkuhler and Matthews, 2015] Molecular dynamics: with deterministic and stochastic numerical methods, Chapter 7
+    """
+
+    def __init__(self,
+                 alchemical_functions,
+                 splitting="V R O R V",
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=1.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 measure_shadow_work=False,
+                 measure_heat=True,
+                 direction="forward",
+                 nsteps_neq=100):
+        """
         Parameters
         ----------
         alchemical_functions : dict of strings
@@ -1417,28 +1471,18 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         constraint_tolerance : float
             Tolerance for constraint solver
 
-        override_splitting_checks : boolean
-            If True, skip sanity-checks on `splitting` string.
-
         measure_shadow_work : boolean
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
         measure_heat : boolean
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
-    """
 
-    def __init__(self,
-                 alchemical_functions,
-                 splitting="V R O R V",
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
-                 constraint_tolerance=1e-8,
-                 override_splitting_checks=False,
-                 measure_shadow_work=False,
-                 measure_heat=True,
-                 direction="forward",
-                 nsteps_neq=100):
+        direction : str
+            Whether to move the global lambda parameter from 0 to 1 (forward) or 1 to 0 (reverse). Default forward.
+
+        nsteps_neq : int
+            Number of steps in nonequilibrium protocol. Default 100
+        """
 
         self._alchemical_functions = alchemical_functions
         self._direction = direction
@@ -1457,7 +1501,6 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         super(AlchemicalLangevinSplittingIntegrator, self).__init__(splitting=splitting, temperature=temperature,
                                                                     collision_rate=collision_rate, timestep=timestep,
                                                                     constraint_tolerance=constraint_tolerance,
-                                                                    override_splitting_checks=override_splitting_checks,
                                                                     measure_shadow_work=measure_shadow_work,
                                                                     measure_heat=measure_heat,
                                                                     )
@@ -1508,8 +1551,6 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             Whether the O step should measure heat
         n_R : int
             The number of R steps per integrator step
-        n_V : int
-            The number of V steps per integrator step
         force_group_nV : dict
             The number of V steps per integrator step per force group. {0: nV} if not mts
         mts : bool
@@ -1558,7 +1599,6 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
                  collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
-                 override_splitting_checks=False,
                  measure_shadow_work=False,
                  measure_heat=True):
 
@@ -1570,7 +1610,6 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
                                                                               collision_rate=collision_rate,
                                                                               timestep=timestep,
                                                                               constraint_tolerance=constraint_tolerance,
-                                                                              override_splitting_checks=override_splitting_checks,
                                                                               measure_shadow_work=measure_shadow_work,
                                                                               measure_heat=measure_heat)
 
