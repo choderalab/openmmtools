@@ -14,8 +14,8 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.9.0"
-ISRELEASED = True
+VERSION = "0.9.1"
+ISRELEASED = False
 __version__ = VERSION
 ########################
 CLASSIFIERS = """\
