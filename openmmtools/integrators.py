@@ -1057,6 +1057,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         #check if integrator is metropolized by checking for M step:
         if splitting.find("{") > -1:
             self._metropolized_integrator = True
+            measure_shadow_work = True
         else:
             self._metropolized_integrator = False
 
