@@ -1370,8 +1370,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.beginIfBlock("accept != 1")
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "-vold")
-        self.addComputeGlobal("shadow_work", 0)
         self.endBlock()
+        self.addComputeGlobal("shadow_work", 0)
 
     def begin_metropolize(self):
         """
