@@ -1434,8 +1434,10 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         #call the base class constructor
         super(AlchemicalLangevinSplittingIntegrator, self).__init__(splitting=splitting, temperature=temperature,
                                                                     collision_rate=collision_rate, timestep=timestep,
-                                                                    constraint_tolerance=constraint_tolerance, override_splitting_checks=override_splitting_checks,
-                                                                    measure_shadow_work=measure_shadow_work, measure_heat=measure_heat,
+                                                                    constraint_tolerance=constraint_tolerance,
+                                                                    override_splitting_checks=override_splitting_checks,
+                                                                    measure_shadow_work=measure_shadow_work,
+                                                                    measure_heat=measure_heat,
                                                                     )
 
     def addUpdateAlchemicalParametersStep(self):
@@ -1527,6 +1529,28 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
     """
     LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
     """
+
+    def __init__(self,
+                 splitting="V R O R V",
+                 temperature=298.0 * simtk.unit.kelvin,
+                 collision_rate=1.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds,
+                 constraint_tolerance=1e-8,
+                 override_splitting_checks=False,
+                 measure_shadow_work=False,
+                 measure_heat=True):
+
+        self.addGlobalVariable("protocol_work", 0)
+        self.addGlobalVariable("perturbed_pe", 0)
+        self.addGlobalVariable("unperturbed_pe", 0)
+        super(ExternalPerturbationLangevinSplittingIntegrator, self).__init__(splitting=splitting,
+                                                                              temperature=temperature,
+                                                                              collision_rate=collision_rate,
+                                                                              timestep=timestep,
+                                                                              constraint_tolerance=constraint_tolerance,
+                                                                              override_splitting_checks=override_splitting_checks,
+                                                                              measure_shadow_work=measure_shadow_work,
+                                                                              measure_heat=measure_heat)
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         self.addComputeGlobal("perturbed_pe", "energy")
