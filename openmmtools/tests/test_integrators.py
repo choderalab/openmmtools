@@ -207,7 +207,7 @@ def test_vvvr_shadow_work_accumulation():
     assert('shadow_work' not in names_of_globals)
 
 
-def test_vvvr_protocol_work_accumulation():
+def test_external_protocol_work_accumulation():
     """When `measure_protocol_work==True`, assert that global `protocol_work` is initialized to zero and
     reaches a zero value after integrating a few dozen steps without perturbation.
 
@@ -216,7 +216,7 @@ def test_vvvr_protocol_work_accumulation():
     testsystem = testsystems.HarmonicOscillator()
     system, topology = testsystem.system, testsystem.topology
     temperature = 298.0 * unit.kelvin
-    integrator = integrators.VVVRIntegrator(temperature, measure_protocol_work=True)
+    integrator = integrators.ExternalPerturbationLangevinSplittingIntegrator(splitting="O V R V O", temperature=temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)

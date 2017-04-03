@@ -1636,9 +1636,7 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
                  measure_shadow_work=False,
                  measure_heat=True):
 
-        self.addGlobalVariable("protocol_work", 0)
-        self.addGlobalVariable("perturbed_pe", 0)
-        self.addGlobalVariable("unperturbed_pe", 0)
+
         super(ExternalPerturbationLangevinSplittingIntegrator, self).__init__(splitting=splitting,
                                                                               temperature=temperature,
                                                                               collision_rate=collision_rate,
@@ -1646,6 +1644,10 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
                                                                               constraint_tolerance=constraint_tolerance,
                                                                               measure_shadow_work=measure_shadow_work,
                                                                               measure_heat=measure_heat)
+
+        self.addGlobalVariable("protocol_work", 0)
+        self.addGlobalVariable("perturbed_pe", 0)
+        self.addGlobalVariable("unperturbed_pe", 0)
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         self.addComputeGlobal("perturbed_pe", "energy")
