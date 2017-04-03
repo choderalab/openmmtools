@@ -1096,6 +1096,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         #If we metropolize, we have to keep track of the before and after (x, v)
         if self._metropolized_integrator:
+            self.addGlobalVariable("ntrials", 0)
+            self.addGlobalVariable("nreject", 0)
+            self.addGlobalVariable("naccept", 0)
             self.addPerDofVariable("vold", 0)
             self.addPerDofVariable("xold", 0)
 
@@ -1367,10 +1370,13 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         is reset.
         """
         self.addComputeGlobal("accept", "step(exp(-(shadow_work)/kT) - uniform)")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
         self.beginIfBlock("accept != 1")
         self.addComputePerDof("x", "xold")
         self.addComputePerDof("v", "-vold")
+        self.addComputeGlobal("nreject", "nreject + 1")
         self.endBlock()
+        self.addComputeGlobal("naccept", "ntrials - nreject")
         self.addComputeGlobal("shadow_work", 0)
 
     def begin_metropolize(self):
