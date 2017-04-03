@@ -1165,6 +1165,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                 if len(step) == 2:
                     if step[1] != "(":
                         raise ValueError("The correct way to specify Metropolization is M(")
+                    if ")" not in splitting:
+                        raise ValueError("Use of M( must be followed by )")
                 else:
                     raise ValueError("M should be followed by a ( without space.")
             elif step in allowed_characters:
