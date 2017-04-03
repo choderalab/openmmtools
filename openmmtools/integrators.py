@@ -1020,7 +1020,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                  override_splitting_checks=False,
                  measure_shadow_work=False,
                  measure_heat=True,
-                 measure_protocol_work=False,
                  ):
         """Create a Langevin integrator with the prescribed operator splitting.
 
@@ -1114,18 +1113,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
-        # Protocol work is calculated by taking the potential energy in the perturbed system
-        # and subtracting the previous, unperturbed potential energy after the last iteration.
-        if measure_protocol_work:
-            self.addComputeGlobal("perturbed_pe", "energy")
-            self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
-
         #Add the steps for integration
         for i, step in enumerate(splitting.split()):
             self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
-
-        if measure_protocol_work:
-            self.addComputeGlobal("unperturbed_pe", "energy")
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         """
@@ -1418,12 +1408,6 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
 
         measure_heat : boolean
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
-
-        measure_protocol_work : boolean
-            Accumulate the protocol work, in the global `protocol_work`.
-            Assumes that context parameters have been perturbed externally.
-            Even if False, protocol work is accumulated for the Hamiltonian changes performed by
-            this integrator.
     """
 
     def __init__(self,
@@ -1436,7 +1420,6 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
                  override_splitting_checks=False,
                  measure_shadow_work=False,
                  measure_heat=True,
-                 measure_protocol_work=True,
                  direction="forward",
                  nsteps_neq=100):
 
@@ -1458,7 +1441,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
                                                                     collision_rate=collision_rate, timestep=timestep,
                                                                     constraint_tolerance=constraint_tolerance, override_splitting_checks=override_splitting_checks,
                                                                     measure_shadow_work=measure_shadow_work, measure_heat=measure_heat,
-                                                                    measure_protocol_work=measure_protocol_work)
+                                                                    )
 
     def addUpdateAlchemicalParametersStep(self):
         """
