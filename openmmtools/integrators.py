@@ -1107,7 +1107,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
-        self.add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
+        self.add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         """
