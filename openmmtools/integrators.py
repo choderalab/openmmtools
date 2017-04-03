@@ -1151,7 +1151,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         splitting_no_space = splitting.replace(" ", "")
 
         #sanity check to make sure only allowed combinations are present in string:
-        for step in splitting:
+        for step in splitting.split():
             if step[0]=="V":
                 try:
                     force_group_number = int(step[1:])
@@ -1165,6 +1165,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                         raise ValueError("The correct way to specify Metropolization is M(")
                     if ")" not in splitting:
                         raise ValueError("Use of M( must be followed by )")
+                    if not self.verify_metropolization(splitting):
+                        raise ValueError("Shadow work generating steps found outside the Metropolization block")
                 else:
                     raise ValueError("M should be followed by a ( without space.")
             elif step in allowed_characters:
@@ -1177,6 +1179,37 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         assert ("R" in splitting_no_space)
         assert ("V" in splitting_no_space)
         assert ("O" in splitting_no_space)
+
+    def verify_metropolization(self, splitting):
+        """
+        Verify that the shadow-work generating steps are all inside the metropolis block
+        Returns False if they are not.
+
+        Parameters
+        ----------
+        splitting : str
+            The langevin splitting string
+
+        Returns
+        -------
+        valid_metropolis : bool
+            Whether all shadow-work generating steps are in the M() block
+        """
+        #find the metropolization steps:
+        M_start_index = splitting.find("M(")
+        M_end_index = splitting.find(")")
+
+        #accept/reject happens before the beginning of metropolis step
+        if M_start_index > M_end_index:
+            return False
+
+        non_metropolis_string = splitting[:M_start_index] + splitting[M_end_index:]
+
+        if "R" in non_metropolis_string or "V" in non_metropolis_string:
+            return False
+        else:
+            return True
+
 
 
     def R_step(self, measure_shadow_work, n_R):
