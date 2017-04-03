@@ -1151,13 +1151,33 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         #Space is just a delimiter--remove it
         splitting_no_space = splitting.replace(" ", "")
+
+        #sanity check to make sure only allowed combinations are present in string:
+        for step in splitting:
+            if step[0]=="V":
+                try:
+                    force_group_number = int(step[1:])
+                    if force_group_number > 31:
+                        raise ValueError("OpenMM only allows up to 32 force groups")
+                except ValueError:
+                    raise ValueError("You must use an integer force group")
+            elif step[0] == "M":
+                if len(step) == 2:
+                    if step[1] != "(":
+                        raise ValueError("The correct way to specify Metropolization is M(")
+                else:
+                    raise ValueError("M should be followed by a ( without space.")
+            elif step in allowed_characters:
+                continue
+            else:
+                raise ValueError("Invalid step name used")
+
+
         # Make sure we contain at least one of R, V, O steps
         assert ("R" in splitting_no_space)
         assert ("V" in splitting_no_space)
         assert ("O" in splitting_no_space)
 
-        # Make sure it contains no invalid steps
-        assert numpy.all([char in allowed_characters for char in splitting_no_space])
 
     def R_step(self, measure_shadow_work, n_R):
         """
