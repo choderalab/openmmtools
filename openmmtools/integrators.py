@@ -1099,11 +1099,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("new_pe", 0)
             self.addGlobalVariable("shadow_work", 0)
 
-        if measure_protocol_work:
-            self.addGlobalVariable("protocol_work", 0)
-            self.addGlobalVariable("perturbed_pe", 0)
-            self.addGlobalVariable("unperturbed_pe", 0)
-
         #If we metropolize, we have to keep track of the before and after (x, v)
         if self._metropolized_integrator:
             self.addPerDofVariable("vold", 0)
