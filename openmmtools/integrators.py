@@ -1152,12 +1152,13 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         #sanity check to make sure only allowed combinations are present in string:
         for step in splitting.split():
             if step[0]=="V":
-                try:
-                    force_group_number = int(step[1:])
-                    if force_group_number > 31:
-                        raise ValueError("OpenMM only allows up to 32 force groups")
-                except ValueError:
-                    raise ValueError("You must use an integer force group")
+                if len(step) > 1:
+                    try:
+                        force_group_number = int(step[1:])
+                        if force_group_number > 31:
+                            raise ValueError("OpenMM only allows up to 32 force groups")
+                    except ValueError:
+                        raise ValueError("You must use an integer force group")
             elif step == "{":
                     if "}" not in splitting:
                         raise ValueError("Use of { must be followed by }")
