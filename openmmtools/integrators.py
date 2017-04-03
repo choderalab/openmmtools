@@ -1054,10 +1054,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         measure_heat : boolean
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
-
-        measure_protocol_work : boolean
-            Accumulate the protocol work, in the global `protocol_work`.
-            Assumes that context parameters have been perturbed externally.
         """
 
         # Compute constants
@@ -1131,6 +1127,27 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         if measure_protocol_work:
             self.addComputeGlobal("unperturbed_pe", "energy")
 
+    def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
+        """
+        Add the steps to the integrator--this can be overridden to place steps around the integration.
+
+        Parameters
+        ----------
+        splitting : str
+            The Langevin splitting string
+        measure_shadow_work : bool
+            Whether to measure shadow work
+        measure_heat : bool
+            Whether to measure heat
+        ORV_counts : dict
+            Dictionary of occurrences of O, R, V
+        force_group_nV : dict
+            Dictionary of the number of Vs per force group
+        mts : bool
+            Whether this integrator defines an MTS integrator
+        """
+        for i, step in enumerate(splitting.split()):
+            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
 
     def sanity_check(self, splitting, allowed_characters="M()RVO0123456789"):
         """
@@ -1405,6 +1422,8 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         measure_protocol_work : boolean
             Accumulate the protocol work, in the global `protocol_work`.
             Assumes that context parameters have been perturbed externally.
+            Even if False, protocol work is accumulated for the Hamiltonian changes performed by
+            this integrator.
     """
 
     def __init__(self,
@@ -1526,7 +1545,16 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
         self.addGlobalVariable('step', 0) # current NCMC step number
 
+class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrator):
+    """
+    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
+    """
 
+    def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
+        self.addComputeGlobal("perturbed_pe", "energy")
+        self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
+        super(ExternalPerturbationLangevinSplittingIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
+        self.addComputeGlobal("unperturbed_pe", "energy")
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
