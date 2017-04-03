@@ -1667,7 +1667,6 @@ class VVVRIntegrator(LangevinSplittingIntegrator):
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
                  measure_heat=True,
-                 measure_protocol_work=False,
                  ):
         """Create a velocity verlet with velocity randomization (VVVR) integrator.
         -----
@@ -1697,7 +1696,6 @@ class VVVRIntegrator(LangevinSplittingIntegrator):
                                              constraint_tolerance=constraint_tolerance,
                                              measure_shadow_work=measure_shadow_work,
                                              measure_heat=measure_heat,
-                                             measure_protocol_work=measure_protocol_work
                                              )
 
 class BAOABIntegrator(LangevinSplittingIntegrator):
