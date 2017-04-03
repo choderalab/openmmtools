@@ -1267,7 +1267,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         Parameters
         ----------
         step_string : str
-            R, O, V, or Vn (where n is a nonnegative integer specifying force group)
+            R, O, V, M(, ), or Vn (where n is a nonnegative integer specifying force group)
         measure_shadow_work : bool
             Whether the steps should measure shadow work
         measure_heat : bool
