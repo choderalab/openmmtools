@@ -2066,25 +2066,26 @@ class CompoundThermodynamicState(ThermodynamicState):
         """Return a dictionary representation of the state."""
         # Create original ThermodynamicState to serialize.
         thermodynamic_state = object.__new__(self.__class__.__bases__[1])
-        thermodynamic_state.__dict__ = copy.deepcopy(self.__dict__)
+        thermodynamic_state.__dict__ = self.__dict__
         # Set the instance _standardize_system method to CompoundState._standardize_system
         # so that the composable states standardization will be called during serialization.
         thermodynamic_state._standardize_system = self._standardize_system
-        serialization = dict(thermodynamic_state=utils.serialize(thermodynamic_state))
+        serialized_thermodynamic_state = utils.serialize(thermodynamic_state)
 
-        # TODO serialize as list of dicts when storage layer serialize dicts as strings
-        # Serialize composable states as nested dictionaries since
-        # list of dicts are harder to store on a file.
-        for i, composable_state in enumerate(self._composable_states):
-            serialization['composable_state' + str(i)] = utils.serialize(composable_state)
+        # Serialize composable states.
+        serialized_composable_states = [utils.serialize(state)
+                                        for state in self._composable_states]
 
-        return serialization
+        return dict(thermodynamic_state=serialized_thermodynamic_state,
+                    composable_states=serialized_composable_states)
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
-        thermodynamic_state = utils.deserialize(serialization['thermodynamic_state'])
-        composable_states = [utils.deserialize(serialization['composable_state' + str(i)])
-                             for i in range(len(serialization) - 1)]
+        serialized_thermodynamic_state = serialization['thermodynamic_state']
+        serialized_composable_states = serialization['composable_states']
+        thermodynamic_state = utils.deserialize(serialized_thermodynamic_state)
+        composable_states = [utils.deserialize(state)
+                             for state in serialized_composable_states]
         self._initialize(thermodynamic_state, composable_states)
 
     # -------------------------------------------------------------------------

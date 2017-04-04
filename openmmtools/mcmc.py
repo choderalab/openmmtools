@@ -378,16 +378,12 @@ class SequenceMove(object):
         return iter(self.move_list)
 
     def __getstate__(self):
-        serialization = dict()
-        for i, move in enumerate(self.move_list):
-            serialization['move' + str(i)] = utils.serialize(move)
-        return serialization
+        serialized_moves = [utils.serialize(move) for move in self.move_list]
+        return dict(move_list=serialized_moves)
 
     def __setstate__(self, serialization):
-        self.move_list = [None for _ in range(len(serialization))]
-        # Restore moves in the correct order.
-        for i in range(len(serialization)):
-            self.move_list[i] = utils.deserialize(serialization['move' + str(i)])
+        serialized_moves = serialization['move_list']
+        self.move_list = [utils.deserialize(move) for move in serialized_moves]
 
 
 class WeightedMove(object):
@@ -469,19 +465,19 @@ class WeightedMove(object):
         move.apply(thermodynamic_state, sampler_state)
 
     def __getstate__(self):
-        serialization = dict()
-        for i, (move, weight) in enumerate(self.move_set):
-            serialization['move' + str(i)] = utils.serialize(move)
-            serialization['move' + str(i) + '_weight'] = weight
-        return serialization
+        serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
+        weights = [weight for _, weight in self.move_set]
+        return dict(moves=serialized_moves, weights=weights)
 
     def __setstate__(self, serialization):
-        self.move_set = []
-        # Restore moves in the correct order.
-        for i in range(int(len(serialization) / 2)):
-            move = utils.deserialize(serialization['move' + str(i)])
-            weight = serialization['move' + str(i) + '_weight']
-            self.move_set.append((move, weight))
+        serialized_moves = serialization['move_list']
+        self.move_list = [utils.deserialize(move) for move in serialized_moves]
+
+    def __setstate__(self, serialization):
+        serialized_moves = serialization['moves']
+        weights = serialization['weights']
+        self.move_set = [(utils.deserialize(move), weight)
+                         for move, weight in zip(serialized_moves, weights)]
 
     def __str__(self):
         return str(self.move_set)

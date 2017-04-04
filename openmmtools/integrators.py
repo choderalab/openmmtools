@@ -1024,12 +1024,12 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         Parameters
         ----------
-        splitting : string
-            Sequence of R, V, O (and optionally V{i}), and { } substeps to be executed each timestep.
+        splitting : string, default: "V R O R V"
+            Sequence of "R", "V", "O" (and optionally "(", ")", "V0", "V1", ...) substeps to be executed each timestep.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
-            ( will cause metropolization, and must be followed later by a ).
+            "(" will cause metropolization, and must be followed later by a ")".
 
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
@@ -1041,20 +1041,20 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
         """
 
         # Compute constants
         gamma = collision_rate
 
-        #check if integrator is metropolized by checking for M step:
+        # Check if integrator is metropolized by checking for M step:
         if splitting.find("(") > -1:
             self._metropolized_integrator = True
             measure_shadow_work = True
@@ -1095,7 +1095,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("new_pe", 0)
             self.addGlobalVariable("shadow_work", 0)
 
-        #If we metropolize, we have to keep track of the before and after (x, v)
+        # If we metropolize, we have to keep track of the before and after (x, v)
         if self._metropolized_integrator:
             self.addGlobalVariable("ntrials", 0)
             self.addGlobalVariable("nreject", 0)
@@ -1110,8 +1110,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
-        """
-        Add the steps to the integrator--this can be overridden to place steps around the integration.
+        """Add the steps to the integrator--this can be overridden to place steps around the integration.
 
         Parameters
         ----------
@@ -1132,8 +1131,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
 
     def sanity_check(self, splitting, allowed_characters="()RVO0123456789"):
-        """
-        Perform a basic sanity check on the splitting string to ensure that it makes sense.
+        """Perform a basic sanity check on the splitting string to ensure that it makes sense.
 
         Parameters
         ----------
@@ -1146,10 +1144,10 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             Default RVO and the digits 0-9.
         """
 
-        #Space is just a delimiter--remove it
+        # Space is just a delimiter--remove it
         splitting_no_space = splitting.replace(" ", "")
 
-        #sanity check to make sure only allowed combinations are present in string:
+        # sanity check to make sure only allowed combinations are present in string:
         for step in splitting.split():
             if step[0]=="V":
                 if len(step) > 1:
@@ -1169,15 +1167,14 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             else:
                 raise ValueError("Invalid step name used")
 
-
         # Make sure we contain at least one of R, V, O steps
         assert ("R" in splitting_no_space)
         assert ("V" in splitting_no_space)
         assert ("O" in splitting_no_space)
 
     def verify_metropolization(self, splitting):
-        """
-        Verify that the shadow-work generating steps are all inside the metropolis block
+        """Verify that the shadow-work generating steps are all inside the metropolis block
+
         Returns False if they are not.
 
         Parameters
@@ -1190,15 +1187,15 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         valid_metropolis : bool
             Whether all shadow-work generating steps are in the {} block
         """
-        #check that there is exactly one metropolized region
+        # check that there is exactly one metropolized region
         if splitting.count(")") != 1 or splitting.count("(") != 1:
             raise ValueError("There can only be one Metropolized region.")
 
-        #find the metropolization steps:
+        # find the metropolization steps:
         M_start_index = splitting.find("(")
         M_end_index = splitting.find(")")
 
-        #accept/reject happens before the beginning of metropolis step
+        # accept/reject happens before the beginning of metropolis step
         if M_start_index > M_end_index:
             return False
 
@@ -1212,8 +1209,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
 
     def R_step(self, measure_shadow_work, n_R):
-        """
-        Add an R step (position update) given the velocities.
+        """Add an R step (position update) given the velocities.
 
         Parameters
         ----------
@@ -1239,8 +1235,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke + new_pe) - (old_ke + old_pe)")
 
     def V_step(self, fg, measure_shadow_work, force_group_nV, mts):
-        """
-        Deterministic velocity update, using only forces from force-group fg.
+        """Deterministic velocity update, using only forces from force-group fg.
 
         Parameters
         ----------
@@ -1271,8 +1266,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke - old_ke)")
 
     def O_step(self, measure_heat):
-        """
-        Add an O step (stochastic velocity update)
+        """Add an O step (stochastic velocity update)
 
         Parameters
         ----------
@@ -1292,8 +1286,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.addComputeGlobal("heat", "heat + (new_ke - old_ke)")
 
     def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
-        """
-        Take step string, and add the appropriate R, V, O step with appropriate parameters.
+        """Take step string, and add the appropriate R, V, O step with appropriate parameters.
+
         The step string input here is a single character (or character + number, for MTS)
 
         Parameters
@@ -1324,13 +1318,12 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         elif step_string == ")":
             self.metropolize()
         elif step_string[0] == "V":
-            #get the force group for this update--it's the number after the V
+            # get the force group for this update--it's the number after the V
             force_group = step_string[1:]
             self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
 
     def parse_splitting_string(self, splitting_string):
-        """
-        Parse the splitting string to check for simple errors and extract necessary information
+        """Parse the splitting string to check for simple errors and extract necessary information
 
         Parameters
         ----------
@@ -1346,50 +1339,50 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         force_group_n_V : dict
             Specifies the number of V steps per force group. {"0": nV} if not MTS
         """
-        #convert the string to all caps
+        # convert the string to all caps
         splitting_string = splitting_string.upper()
 
-        #sanity check the splitting string
+        # sanity check the splitting string
         self.sanity_check(splitting_string)
 
         ORV_counts = dict()
 
-        #count number of R, V, O steps:
+        # count number of R, V, O steps:
         ORV_counts["R"] = splitting_string.count("R")
         ORV_counts["V"] = splitting_string.count("V")
         ORV_counts["O"] = splitting_string.count("O")
 
-        #split by delimiter (space)
+        # split by delimiter (space)
         step_list = splitting_string.split(" ")
 
-        #populate a list with all the force groups in the system
+        # populate a list with all the force groups in the system
         force_group_list = []
         for step in step_list:
-            #if the length of the step is greater than one, it has a digit after it
+            # if the length of the step is greater than one, it has a digit after it
             if step[0] == "V" and len(step) > 1:
                 force_group_list.append(step[1:])
 
-        #Make a set to count distinct force groups
+        # Make a set to count distinct force groups
         force_group_set = set(force_group_list)
 
-        #check if force group list cast to set is longer than one
-        #If it is, then multiple force groups are specified
+        # check if force group list cast to set is longer than one
+        # If it is, then multiple force groups are specified
         if len(force_group_set) > 1:
             mts = True
         else:
             mts = False
 
 
-        #If the integrator is MTS, count how many times the V steps appear for each
+        # If the integrator is MTS, count how many times the V steps appear for each
         if mts:
             force_group_n_V = {force_group: 0 for force_group in force_group_set}
             for step in step_list:
                 if step[0] == "V":
-                    #ensure that there are no V-all steps if it's MTS
+                    # ensure that there are no V-all steps if it's MTS
                     assert len(step) > 1
-                    #extract the index of the force group from the step
+                    # extract the index of the force group from the step
                     force_group_idx = step[1:]
-                    #increment the number of V calls for that force group
+                    # increment the number of V calls for that force group
                     force_group_n_V[force_group_idx] += 1
         else:
             force_group_n_V = {"0": ORV_counts["V"]}
@@ -1397,9 +1390,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         return ORV_counts, mts, force_group_n_V
 
     def metropolize(self):
-        """
-        Add a Metropolization (based on shadow work) step to the integrator. When Metropolization occurs, shadow work
-        is reset.
+        """Add a Metropolization (based on shadow work) step to the integrator.
+
+        When Metropolization occurs, shadow work is reset.
         """
         self.addComputeGlobal("accept", "step(exp(-(shadow_work)/kT) - uniform)")
         self.addComputeGlobal("ntrials", "ntrials + 1")
@@ -1412,15 +1405,12 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("shadow_work", 0)
 
     def begin_metropolize(self):
-        """
-        Save the current x and v for a metropolization step later
-        """
+        """Save the current x and v for a metropolization step later"""
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
 
 class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
-    """
-    Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
+    """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
     Propagator is based on Langevin splitting, as described below.
 
     One way to divide the Langevin system is into three parts which can each be solved "exactly:"
@@ -1489,13 +1479,12 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             key: value pairs such as "global_parameter" : function_of_lambda where function_of_lambda is a Lepton-compatible
             string that depends on the variable "lambda"
 
-        splitting : string
+        splitting : string, default: "V R O R V"
             Sequence of R, V, O (and optionally V{i}), and { }substeps to be executed each timestep.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
             ( will cause metropolization, and must be followed later by a ).
-
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
            Fictitious "bath" temperature
@@ -1506,19 +1495,19 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
-        direction : str
-            Whether to move the global lambda parameter from 0 to 1 (forward) or 1 to 0 (reverse). Default forward.
+        direction : str, default: "forward"
+            Whether to move the global lambda parameter from 0 to 1 (forward) or 1 to 0 (reverse).
 
-        nsteps_neq : int
+        nsteps_neq : int, default: 100
             Number of steps in nonequilibrium protocol. Default 100
         """
 
@@ -1526,16 +1515,16 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self._direction = direction
         self._n_steps_neq = nsteps_neq
 
-        #add some global variables relevant to the integrator
+        # add some global variables relevant to the integrator
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable('nsteps', self._n_steps_neq) # total number of NCMC steps to perform
         self.addGlobalVariable('step', 0) # current NCMC step number
 
-        #collect the system parameters.
+        # collect the system parameters.
         self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
 
-        #call the base class constructor
+        # call the base class constructor
         super(AlchemicalLangevinSplittingIntegrator, self).__init__(splitting=splitting, temperature=temperature,
                                                                     collision_rate=collision_rate, timestep=timestep,
                                                                     constraint_tolerance=constraint_tolerance,
@@ -1575,8 +1564,8 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         super(AlchemicalLangevinSplittingIntegrator, self).sanity_check(splitting, allowed_characters=allowed_characters)
 
     def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
-        """
-        Take step string, and add the appropriate R, V, O, M, or H step with appropriate parameters.
+        """Take step string, and add the appropriate R, V, O, M, or H step with appropriate parameters.
+
         The step string input here is a single character (or character + number, for MTS)
 
         Parameters
@@ -1605,15 +1594,14 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         elif step_string == ")":
             self.metropolize()
         elif step_string[0] == "V":
-            #get the force group for this update--it's the number after the V
+            # get the force group for this update--it's the number after the V
             force_group = step_string[1:]
             self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
         elif step_string == "H":
             self.alchemical_perturbation_step()
 
     def addGlobalVariables(self, nsteps):
-        """
-        Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
+        """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
         total steps in the protocol.
 
         Parameters
@@ -1627,9 +1615,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addGlobalVariable('step', 0) # current NCMC step number
 
 class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrator):
-    """
-    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
-    """
+    """LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work."""
 
     def __init__(self,
                  splitting="V R O R V",
@@ -1703,7 +1689,7 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
     def __init__(self,
                  temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
@@ -1722,16 +1708,13 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        override_splitting_checks : boolean
-            If True, skip sanity-checks on `splitting` string.
-
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         References
@@ -1762,7 +1745,7 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
 
     def __init__(self, K_r=2,
                  temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
@@ -1772,7 +1755,7 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
 
         Parameters
         ----------
-        K_r : integer
+        K_r : integer, default: 2
             Number of geodesic drift steps.
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
@@ -1784,16 +1767,13 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        override_splitting_checks : boolean
-            If True, skip sanity-checks on `splitting` string.
-
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         References
