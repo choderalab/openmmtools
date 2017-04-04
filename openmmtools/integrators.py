@@ -1450,6 +1450,30 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         elif step_string == "H":
             self.alchemical_perturbation_step()
 
+    def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
+        """
+        Override the base class to insert reset steps around the integrator.
+        """
+        #if the step is zero,
+        self.beginIfBlock('step = 0')
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+        self.addWorkResetStep()
+        self.addAlchemicalResetStep()
+        self.endBlock()
+
+        #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
+        self.beginIfBlock("step < nsteps")
+        super(AlchemicalLangevinSplittingIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
+                                                                                measure_heat, ORV_counts,
+                                                                                force_group_nV, mts)
+
+        #increment the step number
+        self.addComputeGlobal("step", "step + 1")
+
+        self.endBlock()
+
+
     def add_global_variables(self, nsteps):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
         total steps in the protocol.
@@ -1463,6 +1487,27 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
         self.addGlobalVariable('step', 0) # current NCMC step number
+
+    def alchemical_reset_step(self):
+        """
+        Reset the alchemical lambda to its starting value
+        This is 1 for reverse and 0 for forward
+        """
+        if self._direction == "forward":
+            self.addComputeGlobal("lambda", "0")
+        if self._direction == "reverse":
+            self.addComputeGlobal("lambda", "1")
+
+        #add all dependent parameters
+        self.update_alchemical_parameters_step()
+
+    def reset_work_step(self):
+        """
+        This step resets work statistics that have been accumulated.
+        """
+        self.addComputeGlobal("protocol_work", "0.0")
+        self.addComputeGlobal("shadow_work", "0.0")
+
 
 
 class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrator):
