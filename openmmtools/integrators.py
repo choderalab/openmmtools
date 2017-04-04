@@ -1685,7 +1685,7 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
     def __init__(self,
                  temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
@@ -1704,16 +1704,13 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        override_splitting_checks : boolean
-            If True, skip sanity-checks on `splitting` string.
-
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         References
@@ -1744,7 +1741,7 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
 
     def __init__(self, K_r=2,
                  temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=91.0 / simtk.unit.picoseconds,
+                 collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
@@ -1754,7 +1751,7 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
 
         Parameters
         ----------
-        K_r : integer
+        K_r : integer, default: 2
             Number of geodesic drift steps.
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
@@ -1766,16 +1763,13 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        override_splitting_checks : boolean
-            If True, skip sanity-checks on `splitting` string.
-
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         References
