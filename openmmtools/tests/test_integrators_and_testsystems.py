@@ -93,7 +93,10 @@ def test_integrators_and_testsystems():
 
         for integrator_name, integrator_class in custom_integrators:
             # Create integrator.
-            integrator = integrator_class()
+            if issubclass(integrator_class,integrators.AlchemicalLangevinSplittingIntegrator):
+                integrator = integrator_class(dict())
+            else:
+                integrator = integrator_class()
 
             # Create test.
             f = partial(check_combination, integrator, testsystem, platform)
