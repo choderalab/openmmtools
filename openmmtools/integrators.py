@@ -944,6 +944,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         # If we metropolize, we have to keep track of the before and after (x, v)
         if self._metropolized_integrator:
+            self.addGlobalVariable("accept", 0)
             self.addGlobalVariable("ntrials", 0)
             self.addGlobalVariable("nreject", 0)
             self.addGlobalVariable("naccept", 0)
