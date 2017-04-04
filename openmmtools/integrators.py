@@ -1450,7 +1450,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         elif step_string == "H":
             self.alchemical_perturbation_step()
 
-    def addGlobalVariables(self, nsteps):
+    def add_global_variables(self, nsteps):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
         total steps in the protocol.
 
