@@ -523,7 +523,7 @@ class DummyContextCache(object):
 # GLOBAL CONTEXT CACHE
 # =============================================================================
 
-global_context_cache = ContextCache(time_to_live=50)
+global_context_cache = ContextCache(capacity=3, time_to_live=50)
 
 
 # =============================================================================
