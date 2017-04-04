@@ -1249,7 +1249,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("nreject", "nreject + 1")
         self.endBlock()
         self.addComputeGlobal("naccept", "ntrials - nreject")
-        self.addComputeGlobal("shadow_work", 0)
+        self.addComputeGlobal("shadow_work", "0")
 
     def begin_metropolize(self):
         """Save the current x and v for a metropolization step later"""
