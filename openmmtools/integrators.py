@@ -1025,11 +1025,11 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         Parameters
         ----------
         splitting : string, default: "V R O R V"
-            Sequence of "R", "V", "O" (and optionally "(", ")", "V0", "V1", ...) substeps to be executed each timestep.
+            Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
-            "(" will cause metropolization, and must be followed later by a ")".
+            "{" will cause metropolization, and must be followed later by a "}".
 
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
@@ -1055,7 +1055,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         gamma = collision_rate
 
         # Check if integrator is metropolized by checking for M step:
-        if splitting.find("(") > -1:
+        if splitting.find("{") > -1:
             self._metropolized_integrator = True
             measure_shadow_work = True
         else:
@@ -1157,8 +1157,8 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                             raise ValueError("OpenMM only allows up to 32 force groups")
                     except ValueError:
                         raise ValueError("You must use an integer force group")
-            elif step == "(":
-                    if ")" not in splitting:
+            elif step == "{":
+                    if "}" not in splitting:
                         raise ValueError("Use of { must be followed by }")
                     if not self.verify_metropolization(splitting):
                         raise ValueError("Shadow work generating steps found outside the Metropolization block")
@@ -1188,12 +1188,12 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             Whether all shadow-work generating steps are in the {} block
         """
         # check that there is exactly one metropolized region
-        if splitting.count(")") != 1 or splitting.count("(") != 1:
+        if splitting.count("}") != 1 or splitting.count("{") != 1:
             raise ValueError("There can only be one Metropolized region.")
 
         # find the metropolization steps:
-        M_start_index = splitting.find("(")
-        M_end_index = splitting.find(")")
+        M_start_index = splitting.find("{")
+        M_end_index = splitting.find("}")
 
         # accept/reject happens before the beginning of metropolis step
         if M_start_index > M_end_index:
@@ -1312,10 +1312,10 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             self.O_step(measure_heat)
         elif step_string == "R":
             self.R_step(measure_shadow_work, n_R)
-        elif step_string == "(":
+        elif step_string == "{":
             self.addComputePerDof("xold", "x")
             self.addComputePerDof("vold", "v")
-        elif step_string == ")":
+        elif step_string == "}":
             self.metropolize()
         elif step_string[0] == "V":
             # get the force group for this update--it's the number after the V
@@ -1588,10 +1588,10 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             self.O_step(measure_heat)
         elif step_string == "R":
             self.R_step(measure_shadow_work, n_R)
-        elif step_string == "(":
+        elif step_string == "{":
             self.addComputePerDof("xold", "x")
             self.addComputePerDof("vold", "v")
-        elif step_string == ")":
+        elif step_string == "}":
             self.metropolize()
         elif step_string[0] == "V":
             # get the force group for this update--it's the number after the V
