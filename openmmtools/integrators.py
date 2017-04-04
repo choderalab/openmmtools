@@ -805,6 +805,7 @@ class HMCIntegrator(ThermostatedIntegrator):
         """The acceptance rate: n_accept  / n_trials."""
         return self.n_accept / float(self.n_trials)
 
+
 class LangevinSplittingIntegrator(ThermostatedIntegrator):
     """Integrates Langevin dynamics with a prescribed operator splitting.
 
@@ -1255,6 +1256,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputePerDof("xold", "x")
         self.addComputePerDof("vold", "v")
 
+
 class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
     Propagator is based on Langevin splitting, as described below.
@@ -1357,19 +1359,6 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             Number of steps in nonequilibrium protocol. Default 100
         """
 
-        self._alchemical_functions = alchemical_functions
-        self._direction = direction
-        self._n_steps_neq = nsteps_neq
-
-        # add some global variables relevant to the integrator
-        self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-        self.addGlobalVariable('kinetic', 0.0) # kinetic energy
-        self.addGlobalVariable('nsteps', self._n_steps_neq) # total number of NCMC steps to perform
-        self.addGlobalVariable('step', 0) # current NCMC step number
-
-        # collect the system parameters.
-        self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
-
         # call the base class constructor
         super(AlchemicalLangevinSplittingIntegrator, self).__init__(splitting=splitting, temperature=temperature,
                                                                     collision_rate=collision_rate, timestep=timestep,
@@ -1377,6 +1366,20 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
                                                                     measure_shadow_work=measure_shadow_work,
                                                                     measure_heat=measure_heat,
                                                                     )
+
+        self._alchemical_functions = alchemical_functions
+        self._direction = direction
+        self._n_steps_neq = nsteps_neq
+
+        # add some global variables relevant to the integrator
+        self.addGlobalVariable('lambda',
+                               0.0)  # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
+        self.addGlobalVariable('kinetic', 0.0)  # kinetic energy
+        self.addGlobalVariable('nsteps', self._n_steps_neq)  # total number of NCMC steps to perform
+        self.addGlobalVariable('step', 0)  # current NCMC step number
+
+        # collect the system parameters.
+        self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
 
     def update_alchemical_parameters_step(self):
         """
@@ -1460,6 +1463,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
         self.addGlobalVariable('step', 0) # current NCMC step number
 
+
 class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrator):
     """LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work."""
 
@@ -1490,6 +1494,7 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
         super(ExternalPerturbationLangevinSplittingIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
         self.addComputeGlobal("unperturbed_pe", "energy")
+
 
 class VVVRIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
@@ -1530,6 +1535,7 @@ class VVVRIntegrator(LangevinSplittingIntegrator):
                                              measure_shadow_work=measure_shadow_work,
                                              measure_heat=measure_heat,
                                              )
+
 
 class BAOABIntegrator(LangevinSplittingIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
@@ -1584,6 +1590,7 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
                                              measure_shadow_work=measure_shadow_work,
                                              measure_heat=measure_heat
                                              )
+
 
 class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
     """Create a geodesic-BAOAB integrator."""
@@ -1643,6 +1650,7 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
                                              measure_shadow_work=measure_shadow_work,
                                              measure_heat=measure_heat
                                              )
+
 
 class GHMCIntegrator(LangevinSplittingIntegrator):
 

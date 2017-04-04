@@ -154,6 +154,9 @@ def test_stabilities():
 
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
+            # Need an alchemical system to test this
+            if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+                continue
             integrator = integrator_class()
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
@@ -265,7 +268,10 @@ def test_temperature_getter_setter():
         # Test original integrator.
         check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
                                                                   'getter of {}').format(integrator_name)
-        integrator = integrator_class(temperature=temperature)
+        if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+            integrator = integrator_class(dict(),temperature=temperature)
+        else:
+            integrator = integrator_class(temperature=temperature)
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
 
@@ -277,7 +283,10 @@ def test_temperature_getter_setter():
         # Test Context integrator wrapper.
         check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
                                                                   'of {}').format(integrator_name)
-        integrator = integrator_class()
+        if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+            integrator = integrator_class(dict())
+        else:
+            integrator = integrator_class()
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
         integrator = context.getIntegrator()
@@ -297,6 +306,9 @@ def test_thermostated_integrator_hash():
     for integrator_name, integrator_class in thermostated_integrators:
         hash_float = RestorableIntegrator._compute_class_hash(integrator_class)
         all_hashes.add(hash_float)
-        integrator = integrator_class()
+        if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+            integrator = integrator_class(dict())
+        else:
+            integrator = integrator_class()
         assert integrator.getGlobalVariableByName('_restorable__class_hash') == hash_float
     assert len(all_hashes) == len(thermostated_integrators)
