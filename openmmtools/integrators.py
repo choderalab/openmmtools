@@ -1190,6 +1190,10 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         valid_metropolis : bool
             Whether all shadow-work generating steps are in the {} block
         """
+        #check that there is exactly one metropolized region
+        if splitting.count(")") != 1 or splitting.count("(") != 1:
+            raise ValueError("There can only be one Metropolized region.")
+
         #find the metropolization steps:
         M_start_index = splitting.find("(")
         M_end_index = splitting.find(")")
