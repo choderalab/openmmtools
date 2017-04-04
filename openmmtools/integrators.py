@@ -1690,7 +1690,7 @@ class GHMCIntegrator(LangevinSplittingIntegrator):
         http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
         """
 
-        super(GHMCIntegrator, self).__init__(splitting="", temperature=temperature, collision_rate=collision_rate,
+        super(GHMCIntegrator, self).__init__(splitting="O ( V R V )", temperature=temperature, collision_rate=collision_rate,
                                              timestep=timestep,
                                              constraint_tolerance=constraint_tolerance,
                                              measure_shadow_work=measure_shadow_work, measure_heat=measure_heat)
