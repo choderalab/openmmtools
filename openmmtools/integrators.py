@@ -1024,12 +1024,12 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
         Parameters
         ----------
-        splitting : string
-            Sequence of R, V, O (and optionally V{i}), and { } substeps to be executed each timestep.
+        splitting : string, default: "V R O R V"
+            Sequence of "R", "V", "O" (and optionally "(", ")", "V0", "V1", ...) substeps to be executed each timestep.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
-            ( will cause metropolization, and must be followed later by a ).
+            "(" will cause metropolization, and must be followed later by a ")".
 
 
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
@@ -1041,20 +1041,20 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
         """
 
         # Compute constants
         gamma = collision_rate
 
-        #check if integrator is metropolized by checking for M step:
+        # Check if integrator is metropolized by checking for M step:
         if splitting.find("(") > -1:
             self._metropolized_integrator = True
             measure_shadow_work = True
@@ -1166,7 +1166,6 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
                 continue
             else:
                 raise ValueError("Invalid step name used")
-
 
         # Make sure we contain at least one of R, V, O steps
         assert ("R" in splitting_no_space)
@@ -1319,7 +1318,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         elif step_string == ")":
             self.metropolize()
         elif step_string[0] == "V":
-            #get the force group for this update--it's the number after the V
+            # get the force group for this update--it's the number after the V
             force_group = step_string[1:]
             self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
 
@@ -1411,8 +1410,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputePerDof("vold", "v")
 
 class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
-    """
-    Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
+    """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
     Propagator is based on Langevin splitting, as described below.
 
     One way to divide the Langevin system is into three parts which can each be solved "exactly:"
@@ -1481,7 +1479,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             key: value pairs such as "global_parameter" : function_of_lambda where function_of_lambda is a Lepton-compatible
             string that depends on the variable "lambda"
 
-        splitting : string
+        splitting : string, default: "V R O R V"
             Sequence of R, V, O (and optionally V{i}), and { }substeps to be executed each timestep.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
@@ -1497,19 +1495,19 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
            Integration timestep
 
-        constraint_tolerance : float
+        constraint_tolerance : float, default: 1.0e-8
             Tolerance for constraint solver
 
-        measure_shadow_work : boolean
+        measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean
+        measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
-        direction : str
-            Whether to move the global lambda parameter from 0 to 1 (forward) or 1 to 0 (reverse). Default forward.
+        direction : str, default: "forward"
+            Whether to move the global lambda parameter from 0 to 1 (forward) or 1 to 0 (reverse).
 
-        nsteps_neq : int
+        nsteps_neq : int, default: 100
             Number of steps in nonequilibrium protocol. Default 100
         """
 
