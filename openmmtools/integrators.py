@@ -977,7 +977,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         for i, step in enumerate(splitting.split()):
             self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
 
-    def sanity_check(self, splitting, allowed_characters="()RVO0123456789"):
+    def sanity_check(self, splitting, allowed_characters="{}RVO0123456789"):
         """Perform a basic sanity check on the splitting string to ensure that it makes sense.
 
         Parameters
@@ -1409,7 +1409,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addComputeGlobal("Enew", "energy")
         self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
 
-    def sanity_check(self, splitting, allowed_characters="H()RVO0123456789"):
+    def sanity_check(self, splitting, allowed_characters="H{}RVO0123456789"):
         super(AlchemicalLangevinSplittingIntegrator, self).sanity_check(splitting, allowed_characters=allowed_characters)
 
     def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
