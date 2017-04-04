@@ -1543,7 +1543,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
                                                                     measure_heat=measure_heat,
                                                                     )
 
-    def addUpdateAlchemicalParametersStep(self):
+    def update_alchemical_parameters_step(self):
         """
         Update Context parameters according to provided functions.
         """
@@ -1551,7 +1551,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             if context_parameter in self._system_parameters:
                 self.addComputeGlobal(context_parameter, self._alchemical_functions[context_parameter])
 
-    def addAlchemicalPerturbationStep(self):
+    def alchemical_perturbation_step(self):
         """
         Add alchemical perturbation step, accumulating protocol work.
         """
@@ -1565,7 +1565,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
 
         # Update all slaved alchemical parameters
-        self.addUpdateAlchemicalParametersStep()
+        self.update_alchemical_parameters_step()
 
         # Accumulate protocol work
         self.addComputeGlobal("Enew", "energy")
@@ -1609,7 +1609,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             force_group = step_string[1:]
             self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
         elif step_string == "H":
-            self.addAlchemicalPerturbationStep()
+            self.alchemical_perturbation_step()
 
     def addGlobalVariables(self, nsteps):
         """
