@@ -1739,7 +1739,6 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
                                              measure_heat=measure_heat
                                              )
 
-
 class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
     """Create a geodesic-BAOAB integrator."""
 
@@ -1799,7 +1798,56 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
                                              measure_heat=measure_heat
                                              )
 
+class GHMCIntegrator(LangevinSplittingIntegrator):
 
+    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=1.0 / simtk.unit.picoseconds,
+                 timestep=1.0 * simtk.unit.femtoseconds, constraint_tolerance=1.0e-8, measure_shadow_work=False,
+                 measure_heat=True):
+        """
+        Create a generalized hybrid Monte Carlo (GHMC) integrator.
+
+        Parameters
+        ----------
+        temperature : simtk.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
+           The temperature.
+        collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
+           The collision rate.
+        timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
+           The integration timestep.
+
+        Notes
+        -----
+        This integrator is equivalent to a Langevin integrator in the velocity Verlet discretization with a
+        Metrpolization step to ensure sampling from the appropriate distribution.
+
+        Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and
+        accepted, respectively.
+
+        TODO
+        ----
+        * Move initialization of 'sigma' to setting the per-particle variables.
+        * Generalize to use MTS inner integrator.
+
+        Examples
+        --------
+
+        Create a GHMC integrator.
+
+        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> integrator = GHMCIntegrator(temperature, collision_rate, timestep)
+
+        References
+        ----------
+        Lelievre T, Stoltz G, and Rousset M. Free Energy Computations: A Mathematical Perspective
+        http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
+        """
+
+        super(GHMCIntegrator, self).__init__(splitting="", temperature=temperature, collision_rate=collision_rate,
+                                             timestep=timestep,
+                                             constraint_tolerance=constraint_tolerance,
+                                             measure_shadow_work=measure_shadow_work, measure_heat=measure_heat)
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
