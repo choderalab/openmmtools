@@ -37,6 +37,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import numpy
 import logging
+import re
 
 import simtk.unit
 
@@ -1036,7 +1037,11 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
             Whether all shadow-work generating steps are in the {} block
         """
         # check that there is exactly one metropolized region
-        if splitting.count("}") != 1 or splitting.count("{") != 1:
+        #this pattern matches the { literally, then any number of any character other than }, followed by another {
+        #If there's a match, then we have an attempt at a nested metropolization, which is unsupported
+        regex_nested_metropolis = "{[^}]*{"
+        pattern = re.compile(regex_nested_metropolis)
+        if pattern.match(splitting.replace(" ", "")):
             raise ValueError("There can only be one Metropolized region.")
 
         # find the metropolization steps:
@@ -1047,14 +1052,13 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         if M_start_index > M_end_index:
             return False
 
-        non_metropolis_string = splitting[:M_start_index] + splitting[M_end_index:]
-
-        if "R" in non_metropolis_string or "V" in non_metropolis_string:
+        #pattern to find whether any shadow work producing steps lie outside the metropolization region
+        RV_outside_metropolis = "[RV](?![^{]*})"
+        outside_metropolis_check = re.compile(RV_outside_metropolis)
+        if outside_metropolis_check.match(splitting.replace(" ","")):
             return False
         else:
             return True
-
-
 
     def R_step(self, measure_shadow_work, n_R):
         """Add an R step (position update) given the velocities.
@@ -1360,6 +1364,13 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             Number of steps in nonequilibrium protocol. Default 100
         """
 
+        self._alchemical_functions = alchemical_functions
+        self._direction = direction
+        self._n_steps_neq = nsteps_neq
+
+        # collect the system parameters.
+        self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
+
         # call the base class constructor
         super(AlchemicalLangevinSplittingIntegrator, self).__init__(splitting=splitting, temperature=temperature,
                                                                     collision_rate=collision_rate, timestep=timestep,
@@ -1368,19 +1379,8 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
                                                                     measure_heat=measure_heat,
                                                                     )
 
-        self._alchemical_functions = alchemical_functions
-        self._direction = direction
-        self._n_steps_neq = nsteps_neq
-
         # add some global variables relevant to the integrator
-        self.addGlobalVariable('lambda',
-                               0.0)  # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-        self.addGlobalVariable('kinetic', 0.0)  # kinetic energy
-        self.addGlobalVariable('nsteps', self._n_steps_neq)  # total number of NCMC steps to perform
-        self.addGlobalVariable('step', 0)  # current NCMC step number
-
-        # collect the system parameters.
-        self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
+        self.add_global_variables(nsteps=nsteps_neq)
 
     def update_alchemical_parameters_step(self):
         """
@@ -1458,8 +1458,8 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
         self.addConstrainVelocities()
-        self.addWorkResetStep()
-        self.addAlchemicalResetStep()
+        self.reset_work_step()
+        self.alchemical_reset_step()
         self.endBlock()
 
         #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
@@ -1483,10 +1483,13 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         nsteps : int, greater than 0
             The number of steps in the switching protocol.
         """
+        self.addGlobalVariable('Eold', 0) #old energy value before perturbation
+        self.addGlobalVariable('Enew', 0) #new energy value after perturbation
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
         self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
         self.addGlobalVariable('step', 0) # current NCMC step number
+        self.addGlobalVariable('protocol_work', 0) # work performed by NCMC protocol
 
     def alchemical_reset_step(self):
         """
