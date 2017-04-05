@@ -21,7 +21,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems, alchemy
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalLangevinSplittingIntegrator, GHMCIntegrator
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalLangevinSplittingIntegrator, GHMCIntegrator, GeodesicBAOABIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -321,11 +321,10 @@ def test_alchemical_langevin_integrator():
     AlanineDipeptideImplicit to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
     """
-    nsteps = 100
+    nsteps = 1000000
     #These are the alchemical functions we will use to switch the sterics and electrostatics
     default_functions = {
-    'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
-    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)'
+    'lambda_sterics' : 'lambda',
     }
 
     alchemical_integrator_forward = AlchemicalLangevinSplittingIntegrator(default_functions,
@@ -340,23 +339,26 @@ def test_alchemical_langevin_integrator():
     platform = openmm.Platform.getPlatformByName("Reference")
 
     #Do 100 iterations of each direction
-    n_iterations = 10000
+    n_iterations = 100
 
     #instantiate the testsystem
     alanine_dipeptide = testsystems.AlanineDipeptideVacuum()
+    lj = testsystems.LennardJonesCluster()
 
     #alchemically modify everything:
-    n_atoms = alanine_dipeptide.system.getNumParticles()
+    n_atoms = lj.system.getNumParticles()
     alchemical_factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
-    alchemical_region = alchemy.AlchemicalRegion(range(n_atoms))
-    modified_system = alchemical_factory.create_alchemical_system(reference_system=alanine_dipeptide.system,
-                                                                  alchemical_regions=alchemical_region)
+    alchemical_region = alchemy.AlchemicalRegion([1], alchemical_bonds=False, alchemical_angles=False,
+                                                 alchemical_torsions=False)
+    modified_system = alchemical_factory.create_alchemical_system(reference_system=lj.system,
+                                                                  alchemical_regions=alchemical_region,
+                                                                  )
 
     alchemical_ctx_forward = openmm.Context(modified_system, alchemical_integrator_forward, platform)
     alchemical_ctx_reverse = openmm.Context(modified_system, alchemical_integrator_reverse, platform)
 
     #get the forward work values:
-    positions = alanine_dipeptide.positions
+    positions = lj.positions
     w_f = numpy.zeros([n_iterations])
     for i in range(n_iterations):
         w_f[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
@@ -375,7 +377,7 @@ def test_alchemical_langevin_integrator():
         positions = eq_positions
         print(i)
 
-    deltaF, ddeltaF = pymbar.BAR(w_f, w_r)
+    deltaF, ddeltaF = pymbar.BAR(-w_f, -w_r)
 
     print(deltaF)
     print(ddeltaF)
@@ -401,12 +403,13 @@ def run_nonequilibrium_switching(system, positions, alchemical_functions, alchem
 
     #make a ghmc integrator with the default parameters
     ghmc_integrator = GHMCIntegrator()
+    gbaoab = GeodesicBAOABIntegrator()
 
     #use the reference platform, since this is for a test
     platform = openmm.Platform.getPlatformByName("Reference")
 
     #make a context
-    context = openmm.Context(system, ghmc_integrator, platform)
+    context = openmm.Context(system, gbaoab, platform)
     context.setPositions(positions)
 
     #set the initial alchemical state for the equilibration simulation:
@@ -414,7 +417,7 @@ def run_nonequilibrium_switching(system, positions, alchemical_functions, alchem
         context.setParameter(parameter, 0.0) if direction == "forward" else context.setParameter(parameter, 1.0)
 
     #run some steps to equilibrate
-    ghmc_integrator.step(100)
+    gbaoab.step(100)
 
     eq_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
 
