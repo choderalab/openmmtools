@@ -320,7 +320,7 @@ def test_alchemical_langevin_integrator():
     AlanineDipeptideImplicit to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
     """
-    nsteps = 1000000
+    nsteps = 1000
     #These are the alchemical functions we will use to switch the sterics and electrostatics
     default_functions = {
     'lambda_sterics' : 'lambda',
