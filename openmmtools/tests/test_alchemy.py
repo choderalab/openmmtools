@@ -1258,8 +1258,11 @@ class TestAlchemicalState(object):
 
     def test_check_system_consistency(self):
         """Test method AlchemicalState.check_system_consistency()."""
-        # Raise error if system has MORE lambda parameters.
+        # A system is consistent with itself.
         alchemical_state = AlchemicalState.from_system(self.alanine_state.system)
+        alchemical_state.check_system_consistency(self.alanine_state.system)
+
+        # Raise error if system has MORE lambda parameters.
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.check_system_consistency(self.full_alanine_state.system)
 
