@@ -374,7 +374,7 @@ def test_alchemical_langevin_integrator():
         positions = eq_positions
         print(i)
 
-    deltaF, ddeltaF = pymbar.BAR(-w_f, -w_r)
+    deltaF, ddeltaF = pymbar.BAR(w_f, w_r)
 
     print(deltaF)
     print(ddeltaF)
