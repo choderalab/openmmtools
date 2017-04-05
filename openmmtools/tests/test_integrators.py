@@ -398,14 +398,13 @@ def run_nonequilibrium_switching(system, positions, alchemical_functions, alchem
     """
 
     # Make a ghmc integrator with the default parameters
-    ghmc_integrator = GHMCIntegrator()
-    gbaoab = GeodesicBAOABIntegrator()
+    ghmc = GHMCIntegrator()
 
     # Use the reference platform, since this is for a test
     platform = openmm.Platform.getPlatformByName("Reference")
 
     # Make a context
-    context = openmm.Context(system, gbaoab, platform)
+    context = openmm.Context(system, ghmc, platform)
     context.setPositions(positions)
 
     # Set the initial alchemical state for the equilibration simulation:
@@ -413,7 +412,7 @@ def run_nonequilibrium_switching(system, positions, alchemical_functions, alchem
         context.setParameter(parameter, 0.0) if direction == "forward" else context.setParameter(parameter, 1.0)
 
     # Run some steps to equilibrate
-    gbaoab.step(100)
+    ghmc.step(100)
 
     eq_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
 
