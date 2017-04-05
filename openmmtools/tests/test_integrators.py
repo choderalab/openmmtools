@@ -15,12 +15,13 @@ Test custom integrators.
 
 import numpy
 import inspect
+import pymbar
 
 from simtk import unit
 from simtk import openmm
 
-from openmmtools import integrators, testsystems
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator
+from openmmtools import integrators, testsystems, alchemy
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalLangevinSplittingIntegrator, GHMCIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -312,3 +313,117 @@ def test_thermostated_integrator_hash():
             integrator = integrator_class()
         assert integrator.getGlobalVariableByName('_restorable__class_hash') == hash_float
     assert len(all_hashes) == len(thermostated_integrators)
+
+
+def test_alchemical_langevin_integrator():
+    """
+    Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
+    AlanineDipeptideImplicit to the same with nonbonded forces decoupled and back, results in an approximately
+    zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
+    """
+    nsteps = 100
+    #These are the alchemical functions we will use to switch the sterics and electrostatics
+    default_functions = {
+    'lambda_sterics' : '2*lambda * step(0.5 - lambda) + (1.0 - step(0.5 - lambda))',
+    'lambda_electrostatics' : '2*(lambda - 0.5) * step(lambda - 0.5)'
+    }
+
+    alchemical_integrator_forward = AlchemicalLangevinSplittingIntegrator(default_functions,
+                                                                      splitting="O { V R H R V } O",
+                                                                      nsteps_neq=nsteps,
+                                                                      direction="forward")
+    alchemical_integrator_reverse = AlchemicalLangevinSplittingIntegrator(default_functions,
+                                                                  splitting="O { V R H R V } O",
+                                                                  nsteps_neq=nsteps,
+                                                                  direction="reverse")
+
+    platform = openmm.Platform.getPlatformByName("Reference")
+
+    #Do 100 iterations of each direction
+    n_iterations = 10000
+
+    #instantiate the testsystem
+    alanine_dipeptide = testsystems.AlanineDipeptideVacuum()
+
+    #alchemically modify everything:
+    n_atoms = alanine_dipeptide.system.getNumParticles()
+    alchemical_factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
+    alchemical_region = alchemy.AlchemicalRegion(range(n_atoms))
+    modified_system = alchemical_factory.create_alchemical_system(reference_system=alanine_dipeptide.system,
+                                                                  alchemical_regions=alchemical_region)
+
+    alchemical_ctx_forward = openmm.Context(modified_system, alchemical_integrator_forward, platform)
+    alchemical_ctx_reverse = openmm.Context(modified_system, alchemical_integrator_reverse, platform)
+
+    #get the forward work values:
+    positions = alanine_dipeptide.positions
+    w_f = numpy.zeros([n_iterations])
+    for i in range(n_iterations):
+        w_f[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
+                                              default_functions, alchemical_integrator_forward, 100, alchemical_ctx_forward,
+                                              direction="forward")
+        positions = eq_positions
+
+        print(i)
+
+    #get the reverse work values:
+    w_r = numpy.zeros([n_iterations])
+    for i in range(n_iterations):
+        w_r[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
+                                              default_functions, alchemical_integrator_reverse, 100, alchemical_ctx_reverse,
+                                              direction="reverse")
+        positions = eq_positions
+        print(i)
+
+    deltaF, ddeltaF = pymbar.BAR(w_f, w_r)
+
+    print(deltaF)
+    print(ddeltaF)
+
+
+
+def run_nonequilibrium_switching(system, positions, alchemical_functions, alchemical_integrator, nsteps, alchemical_ctx, direction="forward"):
+    """
+    Equilibrate and then run some nonequilibrium switching simulations
+
+    Parameters
+    ----------
+    system
+    positions
+    alchemical_integrator
+    direction
+
+    Returns
+    -------
+    protocol_work : float
+        Work performed by protocol
+    """
+
+    #make a ghmc integrator with the default parameters
+    ghmc_integrator = GHMCIntegrator()
+
+    #use the reference platform, since this is for a test
+    platform = openmm.Platform.getPlatformByName("Reference")
+
+    #make a context
+    context = openmm.Context(system, ghmc_integrator, platform)
+    context.setPositions(positions)
+
+    #set the initial alchemical state for the equilibration simulation:
+    for parameter in alchemical_functions.keys():
+        context.setParameter(parameter, 0.0) if direction == "forward" else context.setParameter(parameter, 1.0)
+
+    #run some steps to equilibrate
+    ghmc_integrator.step(100)
+
+    eq_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+
+    alchemical_ctx.setPositions(eq_positions)
+
+    alchemical_integrator.step(nsteps)
+
+    return alchemical_integrator.getGlobalVariableByName("protocol_work"), eq_positions
+
+
+if __name__=="__main__":
+    test_alchemical_langevin_integrator()
