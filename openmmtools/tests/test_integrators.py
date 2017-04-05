@@ -359,7 +359,7 @@ def test_alchemical_langevin_integrator():
     w_f = numpy.zeros([n_iterations])
     for i in range(n_iterations):
         w_f[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
-                                              default_functions, alchemical_integrator_forward, 100, alchemical_ctx_forward,
+                                              default_functions, alchemical_integrator_forward, nsteps, alchemical_ctx_forward,
                                               direction="forward")
         positions = eq_positions
 
@@ -369,7 +369,7 @@ def test_alchemical_langevin_integrator():
     w_r = numpy.zeros([n_iterations])
     for i in range(n_iterations):
         w_r[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
-                                              default_functions, alchemical_integrator_reverse, 100, alchemical_ctx_reverse,
+                                              default_functions, alchemical_integrator_reverse, nsteps, alchemical_ctx_reverse,
                                               direction="reverse")
         positions = eq_positions
         print(i)
