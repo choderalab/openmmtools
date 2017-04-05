@@ -317,10 +317,12 @@ def test_thermostated_integrator_hash():
 
 def test_alchemical_langevin_integrator():
     """Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
-    AlanineDipeptideImplicit to the same with nonbonded forces decoupled and back, results in an approximately
+    LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
     """
-    nsteps = 1000
+    n_iterations = 100  # number of forward and reverse protocols
+    nsteps = 1000 # number of steps within each protocol
+
     #These are the alchemical functions we will use to switch the sterics and electrostatics
     default_functions = {
     'lambda_sterics' : 'lambda',
@@ -337,9 +339,6 @@ def test_alchemical_langevin_integrator():
 
     platform = openmm.Platform.getPlatformByName("Reference")
 
-    # Do 100 iterations of each direction
-    n_iterations = 100
-
     # Instantiate the testsystem
     lj = testsystems.LennardJonesCluster()
 
@@ -354,42 +353,59 @@ def test_alchemical_langevin_integrator():
     alchemical_ctx_forward = openmm.Context(modified_system, alchemical_integrator_forward, platform)
     alchemical_ctx_reverse = openmm.Context(modified_system, alchemical_integrator_reverse, platform)
 
+    # Get equilibrium samples
+    burn_in = 1000
+    n_equil_samples = n_iterations
+    thinning = 10
+
+    samples_at_0, samples_at_1 = [], []
+
+    # Get equilibrium samples from the lambda=0 state
+    ghmc = GHMCIntegrator()
+    platform = openmm.Platform.getPlatformByName("Reference")
+    context = openmm.Context(modified_system, ghmc, platform)
+    context.setPositions(lj.positions)
+    for parameter in default_functions.keys():
+        context.setParameter(parameter, 0.0)
+    ghmc.step(burn_in)
+    for _ in range(n_equil_samples):
+        ghmc.step(thinning)
+        samples_at_0.append(context.getState(getPositions=True).getPositions(asNumpy=True))
+
+    # Get equilibrium samples from the lambda=1 state
+    for parameter in default_functions.keys():
+        context.setParameter(parameter, 1.0)
+    ghmc.step(burn_in)
+    for _ in range(n_equil_samples):
+        ghmc.step(thinning)
+        samples_at_1.append(context.getState(getPositions=True).getPositions(asNumpy=True))
+
     # Get the forward work values:
-    positions = lj.positions
     w_f = numpy.zeros([n_iterations])
     for i in range(n_iterations):
-        w_f[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
-                                              default_functions, alchemical_integrator_forward, nsteps, alchemical_ctx_forward,
-                                              direction="forward")
-        positions = eq_positions
-
-        print(i)
+        init_x = samples_at_0[numpy.random.randint(len(samples_at_0))]
+        w_f[i] = run_nonequilibrium_switching(init_x, alchemical_integrator_forward, nsteps, alchemical_ctx_forward)
 
     # Get the reverse work values:
     w_r = numpy.zeros([n_iterations])
     for i in range(n_iterations):
-        w_r[i], eq_positions = run_nonequilibrium_switching(modified_system, positions,
-                                              default_functions, alchemical_integrator_reverse, nsteps, alchemical_ctx_reverse,
-                                              direction="reverse")
-        positions = eq_positions
-        print(i)
+        init_x = samples_at_1[numpy.random.randint(len(samples_at_1))]
+        w_r[i] = run_nonequilibrium_switching(init_x, alchemical_integrator_reverse, nsteps, alchemical_ctx_reverse)
 
     deltaF, ddeltaF = pymbar.BAR(w_f, w_r)
 
-    print(deltaF)
-    print(ddeltaF)
+    print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(deltaF, ddeltaF))
 
 
-
-def run_nonequilibrium_switching(system, positions, alchemical_functions, alchemical_integrator, nsteps, alchemical_ctx, direction="forward"):
-    """Equilibrate and then run some nonequilibrium switching simulations
+def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
+    """Perform a nonequilibrium switching protocol
 
     Parameters
     ----------
-    system
-    positions
+    init_x
     alchemical_integrator
-    direction
+    nsteps
+    alchemical_ctx
 
     Returns
     -------
@@ -397,30 +413,10 @@ def run_nonequilibrium_switching(system, positions, alchemical_functions, alchem
         Work performed by protocol
     """
 
-    # Make a ghmc integrator with the default parameters
-    ghmc = GHMCIntegrator()
-
-    # Use the reference platform, since this is for a test
-    platform = openmm.Platform.getPlatformByName("Reference")
-
-    # Make a context
-    context = openmm.Context(system, ghmc, platform)
-    context.setPositions(positions)
-
-    # Set the initial alchemical state for the equilibration simulation:
-    for parameter in alchemical_functions.keys():
-        context.setParameter(parameter, 0.0) if direction == "forward" else context.setParameter(parameter, 1.0)
-
-    # Run some steps to equilibrate
-    ghmc.step(100)
-
-    eq_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-
-    alchemical_ctx.setPositions(eq_positions)
-
+    alchemical_ctx.setPositions(init_x)
+    alchemical_ctx.setVelocitiesToTemperature(298 * unit.kelvin)
     alchemical_integrator.step(nsteps)
-
-    return alchemical_integrator.getGlobalVariableByName("protocol_work"), eq_positions
+    return alchemical_integrator.getGlobalVariableByName("protocol_work")
 
 
 if __name__=="__main__":
