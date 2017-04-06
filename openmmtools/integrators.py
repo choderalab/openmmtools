@@ -906,8 +906,10 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         if splitting.find("{") > -1:
             self._metropolized_integrator = True
             measure_shadow_work = True
+            self._measure_shadow_work = True
         else:
             self._metropolized_integrator = False
+            self._measure_shadow_work = False
 
         ORV_counts, mts, force_group_nV = self.parse_splitting_string(splitting)
 
@@ -1501,6 +1503,10 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         if self._direction == "reverse":
             self.addComputeGlobal("lambda", "1")
 
+        self.addComputeGlobal("protocol_work", "0.0")
+        if self._measure_shadow_work:
+            self.addComputeGlobal("shadow_work", "0.0")
+        self.addComputeGlobal("step", "0.0")
         #add all dependent parameters
         self.update_alchemical_parameters_step()
 
@@ -1510,6 +1516,12 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         """
         self.addComputeGlobal("protocol_work", "0.0")
         self.addComputeGlobal("shadow_work", "0.0")
+
+    def reset_integrator(self):
+        """
+        Manually reset the work statistics and step
+        """
+        self.setGlobalVariableByName("step", 0)
 
 
 

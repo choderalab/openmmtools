@@ -321,7 +321,7 @@ def test_alchemical_langevin_integrator():
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
     """
     n_iterations = 100  # number of forward and reverse protocols
-    nsteps = 1000 # number of steps within each protocol
+    nsteps = 100 # number of steps within each protocol
 
     #These are the alchemical functions we will use to switch the sterics and electrostatics
     default_functions = {
@@ -415,6 +415,7 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
 
     alchemical_ctx.setPositions(init_x)
     alchemical_ctx.setVelocitiesToTemperature(298 * unit.kelvin)
+    alchemical_integrator.reset_integrator()
     alchemical_integrator.step(nsteps)
     return alchemical_integrator.getGlobalVariableByName("protocol_work")
 
