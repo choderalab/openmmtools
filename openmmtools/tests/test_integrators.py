@@ -426,6 +426,7 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
 
     alchemical_ctx.setPositions(init_x)
     alchemical_ctx.setVelocitiesToTemperature(298 * unit.kelvin)
+    alchemical_integrator.setGlobalVariableByName("step", 0)
     alchemical_integrator.step(nsteps)
     return alchemical_integrator.getGlobalVariableByName("protocol_work")
 
