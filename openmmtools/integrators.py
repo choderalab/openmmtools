@@ -1165,8 +1165,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         elif step_string == "R":
             self.R_step(measure_shadow_work, n_R)
         elif step_string == "{":
-            self.addComputePerDof("xold", "x")
-            self.addComputePerDof("vold", "v")
+            self.begin_metropolize()
         elif step_string == "}":
             self.metropolize()
         elif step_string[0] == "V":
@@ -1439,8 +1438,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         elif step_string == "R":
             self.R_step(measure_shadow_work, n_R)
         elif step_string == "{":
-            self.addComputePerDof("xold", "x")
-            self.addComputePerDof("vold", "v")
+            self.begin_metropolize()
         elif step_string == "}":
             self.metropolize()
         elif step_string[0] == "V":
