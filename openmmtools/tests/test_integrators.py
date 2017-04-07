@@ -321,24 +321,19 @@ def test_alchemical_langevin_integrator():
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
     """
     n_iterations = 100  # number of forward and reverse protocols
-    nsteps = 100 # number of steps within each protocol
+    nsteps = 10 # number of steps within each protocol
 
-    # These are the alchemical functions we will use to switch the sterics and electrostatics
-    default_functions = {'lambda_sterics' : 'lambda'}
+    # These are the alchemical functions that will be used to control the system
+    default_functions = {'lambda_sterics' : 'lambda^2 - lambda'}
 
     splitting = "O { V R H R V } O"
-    alchemical_integrator_forward = AlchemicalLangevinSplittingIntegrator(default_functions,
+    alchemical_integrator = AlchemicalLangevinSplittingIntegrator(default_functions,
                                                                       splitting=splitting,
                                                                       nsteps_neq=nsteps,
-                                                                      direction="forward")
-    alchemical_integrator_reverse = AlchemicalLangevinSplittingIntegrator(default_functions,
-                                                                  splitting=splitting,
-                                                                  nsteps_neq=nsteps,
-                                                                  direction="reverse")
+                                                                      )
 
     platform = openmm.Platform.getPlatformByName("Reference")
 
-    # Instantiate the testsystem
     lj = testsystems.LennardJonesCluster()
     positions = lj.positions
 
@@ -349,8 +344,7 @@ def test_alchemical_langevin_integrator():
     modified_system = alchemical_factory.create_alchemical_system(reference_system=lj.system,
                                                                   alchemical_regions=alchemical_region)
 
-    alchemical_ctx_forward = openmm.Context(modified_system, alchemical_integrator_forward, platform)
-    alchemical_ctx_reverse = openmm.Context(modified_system, alchemical_integrator_reverse, platform)
+    alchemical_ctx = openmm.Context(modified_system, alchemical_integrator, platform)
 
     # Get equilibrium samples
     burn_in = 1000
@@ -372,41 +366,16 @@ def test_alchemical_langevin_integrator():
         samples_at_0.append(context.getState(getPositions=True).getPositions(asNumpy=True))
     print("GHMC acceptance rate: {:.3f}".format(get_acceptance_rate(ghmc)))
 
-    # Get equilibrium samples from the lambda=1 state
-    ghmc = GHMCIntegrator()
-    context = openmm.Context(modified_system, ghmc, platform)
-    context.setPositions(positions)
-    for parameter in default_functions.keys():
-        context.setParameter(parameter, 1.0)
-    ghmc.step(burn_in)
-    for _ in range(n_equil_samples):
-        ghmc.step(thinning)
-        samples_at_1.append(context.getState(getPositions=True).getPositions(asNumpy=True))
-    print("GHMC acceptance rate: {:.3f}".format(get_acceptance_rate(ghmc)))
-
     # Get the forward work values:
     w_f = numpy.zeros([n_iterations])
     f_acceptance_rates = []
     for i in range(n_iterations):
         init_x = samples_at_0[numpy.random.randint(len(samples_at_0))]
-        w_f[i] = run_nonequilibrium_switching(init_x, alchemical_integrator_forward, nsteps, alchemical_ctx_forward)
-        f_acceptance_rates.append(get_acceptance_rate(alchemical_integrator_forward))
+        w_f[i] = run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx)
+        f_acceptance_rates.append(get_acceptance_rate(alchemical_integrator))
 
-    # Get the reverse work values:
-    w_r = numpy.zeros([n_iterations])
-    r_acceptance_rates = []
-    for i in range(n_iterations):
-        init_x = samples_at_1[numpy.random.randint(len(samples_at_1))]
-
-        w_r[i] = run_nonequilibrium_switching(init_x, alchemical_integrator_reverse, nsteps, alchemical_ctx_reverse)
-        r_acceptance_rates.append(get_acceptance_rate(alchemical_integrator_reverse))
-
-    deltaF, ddeltaF = pymbar.BAR(w_f, w_r)
-    print("W_f, W_r", w_f, w_r)
-    print("F_accept, R_accept", numpy.mean(f_acceptance_rates), numpy.mean(r_acceptance_rates))
-
-    print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(deltaF, ddeltaF))
-
+    dF, ddF = pymbar.EXP(w_f)
+    print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
 
 def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
     """Perform a nonequilibrium switching protocol

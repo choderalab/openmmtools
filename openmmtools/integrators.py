@@ -1265,6 +1265,9 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
 
 class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
+    A variable named lambda is switched from 0 to 1 linearly throughout the nsteps of the protocol.
+    The functions can use this to create more complex protocols for other global parameters.
+
     Propagator is based on Langevin splitting, as described below.
 
     One way to divide the Langevin system is into three parts which can each be solved "exactly:"
@@ -1317,14 +1320,13 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
 
     def __init__(self,
                  alchemical_functions,
-                 splitting="V R O R V",
+                 splitting="O { V R H R V } O",
                  temperature=298.0 * simtk.unit.kelvin,
                  collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
                  measure_heat=True,
-                 direction="forward",
                  nsteps_neq=100):
         """
         Parameters
@@ -1333,8 +1335,9 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
             key: value pairs such as "global_parameter" : function_of_lambda where function_of_lambda is a Lepton-compatible
             string that depends on the variable "lambda"
 
-        splitting : string, default: "V R O R V"
-            Sequence of R, V, O (and optionally V{i}), and { }substeps to be executed each timestep.
+        splitting : string, default: "O { V R H R V } O"
+            Sequence of R, V, O (and optionally V{i}), and { }substeps to be executed each timestep. There is also an H option,
+            which increments the global parameter `lambda` by 1/nsteps_neq for each step.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
@@ -1358,15 +1361,11 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         measure_heat : boolean, default: True
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
-        direction : str, default: "forward"
-            Whether to move the global lambda parameter from 0 to 1 (forward) or 1 to 0 (reverse).
-
         nsteps_neq : int, default: 100
             Number of steps in nonequilibrium protocol. Default 100
         """
 
         self._alchemical_functions = alchemical_functions
-        self._direction = direction
         self._n_steps_neq = nsteps_neq
 
         # collect the system parameters.
@@ -1399,10 +1398,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addComputeGlobal("Eold", "energy")
 
         # Use fractional state
-        if self._direction == 'forward':
-            self.addComputeGlobal('lambda', '(step+1)/nsteps')
-        elif self._direction == 'reverse':
-            self.addComputeGlobal('lambda', '(nsteps - step - 1)/nsteps')
+        self.addComputeGlobal('lambda', '(step+1)/nsteps')
 
         # Update all slaved alchemical parameters
         self.update_alchemical_parameters_step()
@@ -1496,10 +1492,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         Reset the alchemical lambda to its starting value
         This is 1 for reverse and 0 for forward
         """
-        if self._direction == "forward":
-            self.addComputeGlobal("lambda", "0")
-        if self._direction == "reverse":
-            self.addComputeGlobal("lambda", "1")
+        self.addComputeGlobal("lambda", "0")
 
         self.addComputeGlobal("protocol_work", "0.0")
         if self._measure_shadow_work:
