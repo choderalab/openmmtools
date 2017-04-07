@@ -320,6 +320,9 @@ def test_alchemical_langevin_integrator():
     LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
     """
+
+    #max deviation from the calculated free energy
+    NSIGMA_MAX = 6
     n_iterations = 100  # number of forward and reverse protocols
     nsteps = 10 # number of steps within each protocol
 
@@ -376,6 +379,8 @@ def test_alchemical_langevin_integrator():
 
     dF, ddF = pymbar.EXP(w_f)
     print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
+    if np.abs(dF) > NSIGMA_MAX * ddF:
+        raise Exception("The free energy difference for the nonequilibrium switching is not correct.")
 
 def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
     """Perform a nonequilibrium switching protocol
