@@ -1306,6 +1306,9 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
             splitting="V R R R O R R R V"
         - g-BAOAB with solvent-solute splitting, K_r=K_p=2:
             splitting="V0 V1 R R O R R V1 R R O R R V1 V0"
+        - An NCMC algorithm with Metropolized integrator:
+            splitting="O { V R H R V } O"
+
 
     Attributes
     ----------
