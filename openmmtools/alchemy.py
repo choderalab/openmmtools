@@ -342,6 +342,10 @@ class AlchemicalState(object):
             is_equal = is_equal and self_value == other_value
         return is_equal
 
+    def __ne__(self, other):
+        # TODO: we can safely remove this when dropping support for Python 2
+        return not self == other
+
     def __str__(self):
         return str(self._parameters)
 
