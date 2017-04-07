@@ -15,12 +15,13 @@ Test custom integrators.
 
 import numpy
 import inspect
+import pymbar
 
 from simtk import unit
 from simtk import openmm
 
-from openmmtools import integrators, testsystems
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator
+from openmmtools import integrators, testsystems, alchemy
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, NonequilibriumLangevinIntegrator, GHMCIntegrator, GeodesicBAOABIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -154,6 +155,9 @@ def test_stabilities():
 
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
+            # Need an alchemical system to test this
+            if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+                continue
             integrator = integrator_class()
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
@@ -207,7 +211,7 @@ def test_vvvr_shadow_work_accumulation():
     assert('shadow_work' not in names_of_globals)
 
 
-def test_vvvr_protocol_work_accumulation():
+def test_external_protocol_work_accumulation():
     """When `measure_protocol_work==True`, assert that global `protocol_work` is initialized to zero and
     reaches a zero value after integrating a few dozen steps without perturbation.
 
@@ -216,7 +220,7 @@ def test_vvvr_protocol_work_accumulation():
     testsystem = testsystems.HarmonicOscillator()
     system, topology = testsystem.system, testsystem.topology
     temperature = 298.0 * unit.kelvin
-    integrator = integrators.VVVRIntegrator(temperature, measure_protocol_work=True)
+    integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
@@ -265,7 +269,10 @@ def test_temperature_getter_setter():
         # Test original integrator.
         check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
                                                                   'getter of {}').format(integrator_name)
-        integrator = integrator_class(temperature=temperature)
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+            integrator = integrator_class(dict(),temperature=temperature)
+        else:
+            integrator = integrator_class(temperature=temperature)
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
 
@@ -277,7 +284,10 @@ def test_temperature_getter_setter():
         # Test Context integrator wrapper.
         check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
                                                                   'of {}').format(integrator_name)
-        integrator = integrator_class()
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+            integrator = integrator_class(dict())
+        else:
+            integrator = integrator_class()
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
         integrator = context.getIntegrator()
@@ -297,6 +307,103 @@ def test_thermostated_integrator_hash():
     for integrator_name, integrator_class in thermostated_integrators:
         hash_float = RestorableIntegrator._compute_class_hash(integrator_class)
         all_hashes.add(hash_float)
-        integrator = integrator_class()
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+            integrator = integrator_class(dict())
+        else:
+            integrator = integrator_class()
         assert integrator.getGlobalVariableByName('_restorable__class_hash') == hash_float
     assert len(all_hashes) == len(thermostated_integrators)
+
+
+def test_alchemical_langevin_integrator():
+    """Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
+    LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
+    zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
+    """
+
+    #max deviation from the calculated free energy
+    NSIGMA_MAX = 6
+    n_iterations = 100  # number of forward and reverse protocols
+    nsteps = 10 # number of steps within each protocol
+
+    # These are the alchemical functions that will be used to control the system
+    default_functions = {'lambda_sterics' : 'lambda^2 - lambda'}
+
+    splitting = "O { V R H R V } O"
+    alchemical_integrator = NonequilibriumLangevinIntegrator(default_functions,
+                                                             splitting=splitting,
+                                                             nsteps_neq=nsteps,
+                                                             )
+
+    platform = openmm.Platform.getPlatformByName("Reference")
+
+    lj = testsystems.LennardJonesCluster()
+    positions = lj.positions
+
+    # Alchemically modify everything:
+    alchemical_factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
+    alchemical_region = alchemy.AlchemicalRegion([1], alchemical_bonds=False, alchemical_angles=False,
+                                                 alchemical_torsions=False)
+    modified_system = alchemical_factory.create_alchemical_system(reference_system=lj.system,
+                                                                  alchemical_regions=alchemical_region)
+
+    alchemical_ctx = openmm.Context(modified_system, alchemical_integrator, platform)
+
+    # Get equilibrium samples
+    burn_in = 1000
+    n_equil_samples = n_iterations
+    thinning = 10
+
+    samples_at_0, samples_at_1 = [], []
+    get_acceptance_rate = lambda integrator : integrator.getGlobalVariableByName("naccept") / integrator.getGlobalVariableByName("ntrials")
+
+    # Get equilibrium samples from the lambda=0 state
+    ghmc = GHMCIntegrator()
+    context = openmm.Context(modified_system, ghmc, platform)
+    context.setPositions(positions)
+    for parameter in default_functions.keys():
+        context.setParameter(parameter, 0.0)
+    ghmc.step(burn_in)
+    for _ in range(n_equil_samples):
+        ghmc.step(thinning)
+        samples_at_0.append(context.getState(getPositions=True).getPositions(asNumpy=True))
+    print("GHMC acceptance rate: {:.3f}".format(get_acceptance_rate(ghmc)))
+
+    # Get the forward work values:
+    w_f = numpy.zeros([n_iterations])
+    f_acceptance_rates = []
+    for i in range(n_iterations):
+        init_x = samples_at_0[numpy.random.randint(len(samples_at_0))]
+        w_f[i] = run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx)
+        f_acceptance_rates.append(get_acceptance_rate(alchemical_integrator))
+
+    dF, ddF = pymbar.EXP(w_f)
+    print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
+    if numpy.abs(dF) > NSIGMA_MAX * ddF:
+        raise Exception("The free energy difference for the nonequilibrium switching is not correct.")
+
+def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
+    """Perform a nonequilibrium switching protocol
+
+    Parameters
+    ----------
+    init_x
+    alchemical_integrator
+    nsteps
+    alchemical_ctx
+
+    Returns
+    -------
+    protocol_work : float
+        Work performed by protocol
+    """
+
+    alchemical_ctx.setPositions(init_x)
+    alchemical_ctx.setVelocitiesToTemperature(298 * unit.kelvin)
+    alchemical_integrator.reset_integrator()
+    alchemical_integrator.step(nsteps)
+    return alchemical_integrator.getGlobalVariableByName("protocol_work")
+
+
+if __name__=="__main__":
+    test_alchemical_langevin_integrator()
