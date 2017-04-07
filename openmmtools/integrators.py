@@ -807,7 +807,7 @@ class HMCIntegrator(ThermostatedIntegrator):
         return self.n_accept / float(self.n_trials)
 
 
-class LangevinSplittingIntegrator(ThermostatedIntegrator):
+class LangevinIntegrator(ThermostatedIntegrator):
     """Integrates Langevin dynamics with a prescribed operator splitting.
 
     One way to divide the Langevin system is into three parts which can each be solved "exactly:"
@@ -914,7 +914,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         ORV_counts, mts, force_group_nV = self.parse_splitting_string(splitting)
 
         # Create a new CustomIntegrator
-        super(LangevinSplittingIntegrator, self).__init__(temperature, timestep)
+        super(LangevinIntegrator, self).__init__(temperature, timestep)
 
         # Initialize
         self.addPerDofVariable("sigma", 0)
@@ -1263,7 +1263,7 @@ class LangevinSplittingIntegrator(ThermostatedIntegrator):
         self.addComputePerDof("vold", "v")
 
 
-class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
+class NonequilibriumLangevinIntegrator(LangevinIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
     A variable named lambda is switched from 0 to 1 linearly throughout the nsteps of the protocol.
     The functions can use this to create more complex protocols for other global parameters.
@@ -1372,12 +1372,12 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
 
         # call the base class constructor
-        super(AlchemicalLangevinSplittingIntegrator, self).__init__(splitting=splitting, temperature=temperature,
-                                                                    collision_rate=collision_rate, timestep=timestep,
-                                                                    constraint_tolerance=constraint_tolerance,
-                                                                    measure_shadow_work=measure_shadow_work,
-                                                                    measure_heat=measure_heat,
-                                                                    )
+        super(NonequilibriumLangevinIntegrator, self).__init__(splitting=splitting, temperature=temperature,
+                                                               collision_rate=collision_rate, timestep=timestep,
+                                                               constraint_tolerance=constraint_tolerance,
+                                                               measure_shadow_work=measure_shadow_work,
+                                                               measure_heat=measure_heat,
+                                                               )
 
         # add some global variables relevant to the integrator
         self.add_global_variables(nsteps=nsteps_neq)
@@ -1408,7 +1408,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
         self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
 
     def sanity_check(self, splitting, allowed_characters="H{}RVO0123456789"):
-        super(AlchemicalLangevinSplittingIntegrator, self).sanity_check(splitting, allowed_characters=allowed_characters)
+        super(NonequilibriumLangevinIntegrator, self).sanity_check(splitting, allowed_characters=allowed_characters)
 
     def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
         """Take step string, and add the appropriate R, V, O, M, or H step with appropriate parameters.
@@ -1460,9 +1460,9 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
 
         #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
         self.beginIfBlock("step < nsteps")
-        super(AlchemicalLangevinSplittingIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
-                                                                                measure_heat, ORV_counts,
-                                                                                force_group_nV, mts)
+        super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
+                                                                           measure_heat, ORV_counts,
+                                                                           force_group_nV, mts)
 
         #increment the step number
         self.addComputeGlobal("step", "step + 1")
@@ -1516,7 +1516,7 @@ class AlchemicalLangevinSplittingIntegrator(LangevinSplittingIntegrator):
 
 
 
-class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrator):
+class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
     """LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work."""
 
     def __init__(self,
@@ -1529,13 +1529,13 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
                  measure_heat=True):
 
 
-        super(ExternalPerturbationLangevinSplittingIntegrator, self).__init__(splitting=splitting,
-                                                                              temperature=temperature,
-                                                                              collision_rate=collision_rate,
-                                                                              timestep=timestep,
-                                                                              constraint_tolerance=constraint_tolerance,
-                                                                              measure_shadow_work=measure_shadow_work,
-                                                                              measure_heat=measure_heat)
+        super(ExternalPerturbationLangevinIntegrator, self).__init__(splitting=splitting,
+                                                                     temperature=temperature,
+                                                                     collision_rate=collision_rate,
+                                                                     timestep=timestep,
+                                                                     constraint_tolerance=constraint_tolerance,
+                                                                     measure_shadow_work=measure_shadow_work,
+                                                                     measure_heat=measure_heat)
 
         self.addGlobalVariable("protocol_work", 0)
         self.addGlobalVariable("perturbed_pe", 0)
@@ -1544,11 +1544,11 @@ class ExternalPerturbationLangevinSplittingIntegrator(LangevinSplittingIntegrato
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         self.addComputeGlobal("perturbed_pe", "energy")
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
-        super(ExternalPerturbationLangevinSplittingIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
+        super(ExternalPerturbationLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
         self.addComputeGlobal("unperturbed_pe", "energy")
 
 
-class VVVRIntegrator(LangevinSplittingIntegrator):
+class VVVRIntegrator(LangevinIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
     def __init__(self,
                  temperature=298.0 * simtk.unit.kelvin,
@@ -1579,17 +1579,17 @@ class VVVRIntegrator(LangevinSplittingIntegrator):
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
         """
-        LangevinSplittingIntegrator.__init__(self, splitting="O V R V O",
-                                             temperature=temperature,
-                                             collision_rate=collision_rate,
-                                             timestep=timestep,
-                                             constraint_tolerance=constraint_tolerance,
-                                             measure_shadow_work=measure_shadow_work,
-                                             measure_heat=measure_heat,
-                                             )
+        LangevinIntegrator.__init__(self, splitting="O V R V O",
+                                    temperature=temperature,
+                                    collision_rate=collision_rate,
+                                    timestep=timestep,
+                                    constraint_tolerance=constraint_tolerance,
+                                    measure_shadow_work=measure_shadow_work,
+                                    measure_heat=measure_heat,
+                                    )
 
 
-class BAOABIntegrator(LangevinSplittingIntegrator):
+class BAOABIntegrator(LangevinIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
     def __init__(self,
                  temperature=298.0 * simtk.unit.kelvin,
@@ -1634,17 +1634,17 @@ class BAOABIntegrator(LangevinSplittingIntegrator):
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = BAOABIntegrator(temperature, collision_rate, timestep)
         """
-        LangevinSplittingIntegrator.__init__(self, splitting="V R O R V",
-                                             temperature=temperature,
-                                             collision_rate=collision_rate,
-                                             timestep=timestep,
-                                             constraint_tolerance=constraint_tolerance,
-                                             measure_shadow_work=measure_shadow_work,
-                                             measure_heat=measure_heat
-                                             )
+        LangevinIntegrator.__init__(self, splitting="V R O R V",
+                                    temperature=temperature,
+                                    collision_rate=collision_rate,
+                                    timestep=timestep,
+                                    constraint_tolerance=constraint_tolerance,
+                                    measure_shadow_work=measure_shadow_work,
+                                    measure_heat=measure_heat
+                                    )
 
 
-class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
+class GeodesicBAOABIntegrator(LangevinIntegrator):
     """Create a geodesic-BAOAB integrator."""
 
     def __init__(self, K_r=2,
@@ -1694,17 +1694,17 @@ class GeodesicBAOABIntegrator(LangevinSplittingIntegrator):
         >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         """
         splitting = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
-        LangevinSplittingIntegrator.__init__(self, splitting=splitting,
-                                             temperature=temperature,
-                                             collision_rate=collision_rate,
-                                             timestep=timestep,
-                                             constraint_tolerance=constraint_tolerance,
-                                             measure_shadow_work=measure_shadow_work,
-                                             measure_heat=measure_heat
-                                             )
+        LangevinIntegrator.__init__(self, splitting=splitting,
+                                    temperature=temperature,
+                                    collision_rate=collision_rate,
+                                    timestep=timestep,
+                                    constraint_tolerance=constraint_tolerance,
+                                    measure_shadow_work=measure_shadow_work,
+                                    measure_heat=measure_heat
+                                    )
 
 
-class GHMCIntegrator(LangevinSplittingIntegrator):
+class GHMCIntegrator(LangevinIntegrator):
 
     def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds, constraint_tolerance=1.0e-8, measure_shadow_work=False,

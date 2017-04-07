@@ -21,7 +21,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems, alchemy
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalLangevinSplittingIntegrator, GHMCIntegrator, GeodesicBAOABIntegrator
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, NonequilibriumLangevinIntegrator, GHMCIntegrator, GeodesicBAOABIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -156,7 +156,7 @@ def test_stabilities():
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
             # Need an alchemical system to test this
-            if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+            if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
                 continue
             integrator = integrator_class()
             integrator.__doc__ = integrator_name
@@ -220,7 +220,7 @@ def test_external_protocol_work_accumulation():
     testsystem = testsystems.HarmonicOscillator()
     system, topology = testsystem.system, testsystem.topology
     temperature = 298.0 * unit.kelvin
-    integrator = integrators.ExternalPerturbationLangevinSplittingIntegrator(splitting="O V R V O", temperature=temperature)
+    integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
@@ -269,7 +269,7 @@ def test_temperature_getter_setter():
         # Test original integrator.
         check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
                                                                   'getter of {}').format(integrator_name)
-        if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
             integrator = integrator_class(dict(),temperature=temperature)
         else:
             integrator = integrator_class(temperature=temperature)
@@ -284,7 +284,7 @@ def test_temperature_getter_setter():
         # Test Context integrator wrapper.
         check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
                                                                   'of {}').format(integrator_name)
-        if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
             integrator = integrator_class(dict())
         else:
             integrator = integrator_class()
@@ -307,7 +307,7 @@ def test_thermostated_integrator_hash():
     for integrator_name, integrator_class in thermostated_integrators:
         hash_float = RestorableIntegrator._compute_class_hash(integrator_class)
         all_hashes.add(hash_float)
-        if issubclass(integrator_class, integrators.AlchemicalLangevinSplittingIntegrator):
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
             integrator = integrator_class(dict())
         else:
             integrator = integrator_class()
@@ -330,10 +330,10 @@ def test_alchemical_langevin_integrator():
     default_functions = {'lambda_sterics' : 'lambda^2 - lambda'}
 
     splitting = "O { V R H R V } O"
-    alchemical_integrator = AlchemicalLangevinSplittingIntegrator(default_functions,
-                                                                      splitting=splitting,
-                                                                      nsteps_neq=nsteps,
-                                                                      )
+    alchemical_integrator = NonequilibriumLangevinIntegrator(default_functions,
+                                                             splitting=splitting,
+                                                             nsteps_neq=nsteps,
+                                                             )
 
     platform = openmm.Platform.getPlatformByName("Reference")
 
