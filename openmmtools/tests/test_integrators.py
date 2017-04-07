@@ -379,7 +379,7 @@ def test_alchemical_langevin_integrator():
 
     dF, ddF = pymbar.EXP(w_f)
     print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
-    if np.abs(dF) > NSIGMA_MAX * ddF:
+    if numpy.abs(dF) > NSIGMA_MAX * ddF:
         raise Exception("The free energy difference for the nonequilibrium switching is not correct.")
 
 def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
