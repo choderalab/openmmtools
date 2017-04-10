@@ -225,7 +225,7 @@ def test_external_protocol_work_accumulation():
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
     assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
-    integrator.step(25)
+    integrator.step(1)
     assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
 
     pe_1 = context.getState(getEnergy=True).getPotentialEnergy()
