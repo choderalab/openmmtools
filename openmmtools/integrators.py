@@ -1543,9 +1543,15 @@ class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
         self.addGlobalVariable("protocol_work", 0)
         self.addGlobalVariable("perturbed_pe", 0)
         self.addGlobalVariable("unperturbed_pe", 0)
+        self.addGlobalVariable("first_step", 0)
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         self.addComputeGlobal("perturbed_pe", "energy")
+        # Assumes no perturbation is done before doing the initial MD step.
+        self.beginIfBlock("first_step < 1")
+        self.addComputeGlobal("first_step", "1")
+        self.addComputeGlobal("unperturbed_pe", "energy")
+        self.endBlock()
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
         super(ExternalPerturbationLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
         self.addComputeGlobal("unperturbed_pe", "energy")
