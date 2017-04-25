@@ -1520,7 +1520,13 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
 
 class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
-    """LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work."""
+    """
+    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
+
+    If used before an NCMC attempt, initialize the protocol work with
+    >>> integrator.setGlobalVariableByName("first_step", 0)
+    where integrator is an instance of ExternalPerturbationLangevinIntegrator.
+    """
 
     def __init__(self,
                  splitting="V R O R V",
@@ -1551,6 +1557,7 @@ class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
         self.beginIfBlock("first_step < 1")
         self.addComputeGlobal("first_step", "1")
         self.addComputeGlobal("unperturbed_pe", "energy")
+        self.addComputeGlobal("protocol_work", "0.0")
         self.endBlock()
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
         super(ExternalPerturbationLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
