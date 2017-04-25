@@ -1521,10 +1521,17 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
 class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
     """
-    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
+    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work. An example of an
+    external perturbation could be changing the forcefield parameters via
 
-    If used before an NCMC attempt, initialize the protocol work with
+     >>> force.setParticleParameters(...)
+     >>> force.updateParametersInContext(context)
+
+    where force is an instance of openmm's force class. The externally performed protocol work is accumulated in the
+    "protocol_work" global variable. This variable can be re-initialized with
+
     >>> integrator.setGlobalVariableByName("first_step", 0)
+
     where integrator is an instance of ExternalPerturbationLangevinIntegrator.
     """
 
