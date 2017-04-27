@@ -10,5 +10,5 @@ from openmmtools import version
 __version__ = version.version
 
 # Import modules.
-from openmmtools import testsystems, integrators, alchemy, mcmc, states, cache, utils, constants. storage
+from openmmtools import testsystems, integrators, alchemy, mcmc, states, cache, utils, constants, storage
 
