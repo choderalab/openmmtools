@@ -1155,7 +1155,7 @@ class TestAlchemicalState(object):
         cls.alanine_state = states.ThermodynamicState(alchemical_alanine_system,
                                                       temperature=300*unit.kelvin)
 
-        # System with all lambdas except for lambda_restraints.
+        # System with all lambdas.
         alchemical_region = AlchemicalRegion(alchemical_atoms=range(22), alchemical_torsions=True,
                                              alchemical_angles=True, alchemical_bonds=True)
         fully_alchemical_alanine_system = factory.create_alchemical_system(alanine_vacuum.system, alchemical_region)
@@ -1247,8 +1247,10 @@ class TestAlchemicalState(object):
 
         # Raise an error if an extra parameter is defined in the state.
         for state, defined_lambdas in test_cases:
+            if 'lambda_bonds' in defined_lambdas:
+                continue
             defined_lambdas = set(defined_lambdas)  # Copy
-            defined_lambdas.add('lambda_restraints')  # Add extra parameter.
+            defined_lambdas.add('lambda_bonds')  # Add extra parameter.
             kwargs = dict.fromkeys(defined_lambdas, 1.0)
             alchemical_state = AlchemicalState(**kwargs)
             with nose.tools.assert_raises(AlchemicalStateError):
@@ -1256,8 +1258,11 @@ class TestAlchemicalState(object):
 
     def test_check_system_consistency(self):
         """Test method AlchemicalState.check_system_consistency()."""
-        # Raise error if system has MORE lambda parameters.
+        # A system is consistent with itself.
         alchemical_state = AlchemicalState.from_system(self.alanine_state.system)
+        alchemical_state.check_system_consistency(self.alanine_state.system)
+
+        # Raise error if system has MORE lambda parameters.
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.check_system_consistency(self.full_alanine_state.system)
 
@@ -1470,7 +1475,12 @@ class TestAlchemicalState(object):
         alanine_state = copy.deepcopy(self.alanine_state)
         compound_state = states.CompoundThermodynamicState(alanine_state, [alchemical_state])
 
+        # The serialized system is standard.
         serialization = utils.serialize(compound_state)
+        serialized_standard_system = serialization['thermodynamic_state']['standard_system']
+        assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
+
+        # The object is deserialized correctly.
         deserialized_state = utils.deserialize(serialization)
         original_system_pickle = pickle.dumps(compound_state.system)
         original_alchemical_state_pickle = pickle.dumps(compound_state._composable_states[0])

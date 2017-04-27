@@ -108,9 +108,6 @@ class AlchemicalState(object):
         Scaling factor for alchemically-softened angles (default is 1.0).
     lambda_torsions : float, optional
         Scaling factor for alchemically-softened torsions (default is 1.0).
-    lambda_restraints : float, optional
-        Scaling factor for remaining receptor-ligand relative restraint
-        terms to help keep ligand near protein (default is 1.0).
 
     Attributes
     ----------
@@ -119,7 +116,6 @@ class AlchemicalState(object):
     lambda_bonds
     lambda_angles
     lambda_torsions
-    lambda_restraints
 
     Examples
     --------
@@ -277,7 +273,6 @@ class AlchemicalState(object):
     lambda_bonds = _LambdaProperty('lambda_bonds')
     lambda_angles = _LambdaProperty('lambda_angles')
     lambda_torsions = _LambdaProperty('lambda_torsions')
-    lambda_restraints = _LambdaProperty('lambda_restraints')
 
     def set_alchemical_parameters(self, new_value):
         """Set all defined parameters to the given value.
@@ -346,6 +341,10 @@ class AlchemicalState(object):
             other_value = getattr(other, parameter_name)
             is_equal = is_equal and self_value == other_value
         return is_equal
+
+    def __ne__(self, other):
+        # TODO: we can safely remove this when dropping support for Python 2
+        return not self == other
 
     def __str__(self):
         return str(self._parameters)

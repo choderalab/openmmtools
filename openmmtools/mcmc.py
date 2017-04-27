@@ -53,7 +53,7 @@ You can combine them to form a sequence of moves
 or create a move that selects one of them at random with given probability
 at each iteration.
 
->>> weighted_move = WeightedMove({ghmc_move: 0.5, langevin_move: 0.5})
+>>> weighted_move = WeightedMove([(ghmc_move, 0.5), (langevin_move, 0.5)])
 >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=weighted_move)
 
 By default the MCMCMove use a global ContextCache that creates Context on the
@@ -110,6 +110,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import os
 import abc
 import copy
 import logging
@@ -117,7 +118,7 @@ import logging
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import integrators, cache
+from openmmtools import integrators, cache, utils
 from openmmtools.utils import SubhookedABCMeta, Timer
 
 logger = logging.getLogger(__name__)
@@ -207,7 +208,7 @@ class MCMCSampler(object):
     ...                                          temperature=298*unit.kelvin)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set specifying probabilities fo each type of move.
-    >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
+    >>> move = WeightedMove([(HMCMove(n_steps=10), 0.5), (LangevinDynamicsMove(n_steps=10), 0.5)])
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     >>> sampler.run(n_iterations=2)
@@ -339,6 +340,23 @@ class SequenceMove(object):
             for move in self.move_list:
                 move.context_cache = context_cache
 
+    @property
+    def statistics(self):
+        """The statistics of all moves as a list of dictionaries."""
+        stats = [None for _ in range(len(self.move_list))]
+        for i, move in enumerate(self.move_list):
+            try:
+                stats[i] = move.statistics
+            except AttributeError:
+                stats[i] = {}
+        return stats
+
+    @statistics.setter
+    def statistics(self, value):
+        for i, move in enumerate(self.move_list):
+            if hasattr(move, 'statistics'):
+                move.statistics = value[i]
+
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the sequence of MCMC move in order.
 
@@ -359,22 +377,30 @@ class SequenceMove(object):
     def __iter__(self):
         return iter(self.move_list)
 
+    def __getstate__(self):
+        serialized_moves = [utils.serialize(move) for move in self.move_list]
+        return dict(move_list=serialized_moves)
+
+    def __setstate__(self, serialization):
+        serialized_moves = serialization['move_list']
+        self.move_list = [utils.deserialize(move) for move in serialized_moves]
+
 
 class WeightedMove(object):
     """Pick an MCMC move out of set with given probability at each iteration.
 
     Parameters
     ----------
-    move_set : dict of MCMCMove: float
-        The dict of MCMCMoves: probability of being selected at an iteration.
+    move_set : list of tuples (MCMCMove, float_
+        Each tuple associate an MCMCMoves to its probability of being
+        selected on apply().
     context_cache : openmmtools.cache.ContextCache, optional
         If not None, the context_cache of all the moves in the set will be
         set to this (default is None).
 
     Attributes
     ----------
-    move_set : dict of MCMCMove: float
-        The dict of MCMCMoves: probability of being selected at an iteration.
+    move_set
 
     Examples
     --------
@@ -389,7 +415,8 @@ class WeightedMove(object):
     ...                                          temperature=298*unit.kelvin)
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> # Create a move set specifying probabilities fo each type of move.
-    >>> move = WeightedMove({HMCMove(n_steps=10): 0.5, LangevinDynamicsMove(n_steps=10): 0.5})
+    >>> move = WeightedMove([(HMCMove(n_steps=10), 0.5),
+    ...                      (LangevinDynamicsMove(n_steps=10), 0.5)])
     >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
     >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
     >>> sampler.run(n_iterations=2)
@@ -400,8 +427,25 @@ class WeightedMove(object):
     def __init__(self, move_set, context_cache=None):
         self.move_set = move_set
         if context_cache is not None:
-            for move in self.move_set:
+            for move, weight in self.move_set:
                 move.context_cache = context_cache
+
+    @property
+    def statistics(self):
+        """The statistics of all moves as a list of dictionaries."""
+        stats = [None for _ in range(len(self.move_set))]
+        for i, (move, weight) in enumerate(self.move_set):
+            try:
+                stats[i] = move.statistics
+            except AttributeError:
+                stats[i] = {}
+        return stats
+
+    @statistics.setter
+    def statistics(self, value):
+        for i, (move, weight) in enumerate(self.move_set):
+            if hasattr(move, 'statistics'):
+                move.statistics = value[i]
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply one of the MCMC moves in the set to the state.
@@ -416,22 +460,95 @@ class WeightedMove(object):
            The sampler state to apply the move to.
 
         """
-        moves, weights = zip(*self.move_set.items())
+        moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
         move.apply(thermodynamic_state, sampler_state)
+
+    def __getstate__(self):
+        serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
+        weights = [weight for _, weight in self.move_set]
+        return dict(moves=serialized_moves, weights=weights)
+
+    def __setstate__(self, serialization):
+        serialized_moves = serialization['move_list']
+        self.move_list = [utils.deserialize(move) for move in serialized_moves]
+
+    def __setstate__(self, serialization):
+        serialized_moves = serialization['moves']
+        weights = serialization['weights']
+        self.move_set = [(utils.deserialize(move), weight)
+                         for move, weight in zip(serialized_moves, weights)]
 
     def __str__(self):
         return str(self.move_set)
 
     def __iter__(self):
-        return self.move_set.items()
+        return self.move_set
 
 
 # =============================================================================
 # INTEGRATOR MCMC MOVE BASE CLASS
 # =============================================================================
 
-class IntegratorMove(object):
+class IntegratorMoveError(Exception):
+    """An error raised when NaN is found after applying a move.
+
+    Parameters
+    ----------
+    message : str
+        A description of the error.
+    move : MCMCMove
+        The MCMCMove that raised the error.
+    context : simtk.openmm.Context, optional
+        The context after the integration.
+
+    """
+    def __init__(self, message, move, context=None):
+        super(IntegratorMoveError, self).__init__(message)
+        self.move = move
+        self.context = context
+
+    def serialize_error(self, path_files_prefix):
+        """Serializes and save the state of the simulation causing the error.
+
+        This creates several files:
+        - path_files_prefix-move.yaml
+            A YAML serialization of the MCMCMove.
+        - path_files_prefix-system.xml
+            The serialized system in the Context.
+        - path_files_prefix-integrator.xml
+            The serialized integrator in the Context.
+        - path_files_prefix-state.xml
+            The serialized OpenMM State object before the integration.
+
+        Parameters
+        ----------
+        path_files_prefix : str
+            The prefix (including eventually a directory) for the files. Existing
+            files will be overwritten.
+
+        """
+        directory_path = os.path.dirname(path_files_prefix)
+        if not os.path.exists(directory_path):
+            os.makedirs(directory_path)
+
+        # Serialize MCMCMove.
+        import json
+        serialized_move = utils.serialize(self.move)
+        with open(os.path.join(path_files_prefix + '-move.json'), 'w') as f:
+            json.dump(serialized_move, f)
+
+        # Serialize Context.
+        openmm_state = self.context.getState(getPositions=True, getVelocities=True,
+                                             getEnergy=True, getForces=True, getParameters=True)
+        to_serialize = [self.context.getSystem(), self.context.getIntegrator(), openmm_state]
+        for name, openmm_object in zip(['system', 'integrator', 'state'], to_serialize):
+            serialized_object = openmm.XmlSerializer.serialize(openmm_object)
+            with open(os.path.join(path_files_prefix + '-' + name + '.xml'), 'w') as f:
+                f.write(serialized_object)
+
+
+class BaseIntegratorMove(object):
     """A general MCMC move that applies an integrator.
 
     This class is intended to be inherited by MCMCMoves that need to integrate
@@ -448,14 +565,17 @@ class IntegratorMove(object):
     context_cache : openmmtools.cache.ContextCache, optional
         The ContextCache to use for Context creation. If None, the global cache
         openmmtools.cache.global_context_cache is used (default is None).
+    restart_attempts : int, optional
+        When greater than 0, if after the integration there are NaNs in energies,
+        the move will restart. When the integrator has a random component, this
+        may help recovering. An IntegratorMoveError is raised after the given
+        number of attempts if there are still NaNs.
 
     Attributes
     ----------
     n_steps : int
-        The number of integration steps to take each time the move is applied.
     context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used.
+    restart_attempts : int or None
 
     Examples
     --------
@@ -463,9 +583,9 @@ class IntegratorMove(object):
 
     >>> from openmmtools import testsystems, states
     >>> from simtk.openmm import VerletIntegrator
-    >>> class VerletMove(IntegratorMove):
-    ...     def __init__(self, timestep, n_steps, context_cache=None):
-    ...         super(VerletMove, self).__init__(n_steps, context_cache)
+    >>> class VerletMove(BaseIntegratorMove):
+    ...     def __init__(self, timestep, n_steps, **kwargs):
+    ...         super(VerletMove, self).__init__(n_steps, **kwargs)
     ...         self.timestep = timestep
     ...     def _get_integrator(self, thermodynamic_state):
     ...         return VerletIntegrator(self.timestep)
@@ -485,9 +605,10 @@ class IntegratorMove(object):
 
     """
 
-    def __init__(self, n_steps, context_cache=None):
+    def __init__(self, n_steps, context_cache=None, n_restart_attempts=0):
         self.n_steps = n_steps
         self.context_cache = context_cache
+        self.n_restart_attempts = n_restart_attempts
 
     def apply(self, thermodynamic_state, sampler_state):
         """Propagate the state through the integrator.
@@ -522,23 +643,50 @@ class IntegratorMove(object):
         # Create context.
         timer.start("{}: Context request".format(move_name))
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
-        sampler_state.apply_to_context(context)
         timer.stop("{}: Context request".format(move_name))
         logger.debug("{}: Context obtained, platform is {}".format(
             move_name, context.getPlatform().getName()))
 
-        self._before_integration(context, thermodynamic_state)
+        # Perform the integration.
+        for attempt_counter in range(self.n_restart_attempts + 1):
+            sampler_state.apply_to_context(context)
 
-        # Run dynamics.
-        timer.start("{}: step({})".format(move_name, self.n_steps))
-        integrator.step(self.n_steps)
-        timer.stop("{}: step({})".format(move_name, self.n_steps))
+            self._before_integration(context, thermodynamic_state)
 
+            # Run dynamics.
+            timer.start("{}: step({})".format(move_name, self.n_steps))
+            integrator.step(self.n_steps)
+            timer.stop("{}: step({})".format(move_name, self.n_steps))
+
+            # We get also velocities here even if we don't need them because we
+            # will recycle this State to update the sampler state object. This
+            # way we won't need a second call to Context.getState().
+            context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                             enforcePeriodicBox=thermodynamic_state.is_periodic)
+
+            # Check for NaNs in energies.
+            potential_energy = context_state.getPotentialEnergy()
+            if np.isnan(potential_energy.value_in_unit(potential_energy.unit)):
+                err_msg = ('Potential energy is NaN after {} attempts of integration '
+                           'with move {}'.format(attempt_counter, self.__class__.__name__))
+
+                # If we have hit the number of restart attempts, raise an exception.
+                if attempt_counter == self.n_restart_attempts:
+                    # Restore the context to the state right before the integration.
+                    sampler_state.apply_to_context(context)
+                    logger.error(err_msg)
+                    raise IntegratorMoveError(err_msg, self, context)
+                else:
+                    logger.warning(err_msg + ' Attempting a restart...')
+            else:
+                break
+
+        # Subclasses can read here info from the context to update internal statistics.
         self._after_integration(context)
 
-        # Get updated sampler state.
+        # Updated sampler state.
         timer.start("{}: update sampler state".format(move_name))
-        sampler_state.update_from_context(context)
+        sampler_state.update_from_context(context_state)
         timer.stop("{}: update sampler state".format(move_name))
 
         timer.report_timing()
@@ -560,11 +708,257 @@ class IntegratorMove(object):
         """
         pass
 
+    def __getstate__(self):
+        if self.context_cache is None:
+            context_cache_serialized = None
+        else:
+            context_cache_serialized = utils.serialize(self.context_cache)
+        return dict(n_steps=self.n_steps, context_cache=context_cache_serialized,
+                    n_restart_attempts=self.n_restart_attempts)
+
+    def __setstate__(self, serialization):
+        self.n_steps = serialization['n_steps']
+        self.n_restart_attempts = serialization['n_restart_attempts']
+        if serialization['context_cache'] is None:
+            self.context_cache = None
+        else:
+            self.context_cache = utils.deserialize(serialization['context_cache'])
+
+
+# =============================================================================
+# METROPOLIZED MOVE BASE CLASS
+# =============================================================================
+
+class MetropolizedMove(object):
+    """A base class for metropolized moves.
+
+    This class is intended to be inherited by MCMCMoves that needs to
+    accept or reject a proposed move with a Metropolis criterion. Only
+    the proposal needs to be specified by subclasses through the method
+    _propose_positions().
+
+    Parameters
+    ----------
+    atom_subset : slice or list of int, optional
+        If specified, the move is applied only to those atoms specified by these
+        indices. If None, the move is applied to all atoms (default is None).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    n_accepted : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    atom_subset
+    context_cache
+
+    Examples
+    --------
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems, states
+    >>> class AddOneVector(MetropolizedMove):
+    ...     def __init__(self, **kwargs):
+    ...         super(AddOneVector, self).__init__(**kwargs)
+    ...     def _propose_positions(self, initial_positions):
+    ...         print('Propose new positions')
+    ...         displacement = unit.Quantity(np.array([1.0, 1.0, 1.0]), initial_positions.unit)
+    ...         return initial_positions + displacement
+    ...
+    >>> alanine = testsystems.AlanineDipeptideVacuum()
+    >>> sampler_state = states.SamplerState(alanine.positions)
+    >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
+    >>> move = AddOneVector(atom_subset=list(range(sampler_state.n_particles)))
+    >>> move.apply(thermodynamic_state, sampler_state)
+    Propose new positions
+    >>> move.n_accepted
+    1
+    >>> move.n_proposed
+    1
+
+    """
+    def __init__(self, atom_subset=None, context_cache=None):
+        self.n_accepted = 0
+        self.n_proposed = 0
+        self.atom_subset = atom_subset
+        self.context_cache = context_cache
+
+    @property
+    def statistics(self):
+        """The acceptance statistics as a dictionary."""
+        return dict(n_accepted=self.n_accepted, n_proposed=self.n_proposed)
+
+    @statistics.setter
+    def statistics(self, value):
+        self.n_accepted = value['n_accepted']
+        self.n_proposed = value['n_proposed']
+
+    def apply(self, thermodynamic_state, sampler_state):
+        """Apply a metropolized move to the sampler state.
+
+        Total number of acceptances and proposed move are updated.
+
+        Parameters
+        ----------
+        thermodynamic_state : openmmtools.states.ThermodynamicState
+           The thermodynamic state to use to apply the move.
+        sampler_state : openmmtools.states.SamplerState
+           The initial sampler state to apply the move to. This is modified.
+
+        """
+        timer = Timer()
+        benchmark_id = 'Applying {}'.format(self.__class__.__name__ )
+        timer.start(benchmark_id)
+
+        # Check if we have to use the global cache.
+        if self.context_cache is None:
+            context_cache = cache.global_context_cache
+        else:
+            context_cache = self.context_cache
+
+        # Create context, any integrator works.
+        context, unused_integrator = context_cache.get_context(thermodynamic_state)
+
+        # Compute initial energy. We don't need to set velocities to compute the potential.
+        # TODO assume sampler_state.potential_energy is the correct potential if not None?
+        sampler_state.apply_to_context(context, ignore_velocities=True)
+        initial_energy = thermodynamic_state.reduced_potential(context)
+
+        # Handle default and weird cases for atom_subset.
+        if self.atom_subset is None:
+            atom_subset = slice(None)
+        elif not isinstance(self.atom_subset, slice) and len(self.atom_subset) == 1:
+            # Slice to maintain the 2D shape.
+            atom_subset = slice(self.atom_subset[0], self.atom_subset[0]+1)
+        else:
+            atom_subset = self.atom_subset
+
+        # Store initial positions of the atoms that are moved.
+        # We'll use this also to recover in case the move is rejected.
+        if isinstance(atom_subset, slice):
+            # Numpy array when sliced return a view, they are not copied.
+            initial_positions = copy.deepcopy(sampler_state.positions[atom_subset])
+        else:
+            # This automatically creates a copy.
+            initial_positions = sampler_state.positions[atom_subset]
+
+        # Propose perturbed positions. Modifying the reference changes the sampler state.
+        proposed_positions = self._propose_positions(initial_positions)
+
+        # Compute the energy of the proposed positions.
+        sampler_state.positions[atom_subset] = proposed_positions
+        sampler_state.apply_to_context(context)
+        proposed_energy = thermodynamic_state.reduced_potential(context)
+
+        # Accept or reject with Metropolis criteria.
+        delta_energy = proposed_energy - initial_energy
+        if (not np.isnan(proposed_energy) and
+                (delta_energy <= 0.0 or np.random.rand() < np.exp(-delta_energy))):
+            self.n_accepted += 1
+        else:
+            # Restore original positions.
+            sampler_state.positions[atom_subset] = initial_positions
+        self.n_proposed += 1
+
+        # Print timing information.
+        timer.stop(benchmark_id)
+        timer.report_timing()
+
+    def __getstate__(self):
+        if self.context_cache is None:
+            context_cache_serialized = None
+        else:
+            context_cache_serialized = utils.serialize(self.context_cache)
+        serialization = dict(atom_subset=self.atom_subset, context_cache=context_cache_serialized)
+        serialization.update(self.statistics)
+        return serialization
+
+    def __setstate__(self, serialization):
+        self.atom_subset = serialization['atom_subset']
+        if serialization['context_cache'] is None:
+            self.context_cache = None
+        else:
+            self.context_cache = utils.deserialize(serialization['context_cache'])
+        self.statistics = serialization
+
+    @abc.abstractmethod
+    def _propose_positions(self, positions):
+        """Return new proposed positions.
+
+        These method must be implemented in subclasses.
+
+        Parameters
+        ----------
+        positions : nx3 numpy.ndarray
+            The original positions of the subset of atoms that these move
+            applied to.
+
+        Returns
+        -------
+        proposed_positions : nx3 numpy.ndarray
+            The new proposed positions.
+
+        """
+        pass
+
+
+# =============================================================================
+# GENERIC INTEGRATOR MOVE
+# =============================================================================
+
+class IntegratorMove(BaseIntegratorMove):
+    """An MCMCMove that propagate the system with an integrator.
+
+    This class makes it easy to convert OpenMM Integrator objects to
+    MCMCMove objects.
+
+    Parameters
+    ----------
+    integrator : simtk.openmm.Integrator
+        An instance of an OpenMM Integrator object to use for propagation.
+    n_steps : int
+        The number of integration steps to take each time the move is applied.
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    integrator
+    n_steps
+    context_cache
+
+    """
+    def __init__(self, integrator, n_steps, **kwargs):
+        super(IntegratorMove, self).__init__(n_steps=n_steps, **kwargs)
+        self.integrator = integrator
+
+    def _get_integrator(self, thermodynamic_state):
+        """Implement BaseIntegratorMove._get_integrator abstract method."""
+        # We copy the integrator to make sure that the MCMCMove
+        # can be applied to multiple Contexts.
+        copied_integrator = copy.deepcopy(self.integrator)
+        # Restore eventual extra methods for custom forces.
+        integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
+        return copied_integrator
+
+    def __getstate__(self):
+        serialization = super(IntegratorMove, self).__getstate__()
+        serialization['integrator'] = openmm.XmlSerializer.serialize(self.integrator)
+        return serialization
+
+    def __setstate__(self, serialization):
+        super(IntegratorMove, self).__setstate__(serialization)
+        self.integrator = openmm.XmlSerializer.deserialize(serialization['integrator'])
+
+
 # =============================================================================
 # LANGEVIN DYNAMICS MOVE
 # =============================================================================
 
-class LangevinDynamicsMove(IntegratorMove):
+class LangevinDynamicsMove(BaseIntegratorMove):
     """Langevin dynamics segment as a (pseudo) Monte Carlo move.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution
@@ -657,8 +1051,8 @@ class LangevinDynamicsMove(IntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
-                 n_steps=1000, reassign_velocities=False, context_cache=None):
-        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps, context_cache=context_cache)
+                 n_steps=1000, reassign_velocities=False, **kwargs):
+        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
         self.reassign_velocities = reassign_velocities
@@ -680,13 +1074,26 @@ class LangevinDynamicsMove(IntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = super(LangevinDynamicsMove, self).__getstate__()
+        serialization['timestep'] = self.timestep
+        serialization['collision_rate'] = self.collision_rate
+        serialization['reassign_velocities'] = self.reassign_velocities
+        return serialization
+
+    def __setstate__(self, serialization):
+        super(LangevinDynamicsMove, self).__setstate__(serialization)
+        self.timestep = serialization['timestep']
+        self.collision_rate = serialization['collision_rate']
+        self.reassign_velocities = serialization['reassign_velocities']
+
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         return openmm.LangevinIntegrator(thermodynamic_state.temperature,
                                          self.collision_rate, self.timestep)
 
     def _before_integration(self, context, thermodynamic_state):
-        """Override IntegratorMove._before_integration()."""
+        """Override BaseIntegratorMove._before_integration()."""
         if self.reassign_velocities:
             # Assign Maxwell-Boltzmann velocities.
             context.setVelocitiesToTemperature(thermodynamic_state.temperature)
@@ -696,7 +1103,7 @@ class LangevinDynamicsMove(IntegratorMove):
 # GENERALIZED HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class GHMCMove(IntegratorMove):
+class GHMCMove(BaseIntegratorMove):
     """Generalized hybrid Monte Carlo (GHMC) Markov chain Monte Carlo move.
 
     This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized
@@ -731,7 +1138,7 @@ class GHMCMove(IntegratorMove):
         cache openmmtools.cache.global_context_cache is used.
     n_accepted : int
         The number of accepted steps.
-    n_attempted : int
+    n_proposed : int
         The number of attempted steps.
     fraction_accepted
 
@@ -782,16 +1189,12 @@ class GHMCMove(IntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=20.0/unit.picoseconds,
-                 n_steps=1000, context_cache=None):
-        super(GHMCMove, self).__init__(n_steps=n_steps, context_cache=context_cache)
+                 n_steps=1000, **kwargs):
+        super(GHMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.reset_statistics()
-
-    def reset_statistics(self):
-        """Reset the internal statistics of number of accepted and attempted moves."""
-        self.n_accepted = 0  # number of accepted steps
-        self.n_attempted = 0  # number of attempted steps
+        self.n_accepted = 0  # Number of accepted steps.
+        self.n_proposed = 0  # Number of attempted steps.
 
     @property
     def fraction_accepted(self):
@@ -800,10 +1203,25 @@ class GHMCMove(IntegratorMove):
         If the number of attempted steps is 0, this is numpy.NaN.
 
         """
-        if self.n_attempted == 0:
+        if self.n_proposed == 0:
             return np.NaN
         # TODO drop the casting when stop Python2 support
-        return float(self.n_accepted) / self.n_attempted
+        return float(self.n_accepted) / self.n_proposed
+
+    @property
+    def statistics(self):
+        """The acceptance statistics as a dictionary."""
+        return dict(n_accepted=self.n_accepted, n_proposed=self.n_proposed)
+
+    @statistics.setter
+    def statistics(self, value):
+        self.n_accepted = value['n_accepted']
+        self.n_proposed = value['n_proposed']
+
+    def reset_statistics(self):
+        """Reset the internal statistics of number of accepted and attempted moves."""
+        self.n_accepted = 0
+        self.n_proposed = 0
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the GHMC MCMC move.
@@ -822,31 +1240,44 @@ class GHMCMove(IntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(GHMCMove, self).apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = super(GHMCMove, self).__getstate__()
+        serialization['timestep'] = self.timestep
+        serialization['collision_rate'] = self.collision_rate
+        serialization.update(self.statistics)
+        return serialization
+
+    def __setstate__(self, serialization):
+        super(GHMCMove, self).__setstate__(serialization)
+        self.timestep = serialization['timestep']
+        self.collision_rate = serialization['collision_rate']
+        self.statistics = serialization
+
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         # Store lastly generated integrator to collect statistics.
         return integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature,
                                           collision_rate=self.collision_rate,
                                           timestep=self.timestep)
 
     def _after_integration(self, context):
-        """Implement IntegratorMove._after_integration()."""
+        """Implement BaseIntegratorMove._after_integration()."""
         integrator = context.getIntegrator()
 
         # Accumulate acceptance statistics.
         ghmc_global_variables = {integrator.getGlobalVariableName(index): index
                                  for index in range(integrator.getNumGlobalVariables())}
         n_accepted = integrator.getGlobalVariable(ghmc_global_variables['naccept'])
-        n_attempted = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
+        n_proposed = integrator.getGlobalVariable(ghmc_global_variables['ntrials'])
         self.n_accepted += n_accepted
-        self.n_attempted += n_attempted
+        self.n_proposed += n_proposed
 
 
 # =============================================================================
 # HYBRID MONTE CARLO MOVE
 # =============================================================================
 
-class HMCMove(IntegratorMove):
+class HMCMove(BaseIntegratorMove):
     """Hybrid Monte Carlo dynamics.
 
     This move assigns a velocity from the Maxwell-Boltzmann distribution
@@ -915,8 +1346,8 @@ class HMCMove(IntegratorMove):
 
     """
 
-    def __init__(self, timestep=1.0*unit.femtosecond, n_steps=1000, context_cache=None):
-        super(HMCMove, self).__init__(n_steps=n_steps, context_cache=context_cache)
+    def __init__(self, timestep=1.0*unit.femtosecond, n_steps=1000, **kwargs):
+        super(HMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
 
     def apply(self, thermodynamic_state, sampler_state):
@@ -935,8 +1366,17 @@ class HMCMove(IntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(HMCMove, self).apply(thermodynamic_state, sampler_state)
 
+    def __getstate__(self):
+        serialization = super(HMCMove, self).__getstate__()
+        serialization['timestep'] = self.timestep
+        return serialization
+
+    def __setstate__(self, serialization):
+        super(HMCMove, self).__setstate__(serialization)
+        self.timestep = serialization['timestep']
+
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         return integrators.HMCIntegrator(temperature=thermodynamic_state.temperature,
                                          timestep=self.timestep, nsteps=self.n_steps)
 
@@ -945,7 +1385,7 @@ class HMCMove(IntegratorMove):
 # MONTE CARLO BAROSTAT MOVE
 # =============================================================================
 
-class MonteCarloBarostatMove(IntegratorMove):
+class MonteCarloBarostatMove(BaseIntegratorMove):
     """Monte Carlo barostat move.
 
     This move makes one or more attempts to update the box volume using
@@ -999,9 +1439,8 @@ class MonteCarloBarostatMove(IntegratorMove):
 
     """
 
-    def __init__(self, n_attempts=5, context_cache=None):
-        super(MonteCarloBarostatMove, self).__init__(n_steps=n_attempts,
-                                                     context_cache=context_cache)
+    def __init__(self, n_attempts=5, **kwargs):
+        super(MonteCarloBarostatMove, self).__init__(n_steps=n_attempts, **kwargs)
 
     @property
     def n_attempts(self):
@@ -1049,8 +1488,230 @@ class MonteCarloBarostatMove(IntegratorMove):
             thermodynamic_state.barostat = barostat
 
     def _get_integrator(self, thermodynamic_state):
-        """Implement IntegratorMove._get_integrator()."""
+        """Implement BaseIntegratorMove._get_integrator()."""
         return integrators.DummyIntegrator()
+
+
+# =============================================================================
+# RANDOM DISPLACEMENT MOVE
+# =============================================================================
+
+class MCDisplacementMove(MetropolizedMove):
+    """A metropolized move that randomly displace a subset of atoms.
+
+    Parameters
+    ----------
+    displacement_sigma : simtk.unit.Quantity
+        The standard deviation of the normal distribution used to propose the
+        random displacement (units of length, default is 1.0*nanometer).
+    atom_subset : slice or list of int, optional
+        If specified, the move is applied only to those atoms specified by these
+        indices. If None, the move is applied to all atoms (default is None).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    n_accepted : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    displacement_sigma
+    atom_subset
+    context_cache
+
+    See Also
+    --------
+    MetropolizedMove
+
+    """
+
+    def __init__(self, displacement_sigma=1.0*unit.nanometer, **kwargs):
+        super(MCDisplacementMove, self).__init__(**kwargs)
+        self.displacement_sigma = displacement_sigma
+
+    @staticmethod
+    def displace_positions(positions, displacement_sigma=1.0*unit.nanometer):
+        """Return the positions after applying a random displacement to them.
+
+        Parameters
+        ----------
+        positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The positions to displace.
+        displacement_sigma : simtk.unit.Quantity
+            The standard deviation of the normal distribution used to propose
+            the random displacement (units of length, default is 1.0*nanometer).
+
+        Returns
+        -------
+        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The displaced positions.
+
+        """
+        positions_unit = positions.unit
+        unitless_displacement_sigma = displacement_sigma / positions_unit
+        displacement_vector = unit.Quantity(np.random.randn(3) * unitless_displacement_sigma,
+                                            positions_unit)
+        return positions + displacement_vector
+
+    def __getstate__(self):
+        serialization = super(MCDisplacementMove, self).__getstate__()
+        serialization['displacement_sigma'] = self.displacement_sigma
+        return serialization
+
+    def __setstate__(self, serialization):
+        super(MCDisplacementMove, self).__setstate__(serialization)
+        self.displacement_sigma = serialization['displacement_sigma']
+
+    def _propose_positions(self, initial_positions):
+        """Implement MetropolizedMove._propose_positions for apply()."""
+        return self.displace_positions(initial_positions, self.displacement_sigma)
+
+
+# =============================================================================
+# RANDOM ROTATION MOVE
+# =============================================================================
+
+class MCRotationMove(MetropolizedMove):
+    """A metropolized move that randomly rotate a subset of atoms.
+
+    Parameters
+    ----------
+    atom_subset : slice or list of int, optional
+        If specified, the move is applied only to those atoms specified by these
+        indices. If None, the move is applied to all atoms (default is None).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    n_accepted : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    atom_subset
+    context_cache
+
+    See Also
+    --------
+    MetropolizedMove
+
+    """
+
+    def __init__(self, **kwargs):
+        super(MCRotationMove, self).__init__(**kwargs)
+
+    @classmethod
+    def rotate_positions(cls, positions):
+        """Return the positions after applying a random rotation to them.
+
+        Parameters
+        ----------
+        positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The positions to rotate.
+
+        Returns
+        -------
+        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+            The rotated positions.
+
+        """
+        positions_unit = positions.unit
+        x_initial = positions / positions_unit
+
+        # Compute center of geometry of atoms to rotate.
+        x_initial_mean = x_initial.mean(0)
+
+        # Generate a random rotation matrix.
+        rotation_matrix = cls.generate_random_rotation_matrix()
+
+        # Apply rotation.
+        x_proposed = (rotation_matrix * np.matrix(x_initial - x_initial_mean).T).T + x_initial_mean
+        return unit.Quantity(x_proposed, positions_unit)
+
+    @classmethod
+    def generate_random_rotation_matrix(cls):
+        """Return a random 3x3 rotation matrix.
+
+        Returns
+        -------
+        Rq : 3x3 numpy.ndarray
+            The random rotation matrix.
+
+        """
+        q = cls._generate_uniform_quaternion()
+        return cls._rotation_matrix_from_quaternion(q)
+
+    @staticmethod
+    def _rotation_matrix_from_quaternion(q):
+        """Compute a 3x3 rotation matrix from a given quaternion (4-vector).
+
+        Parameters
+        ----------
+        q : 1x4 numpy.ndarray
+            Quaterion (need not be normalized, zero norm OK).
+
+        Returns
+        -------
+        Rq : 3x3 numpy.ndarray
+            Orthogonal rotation matrix corresponding to quaternion q.
+
+        Examples
+        --------
+        >>> q = np.array([0.1, 0.2, 0.3, -0.4])
+        >>> Rq = MCRotationMove._rotation_matrix_from_quaternion(q)
+
+        References
+        ----------
+        [1] http://en.wikipedia.org/wiki/Rotation_matrix#Quaternion
+
+        """
+
+        w, x, y, z = q
+        Nq = (q**2).sum()  # Squared norm.
+        if Nq > 0.0:
+            s = 2.0 / Nq
+        else:
+            s = 0.0
+
+        X = x*s;   Y = y*s;  Z = z*s
+        wX = w*X; wY = w*Y; wZ = w*Z
+        xX = x*X; xY = x*Y; xZ = x*Z
+        yY = y*Y; yZ = y*Z; zZ = z*Z
+
+        Rq = np.matrix([[1.0-(yY+zZ),     xY-wZ,          xZ+wY],
+                        [xY+wZ,        1.0-(xX+zZ),       yZ-wX],
+                        [xZ-wY,           yZ+wX,    1.0-(xX+yY)]])
+
+        return Rq
+
+    @staticmethod
+    def _generate_uniform_quaternion():
+        """Generate a uniform normalized quaternion 4-vector.
+
+        References
+        ----------
+        [1] K. Shoemake. Uniform random rotations. In D. Kirk, editor,
+        Graphics Gems III, pages 124-132. Academic, New York, 1992.
+        [2] Described briefly here: http://planning.cs.uiuc.edu/node198.html
+
+        Examples
+        --------
+        >>> q = MCRotationMove._generate_uniform_quaternion()
+
+        """
+        u = np.random.rand(3)
+        q = np.array([np.sqrt(1-u[0])*np.sin(2*np.pi*u[1]),
+                      np.sqrt(1-u[0])*np.cos(2*np.pi*u[1]),
+                      np.sqrt(u[0])*np.sin(2*np.pi*u[2]),
+                      np.sqrt(u[0])*np.cos(2*np.pi*u[2])])
+        return q
+
+    def _propose_positions(self, initial_positions):
+        """Implement MetropolizedMove._propose_positions for apply()"""
+        return self.rotate_positions(initial_positions)
 
 
 # =============================================================================

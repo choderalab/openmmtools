@@ -221,6 +221,25 @@ class TestContextCache(object):
         assert len(cache) == 4
         assert n_contexts == 4
 
+    def test_get_context_any_integrator(self):
+        """ContextCache.get_context first search the cache when integrator is unspecified."""
+        cache = ContextCache()
+        state1, state2 = self.incompatible_states[:2]
+
+        # First we create a Context in state1.
+        cache.get_context(state1, copy.deepcopy(self.verlet_2fs))
+        assert len(cache) == 1
+
+        # When we don't specify the integrator, it first looks for cached Contexts.
+        context, integrator = cache.get_context(state1)
+        assert len(cache) == 1
+        assert state1.is_context_compatible(context)
+        assert isinstance(integrator, openmm.VerletIntegrator)
+
+        # With an incompatible state, a new Context is created.
+        cache.get_context(state2)
+        assert len(cache) == 2
+
     def test_cache_capacity_ttl(self):
         """Check that the cache capacity and time_to_live work as expected."""
         cache = ContextCache(capacity=3)

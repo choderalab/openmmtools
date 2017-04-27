@@ -69,7 +69,8 @@ def test_integrators_and_testsystems():
     # Get all the CustomIntegrators in the integrators module.
     is_integrator = lambda x: (inspect.isclass(x) and
                                issubclass(x, openmm.CustomIntegrator) and
-                               x != integrators.ThermostatedIntegrator)
+                               x != integrators.ThermostatedIntegrator and
+                               x != integrators.RestorableIntegrator)
     custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
 
     def all_subclasses(cls):
@@ -92,7 +93,10 @@ def test_integrators_and_testsystems():
 
         for integrator_name, integrator_class in custom_integrators:
             # Create integrator.
-            integrator = integrator_class()
+            if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+                integrator = integrator_class(dict())
+            else:
+                integrator = integrator_class()
 
             # Create test.
             f = partial(check_combination, integrator, testsystem, platform)

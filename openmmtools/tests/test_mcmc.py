@@ -13,10 +13,13 @@ Test State classes in mcmc.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
-from pymbar import timeseries
+import pickle
 from functools import partial
 
-from openmmtools import testsystems, utils
+import nose
+from pymbar import timeseries
+
+from openmmtools import testsystems
 from openmmtools.states import SamplerState, ThermodynamicState
 from openmmtools.mcmc import *
 
@@ -30,8 +33,8 @@ analytical_testsystems = [
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
         GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        WeightedMove({GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100): 0.5,
-                      HMCMove(timestep=10*unit.femtosecond, n_steps=10): 0.5})),
+        WeightedMove([(GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100), 0.5),
+                      (HMCMove(timestep=10*unit.femtosecond, n_steps=10), 0.5)])),
     ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
         LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("IdealGas", testsystems.IdealGas(nparticles=216),
@@ -249,6 +252,119 @@ def test_context_cache():
         move = LangevinDynamicsMove(n_steps=5, context_cache=dummy_cache)
         move.apply(thermodynamic_state, sampler_state)
     assert len(cache.global_context_cache) == 0
+
+
+def test_moves_serialization():
+    """Test serialization of various MCMCMoves."""
+    # Test cases.
+    platform = openmm.Platform.getPlatformByName('Reference')
+    context_cache = cache.ContextCache(capacity=1, time_to_live=1)
+    dummy_cache = cache.DummyContextCache(platform=platform)
+    test_cases = [
+        IntegratorMove(openmm.VerletIntegrator(1.0*unit.femtosecond), n_steps=10),
+        LangevinDynamicsMove(),
+        GHMCMove(),
+        HMCMove(context_cache=context_cache),
+        MonteCarloBarostatMove(context_cache=dummy_cache),
+        SequenceMove(move_list=[LangevinDynamicsMove(), GHMCMove()]),
+        WeightedMove(move_set=[(HMCMove(), 0.5), (MonteCarloBarostatMove(), 0.5)])
+    ]
+    for move in test_cases:
+        original_pickle = pickle.dumps(move)
+        serialized_move = utils.serialize(move)
+        deserialized_move = utils.deserialize(serialized_move)
+        deserialized_pickle = pickle.dumps(deserialized_move)
+        assert original_pickle == deserialized_pickle
+
+
+def test_move_restart():
+    """Test optional restart move if NaN is detected."""
+    n_restart_attempts = 5
+
+    # We define a Move that counts the times it is attempted.
+    class MyMove(BaseIntegratorMove):
+        def __init__(self, **kwargs):
+            super(MyMove, self).__init__(n_steps=1, n_restart_attempts=n_restart_attempts, **kwargs)
+            self.attempted_count = 0
+
+        def _get_integrator(self, thermodynamic_state):
+            return integrators.GHMCIntegrator(temperature=300*unit.kelvin)
+
+        def _before_integration(self, context, thermodynamic_state):
+            self.attempted_count += 1
+
+    # Create a system with an extra NaN particle.
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    system = testsystem.system
+    for force in system.getForces():
+        if isinstance(force, openmm.NonbondedForce):
+            break
+
+    # Add a non-interacting particle to the system at NaN position.
+    system.addParticle(39.9 * unit.amu)
+    force.addParticle(0.0, 1.0, 0.0)
+    particle_position = np.array([np.nan, 0.2, 0.2])
+    positions = unit.Quantity(np.vstack((testsystem.positions, particle_position)),
+                              unit=testsystem.positions.unit)
+
+    # Create and run move. An IntegratoMoveError is raised.
+    sampler_state = SamplerState(positions)
+    thermodynamic_state = ThermodynamicState(system, 300*unit.kelvin)
+
+    # We use a local context cache with Reference platform since on the
+    # CPU platform CustomIntegrators raises an error with NaN particles.
+    reference_platform = openmm.Platform.getPlatformByName('Reference')
+    move = MyMove(context_cache=cache.ContextCache(platform=reference_platform))
+    with nose.tools.assert_raises(IntegratorMoveError) as cm:
+        move.apply(thermodynamic_state, sampler_state)
+
+    # We have counted the correct number of restart attempts.
+    assert move.attempted_count == n_restart_attempts + 1
+
+    # Test serialization of the error.
+    with utils.temporary_directory() as tmp_dir:
+        prefix = os.path.join(tmp_dir, 'prefix')
+        cm.exception.serialize_error(prefix)
+        assert os.path.exists(prefix + '-move.json')
+        assert os.path.exists(prefix + '-system.xml')
+        assert os.path.exists(prefix + '-integrator.xml')
+        assert os.path.exists(prefix + '-state.xml')
+
+
+def test_metropolized_moves():
+    """Test Displacement and Rotation moves."""
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    original_sampler_state = SamplerState(testsystem.positions)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+
+    all_metropolized_moves = MetropolizedMove.__subclasses__()
+    for move_class in all_metropolized_moves:
+        move = move_class(atom_subset=range(thermodynamic_state.n_particles))
+        sampler_state = copy.deepcopy(original_sampler_state)
+
+        # Start applying the move and remove one at each iteration tyring
+        # to generate both an accepted and rejected move.
+        old_n_accepted, old_n_proposed = 0, 0
+        while len(move.atom_subset) > 0:
+            initial_positions = copy.deepcopy(sampler_state.positions)
+            move.apply(thermodynamic_state, sampler_state)
+            final_positions = copy.deepcopy(sampler_state.positions)
+
+            # If the move was accepted the positions should be different.
+            if move.n_accepted > old_n_accepted:
+                assert not np.allclose(initial_positions, final_positions)
+
+            # If we have generated a rejection and an acceptance, test next move.
+            if move.n_accepted > 0 and move.n_accepted != move.n_proposed:
+                break
+
+            # Try with a smaller subset.
+            move.atom_subset = move.atom_subset[:-1]
+            old_n_accepted, old_n_proposed = move.n_accepted, move.n_proposed
+
+        # Check that we were able to generate both an accepted and a rejected move.
+        assert len(move.atom_subset) != 0, ('Could not generate an accepted and rejected '
+                                            'move for class {}'.format(move_class.__name__))
 
 
 # =============================================================================
