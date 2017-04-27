@@ -74,14 +74,12 @@ class StorageInterfaceDirVar(object):
     SIDV instances and will raise an error if you try to use them as such.
     """
 
-    def write(self, data, protected_write=True):
+    def write(self, data, at_index=None):
         """
-        Write data to a variable which cannot be appended to, nor overwritten (unless specified). This method should
-        be called when you do not want the value stored to change, typically written only once. The protected_write
-        variable will let you overwrite this behavior if you want to use something on disk that is a toggleable flag,
-        but does not change in shape.
-
-        Metadata is added to this variable if possible to indicate this is a write protectable variable.
+        Write data to a variable which cannot be appended to or write data at a specific index of an appendable
+        variable. This method is typically called when you do not want the value stored to change. The at_index flag
+        should be an integer to specify that the appendable variable that this is should overwrite the data at the
+        specific index.
 
         This method raises an error if this instance of SIDV is DIRECTORY
 
@@ -90,10 +88,10 @@ class StorageInterfaceDirVar(object):
         data
             This is what will be written to disk, the data will be processed by the STORAGESYSTEM as to how to actually
             handle the data once the units have been stripped out and assigned to this instance of SIDV.
-        protected_write : boolean, default True
-            Decide whether to check if the variable is already on file if present.
-            If True, no overwrite is allowed and an error is raised if the variable already exists.
-            If False, overwriting is allowed but the variable will still not be able to be appended to.
+        at_index : int or None, default None
+            Change the behavior or "write" to act on an appendable variable instead
+            Replace the data at the specific index of at_index with data
+            Checks for compatible data should be/are handled at the storage_driver level
 
         Examples
         --------
@@ -104,18 +102,18 @@ class StorageInterfaceDirVar(object):
         >>> x = np.eye(3)
         >>> my_store.my_arr.write(x)
 
-        Save a list again after making a modification to it
+        Save 2 entries of a list, then update the frist
         >>> my_driver = NetCDFIODriver('my_store.nc')
         >>> my_store = StorageInterface(my_driver)
         >>> x = [0,0,1]
-        >>> my_store.the_list.write(x)
+        >>> my_store.the_list.append(x)
+        >>> my_store.the_list.append(x)
         >>> y = [1,1,1]
-        >>> my_store.the_list.write(y, protected_write=False)
+        >>> my_store.the_list.write(y, at_index=0)
 
         """
         if not self.bound_target:
             self._bind_to_variable_with_write_or_append()
-        previously_written = True  # Assume this is true until proven otherwise
         dump_metadata = False  # Flag to dump metadata after write-protection check
         if not self._variable:
             path = self.path
@@ -124,17 +122,12 @@ class StorageInterfaceDirVar(object):
                 self._variable = self._storage_driver.get_variable_handler(path)
             except KeyError:  # Trap the "not present" case, AttributeErrors are larger problems
                 self._variable = self._storage_driver.create_storage_variable(path, type(data))
-                previously_written = False
             self._directory = False
             dump_metadata = True
         # Protect variable if already written
-        if previously_written and protected_write:
-            # Lock ability to protect the variable
-            raise IOError("Cannot write to protected object on disk! Set 'protected_write = False` to overwrite "
-                          "this protection.")
         if dump_metadata:
             self._dump_metadata_buffer()
-        self._variable.write(data)
+        self._variable.write(data, at_index=at_index)
 
     def append(self, data):
         """

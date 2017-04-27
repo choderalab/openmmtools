@@ -30,7 +30,7 @@ from simtk import unit
 
 from ..utils import typename, quantity_from_string
 
-# TODO: Use the `with_metaclass` from yank.utils when we merge it in
+# TODO: Use the `with_metaclass` from .utils when we merge it in
 ABC = abc.ABCMeta('ABC', (object,), {})  # compatible with Python 2 *and* 3
 
 
