@@ -150,46 +150,80 @@ def generic_type_codec_check(input_data, with_append=True):
                 assert np.all(data_append_out[1] == input_data)
 
 
+def generic_append_to_test(input_data, overwrite_data):
+    """Generic function to test replacing data of appended dimension"""
+    with temporary_directory() as tmp_dir:
+        file_path = tmp_dir + '/test.nc'
+        nc_io_driver = NetCDFIODriver(file_path)
+        input_type = type(input_data)
+        # Create a write and an append of the data
+        append_path = 'data_append'
+        data_append = nc_io_driver.create_storage_variable(append_path, input_type)
+        # Append data 3 times
+        for i in range(3):
+            data_append.append(input_data)
+        # Overwrite second entry
+        data_append.write(overwrite_data, at_index=1)
+        # Check entries
+        assert np.all(data_append[0] == input_data)
+        assert np.all(data_append[2] == input_data)
+        assert np.all(data_append[1] == overwrite_data)
+
+
 def test_netcdf_int_type_codec():
     """Test that the Int type codec can read/write/append"""
     input_data = 4
     generic_type_codec_check(input_data)
+    overwrite_data = 5
+    generic_append_to_test(input_data, overwrite_data)
 
 
 def test_netcdf_float_type_codec():
     """Test that the Float type codec can read/write/append"""
     input_data = 4.0
     generic_type_codec_check(input_data)
+    overwrite_data = 5.0
+    generic_append_to_test(input_data, overwrite_data)
 
 
 def test_netcdf_string_type_codec():
     """Test that the String type codec can read/write/append"""
     input_data = 'four point oh'
     generic_type_codec_check(input_data)
+    overwrite_data = 'five point not'
+    generic_append_to_test(input_data, overwrite_data)
 
 
 def test_netcdf_list_type_codec():
     """Test that the List type codec can read/write/append"""
     input_data = [4, 4, 4]
     generic_type_codec_check(input_data)
+    overwrite_data = [5, 5, 5]
+    generic_append_to_test(input_data, overwrite_data)
 
 
 def test_netcdf_tuple_type_codec():
     """Test that the tuple type codec can read/write/append"""
     input_data = (4, 4, 4)
     generic_type_codec_check(input_data)
+    overwrite_data = (5, 5, 5)
+    generic_append_to_test(input_data, overwrite_data)
 
 
 def test_netcdf_array_type_codec():
     """Test that the ndarray type codec can read/write/append"""
     input_data = np.array([4, 4.0, 4])
     generic_type_codec_check(input_data)
+    overwrite_data = np.array([5, 5.0, 5])
+    generic_append_to_test(input_data, overwrite_data)
 
 
 def test_netcdf_quantity_type_codec():
     """Test that the simtk.unit.Quantity type codec can read/write/append with various unit and _value types"""
     input_data = 4 * unit.kelvin
     generic_type_codec_check(input_data)
+    overwrite_data = 5 * unit.kelving
+    generic_append_to_test(input_data, overwrite_data)
     input_data = [4, 4, 4] * unit.kilojoules_per_mole
     generic_type_codec_check(input_data)
     input_data = np.array([4, 4, 4]) / unit.nanosecond
@@ -207,3 +241,12 @@ def test_netcdf_dictionary_type_codec():
         'box_vectors': (np.eye(3) * 4.0) * unit.nanometer
     }
     generic_type_codec_check(input_data)
+    overwrite_data = {
+        'count': 5,
+        'ratio': 0.5,
+        'name': 'five',
+        'repeated': [5, 5, 5],
+        'temperature': 5 * unit.kelvin,
+        'box_vectors': (np.eye(3) * 5.0) * unit.nanometer
+    }
+    generic_append_to_test(input_data, overwrite_data)
