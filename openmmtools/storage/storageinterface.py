@@ -119,7 +119,7 @@ class StorageInterfaceDirVar(object):
             path = self.path
             # Try to get already on disk variable
             try:
-                self._variable = self._storage_driver.get_variable_handler(path)
+                self._variable = self._storage_driver.get_storage_variable(path)
             except KeyError:  # Trap the "not present" case, AttributeErrors are larger problems
                 self._variable = self._storage_driver.create_storage_variable(path, type(data))
             self._directory = False
@@ -185,7 +185,7 @@ class StorageInterfaceDirVar(object):
             path = self.path
             # Try to get variable on disk
             try:
-                self._variable = self._storage_driver.get_variable_handler(path)
+                self._variable = self._storage_driver.get_storage_variable(path)
             except KeyError as e:
                 raise e
             self._directory = False
@@ -229,10 +229,10 @@ class StorageInterfaceDirVar(object):
 
         Returns
         -------
-        variable_pointer : None or storage_system specific unit of storage
+        variable_pointer : None or storage_driver specific unit of storage
             Returns None if this instance is a directory, or if its functionality has not been determined yet (this
                 includes the variable not being assigned yet)
-            Returns the storage_system specific variable that this instance is bound to once assigned
+            Returns the storage_driver specific variable that this instance is bound to once assigned
 
         """
         return self._variable
@@ -245,11 +245,11 @@ class StorageInterfaceDirVar(object):
 
         Returns
         -------
-        directory_pointer : None, True, or storage_system specific directory of storage
+        directory_pointer : None, True, or storage_driver specific directory of storage
             Returns None if this instance is a variable, or if its functionality has not been determined yet.
             Returns True if this SIDV will be a directory, but is not yet bound.
                 i.e. has additional SIDV children spawned by __getattr__ method.
-            Returns the storage_system specific directory that this instance is bound to once assigned
+            Returns the storage_driver specific directory that this instance is bound to once assigned
 
         """
         return self._directory
@@ -393,7 +393,7 @@ class StorageInterface(object):
     Examples
     --------
 
-    Create a basic storage system and write new my_data to disk
+    Create a basic storage interface and write new my_data to disk
     >>> my_driver = NetCDFIODriver('my_store.nc')
     >>> my_data = [4,2,1,6]
     >>> my_storage = StorageInterface(my_driver)
@@ -418,24 +418,24 @@ class StorageInterface(object):
     ...     mydata = i**2
     ...     my_storage.looper.append(mydata)
     """
-    def __init__(self, storage_system):
+    def __init__(self, storage_driver):
         """
-        Initialize the class by reading in the StorageIODriver in storage_system. The file name is inferred from the
-        storage system and the read/write/append actions are handled by the SIVD class which also act on the
-        storage_system.
+        Initialize the class by reading in the StorageIODriver in storage_driver. The file name is inferred from the
+        storage driver and the read/write/append actions are handled by the SIVD class which also act on the
+        storage_driver.
 
         Parameters
         ----------
-        storage_system : StorageIODriver object
+        storage_driver : StorageIODriver object
             What type of storage to use. Requires fully implemented and instanced StorageIODriver class to use.
 
         """
-        self._storage_system = storage_system
+        self._storage_driver = storage_driver
         # Used for logic checks
 
     def add_metadata(self, name, data):
         """
-        Write additional meta data to attach to the storage_system file itself.
+        Write additional meta data to attach to the storage_driver file itself.
 
         Parameters
         ----------
@@ -447,13 +447,13 @@ class StorageInterface(object):
         Examples
         --------
 
-        Create a storage system and add meta data
+        Create a storage interface and add meta data
         >>> my_driver = NetCDFIODriver('my_store.nc')
         >>> my_storage = StorageInterface(my_driver)
         >>> my_storage.add_metadata('my_index', 4)
         """
         # Instance if not done
-        self.storage_system.add_metadata(name, data)
+        self.storage_driver.add_metadata(name, data)
 
     @property
     def file_name(self):
@@ -467,21 +467,21 @@ class StorageInterface(object):
             Name of the file on the disk
 
         """
-        return self.storage_system.file_name
+        return self.storage_driver.file_name
 
     @property
-    def storage_system(self):
+    def storage_driver(self):
         """
         Pointer to the object which actually handles read/write operations
 
         Returns
         -------
-        storage_system :
-            Instance of the module which handles IO actions to specific storage type requested by storage_system
+        storage_driver :
+            Instance of the module which handles IO actions to specific storage type requested by storage_driver
             string at initialization.
 
         """
-        return self._storage_system
+        return self._storage_driver
 
     def __getattr__(self, name):
         """
@@ -494,6 +494,6 @@ class StorageInterface(object):
             Name of the group or variable that will instance a StorageInterfaceDirVar
 
         """
-        # Instance storage system
+        # Instance Storage Interface Directory/Variable object
         setattr(self, name, StorageInterfaceDirVar(name, self))
         return getattr(self, name)

@@ -53,7 +53,7 @@ def test_storage_interface_creation():
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
         si.add_metadata('name', 'data')
-        assert si.storage_system.ncfile.getncattr('name') == 'data'
+        assert si.storage_driver.ncfile.getncattr('name') == 'data'
 
 
 @tools.raises(Exception)
@@ -117,7 +117,7 @@ def test_unbound_read():
         si = StorageInterface(driver)
         input_data = 4*unit.kelvin
         si.four.write(input_data)
-        si.storage_system.close_down()
+        si.storage_driver.close_down()
         del si
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
@@ -133,13 +133,13 @@ def test_directory_creation():
         si = StorageInterface(driver)
         input_data = 'four'
         si.dir0.dir1.dir2.var.write(input_data)
-        ncfile = si.storage_system.ncfile
+        ncfile = si.storage_driver.ncfile
         target = ncfile
         for i in range(3):
             my_dir = 'dir{}'.format(i)
             assert my_dir in target.groups
             target = target.groups[my_dir]
-        si.storage_system.close_down()
+        si.storage_driver.close_down()
         del si
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
@@ -160,7 +160,7 @@ def test_multi_variable_creation():
         si.dir0.var0.write(input_data)
         si.dir0.var1.append(input_data)
         si.dir0.var1.append(input_data)
-        si.storage_system.close_down()
+        si.storage_driver.close_down()
         del si, driver
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
@@ -180,7 +180,7 @@ def test_metadata_creation():
         si.dir0.var1.write(input_data)
         si.dir0.add_metadata('AmIAGroup', 'yes')
         si.dir0.var1.add_metadata('AmIAGroup', 'no')
-        dir0 = si.storage_system.ncfile.groups['dir0']
+        dir0 = si.storage_driver.ncfile.groups['dir0']
         var1 = dir0.variables['var1']
         assert dir0.getncattr('AmIAGroup') == 'yes'
         assert var1.getncattr('AmIAGroup') == 'no'
