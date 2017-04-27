@@ -693,7 +693,7 @@ class NCVariableCodec(ABC):
 
         """
         # Check type
-        if type(data) is not self.dtype:
+        if not isinstance(data, self.dtype):
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         if at_index is not None:
             self._write_to_append_at_index(data, at_index)
