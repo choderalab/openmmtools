@@ -582,6 +582,31 @@ class NCVariableCodec(ABC):
         # TODO: Replace with @abstractstaticmethod when on Python 3
         raise NotImplementedError("dtype_string has not been implemented in this subclass yet!")
 
+    @abc.abstractproperty
+    def _encoder(self):
+        """
+        Define the encoder used to convert from Python Data -> netcdf
+
+        Returns
+        -------
+        encoder : function
+            Returns the encoder function
+        """
+        raise NotImplementedError("Encoder has not yet been set!")
+
+    @abc.abstractproperty
+    def _decoder(self):
+        """
+        Define the decoder used to convert from netCDF -> Python Data
+
+        Returns
+        -------
+        decoder : function
+            Returns the decoder function
+        """
+        raise NotImplementedError("Decoder has not yet been set!")
+
+
     @abc.abstractmethod
     def _bind_read(self):
         """
@@ -634,7 +659,6 @@ class NCVariableCodec(ABC):
         """
         raise NotImplementedError("_bind_append function has not been implemented in this subclass yet!")
 
-    @abc.abstractmethod
     def read(self):
         """
         Return the property read from the ncfile
@@ -644,28 +668,52 @@ class NCVariableCodec(ABC):
         Given property read from the nc file and cast into the correct Python data type
         """
 
-        raise NotImplementedError("Extracting stored NetCDF data into Python data has not been implemented!")
+        if self._bound_target is None:
+            self._bind_read()
+        # Set the output mode by calling the variable
+        self._output_mode
+        return self._decoder(self._bound_target)
 
-    @abc.abstractmethod
-    def write(self, data):
+    def write(self, data, at_index=None):
         """
         Tell this writer how to write to the NetCDF file given the final object that it is bound to
 
+        Alternately, tell a variable which is normally appended to to write a specific entry on the index at_index
+
         Parameters
         ----------
-        data
+        data : any data you wish to write
+        at_index : None or Int, optional, default=None
+            Specify the index of a variable created by append to write specific data at the index entry.
+            When None, this option is ignored
+            The integer of at_index must be <= to the size of the appended data
 
         Returns
         -------
 
         """
-        raise NotImplementedError("Writing Python data to NetCDF data has not been implemented!")
+        # Check type
+        if type(data) is not self.dtype:
+            raise TypeError("Invalid data type on variable {}.".format(self._target))
+        if at_index is not None:
+            self._write_to_append_at_index(data, at_index)
+            return
+        # Bind
+        if self._bound_target is None:
+            self._bind_write(data)
+        self._check_storage_mode('w')
+        self._check_data_shape_matching(data)
+        # Save data
+        packaged_data = self._encoder(data)
+        self._bound_target[:] = packaged_data
+        return
 
-    @abc.abstractmethod
     def append(self, data):
         """
         Tell this writer how to write to the NetCDF file given the final object that it is bound to
 
+        To overwrite data at a specific index of the already appended data, use the .write(data, at_index=X) method
+
         Parameters
         ----------
         data
@@ -674,7 +722,36 @@ class NCVariableCodec(ABC):
         -------
 
         """
-        raise NotImplementedError("Appending Python data to NetCDF data has not been implemented!")
+        # Check type
+        if type(data) is not self.dtype:
+            raise TypeError("Invalid data type on variable {}.".format(self._target))
+        # Bind
+        if self._bound_target is None:
+            self._bind_append(data)
+        self._check_storage_mode('a')
+        self._check_data_shape_matching(data)
+        # Determine current current length and therefore the last index
+        length = self._bound_target.shape[0]
+        # Save data
+        self._bound_target[length, :] = self._encoder(data)
+
+    @abc.abstractmethod
+    def _check_data_shape_matching(self, data):
+        """
+        Check to make sure that the appendable data is the same shape/size/compatible with the other data on the
+        appendable data.
+
+        e.g. Lists should be the same length, NumPy arrays should be the same shape and dtype, etc
+
+        For static shape objects such as Ints and Floats, the dtype alone is sufficient and this method can be
+        implemented with a simple `pass`
+
+        Parameters
+        ----------
+        data
+
+        """
+        raise NotImplementedError("I dont know how to compare data yet!")
 
     @abc.abstractproperty
     def storage_type(self):
@@ -780,6 +857,66 @@ class NCVariableCodec(ABC):
         except AttributeError:
             warnings.warn("This Codec cannot detect storage type from on-disk variable. .write() and .append() "
                           "operations will not work and .read() operations may work", RuntimeWarning)
+
+    def _check_storage_mode(self, expected_mode):
+        """
+        Check to see if the data stored at this codec is actually compatable with the type of write operation that was
+        performed (write vs. append)
+
+        Parameters
+        ----------
+        expected_mode : string, either "w' or "a"
+
+        Raises
+        ------
+        TypeError if ._output_mode != expected mode
+        """
+
+        # String fill in, uses the oposite of expected mode to raise warnings
+        saved_as = {'w': 'appendable', 'a': 'statically written'}
+        cannot = {'w': 'write', 'a': 'append'}
+        must_use = {'w': 'append() or the to_index keyword of write()', 'a': 'write()'}
+        if self._output_mode != expected_mode:
+            raise TypeError("{target} at {type} was saved as {saved_as} data! Cannot {cannot}, must use "
+                            "{must_use}".format(target=self._target,
+                                                type=self.dtype_string(),
+                                                saved_as=saved_as[expected_mode],
+                                                cannot=cannot[expected_mode],
+                                                must_use=must_use[expected_mode])
+                            )
+
+    def _write_to_append_at_index(self, data, index):
+        """
+        Try to write data to a specific site on an append variable. This is a method which should be called in
+        every `write` call if the index is defined by something other than None.
+
+        Parameters
+        ----------
+        data : Data to write to location on a previously appended variable
+        index : Int,
+            Index to write the data at, replacing what is already there
+            If index > size of written data, crash
+        """
+        if self._bound_target is None:
+            try:
+                self._bind_read()
+            except KeyError:
+                # Trap the NetCDF Key Error to raise an issue that data must exist first
+                raise IOError("Cannot write to a specific index for data that does not exist!")
+        if type(index) is not int:
+            raise ValueError("to_index must be an integer!")
+        self._check_storage_mode('a')  # We want this in append mode
+        self._check_data_shape_matching(data)
+        # Determine current current length and therefore if the index is too large
+        length = self._bound_target.shape[0]
+        # Must actually compare to full length so people don't fill an infinite variable with garbage that is just
+        # masked from empty entries
+        if index >= length or abs(index) > length:
+            raise ValueError("Cannot choose an index beyond the maximum length of the "
+                             "appended data of {}".format(length))
+        self._bound_target[index, :] = self._encoder(data)
+
+
 
 
 # =============================================================================
@@ -891,35 +1028,9 @@ class NCScalar(NCVariableCodec, ABC):
     This particular class is to minimize code duplication between some very basic data types such as int, str, float
 
     It is itself an abstract class and requires the following functions to be complete:
-    _encoder (@property)
-    _decoder (@property)
     dtype (@property)
     dtype_string (@staticmethod)
     """
-
-    @abc.abstractproperty
-    def _encoder(self):
-        """
-        Define the encoder used to convert from Python Data -> netcdf
-
-        Returns
-        -------
-        encoder : function
-            Returns the encoder function
-        """
-        raise NotImplementedError("Encoder has not yet been set!")
-
-    @abc.abstractproperty
-    def _decoder(self):
-        """
-        Define the decoder used to convert from netCDF -> Python Data
-
-        Returns
-        -------
-        decoder : function
-            Returns the decoder function
-        """
-        raise NotImplementedError("Decoder has not yet been set!")
 
     def _bind_read(self):
         self._attempt_storage_read()
@@ -973,45 +1084,8 @@ class NCScalar(NCVariableCodec, ABC):
         self._output_mode
         return
 
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        # Set the output mode by calling the variable
-        self._output_mode
-        return self._decoder(self._bound_target)
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
-        # Save data
-        self._bound_target[:] = self._encoder(data)
-        return
-
-    def append(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Check writeable
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        # Save data
-        self._bound_target[length, :] = self._encoder(data)
+    def _check_data_shape_matching(self, data):
+        pass
 
     @property
     def storage_type(self):
@@ -1098,6 +1172,15 @@ class NCArray(NCVariableCodec):
     """
     NetCDF Codec for numpy arrays
     """
+
+    @property
+    def _encoder(self):
+        return simple_encoder
+
+    @property
+    def _decoder(self):
+        return nc_numpy_array_decoder
+
     @property
     def dtype(self):
         return np.ndarray
@@ -1167,55 +1250,11 @@ class NCArray(NCVariableCodec):
         # Set the output mode by calling the variable
         self._output_mode
 
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        # Set the output mode by calling the variable
-        self._output_mode
-        return nc_numpy_array_decoder(self._bound_target)
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
+    def _check_data_shape_matching(self, data):
         if self._save_shape != data.shape:
             raise ValueError("Input data must be of shape {} but is instead of shape {}!".format(
-                self._compare_shape(data), self._save_shape)
+                self._save_shape, data.shape)
             )
-        # Save data
-        packaged_data = simple_encoder(data)
-        self._bound_target[:] = packaged_data
-        return
-
-    def append(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Check writeable
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
-        if self._save_shape != data.shape:
-            raise ValueError("Input data must be of shape {} but is instead of shape {}!".format(
-                self._compare_shape(data), self._save_shape)
-            )
-        # Save data
-        packaged_data = simple_encoder(data)
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        self._bound_target[length, :] = packaged_data
 
     @staticmethod
     def _determine_data_information(data):
@@ -1241,6 +1280,14 @@ class NCIterable(NCVariableCodec):
     @staticmethod
     def dtype_string():
         return "iterable"
+
+    @property
+    def _encoder(self):
+        return simple_encoder
+
+    @property
+    def _decoder(self):
+        return nc_iterable_decoder
 
     def _bind_read(self):
         self._attempt_storage_read()
@@ -1300,55 +1347,12 @@ class NCIterable(NCVariableCodec):
         self._output_mode
         return
 
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        # Set the output mode by calling the variable
-        self._output_mode
-        return nc_iterable_decoder(self._bound_target)
-
-    def write(self, data):
-        # Check type
-        if not isinstance(data, self.dtype):
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
-        if self._save_shape != len(data):
+    def _check_data_shape_matching(self, data):
+        data_shape = len(data)
+        if self._save_shape != data_shape:
             raise ValueError("Input data must be of shape {} but is instead of shape {}!".format(
-                self._compare_shape(data), self._save_shape)
+                self._save_shape, data_shape)
             )
-        # Save data
-        packaged_data = simple_encoder(data)
-        self._bound_target[:] = packaged_data
-        return
-
-    def append(self, data):
-        # Check type
-        if not isinstance(data, self.dtype):
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Check writeable
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
-        if self._save_shape != len(data):
-            raise ValueError("Input data must be of shape {} but is instead of shape {}!".format(
-                self._compare_shape(data), self._save_shape)
-            )
-        # Save data
-        packaged_data = simple_encoder(data)
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        self._bound_target[length, :] = packaged_data
 
     @staticmethod
     def _determine_data_information(data):
@@ -1455,72 +1459,14 @@ class NCQuantity(NCVariableCodec):
         self._output_mode
         return
 
-    def read(self):
-        if self._bound_target is None:
-            self._bind_read()
-        # Set the output mode by calling the variable
-        self._output_mode
-        data = self._decoder(self._bound_target)
-        unit_name = self._bound_target.getncattr('IODriver_Unit')
-        cast_unit = quantity_from_string(unit_name)
-        if isinstance(cast_unit, unit.Quantity):
-            cast_unit = cast_unit.unit
-        return data * cast_unit
-
-    def write(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_write(data)
-        # Check writeable
-        if self._output_mode != 'w':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
+    def _check_data_shape_matching(self, data):
         if self._save_shape != self._compare_shape(data):
             raise ValueError("Input data must be of shape {} but is instead of shape {}!".format(
-                self._compare_shape(data), self._save_shape)
+                self._save_shape, self._compare_shape(data))
             )
         if self._unit != str(data.unit):
             raise ValueError("Input data must have units of {}, but instead is {}".format(self._unit,
                                                                                           str(data.unit)))
-        # Save data
-        # Strip Unit
-        data_unit = data.unit
-        data_value = data / data_unit
-        packaged_data = self._encoder(data_value)
-        self._bound_target[:] = packaged_data
-        return
-
-    def append(self, data):
-        # Check type
-        if type(data) is not self.dtype:
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
-        # Bind
-        if self._bound_target is None:
-            self._bind_append(data)
-        # Check writeable
-        if self._output_mode != 'a':
-            raise TypeError("{} at {} was saved as appendable data! Cannot overwrite, must use append()".format(
-                self.dtype_string(), self._target)
-            )
-        if self._save_shape != self._compare_shape(data):
-            raise ValueError("Input data must be of shape {} but is instead of shape {}!".format(
-                self._compare_shape(data), self._save_shape)
-            )
-        if self._unit != str(data.unit):
-            raise ValueError("Input data must have units of {}, but instead is {}".format(self._unit,
-                                                                                          str(data.unit)))
-        # Determine current current length and therefore the last index
-        length = self._bound_target.shape[0]
-        # Save data
-        # Strip Unit
-        data_unit = data.unit
-        data_value = data / data_unit
-        packaged_data = self._encoder(data_value)
-        self._bound_target[length, :] = packaged_data
 
     def _determine_data_information(self, data):
         # Make common _bind functions a single function
@@ -1545,19 +1491,41 @@ class NCQuantity(NCVariableCodec):
     def _set_codifiers(self, stype):
         # Assign the codecs in a single block
         if stype == 'int':
-            self._encoder = simple_encoder
-            self._decoder = scalar_decoder_generator(int)
+            self._value_encoder = simple_encoder
+            self._value_decoder = scalar_decoder_generator(int)
         elif stype == 'float':
-            self._encoder = simple_encoder
-            self._decoder = scalar_decoder_generator(float)
+            self._value_encoder = simple_encoder
+            self._value_decoder = scalar_decoder_generator(float)
         elif stype == 'list' or stype == 'tuple':
-            self._encoder = simple_encoder
-            self._decoder = nc_iterable_decoder
+            self._value_encoder = simple_encoder
+            self._value_decoder = nc_iterable_decoder
         elif 'ndarray' in stype:
-            self._encoder = simple_encoder
-            self._decoder = nc_numpy_array_decoder
+            self._value_encoder = simple_encoder
+            self._value_decoder = nc_numpy_array_decoder
         else:
             raise TypeError("NCQuantity does not know how to handle a quantity of type {}!".format(stype))
+
+    @property
+    def _encoder(self):
+        return self._quantity_encoder
+
+    @property
+    def _decoder(self):
+        return self._quantity_decoder
+
+    def _quantity_encoder(self, data):
+        # Strip Unit
+        data_unit = data.unit
+        data_value = data / data_unit
+        return self._value_encoder(data_value)
+
+    def _quantity_decoder(self, bound_target):
+        data = self._value_decoder(bound_target)
+        unit_name = bound_target.getncattr('IODriver_Unit')
+        cast_unit = quantity_from_string(unit_name)
+        if isinstance(cast_unit, unit.Quantity):
+            cast_unit = cast_unit.unit
+        return data * cast_unit
 
     @property
     def storage_type(self):
