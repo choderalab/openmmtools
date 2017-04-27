@@ -92,16 +92,21 @@ def test_variable_append_read():
         assert np.all(output_data[1] == input_data)
 
 
-@tools.raises(Exception)
-def test_write_protect():
-    """Test that writing twice without removing protection raises an error"""
+def test_at_index_write():
+    """Test that writing at a specific index of appended data works"""
     with temporary_directory() as tmp_dir:
         test_store = tmp_dir + '/teststore.nc'
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
         input_data = 4
-        si.four.write(input_data)
-        si.four.write(input_data)
+        overwrite_data = 5
+        for i in range(3):
+            si.four.append(input_data)
+        si.four.write(overwrite_data, at_index=1)  # Sacrilege, I know -LNN
+        output_data = si.four.read()
+        assert np.all(output_data[0] == input_data)
+        assert np.all(output_data[2] == input_data)
+        assert np.all(output_data[1] == overwrite_data)
 
 
 def test_unbound_read():

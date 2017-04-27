@@ -250,3 +250,32 @@ def test_netcdf_dictionary_type_codec():
         'box_vectors': (np.eye(3) * 5.0) * unit.nanometer
     }
     generic_append_to_test(input_data, overwrite_data)
+
+
+@tools.raises(Exception)
+def test_write_at_index_must_exist():
+    """Ensure that the write(data, at_index) must exist first"""
+    with temporary_directory() as tmp_dir:
+        file_path = tmp_dir + '/test.nc'
+        nc_io_driver = NetCDFIODriver(file_path)
+        input_data = 4
+        input_type = type(input_data)
+        # Create a write and an append of the data
+        append_path = 'data_append'
+        data_append = nc_io_driver.create_storage_variable(append_path, input_type)
+        data_append.write(input_data, at_index=0)
+
+
+@tools.raises(Exception)
+def test_write_at_index_is_bound():
+    """Ensure that the write(data, at_index) cannot write to an index beyond"""
+    with temporary_directory() as tmp_dir:
+        file_path = tmp_dir + '/test.nc'
+        nc_io_driver = NetCDFIODriver(file_path)
+        input_data = 4
+        input_type = type(input_data)
+        # Create a write and an append of the data
+        append_path = 'data_append'
+        data_append = nc_io_driver.create_storage_variable(append_path, input_type)
+        data_append.append(input_data)  # Creates the first data
+        data_append.write(input_data, at_index=1)  # should fail for out of bounds index
