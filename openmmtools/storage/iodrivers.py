@@ -723,7 +723,7 @@ class NCVariableCodec(ABC):
 
         """
         # Check type
-        if type(data) is not self.dtype:
+        if not isinstance(data, self.dtype):
             raise TypeError("Invalid data type on variable {}.".format(self._target))
         # Bind
         if self._bound_target is None:

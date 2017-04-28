@@ -142,7 +142,7 @@ def generic_type_codec_check(input_data, with_append=True):
             assert np.all(data_write_out == input_data)
         if with_append:
             try:
-                for key in data_write_out.keys():
+                for key in data_write_out.keys():  # Must act on the data_write since it has the .keys method
                     assert np.all(data_append_out[0][key] == input_data[key])
                     assert np.all(data_append_out[1][key] == input_data[key])
             except AttributeError:
@@ -150,7 +150,7 @@ def generic_type_codec_check(input_data, with_append=True):
                 assert np.all(data_append_out[1] == input_data)
 
 
-def generic_append_to_test(input_data, overwrite_data):
+def generic_append_to_check(input_data, overwrite_data):
     """Generic function to test replacing data of appended dimension"""
     with temporary_directory() as tmp_dir:
         file_path = tmp_dir + '/test.nc'
@@ -164,10 +164,18 @@ def generic_append_to_test(input_data, overwrite_data):
             data_append.append(input_data)
         # Overwrite second entry
         data_append.write(overwrite_data, at_index=1)
-        # Check entries
-        assert np.all(data_append[0] == input_data)
-        assert np.all(data_append[2] == input_data)
-        assert np.all(data_append[1] == overwrite_data)
+        data_append_out = data_append.read()
+        try:
+            for key in input_data.keys():  # Must act on the data_write since it has the .keys method
+                assert np.all(data_append_out[0][key] == input_data[key])
+                assert np.all(data_append_out[2][key] == input_data[key])
+                assert np.all(data_append_out[1][key] == overwrite_data[key])
+            assert set(input_data.keys()) == set(data_append_out[0].keys())  # Assert keys match
+            assert set(input_data.keys()) == set(data_append_out[2].keys())
+        except AttributeError:
+            assert np.all(data_append_out[0] == input_data)
+            assert np.all(data_append_out[2] == input_data)
+            assert np.all(data_append_out[1] == overwrite_data)
 
 
 def test_netcdf_int_type_codec():
@@ -175,7 +183,7 @@ def test_netcdf_int_type_codec():
     input_data = 4
     generic_type_codec_check(input_data)
     overwrite_data = 5
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 def test_netcdf_float_type_codec():
@@ -183,7 +191,7 @@ def test_netcdf_float_type_codec():
     input_data = 4.0
     generic_type_codec_check(input_data)
     overwrite_data = 5.0
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 def test_netcdf_string_type_codec():
@@ -191,7 +199,7 @@ def test_netcdf_string_type_codec():
     input_data = 'four point oh'
     generic_type_codec_check(input_data)
     overwrite_data = 'five point not'
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 def test_netcdf_list_type_codec():
@@ -199,7 +207,7 @@ def test_netcdf_list_type_codec():
     input_data = [4, 4, 4]
     generic_type_codec_check(input_data)
     overwrite_data = [5, 5, 5]
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 def test_netcdf_tuple_type_codec():
@@ -207,7 +215,7 @@ def test_netcdf_tuple_type_codec():
     input_data = (4, 4, 4)
     generic_type_codec_check(input_data)
     overwrite_data = (5, 5, 5)
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 def test_netcdf_array_type_codec():
@@ -215,15 +223,15 @@ def test_netcdf_array_type_codec():
     input_data = np.array([4, 4.0, 4])
     generic_type_codec_check(input_data)
     overwrite_data = np.array([5, 5.0, 5])
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 def test_netcdf_quantity_type_codec():
     """Test that the simtk.unit.Quantity type codec can read/write/append with various unit and _value types"""
     input_data = 4 * unit.kelvin
     generic_type_codec_check(input_data)
-    overwrite_data = 5 * unit.kelving
-    generic_append_to_test(input_data, overwrite_data)
+    overwrite_data = 5 * unit.kelvin
+    generic_append_to_check(input_data, overwrite_data)
     input_data = [4, 4, 4] * unit.kilojoules_per_mole
     generic_type_codec_check(input_data)
     input_data = np.array([4, 4, 4]) / unit.nanosecond
@@ -249,7 +257,7 @@ def test_netcdf_dictionary_type_codec():
         'temperature': 5 * unit.kelvin,
         'box_vectors': (np.eye(3) * 5.0) * unit.nanometer
     }
-    generic_append_to_test(input_data, overwrite_data)
+    generic_append_to_check(input_data, overwrite_data)
 
 
 @tools.raises(Exception)
