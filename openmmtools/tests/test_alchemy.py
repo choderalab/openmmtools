@@ -42,8 +42,11 @@ logger = logging.getLogger(__name__)
 temperature = 300.0 * unit.kelvin  # reference temperature
 # MAX_DELTA = 0.01 * kB * temperature # maximum allowable deviation
 MAX_DELTA = 1.0 * kB * temperature  # maximum allowable deviation
+MAX_FORCE_RELATIVE_ERROR = 1.0e-6 # maximum allowable relative force error
 GLOBAL_ENERGY_UNIT = unit.kilojoules_per_mole  # controls printed units
+GLOBAL_FORCE_UNIT = unit.kilojoules_per_mole / unit.nanometers # controls printed units
 GLOBAL_ALCHEMY_PLATFORM = None  # This is used in every energy calculation.
+GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('OpenCL') # DEBUG
 
 
 # =============================================================================
@@ -75,6 +78,62 @@ def compute_energy(system, positions, platform=None, force_group=-1):
     del context, integrator, state
     return potential
 
+def compute_forces(system, positions, platform=None, force_group=-1):
+    """Compute forces of the system in the given positions.
+
+    Parameters
+    ----------
+    platform : simtk.openmm.Platform or None, optional
+        If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
+    force_group : int flag or set of int, optional
+        Passed to the groups argument of Context.getState().
+
+    """
+    timestep = 1.0 * unit.femtoseconds
+    integrator = openmm.VerletIntegrator(timestep)
+    if platform is None:
+        platform = GLOBAL_ALCHEMY_PLATFORM
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    context.setPositions(positions)
+    state = context.getState(getForces=True, groups=force_group)
+    forces = state.getForces(asNumpy=True)
+    del context, integrator, state
+    return forces
+
+def generate_new_positions(system, positions, platform=None, nsteps=50):
+    """Generate new positions by taking a few steps from the old positions.
+
+    Parameters
+    ----------
+    platform : simtk.openmm.Platform or None, optional
+        If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
+    nsteps : int, optional, default=50
+        Number of steps of dynamics to take.
+
+    Returns
+    -------
+    new_positions : simtk.unit.Quantity of shape [nparticles,3] with units compatible with distance
+        New positions
+
+    """
+    temperature = 300 * unit.kelvin
+    collision_rate = 90 / unit.picoseconds
+    timestep = 1.0 * unit.femtoseconds
+    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
+    if platform is None:
+        platform = GLOBAL_ALCHEMY_PLATFORM
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    context.setPositions(positions)
+    integrator.step(nsteps)
+    new_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    del context, integrator
+    return new_positions
 
 def compute_energy_force(system, positions, force_name):
     """Compute the energy of the force with the given name."""
@@ -388,7 +447,7 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         potentials.append(aa_correction + na_correction)
     else:
         potentials.append(0.0 * GLOBAL_ENERGY_UNIT)
-
+    
     # Check that error is small.
     delta = potentials[1] - potentials[2] - potentials[0]
     if abs(delta) > MAX_DELTA:
@@ -399,6 +458,35 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         err_msg = "Maximum allowable deviation exceeded (was {:.8f} kcal/mol; allowed {:.8f} kcal/mol)."
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
+def compare_system_forces(reference_system, alchemical_system, positions, name=""):
+    """Check that the forces of reference and modified systems are close.
+
+    Parameters
+    ---------
+    reference_system : simtk.openmm.System
+        Reference System
+    alchemical_system : simtk.openmm.System
+        System to compare to reference
+    positions : simtk.unit.Quantity of shape [nparticles,3] with units of distance
+        The particle positions to use
+    name : str, optional, default=""
+        System name to use for debugging.
+
+    """
+    # Compute forces
+    reference_force = compute_forces(reference_system, positions) / GLOBAL_FORCE_UNIT
+    alchemical_force = compute_forces(alchemical_system, positions) / GLOBAL_FORCE_UNIT
+
+    # Check that error is small.
+    def magnitude(vec):
+        return np.sqrt(np.sum(vec**2))
+
+    relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
+    print('relative_error = %16e' % relative_error)
+    if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
+        print("========")
+        err_msg = "Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f})."
+        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR))
 
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Compare full and alchemically-modified system energies by energy component.
@@ -666,7 +754,7 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
 
 
 def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, nsamples=200,
-                  cached_trajectory_filename=None, name=""):
+                  cached_trajectory_filename=None, name="", alchemical_system=None):
     """
     Test overlap between reference system and alchemical system by running a short simulation.
 
@@ -686,6 +774,8 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
         If not None, this file will be used to cache intermediate results with pickle.
     name : str, optional, default=None
         Name of test system being evaluaed
+    alchemical_system : simtk.openmm.System, optional, default=None
+        If not None, this system will be used instead of creating a new alchemical system.
 
     """
     temperature = 300.0 * unit.kelvin
@@ -700,8 +790,9 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
         reference_system.addForce(openmm.MonteCarloBarostat(pressure, temperature))
 
     # Create a fully-interacting alchemical state.
-    factory = AlchemicalFactory()
-    alchemical_system = factory.create_alchemical_system(reference_system, alchemical_regions)
+    if alchemical_system is None:
+        factory = AlchemicalFactory()
+        alchemical_system = factory.create_alchemical_system(reference_system, alchemical_regions)
 
     # Create integrators.
     reference_integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
@@ -739,7 +830,6 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
     for sample in tqdm(range(iteration, nsamples), desc=name):
 
         # Run dynamics.
-        for step in tqdm(range(nsteps)):
         reference_integrator.step(nsteps)
 
         # Get reference energies.
@@ -1041,6 +1131,21 @@ class TestAlchemicalFactory(object):
             f.description = "Testing non-interacting energy of {}".format(test_name)
             yield f
 
+    def test_replace_reaction_field(self):
+        """Check that replacing reaction-field electrostatics with Custom*Force yields minimal force differences with original system.        
+        Note that we cannot test for energy consistency or energy overlap because which atoms are within the cutoff will cause energy difference to vary wildly.
+        """
+        factory = AlchemicalFactory()
+        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
+            reference_system = test_system.system
+            forces = {force.__class__.__name__: force for force in reference_system.getForces()}
+            if ('NonbondedForce' in forces) and (forces['NonbondedForce'].getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):                
+                modified_system = factory.replace_reaction_field(reference_system, switch_width=None)
+                positions = test_system.positions
+                f = partial(compare_system_forces, reference_system, modified_system, positions, name=test_name)
+                f.description = "Testing replace_reaction_field on system {}".format(test_name)
+                yield f
+        
     @attr('slow')
     def test_fully_interacting_energy_components(self):
         """Test interacting state energy by force component."""
@@ -1093,7 +1198,7 @@ class TestAlchemicalFactory(object):
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             reference_system = test_system.system
             positions = test_system.positions
-            # cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
+            #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
             f = partial(overlap_check, reference_system, alchemical_region, positions,
@@ -1110,25 +1215,27 @@ class TestAlchemicalFactorySlow(TestAlchemicalFactory):
     def define_systems(cls):
         """Create test systems and shared objects."""
         cls.test_systems = dict()
-        cls.test_systems['LennardJonesFluid without dispersion correction'] = \
-            testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=False)
-        cls.test_systems['DischargedWaterBox with reaction field, no switch, no dispersion correction'] = \
-            testsystems.DischargedWaterBox(dispersion_correction=False, switch=False,
-                                           nonbondedMethod=openmm.app.CutoffPeriodic)
-        cls.test_systems['WaterBox with reaction field, no switch, dispersion correction'] = \
-            testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
-        cls.test_systems['WaterBox with reaction field, switch, no dispersion correction'] = \
-            testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
+        #cls.test_systems['LennardJonesFluid without dispersion correction'] = \
+        #    testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=False)
+        #cls.test_systems['DischargedWaterBox with reaction field, no switch, no dispersion correction'] = \
+        #    testsystems.DischargedWaterBox(dispersion_correction=False, switch=False,
+        #                                   nonbondedMethod=openmm.app.CutoffPeriodic)
+        #cls.test_systems['WaterBox with reaction field, no switch, dispersion correction'] = \
+        #    testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
+        #cls.test_systems['WaterBox with reaction field, switch, no dispersion correction'] = \
+        #    testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
         cls.test_systems['WaterBox with PME, switch, dispersion correction'] = \
             testsystems.WaterBox(dispersion_correction=True, switch=True, nonbondedMethod=openmm.app.PME)
 
         # Big systems.
-        cls.test_systems['LysozymeImplicit'] = testsystems.LysozymeImplicit()
-        cls.test_systems['DHFRExplicit with reaction field'] = \
-            testsystems.DHFRExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
-        cls.test_systems['SrcExplicit with reaction field'] = \
-            testsystems.SrcExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
-        cls.test_systems['SrcImplicit'] = testsystems.SrcImplicit()
+        #cls.test_systems['LysozymeImplicit'] = testsystems.LysozymeImplicit()
+        #cls.test_systems['DHFRExplicit with reaction field'] = \
+        #    testsystems.DHFRExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['SrcExplicit with PME'] = \
+            testsystems.SrcExplicit(nonbondedMethod=openmm.app.PME)
+        #cls.test_systems['SrcExplicit with reaction field'] = \
+        #    testsystems.SrcExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
+        #cls.test_systems['SrcImplicit'] = testsystems.SrcImplicit()
 
     @classmethod
     def define_regions(cls):
@@ -1136,6 +1243,20 @@ class TestAlchemicalFactorySlow(TestAlchemicalFactory):
         cls.test_regions['LysozymeImplicit'] = AlchemicalRegion(alchemical_atoms=range(2603, 2621))
         cls.test_regions['DHFRExplicit'] = AlchemicalRegion(alchemical_atoms=range(0, 2849))
         cls.test_regions['Src'] = AlchemicalRegion(alchemical_atoms=range(0, 21))
+
+    @attr('slow')
+    def test_overlap(self):
+        """Tests overlap between reference and alchemical systems."""
+        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
+            reference_system = test_system.system
+            positions = test_system.positions
+            cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
+                                                       test_name + '.pickle')
+            #cached_trajectory_filename = None
+            f = partial(overlap_check, reference_system, alchemical_region, positions,
+                        cached_trajectory_filename=cached_trajectory_filename, name=test_name)
+            f.description = "Testing reference/alchemical overlap for {}".format(test_name)
+            yield f
 
 
 # =============================================================================

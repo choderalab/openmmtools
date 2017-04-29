@@ -63,6 +63,10 @@ from .constants import kB
 
 pi = np.pi
 
+DEFAULT_EWALD_ERROR_TOLERANCE = 1.0e-5 # default Ewald error tolerance
+DEFAULT_CUTOFF_DISTANCE = 10.0 * unit.angstroms # default cutoff distance
+DEFAULT_SWITCH_WIDTH = 1.5 * unit.angstroms # default switch width
+
 #=============================================================================================
 # SUBROUTINES
 #=============================================================================================
@@ -1741,7 +1745,7 @@ class LennardJonesFluid(TestSystem):
         Also, if not None, use PME for electrostatics.  Obviously this is no
         longer a traditional LJ system, but this option could be useful for
         testing the effect of charges in small systems.
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if charge is not None.
 
     Examples
@@ -2446,7 +2450,7 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=9*unit.angstroms, model='tip3p', switch_width=1.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=DEFAULT_CUTOFF_DISTANCE, model='tip3p', switch_width=DEFAULT_SWITCH_WIDTH, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
         """
         Create a water box test system.
 
@@ -2455,11 +2459,11 @@ class WaterBox(TestSystem):
 
         box_edge : simtk.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
            Edge length for cubic box [should be greater than 2*cutoff]
-        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.9 nm
+        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_CUTOFF_DISTANCE
            Nonbonded cutoff
         model : str, optional, default = 'tip3p'
            The name of the water model to use ['tip3p', 'tip4p', 'tip4pew', 'tip5p', 'spce']
-        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.5 A
+        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_SWITCH_WIDTH
            Sets the width of the switch function for Lennard-Jones.
         constrained : bool, optional, default=True
            Sets whether water geometry should be constrained (rigid water implemented via SETTLE) or flexible.
@@ -2467,7 +2471,7 @@ class WaterBox(TestSystem):
            Sets whether the long-range dispersion correction should be used.
         nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
            Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
-        ewaldErrorTolerance : float, optional, default=5E-4
+        ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
 
         Examples
@@ -2626,7 +2630,7 @@ class FlexiblePMEWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, *args, **kwargs)
 
 class PMEWaterBox(WaterBox):
 
@@ -2650,7 +2654,7 @@ class PMEWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, *args, **kwargs)
 
 class GiantFlexibleWaterBox(WaterBox):
 
@@ -2992,10 +2996,12 @@ class AlanineDipeptideExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    cutoff : simtk.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_CUTOFF_DISTANCE
+        Cutoff distance
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.
 
     Examples
@@ -3005,7 +3011,7 @@ class AlanineDipeptideExplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3281,7 +3287,7 @@ class HostGuestExplicit(TestSystem):
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
     rigid_water : bool, optional, default=True
-    nonbondedCutoff : Quantity, optional, default=9.0 * unit.angstroms
+    nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
@@ -3289,10 +3295,10 @@ class HostGuestExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.
 
     Examples
@@ -3302,7 +3308,7 @@ class HostGuestExplicit(TestSystem):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0*unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=1.5*unit.angstroms, ewaldErrorTolerance=1.0e-6, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3347,7 +3353,7 @@ class DHFRExplicit(TestSystem):
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
     rigid_water : bool, optional, default=True
-    nonbondedCutoff : Quantity, optional, default=8.0 * unit.angstroms
+    nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
@@ -3355,10 +3361,10 @@ class DHFRExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.
 
     Notes
@@ -3368,7 +3374,7 @@ class DHFRExplicit(TestSystem):
     hardware.  For modern GPUs, 0.95 nm may be a good place to start.
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3506,7 +3512,7 @@ class SrcExplicit(TestSystem):
 
     """
 
-    def __init__(self, nonbondedMethod=app.PME, **kwargs):
+    def __init__(self, nonbondedMethod=app.PME, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, use_dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3516,7 +3522,16 @@ class SrcExplicit(TestSystem):
         # Construct system.
         forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml']  # list of forcefields to use in parameterization
         forcefield = app.ForceField(*forcefields_to_use)
-        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds)
+        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds, 
+                                         ewaldErrorTolerance=ewaldErrorTolerance, nonbondedCutoff=nonbondedCutoff)
+
+        # Set dispersion correction use.
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
         # Get positions.
         positions = pdbfile.getPositions()
