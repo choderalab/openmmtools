@@ -22,6 +22,8 @@ import pickle
 import itertools
 from functools import partial
 
+from tqdm import tqdm
+
 import nose
 import scipy
 from nose.plugins.attrib import attr
@@ -664,7 +666,7 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
 
 
 def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, nsamples=200,
-                  cached_trajectory_filename=None):
+                  cached_trajectory_filename=None, name=""):
     """
     Test overlap between reference system and alchemical system by running a short simulation.
 
@@ -680,8 +682,10 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
         Number of molecular dynamics steps between samples (default is 50).
     nsamples : int, optional
         Number of samples to collect (default is 100).
-    cached_trajectory_filename : str, optional
+    cached_trajectory_filename : str, optional, default=None
         If not None, this file will be used to cache intermediate results with pickle.
+    name : str, optional, default=None
+        Name of test system being evaluaed
 
     """
     temperature = 300.0 * unit.kelvin
@@ -732,12 +736,10 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
     # Collect simulation data.
     iteration = len(data['du_n'])
     reference_context.setPositions(positions)
-    print()
-    for sample in range(iteration, nsamples):
-        print('\rSample {}/{}'.format(sample+1, nsamples), end='')
-        sys.stdout.flush()
+    for sample in tqdm(range(iteration, nsamples), desc=name):
 
         # Run dynamics.
+        for step in tqdm(range(nsteps)):
         reference_integrator.step(nsteps)
 
         # Get reference energies.
@@ -1095,7 +1097,7 @@ class TestAlchemicalFactory(object):
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
             f = partial(overlap_check, reference_system, alchemical_region, positions,
-                        cached_trajectory_filename=cached_trajectory_filename)
+                        cached_trajectory_filename=cached_trajectory_filename, name=test_name)
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
             yield f
 
