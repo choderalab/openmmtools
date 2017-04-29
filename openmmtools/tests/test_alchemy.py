@@ -446,7 +446,7 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         potentials.append(aa_correction + na_correction)
     else:
         potentials.append(0.0 * GLOBAL_ENERGY_UNIT)
-    
+
     # Check that error is small.
     delta = potentials[1] - potentials[2] - potentials[0]
     if abs(delta) > MAX_DELTA:
@@ -481,7 +481,6 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
         return np.sqrt(np.sum(vec**2))
 
     relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
-    print('relative_error = %16e' % relative_error)
     if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
         print("========")
         err_msg = "Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f})."
@@ -1131,20 +1130,20 @@ class TestAlchemicalFactory(object):
             yield f
 
     def test_replace_reaction_field(self):
-        """Check that replacing reaction-field electrostatics with Custom*Force yields minimal force differences with original system.        
+        """Check that replacing reaction-field electrostatics with Custom*Force yields minimal force differences with original system.
         Note that we cannot test for energy consistency or energy overlap because which atoms are within the cutoff will cause energy difference to vary wildly.
         """
         factory = AlchemicalFactory()
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             reference_system = test_system.system
             forces = {force.__class__.__name__: force for force in reference_system.getForces()}
-            if ('NonbondedForce' in forces) and (forces['NonbondedForce'].getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):                
+            if ('NonbondedForce' in forces) and (forces['NonbondedForce'].getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
                 modified_system = factory.replace_reaction_field(reference_system, switch_width=None)
                 positions = test_system.positions
                 f = partial(compare_system_forces, reference_system, modified_system, positions, name=test_name)
                 f.description = "Testing replace_reaction_field on system {}".format(test_name)
                 yield f
-        
+
     @attr('slow')
     def test_fully_interacting_energy_components(self):
         """Test interacting state energy by force component."""
