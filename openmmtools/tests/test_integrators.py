@@ -17,6 +17,8 @@ import numpy
 import inspect
 import pymbar
 
+from tqdm import tqdm
+
 from functools import partial
 from unittest import TestCase
 
@@ -254,31 +256,39 @@ def test_external_protocol_work_accumulation():
     del context, integrator
 
 class TestExternalPerturbationLangevinIntegrator(TestCase):
-    def test_protocol_work_accumulation(self):
+    def test_protocol_work_accumulation_harmonic_oscillator(self):
+        """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with HarmonicOscillator
+        """
+        testsystem = testsystems.HarmonicOscillator()
+        parameter_name = 'testsystems_HarmonicOscillator_x0'
+        parameter_initial = 0.0 * unit.angstroms
+        parameter_final = 10.0 * unit.angstroms
         for platform_name in ['Reference', 'CPU']:
-            self.compare_external_protocol_work_accumulation(platform_name)
+            self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name)
 
-    def compare_external_protocol_work_accumulation(self, platform_name='Reference'):
+    def test_protocol_work_accumulation_waterbox(self):
+        """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicallyDischargedWaterBox
+        """
+        testsystem = testsystems.AlchemicallyDischargedWaterBox()
+        parameter_name = 'lambda_electrostatics'
+        parameter_initial = 1.0
+        parameter_final = 0.0
+        for platform_name in ['Reference', 'CPU']:
+            self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name)
+
+    def compare_external_protocol_work_accumulation(self, testsystem, parameter_name, parameter_initial, parameter_final, platform_name='Reference'):
         """Compare external work accumulation between Reference and CPU platforms.
         """
 
         from openmmtools.constants import kB
-        testsystem = testsystems.HarmonicOscillator()
         system, topology = testsystem.system, testsystem.topology
         temperature = 298.0 * unit.kelvin
-        collision_rate = 1.0 / unit.picoseconds
-        K = 100.0 * unit.kilocalories_per_mole/unit.angstrom**2
-        mass = 39.948 * unit.amu
-        period = unit.sqrt(mass/K)
-        timestep = period / 20.0
         platform = openmm.Platform.getPlatformByName(platform_name)
-        nsteps = 1000
+        nsteps = 100
         kT = kB * temperature
-        x0_initial = 0.0 * unit.angstroms
-        x0_final = 25.0 * unit.angstroms
-
         integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
         context = openmm.Context(system, integrator, platform)
+        context.setParameter(parameter_name, parameter_initial)
         context.setPositions(testsystem.positions)
         context.setVelocitiesToTemperature(temperature)
         assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
@@ -286,22 +296,23 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
 
         external_protocol_work = 0.0
-        for step in range(nsteps):
+        for step in tqdm(range(nsteps)):
             lambda_value = float(step+1) / float(nsteps)
-            x0 = x0_initial * (1-lambda_value) + x0_final * lambda_value
+            parameter_value = parameter_initial * (1-lambda_value) + parameter_final * lambda_value
             initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
-            context.setParameter('testsystems_HarmonicOscillator_x0', x0)
+            context.setParameter(parameter_name, parameter_value)
             final_energy = context.getState(getEnergy=True).getPotentialEnergy()
             external_protocol_work += (final_energy - initial_energy) / kT
 
             integrator.step(1)
             integrator_protocol_work = integrator.getGlobalVariableByName('protocol_work') * unit.kilojoules_per_mole / kT
 
-            #print('%16e %16e : %16e' % (external_protocol_work, integrator_protocol_work, external_protocol_work - integrator_protocol_work))
-            self.assertAlmostEqual(external_protocol_work, integrator_protocol_work)
+            message = '\n'
+            message += 'protocol work discrepancy noted for %s on platform %s\n' % (testsystem.name, platform_name)
+            message += 'step %5d : external %16e kT | integrator %16e kT | difference %16e kT' % (step, external_protocol_work, integrator_protocol_work, external_protocol_work - integrator_protocol_work)
+            self.assertAlmostEqual(external_protocol_work, integrator_protocol_work, msg=message)
 
         del context, integrator
-
 
 def test_temperature_getter_setter():
     """Test that temperature setter and getter modify integrator variables."""
