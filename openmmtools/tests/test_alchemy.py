@@ -46,8 +46,7 @@ MAX_FORCE_RELATIVE_ERROR = 1.0e-6 # maximum allowable relative force error
 GLOBAL_ENERGY_UNIT = unit.kilojoules_per_mole  # controls printed units
 GLOBAL_FORCE_UNIT = unit.kilojoules_per_mole / unit.nanometers # controls printed units
 GLOBAL_ALCHEMY_PLATFORM = None  # This is used in every energy calculation.
-GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('OpenCL') # DEBUG
-
+#GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('OpenCL') # DEBUG: Use OpenCL over CPU platform for testing since OpenCL is deterministic, while CPU is not
 
 # =============================================================================
 # TESTING UTILITIES
