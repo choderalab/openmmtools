@@ -1214,27 +1214,27 @@ class TestAlchemicalFactorySlow(TestAlchemicalFactory):
     def define_systems(cls):
         """Create test systems and shared objects."""
         cls.test_systems = dict()
-        #cls.test_systems['LennardJonesFluid without dispersion correction'] = \
-        #    testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=False)
-        #cls.test_systems['DischargedWaterBox with reaction field, no switch, no dispersion correction'] = \
-        #    testsystems.DischargedWaterBox(dispersion_correction=False, switch=False,
-        #                                   nonbondedMethod=openmm.app.CutoffPeriodic)
-        #cls.test_systems['WaterBox with reaction field, no switch, dispersion correction'] = \
-        #    testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
-        #cls.test_systems['WaterBox with reaction field, switch, no dispersion correction'] = \
-        #    testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['LennardJonesFluid without dispersion correction'] = \
+            testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=False)
+        cls.test_systems['DischargedWaterBox with reaction field, no switch, no dispersion correction'] = \
+            testsystems.DischargedWaterBox(dispersion_correction=False, switch=False,
+                                           nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['WaterBox with reaction field, no switch, dispersion correction'] = \
+            testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['WaterBox with reaction field, switch, no dispersion correction'] = \
+            testsystems.WaterBox(dispersion_correction=False, switch=True, nonbondedMethod=openmm.app.CutoffPeriodic)
         cls.test_systems['WaterBox with PME, switch, dispersion correction'] = \
             testsystems.WaterBox(dispersion_correction=True, switch=True, nonbondedMethod=openmm.app.PME)
 
         # Big systems.
-        #cls.test_systems['LysozymeImplicit'] = testsystems.LysozymeImplicit()
-        #cls.test_systems['DHFRExplicit with reaction field'] = \
-        #    testsystems.DHFRExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['LysozymeImplicit'] = testsystems.LysozymeImplicit()
+        cls.test_systems['DHFRExplicit with reaction field'] = \
+            testsystems.DHFRExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
         cls.test_systems['SrcExplicit with PME'] = \
             testsystems.SrcExplicit(nonbondedMethod=openmm.app.PME)
-        #cls.test_systems['SrcExplicit with reaction field'] = \
-        #    testsystems.SrcExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
-        #cls.test_systems['SrcImplicit'] = testsystems.SrcImplicit()
+        cls.test_systems['SrcExplicit with reaction field'] = \
+            testsystems.SrcExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['SrcImplicit'] = testsystems.SrcImplicit()
 
     @classmethod
     def define_regions(cls):
