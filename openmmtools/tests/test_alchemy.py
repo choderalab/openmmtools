@@ -102,6 +102,35 @@ def compute_forces(system, positions, platform=None, force_group=-1):
     del context, integrator, state
     return forces
 
+def generate_new_positions(system, positions, platform=None, nsteps=500):
+    """Generate new positions by taking a few steps from the old positions.
+    Parameters
+    ----------
+    platform : simtk.openmm.Platform or None, optional
+        If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
+    nsteps : int, optional, default=50
+        Number of steps of dynamics to take.
+    Returns
+    -------
+    new_positions : simtk.unit.Quantity of shape [nparticles,3] with units compatible with distance
+        New positions
+    """
+    temperature = 300 * unit.kelvin
+    collision_rate = 90 / unit.picoseconds
+    timestep = 1.0 * unit.femtoseconds
+    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
+    if platform is None:
+        platform = GLOBAL_ALCHEMY_PLATFORM
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    context.setPositions(positions)
+    integrator.step(nsteps)
+    new_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+    del context, integrator
+    return new_positions
+
 def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms, maxIterations=50):
     """Minimize the energy of the given system.
 
@@ -482,13 +511,14 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
 
     # Check that error is small.
     def magnitude(vec):
-        return np.sqrt(np.sum(vec**2))
+        [nparticles, ndim] = vec.shape
+        return np.sqrt(np.sum(vec**2) / float(nparticles))
 
     relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
     if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
         print("========")
-        err_msg = "Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f})."
-        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR))
+        err_msg = "Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f}).\nalchemical_force = {:.8f}, reference_force = {:.8f}, difference = {:.8f}"
+        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force), magnitude(reference_force), magnitude(reference_force)))
 
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Compare full and alchemically-modified system energies by energy component.
@@ -1140,10 +1170,13 @@ class TestAlchemicalFactory(object):
         """Check that replacing reaction-field electrostatics with Custom*Force yields minimal force differences with original system.
         Note that we cannot test for energy consistency or energy overlap because which atoms are within the cutoff will cause energy difference to vary wildly.
         """
-        factory = AlchemicalFactory()
+        factory = AlchemicalFactory(alchemical_rf_treatment='switched', switch_width=None)
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             if (test_system.system.getNumForces() != test_system.modified_rf_system.getNumForces()):
-                f = partial(compare_system_forces, test_system.system, test_system.modified_rf_system, test_system.positions, name=test_name)
+                modified_rf_system = factory.replace_reaction_field(test_system.system)
+                # Make sure positions are not at minimum
+                positions = generate_new_positions(test_system.system, test_system.positions)
+                f = partial(compare_system_forces, test_system.system, modified_rf_system, positions, name=test_name)
                 f.description = "Testing replace_reaction_field on system {}".format(test_name)
                 yield f
 

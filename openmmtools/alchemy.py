@@ -912,10 +912,7 @@ class AlchemicalFactory(object):
             System with reaction-field converted to c_rf = 0
 
         """
-
         system = copy.deepcopy(reference_system)
-
-        force_indices_to_delete = list()
         for (force_index, reference_force) in enumerate(system.getForces()):
             reference_force_name = reference_force.__class__.__name__
             if (reference_force_name == 'NonbondedForce') and (reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
@@ -929,6 +926,7 @@ class AlchemicalFactory(object):
                 energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
                 custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
                 custom_nonbonded_force.addPerParticleParameter("charge")
+                custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
                 custom_nonbonded_force.setCutoffDistance(reference_force.getCutoffDistance())
                 custom_nonbonded_force.setUseLongRangeCorrection(False)
                 system.addForce(custom_nonbonded_force)
@@ -940,24 +938,12 @@ class AlchemicalFactory(object):
                 custom_bond_force.addPerBondParameter("chargeprod")
                 system.addForce(custom_bond_force)
 
-                nonbonded_method = reference_force.getNonbondedMethod()
-                is_method_periodic = nonbonded_method in [openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME,
-                                                          openmm.NonbondedForce.CutoffPeriodic]
-
-
-
                 # Add switch
                 if switch_width is not None:
                     custom_nonbonded_force.setUseSwitchingFunction(True)
                     custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - switch_width)
                 else:
                     custom_nonbonded_force.setUseSwitchingFunction(False)
-
-                # Set periodicity
-                if is_method_periodic:
-                    custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-                else:
-                    custom_nonbonded_force.setNonbondedMethod(reference_force.getNonbondedMethod())
 
                 # Rewrite particle charges
                 for particle_index in range(reference_force.getNumParticles()):
