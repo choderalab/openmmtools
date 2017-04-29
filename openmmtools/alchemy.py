@@ -663,6 +663,9 @@ class AlchemicalFactory(object):
         method will be use to determine the electrostatics contribution
         to the potential energy of 1,4 exceptions instead of the
         classical q1*q2/(4*epsilon*epsilon0*pi*r).
+    switch_width : float, optional, default = 1.0 * angstroms
+        Default switch width for electrostatics in periodic cutoff systems
+        used in alchemical interactions only.
 
     Examples
     --------
@@ -735,6 +738,7 @@ class AlchemicalFactory(object):
 
     def __init__(self, consistent_exceptions=False):
         self.consistent_exceptions = consistent_exceptions
+        self.switch_width = 1.0 * unit.angstroms
 
     def create_alchemical_system(self, reference_system, alchemical_regions):
         """Create an alchemically modified version of the reference system.
@@ -1329,16 +1333,9 @@ class AlchemicalFactory(object):
             electrostatics_energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
             electrostatics_energy_expression += "c_rf = %f;" % (c_rf.value_in_unit_system(unit.md_unit_system))
         elif nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            # Ewald direct-space electrostatics
-            [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
-            if (alpha_ewald/alpha_ewald.unit) == 0.0:
-                # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                tol = reference_force.getEwaldErrorTolerance()
-                alpha_ewald = (1.0/reference_force.getCutoffDistance()) * np.sqrt(-np.log(2.0*tol))
-            electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-            electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
-            # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
-            # NOTE: There is currently no way to do this in OpenMM.
+            # Use switched standard Coulomb potential, following MTS scheme described in
+            # http://dx.doi.org/10.1063/1.1385159
+            electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(nonbonded_method))
 
@@ -1446,7 +1443,8 @@ class AlchemicalFactory(object):
         for force in [na_electrostatics_custom_nonbonded_force, aa_electrostatics_custom_nonbonded_force]:
             force.addPerParticleParameter("charge")  # partial charge
             force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
-            force.setUseSwitchingFunction(False)  # no switch for electrostatics, since NonbondedForce doesn't use it
+            force.setUseSwitchingFunction(True)  # use switching function for alchemical electrostatics to ensure force continuity at cutoff
+            force.setSwitchingDistance(nonbonded_force.getCutoffDistance() - self.switch_width)
             force.setCutoffDistance(nonbonded_force.getCutoffDistance())
             force.setUseLongRangeCorrection(False)  # long-range dispersion correction is meaningless for electrostatics
 
