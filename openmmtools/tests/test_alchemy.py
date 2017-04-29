@@ -751,8 +751,8 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
     timer.report_timing()
 
 
-def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, nsamples=200,
-                  cached_trajectory_filename=None, name="", alchemical_system=None):
+def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsamples=200,
+                  cached_trajectory_filename=None, name=""):
     """
     Test overlap between reference system and alchemical system by running a short simulation.
 
@@ -760,8 +760,8 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
     ----------
     reference_system : simtk.openmm.System
         The reference System object to compare with.
-    alchemical_regions : AlchemicalRegion
-        The region to alchemically modify.
+    alchemical_system : simtk.openmm.System
+        Alchemically-modified system.
     positions : n_particlesx3 array-like of simtk.unit.Quantity
         The initial positions (units of distance).
     nsteps : int, optional
@@ -772,8 +772,6 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
         If not None, this file will be used to cache intermediate results with pickle.
     name : str, optional, default=None
         Name of test system being evaluaed
-    alchemical_system : simtk.openmm.System, optional, default=None
-        If not None, this system will be used instead of creating a new alchemical system.
 
     """
     temperature = 300.0 * unit.kelvin
@@ -786,11 +784,6 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
     reference_system = copy.deepcopy(reference_system)
     if reference_system.usesPeriodicBoundaryConditions():
         reference_system.addForce(openmm.MonteCarloBarostat(pressure, temperature))
-
-    # Create a fully-interacting alchemical state.
-    if alchemical_system is None:
-        factory = AlchemicalFactory()
-        alchemical_system = factory.create_alchemical_system(reference_system, alchemical_regions)
 
     # Create integrators.
     reference_integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
@@ -870,7 +863,6 @@ def overlap_check(reference_system, alchemical_regions, positions, nsteps=50, ns
     print(report)
     if dDeltaF > MAX_DEVIATION:
         raise Exception(report)
-
 
 def rstyle(ax):
     """Styles x,y axes to appear like ggplot2
@@ -1067,7 +1059,11 @@ class TestAlchemicalFactory(object):
     def generate_cases(cls):
         """Generate all test cases in cls.test_cases combinatorially."""
         cls.test_cases = dict()
-        factory = AlchemicalFactory()
+        factory = AlchemicalFactory(alchemical_rf_treatment='switched')
+
+        # Create reference versions of all rf-containing systems with their switched counterparts with c_rf = 0
+        for (name, testsystem) in cls.test_systems.items():
+            setattr(testsystem, 'modified_rf_system', factory.replace_reaction_field(testsystem.system))
 
         # We generate all possible combinations of annihilate_sterics/electrostatics
         # for each test system. We also annihilate bonds, angles and torsions every
@@ -1115,17 +1111,14 @@ class TestAlchemicalFactory(object):
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            reference_system = test_system.system
-            positions = test_system.positions
-            f = partial(compare_system_energies, reference_system, alchemical_system, alchemical_region, positions)
+            f = partial(compare_system_energies, test_system.modified_rf_system, alchemical_system, alchemical_region, test_system.positions)
             f.description = "Testing fully interacting energy of {}".format(test_name)
             yield f
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            positions = test_system.positions
-            f = partial(check_noninteracting_energy_components, alchemical_system, alchemical_region, positions)
+            f = partial(check_noninteracting_energy_components, alchemical_system, alchemical_region, test_system.positions)
             f.description = "Testing non-interacting energy of {}".format(test_name)
             yield f
 
@@ -1135,12 +1128,8 @@ class TestAlchemicalFactory(object):
         """
         factory = AlchemicalFactory()
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            reference_system = test_system.system
-            forces = {force.__class__.__name__: force for force in reference_system.getForces()}
-            if ('NonbondedForce' in forces) and (forces['NonbondedForce'].getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
-                modified_system = factory.replace_reaction_field(reference_system, switch_width=None)
-                positions = test_system.positions
-                f = partial(compare_system_forces, reference_system, modified_system, positions, name=test_name)
+            if (test_system.system.getNumForces() != test_system.modified_rf_system.getNumForces()):
+                f = partial(compare_system_forces, test_system.system, test_system.reference_system, test_system.positions, name=test_name)
                 f.description = "Testing replace_reaction_field on system {}".format(test_name)
                 yield f
 
@@ -1153,10 +1142,8 @@ class TestAlchemicalFactory(object):
                             if 'Explicit' in test_name]
         for test_name in test_cases_names:
             test_system, alchemical_system, alchemical_region = self.test_cases[test_name]
-            reference_system = test_system.system
-            positions = test_system.positions
-            f = partial(check_interacting_energy_components, reference_system, alchemical_system,
-                        alchemical_region, positions)
+            f = partial(check_interacting_energy_components, test_system.modified_rf_system, alchemical_system,
+                        alchemical_region, test_system.positions)
             f.description = "Testing energy components of %s..." % test_name
             yield f
 
@@ -1178,12 +1165,10 @@ class TestAlchemicalFactory(object):
         for platform in platforms:
             GLOBAL_ALCHEMY_PLATFORM = platform
             for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-                reference_system = test_system.system
-                positions = test_system.positions
-                f = partial(compare_system_energies, reference_system, alchemical_system, alchemical_region, positions)
+                f = partial(compare_system_energies, test_system.modified_rf_system, alchemical_system, alchemical_region, test_system.positions)
                 f.description = "Test fully interacting energy of {} on {}".format(test_name, platform.getName())
                 yield f
-                f = partial(check_noninteracting_energy_components, alchemical_system, alchemical_region, positions)
+                f = partial(check_noninteracting_energy_components, alchemical_system, alchemical_region, test_system.positions)
                 f.description = "Test non-interacting energy of {} on {}".format(test_name, platform.getName())
                 yield f
 
@@ -1199,7 +1184,7 @@ class TestAlchemicalFactory(object):
             #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
-            f = partial(overlap_check, reference_system, alchemical_region, positions,
+            f = partial(overlap_check, test_system.modified_rf_system, alchemical_system, test_system.positions,
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
             yield f
@@ -1246,16 +1231,13 @@ class TestAlchemicalFactorySlow(TestAlchemicalFactory):
     def test_overlap(self):
         """Tests overlap between reference and alchemical systems."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            reference_system = test_system.system
-            positions = test_system.positions
-            cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
-                                                       test_name + '.pickle')
-            #cached_trajectory_filename = None
-            f = partial(overlap_check, reference_system, alchemical_region, positions,
+            #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
+            #                                           test_name + '.pickle')
+            cached_trajectory_filename = None
+            f = partial(overlap_check, test_system.modified_rf_system, alchemical_system, test_system.positions,
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
             yield f
-
 
 # =============================================================================
 # TEST ALCHEMICAL STATE
