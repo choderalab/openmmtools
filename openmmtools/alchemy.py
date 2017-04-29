@@ -675,7 +675,7 @@ class AlchemicalFactory(object):
     alchemical_rf_reatment : str, optional, default = 'switched'
          Controls how alchemical region electrostatics are treated when RF is used
          Options are ['switched', 'shifted']
-         'switched' sets c_rf = 0 and ensures continuity with a switch
+         'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
          'shifted' retains c_rf != 0 but can give erroneous results for hydration free energies
 
     Examples
@@ -791,7 +791,7 @@ class AlchemicalFactory(object):
         box_vectors = reference_system.getDefaultPeriodicBoxVectors()
         alchemical_system.setDefaultPeriodicBoxVectors(*box_vectors)
 
-        # TODO: Are there missing components here, such as vsites?
+        # TODO: Are we missing important components of the System here, such as vsites?
         # Should we deepcopy instead?
 
         # Add particles.
@@ -806,7 +806,7 @@ class AlchemicalFactory(object):
 
         # Modify forces as appropriate, copying other forces without modification.
         for reference_force in reference_system.getForces():
-            # TODO switch to functools.singledispatch when drop Python2
+            # TODO switch to functools.singledispatch when we drop Python2 support
             reference_force_name = reference_force.__class__.__name__
             alchemical_force_creator_name = '_alchemically_modify_{}'.format(reference_force_name)
             try:
@@ -821,6 +821,12 @@ class AlchemicalFactory(object):
         # Record timing statistics.
         timer.stop('Create alchemically modified system')
         timer.report_timing()
+
+        # If the System uses a NonbondedForce, replace its NonbondedForce implementation of reaction field
+        # with a Custom*Force implementation that uses c_rf = 0.
+        # NOTE: This adds an additional CustomNonbondedForce and CustomBondForce
+        if (self.alchemical_rf_treatment == 'switched'):
+            alchemical_system = self.replace_reaction_field(alchemical_system)
 
         return alchemical_system
 
@@ -883,6 +889,11 @@ class AlchemicalFactory(object):
     def replace_reaction_field(self, reference_system, switch_width=1.0*unit.angstroms):
         """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
 
+        A deep copy of the system is made.
+
+        If reaction field electrostatics is in use, this will add a CustomNonbondedForce and CustomBondForce to the System
+        for each NonbondedForce that utilizes CutoffPeriodic.
+
         Note that the resulting System object can NOT be fed to `create_alchemical_system` since the CustomNonbondedForce
         will not be recognized and re-coded.
 
@@ -941,7 +952,7 @@ class AlchemicalFactory(object):
                     custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - switch_width)
                 else:
                     custom_nonbonded_force.setUseSwitchingFunction(False)
-            
+
                 # Set periodicity
                 if is_method_periodic:
                     custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
