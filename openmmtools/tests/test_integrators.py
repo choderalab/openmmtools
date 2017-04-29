@@ -267,23 +267,32 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name)
 
     def test_protocol_work_accumulation_waterbox(self):
-        """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicallyDischargedWaterBox
+        """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicalWaterBox
         """
-        testsystem = testsystems.AlchemicallyDischargedWaterBox()
+        from simtk.openmm import app
         parameter_name = 'lambda_electrostatics'
         parameter_initial = 1.0
         parameter_final = 0.0
-        for platform_name in ['Reference', 'CPU']:
-            self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name)
+        for nonbonded_method in ['CutoffPeriodic', 'PME']:
+            testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
+            name = '%s with nonbondedMethod=%s' % (testsystem.name, nonbonded_method)
+            for platform_name in ['CPU', 'OpenCL', 'Reference']:
+                self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
-    def compare_external_protocol_work_accumulation(self, testsystem, parameter_name, parameter_initial, parameter_final, platform_name='Reference'):
+    def compare_external_protocol_work_accumulation(self, testsystem, parameter_name, parameter_initial, parameter_final, platform_name='Reference', name=None):
         """Compare external work accumulation between Reference and CPU platforms.
         """
+
+        if name is None:
+            name = testsystem.name
 
         from openmmtools.constants import kB
         system, topology = testsystem.system, testsystem.topology
         temperature = 298.0 * unit.kelvin
         platform = openmm.Platform.getPlatformByName(platform_name)
+
+        # TODO: Set precision and determinism if platform is ['OpenCL', 'CUDA']
+
         nsteps = 100
         kT = kB * temperature
         integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
@@ -296,7 +305,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
 
         external_protocol_work = 0.0
-        for step in tqdm(range(nsteps)):
+        for step in tqdm(range(nsteps), desc=name):
             lambda_value = float(step+1) / float(nsteps)
             parameter_value = parameter_initial * (1-lambda_value) + parameter_final * lambda_value
             initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
@@ -308,7 +317,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             integrator_protocol_work = integrator.getGlobalVariableByName('protocol_work') * unit.kilojoules_per_mole / kT
 
             message = '\n'
-            message += 'protocol work discrepancy noted for %s on platform %s\n' % (testsystem.name, platform_name)
+            message += 'protocol work discrepancy noted for %s on platform %s\n' % (name, platform_name)
             message += 'step %5d : external %16e kT | integrator %16e kT | difference %16e kT' % (step, external_protocol_work, integrator_protocol_work, external_protocol_work - integrator_protocol_work)
             self.assertAlmostEqual(external_protocol_work, integrator_protocol_work, msg=message)
 

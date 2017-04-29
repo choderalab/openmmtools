@@ -2896,10 +2896,10 @@ class DischargedWaterBoxHsites(WaterBox):
 
         return
 
-class AlchemicallyDischargedWaterBox(WaterBox):
+class AlchemicalWaterBox(WaterBox):
 
     """
-    Water box test system where a single water molecule can be alchemical discharged.
+    Water box test system where a single water molecule can be alchemically modified.
 
     """
 
@@ -2919,42 +2919,18 @@ class AlchemicallyDischargedWaterBox(WaterBox):
 
         Create a waterbox.
 
-        >>> waterbox = AlchemicallyDischargedWaterBox()
+        >>> waterbox = AlchemicalWaterBox()
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(AlchemicallyDischargedWaterBox, self).__init__(*args, **kwargs)
+        super(AlchemicalWaterBox, self).__init__(*args, **kwargs)
 
-        system = self.system
-        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
-        force = forces['NonbondedForce']
-
-        # Create a CustomNonbondedForce to handle first water interactions
-        from openmmtools.constants import ONE_4PI_EPS0
-        energy_expression = 'compute_interaction * lambda_electrostatics * ONE_4PI_EPS0*chargeprod/r;'
-        energy_expression += 'chargeprod = charge1*charge2;'
-        energy_expression += 'compute_interaction = is_alchemical1 * (1-is_alchemical2) + is_alchemical2 * (1-is_alchemical1);'
-        energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-        custom_force = openmm.CustomNonbondedForce(energy_expression)
-        custom_force.addGlobalParameter('lambda_electrostatics', 1.0)
-        custom_force.addPerParticleParameter('charge')
-        custom_force.addPerParticleParameter('is_alchemical')
-        custom_force.setUseSwitchingFunction(True)
-        custom_force.setUseLongRangeCorrection(False)
-        custom_force.setCutoffDistance(force.getCutoffDistance())
-        custom_force.setSwitchingDistance(force.getSwitchingDistance())
-        system.addForce(custom_force)
-
-        alchemical_atoms = range(0,3) # first water
-        for index in range(system.getNumParticles()):
-            [charge, sigma, epsilon] = force.getParticleParameters(index)
-            custom_force.addParticle([charge, float(index in alchemical_atoms)])
-            if (index in alchemical_atoms):
-                force.setParticleParameters(index, 0 * charge, sigma, epsilon)
-
-        for index in range(force.getNumExceptions()):
-            [particle1, particle2, chargeProd, sigma, epsilon] = force.getExceptionParameters(index)
-            custom_force.addExclusion(particle1, particle2)
+        # Alchemically modify the system
+        from openmmtools.alchemy import AlchemicalRegion, AlchemicalFactory
+        region = AlchemicalRegion(alchemical_atoms=range(3))
+        factory = AlchemicalFactory()
+        alchemical_system = factory.create_alchemical_system(self.system, region)
+        self.system = alchemical_system
 
         return
 
