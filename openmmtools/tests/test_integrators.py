@@ -17,6 +17,9 @@ import numpy
 import inspect
 import pymbar
 
+from functools import partial
+from unittest import TestCase
+
 from simtk import unit
 from simtk import openmm
 
@@ -210,7 +213,6 @@ def test_vvvr_shadow_work_accumulation():
     names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
     assert('shadow_work' not in names_of_globals)
 
-
 def test_external_protocol_work_accumulation():
     """When `measure_protocol_work==True`, assert that global `protocol_work` is initialized to zero and
     reaches a zero value after integrating a few dozen steps without perturbation.
@@ -224,10 +226,11 @@ def test_external_protocol_work_accumulation():
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
+    # Check that initial step accumulates no protocol work
     assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
     integrator.step(1)
     assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
-
+    # Check that a single step accumulates protocol work
     pe_1 = context.getState(getEnergy=True).getPotentialEnergy()
     perturbed_K=99.0 * unit.kilocalories_per_mole / unit.angstroms**2
     context.setParameter('testsystems_HarmonicOscillator_K', perturbed_K)
@@ -236,8 +239,9 @@ def test_external_protocol_work_accumulation():
     assert (integrator.getGlobalVariableByName('protocol_work') != 0), "There should be protocol work after perturbing."
     assert (integrator.getGlobalVariableByName('protocol_work') * unit.kilojoule_per_mole == (pe_2 - pe_1)), \
         "The potential energy difference should be equal to protocol work."
+    del context, integrator
 
-    # test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
+    # Test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
     integrator = integrators.VVVRIntegrator(temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
@@ -247,6 +251,56 @@ def test_external_protocol_work_accumulation():
     n_globals = integrator.getNumGlobalVariables()
     names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
     assert('protocol_work' not in names_of_globals), "Protocol work should not be defined."
+    del context, integrator
+
+class TestExternalPerturbationLangevinIntegrator(TestCase):
+    def test_protocol_work_accumulation(self):
+        for platform_name in ['Reference', 'CPU']:
+            self.compare_external_protocol_work_accumulation(platform_name)
+
+    def compare_external_protocol_work_accumulation(self, platform_name='Reference'):
+        """Compare external work accumulation between Reference and CPU platforms.
+        """
+
+        from openmmtools.constants import kB
+        testsystem = testsystems.HarmonicOscillator()
+        system, topology = testsystem.system, testsystem.topology
+        temperature = 298.0 * unit.kelvin
+        collision_rate = 1.0 / unit.picoseconds
+        K = 100.0 * unit.kilocalories_per_mole/unit.angstrom**2
+        mass = 39.948 * unit.amu
+        period = unit.sqrt(mass/K)
+        timestep = period / 20.0
+        platform = openmm.Platform.getPlatformByName(platform_name)
+        nsteps = 1000
+        kT = kB * temperature
+        x0_initial = 0.0 * unit.angstroms
+        x0_final = 25.0 * unit.angstroms
+
+        integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
+        context = openmm.Context(system, integrator, platform)
+        context.setPositions(testsystem.positions)
+        context.setVelocitiesToTemperature(temperature)
+        assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
+        integrator.step(1)
+        assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
+
+        external_protocol_work = 0.0
+        for step in range(nsteps):
+            lambda_value = float(step+1) / float(nsteps)
+            x0 = x0_initial * (1-lambda_value) + x0_final * lambda_value
+            initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
+            context.setParameter('testsystems_HarmonicOscillator_x0', x0)
+            final_energy = context.getState(getEnergy=True).getPotentialEnergy()
+            external_protocol_work += (final_energy - initial_energy) / kT
+
+            integrator.step(1)
+            integrator_protocol_work = integrator.getGlobalVariableByName('protocol_work') * unit.kilojoules_per_mole / kT
+
+            #print('%16e %16e : %16e' % (external_protocol_work, integrator_protocol_work, external_protocol_work - integrator_protocol_work))
+            self.assertAlmostEqual(external_protocol_work, integrator_protocol_work)
+
+        del context, integrator
 
 
 def test_temperature_getter_setter():
