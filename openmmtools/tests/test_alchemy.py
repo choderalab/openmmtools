@@ -511,14 +511,13 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
 
     # Check that error is small.
     def magnitude(vec):
-        [nparticles, ndim] = vec.shape
-        return np.sqrt(np.sum(vec**2) / float(nparticles))
+        return np.sqrt(np.mean(np.sum(vec**2, axis=1)))
 
     relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
     if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
         print("========")
         err_msg = "Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f}).\nalchemical_force = {:.8f}, reference_force = {:.8f}, difference = {:.8f}"
-        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force), magnitude(reference_force), magnitude(reference_force)))
+        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force), magnitude(reference_force), magnitude(alchemical_force-reference_force)))
 
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Compare full and alchemically-modified system energies by energy component.

@@ -886,7 +886,7 @@ class AlchemicalFactory(object):
 
         return energy_components
 
-    def replace_reaction_field(self, reference_system, switch_width=1.0*unit.angstroms):
+    def replace_reaction_field(self, reference_system):
         """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
 
         A deep copy of the system is made.
@@ -919,10 +919,13 @@ class AlchemicalFactory(object):
                 # Create CustomNonbondedForce to handle switched reaction field
                 epsilon_solvent = reference_force.getReactionFieldDielectric()
                 r_cutoff = reference_force.getCutoffDistance()
-                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2);"
-                k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
+                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2 - c_rf);"
+                k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1.0) / (2.0*epsilon_solvent + 1.0))
+                #c_rf = r_cutoff**(-1) * ((3.0*epsilon_solvent) / (2.0*epsilon_solvent + 1.0))
+                c_rf = 0.0 / unit.angstroms
                 energy_expression += "chargeprod = charge1*charge2;"
                 energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
+                energy_expression += "c_rf = %f;" % (c_rf.value_in_unit_system(unit.md_unit_system))
                 energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
                 custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
                 custom_nonbonded_force.addPerParticleParameter("charge")
@@ -932,16 +935,17 @@ class AlchemicalFactory(object):
                 system.addForce(custom_nonbonded_force)
 
                 # Handle exceptions and exclusions
-                energy_expression = "ONE_4PI_EPS0*chargeprod/r;"
-                energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-                custom_bond_force = openmm.CustomBondForce(energy_expression)
+                exception_energy_expression = "ONE_4PI_EPS0*chargeprod/r;"
+                exception_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
+                custom_bond_force = openmm.CustomBondForce(exception_energy_expression)
+                custom_bond_force.setUsesPeriodicBoundaryConditions(True)
                 custom_bond_force.addPerBondParameter("chargeprod")
                 system.addForce(custom_bond_force)
 
                 # Add switch
-                if switch_width is not None:
+                if self.switch_width is not None:
                     custom_nonbonded_force.setUseSwitchingFunction(True)
-                    custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - switch_width)
+                    custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - self.switch_width)
                 else:
                     custom_nonbonded_force.setUseSwitchingFunction(False)
 
