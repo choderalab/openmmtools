@@ -783,6 +783,40 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
 
     timer.report_timing()
 
+def benchmark_alchemy_from_pdb():
+    """CLI entry point for benchmarking alchemical performance from a PDB file.
+    """
+    import mdtraj
+    import argparse
+    from simtk.openmm import app
+
+    parser = argparse.ArgumentParser(description='Benchmark performance of alchemically-modified system.')
+    parser.add_argument('-p', '--pdb', metavar='PDBFILE', type=str, action='store', required=True,
+                        help='PDB file to benchmark; only protein forcefields supported for now (no small molecules)')
+    parser.add_argument('-s', '--selection', metavar='SELECTION', type=str, action='store', default='not water',
+                        help='MDTraj DSL describing alchemical region (default: "not water")')
+    args = parser.parse_args()
+    # Read the PDB file
+    print('Loading PDB file...')
+    pdbfile = app.PDBFile(args.pdb)
+    print('Loading forcefield...')
+    forcefield = app.ForceField('amber99sbildn.xml', 'tip3p.xml')
+    print('Adding missing hydrogens...')
+    modeller = app.Modeller(pdbfile.topology, pdbfile.positions)
+    modeller.addHydrogens(forcefield)
+    print('Creating System...')
+    reference_system = forcefield.createSystem(modeller.topology, nonbondedMethod=app.PME)
+    # Minimize
+    print('Minimizing...')
+    positions = minimize(reference_system, modeller.positions)
+    # Select alchemical regions
+    mdtraj_topology = mdtraj.Topology.from_openmm(modeller.topology)
+    alchemical_atoms = mdtraj_topology.select(args.selection)
+    alchemical_region = AlchemicalRegion(alchemical_atoms=alchemical_atoms)
+    print('There are %d atoms in the alchemical region.' % len(alchemical_atoms))
+    # Benchmark
+    print('Benchmarking...')
+    benchmark(reference_system, alchemical_region, positions, nsteps=500, timestep=1.0*unit.femtoseconds)
 
 def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsamples=200,
                   cached_trajectory_filename=None, name=""):
