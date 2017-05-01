@@ -773,19 +773,24 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
     alchemical_integrator.step(1)
 
     # Run simulations.
+    print('Running reference system...')
     timer.start('Run reference system')
     reference_integrator.step(nsteps)
     timer.stop('Run reference system')
 
+    print('Running alchemical system...')
     timer.start('Run alchemical system')
     alchemical_integrator.step(nsteps)
     timer.stop('Run alchemical system')
+    print('Done.')
 
     timer.report_timing()
 
 def benchmark_alchemy_from_pdb():
     """CLI entry point for benchmarking alchemical performance from a PDB file.
     """
+    logging.basicConfig(level=logging.DEBUG)
+
     import mdtraj
     import argparse
     from simtk.openmm import app
@@ -795,6 +800,8 @@ def benchmark_alchemy_from_pdb():
                         help='PDB file to benchmark; only protein forcefields supported for now (no small molecules)')
     parser.add_argument('-s', '--selection', metavar='SELECTION', type=str, action='store', default='not water',
                         help='MDTraj DSL describing alchemical region (default: "not water")')
+    parser.add_argument('-n', '--nsteps', metavar='STEPS', type=int, action='store', default=1000,
+                        help='Number of benchmarking steps (default: 1000)')
     args = parser.parse_args()
     # Read the PDB file
     print('Loading PDB file...')
@@ -816,7 +823,7 @@ def benchmark_alchemy_from_pdb():
     print('There are %d atoms in the alchemical region.' % len(alchemical_atoms))
     # Benchmark
     print('Benchmarking...')
-    benchmark(reference_system, alchemical_region, positions, nsteps=500, timestep=1.0*unit.femtoseconds)
+    benchmark(reference_system, alchemical_region, positions, nsteps=args.nsteps, timestep=1.0*unit.femtoseconds)
 
 def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsamples=200,
                   cached_trajectory_filename=None, name=""):
