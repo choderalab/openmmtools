@@ -1454,10 +1454,6 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         Override the base class to insert reset steps around the integrator.
         """
 
-        # Integrate
-        self.addUpdateContextState()
-        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
-
         #if the step is zero,
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
@@ -1576,9 +1572,6 @@ class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
 
         # Computing context updates, such as from the barostat, _after_ computing protocol work.
-        self.addUpdateContextState()
-        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
-
         super(ExternalPerturbationLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
         self.addComputeGlobal("unperturbed_pe", "energy")
 
