@@ -978,8 +978,8 @@ class LangevinIntegrator(ThermostatedIntegrator):
         mts : bool
             Whether this integrator defines an MTS integrator
         """
-        for i, step in enumerate(splitting.split()):
-            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
+        for step in splitting.split():
+            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts[step], force_group_nV, mts)
 
     def sanity_check(self, splitting, allowed_characters="{}RVO0123456789"):
         """Perform a basic sanity check on the splitting string to ensure that it makes sense.
