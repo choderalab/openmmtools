@@ -160,10 +160,11 @@ def test_stabilities():
 
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
-            # Need an alchemical system to test this
+            # The NonequilibriumLangevinIntegrator requires an alchemical function.
             if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-                continue
-            integrator = integrator_class()
+                integrator = integrator_class(alchemical_functions={})
+            else:
+                integrator = integrator_class()
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
                                            "integration steps of a {}.").format(integrator_name, test_name)
