@@ -22,8 +22,6 @@ import pickle
 import itertools
 from functools import partial
 
-from tqdm import tqdm
-
 import nose
 import scipy
 from nose.plugins.attrib import attr
@@ -46,11 +44,27 @@ MAX_FORCE_RELATIVE_ERROR = 1.0e-6 # maximum allowable relative force error
 GLOBAL_ENERGY_UNIT = unit.kilojoules_per_mole  # controls printed units
 GLOBAL_FORCE_UNIT = unit.kilojoules_per_mole / unit.nanometers # controls printed units
 GLOBAL_ALCHEMY_PLATFORM = None  # This is used in every energy calculation.
-#GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('OpenCL') # DEBUG: Use OpenCL over CPU platform for testing since OpenCL is deterministic, while CPU is not
+GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('Reference') # DEBUG: Use OpenCL over CPU platform for testing since OpenCL is deterministic, while CPU is not
+
 
 # =============================================================================
 # TESTING UTILITIES
 # =============================================================================
+
+def create_context(system, integrator, platform=None):
+    """Create a Context.
+
+    If platform is None, GLOBAL_ALCHEMY_PLATFORM is used.
+
+    """
+    if platform is None:
+        platform = GLOBAL_ALCHEMY_PLATFORM
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    return context
+
 
 def compute_energy(system, positions, platform=None, force_group=-1):
     """Compute energy of the system in the given positions.
@@ -65,17 +79,13 @@ def compute_energy(system, positions, platform=None, force_group=-1):
     """
     timestep = 1.0 * unit.femtoseconds
     integrator = openmm.VerletIntegrator(timestep)
-    if platform is None:
-        platform = GLOBAL_ALCHEMY_PLATFORM
-    if platform is not None:
-        context = openmm.Context(system, integrator, platform)
-    else:
-        context = openmm.Context(system, integrator)
+    context = create_context(system, integrator, platform)
     context.setPositions(positions)
     state = context.getState(getEnergy=True, groups=force_group)
     potential = state.getPotentialEnergy()
     del context, integrator, state
     return potential
+
 
 def compute_forces(system, positions, platform=None, force_group=-1):
     """Compute forces of the system in the given positions.
@@ -90,19 +100,15 @@ def compute_forces(system, positions, platform=None, force_group=-1):
     """
     timestep = 1.0 * unit.femtoseconds
     integrator = openmm.VerletIntegrator(timestep)
-    if platform is None:
-        platform = GLOBAL_ALCHEMY_PLATFORM
-    if platform is not None:
-        context = openmm.Context(system, integrator, platform)
-    else:
-        context = openmm.Context(system, integrator)
+    context = create_context(system, integrator, platform)
     context.setPositions(positions)
     state = context.getState(getForces=True, groups=force_group)
     forces = state.getForces(asNumpy=True)
     del context, integrator, state
     return forces
 
-def generate_new_positions(system, positions, platform=None, nsteps=500):
+
+def generate_new_positions(system, positions, platform=None, nsteps=50):
     """Generate new positions by taking a few steps from the old positions.
     Parameters
     ----------
@@ -119,17 +125,13 @@ def generate_new_positions(system, positions, platform=None, nsteps=500):
     collision_rate = 90 / unit.picoseconds
     timestep = 1.0 * unit.femtoseconds
     integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-    if platform is None:
-        platform = GLOBAL_ALCHEMY_PLATFORM
-    if platform is not None:
-        context = openmm.Context(system, integrator, platform)
-    else:
-        context = openmm.Context(system, integrator)
+    context = create_context(system, integrator, platform)
     context.setPositions(positions)
     integrator.step(nsteps)
     new_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
     del context, integrator
     return new_positions
+
 
 def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms, maxIterations=50):
     """Minimize the energy of the given system.
@@ -151,17 +153,13 @@ def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_p
     """
     timestep = 1.0 * unit.femtoseconds
     integrator = openmm.VerletIntegrator(timestep)
-    if platform is None:
-        platform = GLOBAL_ALCHEMY_PLATFORM
-    if platform is not None:
-        context = openmm.Context(system, integrator, platform)
-    else:
-        context = openmm.Context(system, integrator)
+    context = create_context(system, integrator, platform)
     context.setPositions(positions)
     openmm.LocalEnergyMinimizer.minimize(context, tolerance, maxIterations)
     minimized_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
     del context, integrator
     return minimized_positions
+
 
 def compute_energy_force(system, positions, force_name):
     """Compute the energy of the force with the given name."""
@@ -490,6 +488,7 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         err_msg = "Maximum allowable deviation exceeded (was {:.8f} kcal/mol; allowed {:.8f} kcal/mol)."
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
+
 def compare_system_forces(reference_system, alchemical_system, positions, name=""):
     """Check that the forces of reference and modified systems are close.
 
@@ -516,8 +515,11 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
     relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
     if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
         print("========")
-        err_msg = "Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f}).\nalchemical_force = {:.8f}, reference_force = {:.8f}, difference = {:.8f}"
-        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force), magnitude(reference_force), magnitude(alchemical_force-reference_force)))
+        err_msg = ("Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f}).\n"
+                   "alchemical_force = {:.8f}, reference_force = {:.8f}, difference = {:.8f}")
+        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force),
+                                       magnitude(reference_force), magnitude(alchemical_force-reference_force)))
+
 
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Compare full and alchemically-modified system energies by energy component.
@@ -867,12 +869,8 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
     alchemical_integrator = openmm.VerletIntegrator(timestep)
 
     # Create contexts.
-    if GLOBAL_ALCHEMY_PLATFORM:
-        reference_context = openmm.Context(reference_system, reference_integrator, GLOBAL_ALCHEMY_PLATFORM)
-        alchemical_context = openmm.Context(alchemical_system, alchemical_integrator, GLOBAL_ALCHEMY_PLATFORM)
-    else:
-        reference_context = openmm.Context(reference_system, reference_integrator)
-        alchemical_context = openmm.Context(alchemical_system, alchemical_integrator)
+    reference_context = create_context(reference_system, reference_integrator)
+    alchemical_context = create_context(alchemical_system, alchemical_integrator)
 
     # Initialize data structure or load if from cache.
     # du_n[n] is the potential energy difference of sample n.
@@ -895,7 +893,10 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
     # Collect simulation data.
     iteration = len(data['du_n'])
     reference_context.setPositions(positions)
-    for sample in tqdm(range(iteration, nsamples), desc=name):
+    print()
+    for sample in range(iteration, nsamples):
+        print('\rSample {}/{}'.format(sample+1, nsamples), end='')
+        sys.stdout.flush()
 
         # Run dynamics.
         reference_integrator.step(nsteps)
@@ -1195,20 +1196,26 @@ class TestAlchemicalFactory(object):
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            f = partial(compare_system_energies, test_system.modified_rf_system, alchemical_system, alchemical_region, test_system.positions)
+            f = partial(compare_system_energies, test_system.modified_rf_system,
+                        alchemical_system, alchemical_region, test_system.positions)
             f.description = "Testing fully interacting energy of {}".format(test_name)
             yield f
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            f = partial(check_noninteracting_energy_components, alchemical_system, alchemical_region, test_system.positions)
+            f = partial(check_noninteracting_energy_components, alchemical_system,
+                        alchemical_region, test_system.positions)
             f.description = "Testing non-interacting energy of {}".format(test_name)
             yield f
 
     def test_replace_reaction_field(self):
-        """Check that replacing reaction-field electrostatics with Custom*Force yields minimal force differences with original system.
-        Note that we cannot test for energy consistency or energy overlap because which atoms are within the cutoff will cause energy difference to vary wildly.
+        """Check that replacing reaction-field electrostatics with Custom*Force
+        yields minimal force differences with original system.
+
+        Note that we cannot test for energy consistency or energy overlap because
+        which atoms are within the cutoff will cause energy difference to vary wildly.
+
         """
         factory = AlchemicalFactory(alchemical_rf_treatment='switched', switch_width=None)
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
@@ -1316,17 +1323,6 @@ class TestAlchemicalFactorySlow(TestAlchemicalFactory):
         cls.test_regions['DHFRExplicit'] = AlchemicalRegion(alchemical_atoms=range(0, 2849))
         cls.test_regions['Src'] = AlchemicalRegion(alchemical_atoms=range(0, 21))
 
-    @attr('slow')
-    def test_overlap(self):
-        """Tests overlap between reference and alchemical systems."""
-        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
-            #                                           test_name + '.pickle')
-            cached_trajectory_filename = None
-            f = partial(overlap_check, test_system.modified_rf_system, alchemical_system, test_system.positions,
-                        cached_trajectory_filename=cached_trajectory_filename, name=test_name)
-            f.description = "Testing reference/alchemical overlap for {}".format(test_name)
-            yield f
 
 # =============================================================================
 # TEST ALCHEMICAL STATE
