@@ -1390,6 +1390,7 @@ class NCQuantity(NCVariableCodec):
                                                                          dimensions=dims,
                                                                          chunksizes=(appendable_chunk_size,) + data_shape)
             self._common_bind_output_actions(data_type_name, 1, store_unit_string=str(data.unit))
+            self._save_shape = data_shape
             self._set_codifiers(data_type_name)
         self._dump_metadata_buffer()
         return
