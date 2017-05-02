@@ -280,6 +280,26 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
                 name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)                
                 self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
+    def test_protocol_work_accumulation_waterbox_barostat(self):
+        """
+        Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicalWaterBox
+        with an active barostat. For brevity, only using CutoffPeriodic as the non-bonded method.
+        """
+        from simtk.openmm import app
+        parameter_name = 'lambda_electrostatics'
+        parameter_initial = 1.0
+        parameter_final = 0.0
+        platform_names = [ openmm.Platform.getPlatform(index).getName() for index in range(openmm.Platform.getNumPlatforms()) ]
+        nonbonded_method = 'CutoffPeriodic'
+        testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
+
+        # Adding the barostat with a high frequency
+        testsystem.system.addForce(openmm.MonteCarloBarostat(1*unit.atmospheres, 300*unit.kelvin, 2))
+
+        for platform_name in platform_names:
+            name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
+            self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
+
     def compare_external_protocol_work_accumulation(self, testsystem, parameter_name, parameter_initial, parameter_final, platform_name='Reference', name=None):
         """Compare external work accumulation between Reference and CPU platforms.
         """
