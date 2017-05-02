@@ -294,7 +294,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
 
         # TODO: Set precision and determinism if platform is ['OpenCL', 'CUDA']
 
-        nsteps = 100
+        nsteps = 20
         kT = kB * temperature
         integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
         context = openmm.Context(system, integrator, platform)
