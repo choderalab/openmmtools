@@ -18,6 +18,7 @@ requirements:
     - setuptools
     - openmm
     - parmed
+    - tqdm
     - netcdf4
     - pyyaml
 
@@ -30,6 +31,7 @@ requirements:
     - six
     - openmm
     - parmed
+    - tqdm
     - netcdf4
     - pyyaml
 
@@ -38,6 +40,7 @@ test:
   requires:
     - nose
     - pymbar
+    - tqdm
   imports:
     - openmmtools
 

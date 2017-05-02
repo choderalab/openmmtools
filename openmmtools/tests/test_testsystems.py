@@ -98,7 +98,7 @@ fast_testsystems = [
     "CustomLennardJonesFluidMixture",
     "WCAFluid",
     "IdealGas",
-    "WaterBox", "FlexibleWaterBox", "FourSiteWaterBox", "FiveSiteWaterBox", "DischargedWaterBox", "DischargedWaterBoxHsites",
+    "WaterBox", "FlexibleWaterBox", "FourSiteWaterBox", "FiveSiteWaterBox", "DischargedWaterBox", "DischargedWaterBoxHsites", "AlchemicalWaterBox",
     "AlanineDipeptideVacuum", "AlanineDipeptideImplicit",
     "MethanolBox",
     "MolecularIdealGas",
