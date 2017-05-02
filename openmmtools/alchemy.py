@@ -902,9 +902,6 @@ class AlchemicalFactory(object):
         reference_system : simtk.openmm.System
             The system to use as a reference for the creation of the
             alchemical system. This will not be modified.
-        switch_width : simtk.unit.Quantity with units compatible with distance, optional, default = 1.0 * angstroms
-            The switch width applied to the reaction field electrostatics.
-            If None, no siwtch will be added
 
         Returns
         -------
@@ -913,19 +910,17 @@ class AlchemicalFactory(object):
 
         """
         system = copy.deepcopy(reference_system)
-        for (force_index, reference_force) in enumerate(system.getForces()):
+        for force_index, reference_force in enumerate(system.getForces()):
             reference_force_name = reference_force.__class__.__name__
-            if (reference_force_name == 'NonbondedForce') and (reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
+            if (reference_force_name == 'NonbondedForce' and
+                        reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
                 # Create CustomNonbondedForce to handle switched reaction field
                 epsilon_solvent = reference_force.getReactionFieldDielectric()
                 r_cutoff = reference_force.getCutoffDistance()
-                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2 - c_rf);"
+                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2);"  # Omit c_rf constant term.
                 k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1.0) / (2.0*epsilon_solvent + 1.0))
-                #c_rf = r_cutoff**(-1) * ((3.0*epsilon_solvent) / (2.0*epsilon_solvent + 1.0))
-                c_rf = 0.0 / unit.angstroms
                 energy_expression += "chargeprod = charge1*charge2;"
                 energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
-                energy_expression += "c_rf = %f;" % (c_rf.value_in_unit_system(unit.md_unit_system))
                 energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
                 custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
                 custom_nonbonded_force.addPerParticleParameter("charge")
@@ -933,14 +928,6 @@ class AlchemicalFactory(object):
                 custom_nonbonded_force.setCutoffDistance(reference_force.getCutoffDistance())
                 custom_nonbonded_force.setUseLongRangeCorrection(False)
                 system.addForce(custom_nonbonded_force)
-
-                # Handle exceptions and exclusions
-                exception_energy_expression = "ONE_4PI_EPS0*chargeprod/r;"
-                exception_energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-                custom_bond_force = openmm.CustomBondForce(exception_energy_expression)
-                custom_bond_force.setUsesPeriodicBoundaryConditions(True)
-                custom_bond_force.addPerBondParameter("chargeprod")
-                system.addForce(custom_bond_force)
 
                 # Add switch
                 if self.switch_width is not None:
@@ -955,12 +942,10 @@ class AlchemicalFactory(object):
                     reference_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, epsilon)
                     custom_nonbonded_force.addParticle([charge])
 
-                # Rewrite exceptions
+                # Add exclusions to CustomNonbondedForce.
                 for exception_index in range(reference_force.getNumExceptions()):
-                    [iatom, jatom, chargeprod, sigma, epsilon] = reference_force.getExceptionParameters(exception_index)
-                    reference_force.setExceptionParameters(exception_index, iatom, jatom, abs(0.0*chargeprod), sigma, epsilon)
+                    iatom, jatom, chargeprod, sigma, epsilon = reference_force.getExceptionParameters(exception_index)
                     custom_nonbonded_force.addExclusion(iatom, jatom)
-                    custom_bond_force.addBond(iatom, jatom, [chargeprod])
 
         return system
 
