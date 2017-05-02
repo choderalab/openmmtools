@@ -38,6 +38,7 @@ env:
   global:
     - ORGNAME="omnia" # the name of the organization
     - PACKAGENAME="openmmtools" # the name of your package
+    - OPENMM_CPU_THREADS="1" # only use one CPU thread for determinism
     # encrypted BINSTAR_TOKEN for push of dev package to binstar
     - secure: "DP5heLvW3wnHvw6d2tinSHcyAxe0EWEsoL4X3lrGC+BSSy3Fd60pb90zSibK/hcxzV7Cb/x4mC4C7KPgGZEXzvVFH/iF7tg2Yy41XgyuZ5vxacfXICdryoTAlGxrbwACvO/ak+OHEYTtkX3OyFM/f8zV0z7Shz/rOSbSvcEKmpQ="
 
