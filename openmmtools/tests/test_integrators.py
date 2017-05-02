@@ -186,6 +186,27 @@ def test_integrator_decorators():
     assert integrator.acceptance_rate == 1.0
 
 
+def test_single_force_update():
+    """
+    Ensures that addUpdateContextState() is called only once for all custom integrators, except the
+    NonequilibriumLangevinIntegrator which requires an alchmical system.
+    """
+    custom_integrators = get_all_custom_integrators()
+    for integrator_name, integrator_class in custom_integrators:
+        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+            integrator = integrator_class(alchemical_functions={})
+        else:
+            integrator = integrator_class()
+        num_force_update = 0
+        for i in range(integrator.getNumComputations()):
+            step_type, target, expr = integrator.getComputationStep(i)
+
+            if step_type == 5:
+                num_force_update += 1
+        assert num_force_update == 1
+
+
 def test_vvvr_shadow_work_accumulation():
     """When `measure_shadow_work==True`, assert that global `shadow_work` is initialized to zero and
     reaches a nonzero value after integrating a few dozen steps.
