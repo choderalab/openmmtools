@@ -125,7 +125,7 @@ class StorageIODriver(ABC):
         ----------
         type_key : Unique immutable object
             Unique key that will be added to identify this de_encoder as part of the class
-        codec : Specific codifer class
+        codec : Specific codifier class
             Class to handle all of the encoding of decoding of the variables
 
         """
@@ -207,7 +207,7 @@ class StorageIODriver(ABC):
         ----------
         name : string
             Name of the attribute you wish to assign
-        value : any, but prefered string
+        value : any, but preferred string
             Extra meta data to add to the variable
         path : string, Default: ''
             Extra path pointer to add metadata to a specific location if platform allows it
@@ -505,7 +505,7 @@ class NetCDFIODriver(StorageIODriver):
         self.ncfile = None
         self._groups = {}
         # Bind all of the Type Codecs
-        super_codec = super(NetCDFIODriver, self).set_codec  # Shortcut for this init to avoid exces loops
+        super_codec = super(NetCDFIODriver, self).set_codec  # Shortcut for this init to avoid excess loops
         super_codec(str, NCString)  # String
         super_codec(int, NCInt)  # Int
         super_codec(dict, NCDict)  # Dict
@@ -570,7 +570,7 @@ class NCVariableCodec(ABC):
 
     # @abc.abstractproperty
     @staticmethod
-    def dtype_string(self):
+    def dtype_string():
         """
         Short name of variable for strings and errors
 
@@ -606,8 +606,6 @@ class NCVariableCodec(ABC):
         """
         raise NotImplementedError("Decoder has not yet been set!")
 
-
-    @abc.abstractmethod
     def _bind_read(self):
         """
         A one time event that binds this class to the object on disk. This method should set self._bound_target
@@ -615,18 +613,27 @@ class NCVariableCodec(ABC):
         Should raise error if the object is not found on disk (i.e. no data has been written to this location yet)
         Should raise error if the object on disk is incompatible with this type of Codec.
 
+        This is normally a common action among codecs, but can be redefined as needed in subclasses
+
         Returns
         -------
         None, but should set self._bound_target
         """
-        raise NotImplementedError("_bind_read function has not been implemented in this subclass yet!")
+        self._attempt_storage_read()
+        # Handle variable size objects
+        # This line will not happen unless target is real, so output_mode will return the correct value
+        if self._output_mode is 'a':
+            self._save_shape = self._bound_target.shape[1:]
+        else:
+            self._save_shape = self._bound_target.shape
 
     @abc.abstractmethod
     def _bind_write(self, data):
         """
         A one time event that binds this class to the object on disk. This method should set self._bound_target
         This function is unique to the write() function in that the data passed in should help create the storage object
-        if not already on disk and prepare it for a write operation
+        if not already on disk and prepare it for a write operation.
+        Last action of this method should always be dump_metadata_buffer.
 
         Parameters
         ----------
@@ -645,7 +652,8 @@ class NCVariableCodec(ABC):
         """
         A one time event that binds this class to the object on disk. This method should set self._bound_target
         This function is unique to the append() function in that the data passed in should append what is at
-        the location, or should create the object, then write the data with the first dimension infinite in size
+        the location, or should create the object, then write the data with the first dimension infinite in size.
+        Last action of this method should always be dump_metadata_buffer.
 
         Parameters
         ----------
@@ -670,9 +678,43 @@ class NCVariableCodec(ABC):
 
         if self._bound_target is None:
             self._bind_read()
-        # Set the output mode by calling the variable
-        self._output_mode
         return self._decoder(self._bound_target)
+
+    def _common_bind_output_actions(self, type_string, append_mode, store_unit_string='NoneType'):
+        """
+        Method to handle the common NetCDF variable/group Metadata actions when binding a new variable/group to the
+        disk in write/append mode. This code should be called in all the _bind_write and _bind_append blocks inside
+        the trapped error when _bind_read fails to find the object (i.e. new variable on disk creation)
+
+        Parameters
+        ----------
+        type_string : String
+            Type of data being stored either as a single object, or the data being stored in the compound object.
+            For simple objects like ints and floats, this should just be the typename(self.dtype) and will align
+                with the codec's dtype_string
+            For compound objects such as lists, tuples, and np.ndarray's, this should be the string of the data stored
+                in the object and will be wholly different from the codec's dtype_string and dependent on what is being
+                stored in the codec
+        append_mode : Integer, 0 or 1
+            Integer boolean representation of if this is appended data or not.
+            _bind_write methods should pass a 0
+            _bind_append methods should pass 1
+        store_unit_string : String, optional, Default: 'NoneType'
+            String representation of the simtk.unit attached to this data. This string should be able to be fed into
+            quantity_from_string(store_unit_string) and return a valid simtk.Unit object. Typically generated from
+                str(unit).
+            If no unit is assigned to the data, then the default of 'NoneType' should be given.
+
+        """
+        if append_mode not in [0, 1]:
+            raise ValueError('append_mode must be integer of 0 for _bind write, or 1 for _bind_append')
+        self.add_metadata('IODriver_Type', self.dtype_string())
+        self.add_metadata('type', type_string)
+        self._unit = store_unit_string
+        self.add_metadata('IODriver_Unit', self._unit)
+        # Specify the type of storage object this should tie to
+        self.add_metadata('IODriver_Storage_Type', self.storage_type)
+        self.add_metadata('IODriver_Appendable', append_mode)
 
     def write(self, data, at_index=None):
         """
@@ -751,7 +793,7 @@ class NCVariableCodec(ABC):
         data
 
         """
-        raise NotImplementedError("I dont know how to compare data yet!")
+        raise NotImplementedError("I don't know how to compare data yet!")
 
     @abc.abstractproperty
     def storage_type(self):
@@ -770,13 +812,13 @@ class NCVariableCodec(ABC):
     def add_metadata(self, name, value):
         """
         Add metadata to self on disk, extra bits of information that can be used for flags or other variables
-        This is NOT a staticmethod of the top dataset since you can buffer this before binding
+        This is NOT a staticmethod of the top data set since you can buffer this before binding
 
         Parameters
         ----------
         name : string
             Name of the attribute you wish to assign
-        value : any, but prefered string
+        value : any, but preferred string
             Extra meta data to add to the variable
         """
         if not self._bound_target:
@@ -860,7 +902,7 @@ class NCVariableCodec(ABC):
 
     def _check_storage_mode(self, expected_mode):
         """
-        Check to see if the data stored at this codec is actually compatable with the type of write operation that was
+        Check to see if the data stored at this codec is actually compatible with the type of write operation that was
         performed (write vs. append)
 
         Parameters
@@ -872,7 +914,7 @@ class NCVariableCodec(ABC):
         TypeError if ._output_mode != expected mode
         """
 
-        # String fill in, uses the oposite of expected mode to raise warnings
+        # String fill in, uses the opposite of expected mode to raise warnings
         saved_as = {'w': 'appendable', 'a': 'statically written'}
         cannot = {'w': 'write', 'a': 'append'}
         must_use = {'w': 'append() or the to_index keyword of write()', 'a': 'write()'}
@@ -915,8 +957,6 @@ class NCVariableCodec(ABC):
             raise ValueError("Cannot choose an index beyond the maximum length of the "
                              "appended data of {}".format(length))
         self._bound_target[index, :] = self._encoder(data)
-
-
 
 
 # =============================================================================
@@ -1032,15 +1072,6 @@ class NCScalar(NCVariableCodec, ABC):
     dtype_string (@staticmethod)
     """
 
-    def _bind_read(self):
-        self._attempt_storage_read()
-        # Handle variable size objects
-        # This line will not happen unless target is real, so output mode should return correct value
-        if self._output_mode is 'a':
-            self._save_shape = self._bound_target.shape[1:]
-        else:
-            self._save_shape = self._bound_target.shape
-
     def _bind_write(self, data):
         try:
             self._bind_read()
@@ -1049,17 +1080,8 @@ class NCScalar(NCVariableCodec, ABC):
             self._bound_target = self._storage_object.createVariable(self._target, self._on_disk_dtype,
                                                                      dimensions='scalar',
                                                                      chunksizes=(1,))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', typename(self.dtype))
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
+            self._common_bind_output_actions(typename(self.dtype), 0)
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
 
     def _bind_append(self, data):
         try:
@@ -1071,17 +1093,8 @@ class NCScalar(NCVariableCodec, ABC):
             self._bound_target = self._storage_object.createVariable(self._target, self._on_disk_dtype,
                                                                      dimensions=[infinite_name, 'scalar'],
                                                                      chunksizes=(appendable_chunk_size, 1))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', typename(self.dtype))
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
+            self._common_bind_output_actions(typename(self.dtype), 1)
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
         return
 
     def _check_data_shape_matching(self, data):
@@ -1189,15 +1202,6 @@ class NCArray(NCVariableCodec):
     def dtype_string():
         return "numpy.ndarray"
 
-    def _bind_read(self):
-        self._attempt_storage_read()
-        # Handle variable size objects
-        # This line will not happen unless target is real, so output_mode should return correct value
-        if self._output_mode is 'a':
-            self._save_shape = self._bound_target.shape[1:]
-        else:
-            self._save_shape = self._bound_target.shape
-
     def _bind_write(self, data):
         try:
             self._bind_read()
@@ -1210,18 +1214,9 @@ class NCArray(NCVariableCodec):
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
                                                                      chunksizes=data_shape)
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', str(data_base_type))
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
+            self._common_bind_output_actions(str(data_base_type), 0)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
 
     def _bind_append(self, data):
         try:
@@ -1237,18 +1232,9 @@ class NCArray(NCVariableCodec):
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
                                                                      chunksizes=(appendable_chunk_size,) + data_shape)
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', str(data_base_type))
-            self._unit = 'NoneType'
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
+            self._common_bind_output_actions(str(data_base_type), 1)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
 
     def _check_data_shape_matching(self, data):
         if self._save_shape != data.shape:
@@ -1289,15 +1275,6 @@ class NCIterable(NCVariableCodec):
     def _decoder(self):
         return nc_iterable_decoder
 
-    def _bind_read(self):
-        self._attempt_storage_read()
-        # Handle variable size objects
-        # This line will not happen unless target is real, so output_mode should return the correct value
-        if self._output_mode is 'a':
-            self._save_shape = self._bound_target.shape[1:]
-        else:
-            self._save_shape = self._bound_target.shape
-
     def _bind_write(self, data):
         try:
             self._bind_read()
@@ -1307,18 +1284,9 @@ class NCIterable(NCVariableCodec):
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions='iterable{}'.format(data_shape),
                                                                      chunksizes=(data_shape,))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', data_type_name)
-            self._unit = "NoneType"
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
+            self._common_bind_output_actions(data_type_name, 0)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
         return
 
     def _bind_append(self, data):
@@ -1333,18 +1301,9 @@ class NCIterable(NCVariableCodec):
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
                                                                      chunksizes=(appendable_chunk_size, data_shape))
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', data_type_name)
-            self._unit = "NoneType"
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
+            self._common_bind_output_actions(data_type_name, 1)
             self._save_shape = data_shape
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
         return
 
     def _check_data_shape_matching(self, data):
@@ -1380,13 +1339,8 @@ class NCQuantity(NCVariableCodec):
         return "quantity"
 
     def _bind_read(self):
-        self._attempt_storage_read()
-        # Handle variable size objects
-        # This line will not happen unless target is real, so output_mode will return the correct value
-        if self._output_mode is 'a':
-            self._save_shape = self._bound_target.shape[1:]
-        else:
-            self._save_shape = self._bound_target.shape
+        # Method of this subclass as it calls extra data
+        super(NCQuantity, self)._bind_read()
         self._unit = self._bound_target.getncattr('IODriver_Unit')
         self._set_codifiers(self._bound_target.getncattr('type'))
 
@@ -1409,19 +1363,10 @@ class NCQuantity(NCVariableCodec):
                                                                          dimensions=dims,
                                                                          chunksizes=data_shape)
 
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', data_type_name)
-            self._unit = str(data.unit)
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 0)
+            self._common_bind_output_actions(data_type_name, 0, store_unit_string=str(data.unit))
             self._save_shape = data_shape
             self._set_codifiers(data_type_name)
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
         return
 
     def _bind_append(self, data):
@@ -1444,19 +1389,9 @@ class NCQuantity(NCVariableCodec):
                 self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                          dimensions=dims,
                                                                          chunksizes=(appendable_chunk_size,) + data_shape)
-            # Specify a way for the IO Driver stores data
-            self.add_metadata('IODriver_Type', self.dtype_string())
-            self.add_metadata('type', data_type_name)
-            self._unit = str(data.unit)
-            self.add_metadata('IODriver_Unit', self._unit)
-            # Specify the type of storage object this should tie to
-            self.add_metadata('IODriver_Storage_Type', self.storage_type)
-            self.add_metadata('IODriver_Appendable', 1)
-            self._save_shape = data_shape
+            self._common_bind_output_actions(data_type_name, 1, store_unit_string=str(data.unit))
             self._set_codifiers(data_type_name)
         self._dump_metadata_buffer()
-        # Set the output mode by calling the variable
-        self._output_mode
         return
 
     def _check_data_shape_matching(self, data):
@@ -1562,7 +1497,7 @@ class DictYamlDumper(yaml.Dumper):
         data_unit = data.unit
         data_value = data / data_unit
         data_dump = {'QuantityUnit': str(data_unit), 'QuantityValue': data_value}
-        # Uses "self (DictYamlDumper)" as the dumper to allow nested !Quantitity types
+        # Uses "self (DictYamlDumper)" as the dumper to allow nested !Quantity types
         return yaml.Dumper.represent_mapping(dumper, u'!Quantity', data_dump)
 
 
