@@ -160,10 +160,11 @@ def test_stabilities():
 
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
-            # Need an alchemical system to test this
+            # The NonequilibriumLangevinIntegrator requires an alchemical function.
             if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-                continue
-            integrator = integrator_class()
+                integrator = integrator_class(alchemical_functions={})
+            else:
+                integrator = integrator_class()
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
                                            "integration steps of a {}.").format(integrator_name, test_name)
@@ -184,6 +185,27 @@ def test_integrator_decorators():
     assert integrator.n_accept == nsteps
     assert integrator.n_trials == nsteps
     assert integrator.acceptance_rate == 1.0
+
+
+def test_single_force_update():
+    """
+    Ensures that addUpdateContextState() is called only once for all custom integrators, except the
+    NonequilibriumLangevinIntegrator which requires an alchmical system.
+    """
+    custom_integrators = get_all_custom_integrators()
+    for integrator_name, integrator_class in custom_integrators:
+        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+            integrator = integrator_class(alchemical_functions={})
+        else:
+            integrator = integrator_class()
+        num_force_update = 0
+        for i in range(integrator.getNumComputations()):
+            step_type, target, expr = integrator.getComputationStep(i)
+
+            if step_type == 5:
+                num_force_update += 1
+        assert num_force_update == 1
 
 
 def test_vvvr_shadow_work_accumulation():
@@ -279,6 +301,26 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             for platform_name in platform_names:
                 name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)                
                 self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
+
+    def test_protocol_work_accumulation_waterbox_barostat(self):
+        """
+        Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicalWaterBox
+        with an active barostat. For brevity, only using CutoffPeriodic as the non-bonded method.
+        """
+        from simtk.openmm import app
+        parameter_name = 'lambda_electrostatics'
+        parameter_initial = 1.0
+        parameter_final = 0.0
+        platform_names = [ openmm.Platform.getPlatform(index).getName() for index in range(openmm.Platform.getNumPlatforms()) ]
+        nonbonded_method = 'CutoffPeriodic'
+        testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
+
+        # Adding the barostat with a high frequency
+        testsystem.system.addForce(openmm.MonteCarloBarostat(1*unit.atmospheres, 300*unit.kelvin, 2))
+
+        for platform_name in platform_names:
+            name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
+            self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
     def compare_external_protocol_work_accumulation(self, testsystem, parameter_name, parameter_initial, parameter_final, platform_name='Reference', name=None):
         """Compare external work accumulation between Reference and CPU platforms.

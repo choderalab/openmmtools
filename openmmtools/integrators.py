@@ -954,10 +954,6 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.addPerDofVariable("vold", 0)
             self.addPerDofVariable("xold", 0)
 
-        # Integrate
-        self.addUpdateContextState()
-        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
-
         self.add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
 
     def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
@@ -978,6 +974,10 @@ class LangevinIntegrator(ThermostatedIntegrator):
         mts : bool
             Whether this integrator defines an MTS integrator
         """
+        # Integrate
+        self.addUpdateContextState()
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
+
         for i, step in enumerate(splitting.split()):
             self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
 
@@ -1453,6 +1453,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         """
         Override the base class to insert reset steps around the integrator.
         """
+
         #if the step is zero,
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
@@ -1566,7 +1567,11 @@ class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("unperturbed_pe", "energy")
         self.addComputeGlobal("protocol_work", "0.0")
         self.endBlock()
+
+        # Calculate the protocol work
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
+
+        # Computing context updates, such as from the barostat, _after_ computing protocol work.
         super(ExternalPerturbationLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
         self.addComputeGlobal("unperturbed_pe", "energy")
 
