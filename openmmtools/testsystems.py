@@ -631,7 +631,7 @@ class HarmonicOscillator(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=90.0 * unit.kilocalories_per_mole/unit.angstrom**2
+    K : simtk.unit.Quantity, optional, default=100.0 * unit.kilocalories_per_mole/unit.angstrom**2
         harmonic restraining potential
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
@@ -642,6 +642,13 @@ class HarmonicOscillator(TestSystem):
         Openmm system with the harmonic oscillator
     positions : list
         positions of harmonic oscillator
+
+    Context parameters
+    ------------------
+    testsystems_HarmonicOscillator_K
+        Spring constant of harmonic oscillator
+    testsystems_HarmonicOscillator_x0
+        Reference x position for harmonic oscillator
 
     Notes
     -----
@@ -700,10 +707,12 @@ class HarmonicOscillator(TestSystem):
         system.setDefaultPeriodicBoxVectors([edge,0,0], [0,edge,0], [0,0,edge])
 
         # Add a restrining potential centered at the origin.
-        energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
+        energy_expression = '(K/2.0) * ((x-x0)^2 + y^2 + z^2);'
         energy_expression += 'K = testsystems_HarmonicOscillator_K;'
+        energy_expression += 'x0 = testsystems_HarmonicOscillator_x0;'
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_HarmonicOscillator_K', K)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_x0', 0.0)
         force.addParticle(0, [])
         system.addForce(force)
 
@@ -2888,6 +2897,44 @@ class DischargedWaterBoxHsites(WaterBox):
             chargeProd *= 0
             epsilon *= 0
             force.setExceptionParameters(index, particle1, particle2, chargeProd, sigma, epsilon)
+
+        return
+
+class AlchemicalWaterBox(WaterBox):
+
+    """
+    Water box test system where a single water molecule can be alchemically modified.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box test system where a single water molecule can be alchemical discharged.
+
+        Parameters are inherited from WaterBox.
+
+        Context parameters
+        ------------------
+        lambda_electrostatics
+            Coulomb interactions for the first water molecule are scaled by `lambda`
+
+        Examples
+        --------
+
+        Create a waterbox.
+
+        >>> waterbox = AlchemicalWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(AlchemicalWaterBox, self).__init__(*args, **kwargs)
+
+        # Alchemically modify the system
+        from openmmtools.alchemy import AlchemicalRegion, AlchemicalFactory
+        region = AlchemicalRegion(alchemical_atoms=range(3))
+        factory = AlchemicalFactory()
+        alchemical_system = factory.create_alchemical_system(self.system, region)
+        self.system = alchemical_system
 
         return
 

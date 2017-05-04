@@ -33,6 +33,7 @@ test:
   requires:
     - nose
     - pymbar
+    - tqdm
   imports:
     - openmmtools
 
