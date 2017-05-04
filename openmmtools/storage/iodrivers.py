@@ -1473,33 +1473,54 @@ class NCQuantity(NCVariableCodec):
 # =============================================================================
 
 class DictYamlLoader(yaml.Loader):
-    """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
+    """PyYAML Loader that reads !Quantity and !ndarray tags."""
     def __init__(self, *args, **kwargs):
         super(DictYamlLoader, self).__init__(*args, **kwargs)
         self.add_constructor(u'!Quantity', self.quantity_constructor)
+        self.add_constructor(u'!ndarray', self.ndarray_constructor)
 
     @staticmethod
     def quantity_constructor(loader, node):
         loaded_mapping = loader.construct_mapping(node)
-        data_unit = quantity_from_string(loaded_mapping['QuantityUnit'])
-        data_value = loaded_mapping['QuantityValue']
+        data_unit = quantity_from_string(loaded_mapping['unit'])
+        data_value = loaded_mapping['value']
         return data_value * data_unit
+
+    @staticmethod
+    def ndarray_constructor(loader, node):
+        loaded_mapping = loader.construct_mapping(node, deep=True)
+        data_type = np.dtype(loaded_mapping['type'])
+        data_shape = loaded_mapping['shape']
+        data_values = loaded_mapping['values']
+        data = np.ndarray(shape=data_shape, dtype=data_type)
+        if 0 not in data_shape:
+            data[:] = data_values
+        return data
 
 
 class DictYamlDumper(yaml.Dumper):
-    """PyYAML Dumper that convert from Python -> YAML output"""
+    """PyYAML Dumper that handle simtk Quantities and ndarrays."""
+
     def __init__(self, *args, **kwargs):
         super(DictYamlDumper, self).__init__(*args, **kwargs)
         self.add_representer(unit.Quantity, self.quantity_representer)
+        self.add_representer(np.ndarray, self.ndarray_representer)
 
     @staticmethod
     def quantity_representer(dumper, data):
-        """YAML Quantity representer."""
         data_unit = data.unit
         data_value = data / data_unit
-        data_dump = {'QuantityUnit': str(data_unit), 'QuantityValue': data_value}
-        # Uses "self (DictYamlDumper)" as the dumper to allow nested !Quantity types
-        return yaml.Dumper.represent_mapping(dumper, u'!Quantity', data_dump)
+        data_dump = dict(unit=str(data_unit), value=data_value)
+        return dumper.represent_mapping(u'!Quantity', data_dump)
+
+    @staticmethod
+    def ndarray_representer(dumper, data):
+        """Convert a numpy array to native Python types."""
+        data_type = str(data.dtype)
+        data_shape = data.shape
+        data_values = data.tolist()
+        data_dump = dict(type=data_type, shape=data_shape, values=data_values)
+        return dumper.represent_mapping(u'!ndarray', data_dump)
 
 
 class NCDict(NCScalar):
