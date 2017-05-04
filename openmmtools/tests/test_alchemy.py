@@ -44,7 +44,7 @@ MAX_FORCE_RELATIVE_ERROR = 1.0e-6 # maximum allowable relative force error
 GLOBAL_ENERGY_UNIT = unit.kilojoules_per_mole  # controls printed units
 GLOBAL_FORCE_UNIT = unit.kilojoules_per_mole / unit.nanometers # controls printed units
 GLOBAL_ALCHEMY_PLATFORM = None  # This is used in every energy calculation.
-GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('Reference') # DEBUG: Use OpenCL over CPU platform for testing since OpenCL is deterministic, while CPU is not
+# GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('OpenCL') # DEBUG: Use OpenCL over CPU platform for testing since OpenCL is deterministic, while CPU is not
 
 
 # =============================================================================
@@ -788,6 +788,7 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
 
     timer.report_timing()
 
+
 def benchmark_alchemy_from_pdb():
     """CLI entry point for benchmarking alchemical performance from a PDB file.
     """
@@ -826,6 +827,7 @@ def benchmark_alchemy_from_pdb():
     # Benchmark
     print('Benchmarking...')
     benchmark(reference_system, alchemical_region, positions, nsteps=args.nsteps, timestep=1.0*unit.femtoseconds)
+
 
 def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsamples=200,
                   cached_trajectory_filename=None, name=""):
@@ -941,6 +943,7 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
     print(report)
     if dDeltaF > MAX_DEVIATION:
         raise Exception(report)
+
 
 def rstyle(ax):
     """Styles x,y axes to appear like ggplot2
@@ -1275,8 +1278,6 @@ class TestAlchemicalFactory(object):
     def test_overlap(self):
         """Tests overlap between reference and alchemical systems."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            reference_system = test_system.system
-            positions = test_system.positions
             #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None

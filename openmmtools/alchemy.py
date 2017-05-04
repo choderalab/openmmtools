@@ -672,7 +672,7 @@ class AlchemicalFactory(object):
         Options are ['direct-space', 'coulomb'].
         'direct-space' only models the direct space contribution
         'coulomb' includes switched Coulomb interaction
-    alchemical_rf_reatment : str, optional, default = 'switched'
+    alchemical_rf_treatment : str, optional, default = 'switched'
          Controls how alchemical region electrostatics are treated when RF is used
          Options are ['switched', 'shifted']
          'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
