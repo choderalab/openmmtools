@@ -18,7 +18,6 @@ requirements:
     - setuptools
     - openmm
     - parmed
-    - tqdm
 
   run:
     - python
@@ -29,13 +28,11 @@ requirements:
     - six
     - openmm
     - parmed
-    - tqdm
 
 test:
   requires:
     - nose
     - pymbar
-    - tqdm
   imports:
     - openmmtools
 

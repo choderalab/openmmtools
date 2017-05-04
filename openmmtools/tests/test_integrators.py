@@ -17,16 +17,13 @@ import numpy
 import inspect
 import pymbar
 
-from tqdm import tqdm
-
-from functools import partial
 from unittest import TestCase
 
 from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems, alchemy
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, NonequilibriumLangevinIntegrator, GHMCIntegrator, GeodesicBAOABIntegrator
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, NonequilibriumLangevinIntegrator, GHMCIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -348,7 +345,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
 
         external_protocol_work = 0.0
-        for step in tqdm(range(nsteps), desc=name):
+        for step in range(nsteps):
             lambda_value = float(step+1) / float(nsteps)
             parameter_value = parameter_initial * (1-lambda_value) + parameter_final * lambda_value
             initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
