@@ -1400,8 +1400,14 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         # Store initial potential energy
         self.addComputeGlobal("Eold", "energy")
 
-        # Use fractional state
+        # Use an instantaneous jump if nsteps is 0
+        self.beginIfBlock('nsteps = 0')
+        self.addComputeGlobal('lambda', '1')
+        self.endBlock()
+
+        self.beginIfBlock('nsteps > 0')
         self.addComputeGlobal('lambda', '(step+1)/nsteps')
+        self.endBlock()
 
         # Update all slaved alchemical parameters
         self.update_alchemical_parameters_step()
@@ -1460,7 +1466,18 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addConstrainVelocities()
         self.reset_work_step()
         self.alchemical_reset_step()
+
+        #cover the case that nsteps is zero, so we must instantaneously jump
+        self.beginIfBlock('nsteps=0')
+        super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
+                                                                           measure_heat, ORV_counts,
+                                                                           force_group_nV, mts)
+
+        #increment the step number
+        self.addComputeGlobal("step", "step + 1")
         self.endBlock()
+        self.endBlock()
+
 
         #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
         self.beginIfBlock("step < nsteps")
@@ -1472,6 +1489,8 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("step", "step + 1")
 
         self.endBlock()
+
+
 
 
     def add_global_variables(self, nsteps):

@@ -429,7 +429,7 @@ def test_thermostated_integrator_hash():
     assert len(all_hashes) == len(thermostated_integrators)
 
 
-def test_alchemical_langevin_integrator():
+def run_alchemical_langevin_integrator(nsteps=0):
     """Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
     LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
@@ -438,7 +438,6 @@ def test_alchemical_langevin_integrator():
     #max deviation from the calculated free energy
     NSIGMA_MAX = 6
     n_iterations = 100  # number of forward and reverse protocols
-    nsteps = 10 # number of steps within each protocol
 
     # These are the alchemical functions that will be used to control the system
     default_functions = {'lambda_sterics' : 'lambda^2 - lambda'}
@@ -469,7 +468,8 @@ def test_alchemical_langevin_integrator():
     thinning = 10
 
     samples_at_0, samples_at_1 = [], []
-    get_acceptance_rate = lambda integrator : integrator.getGlobalVariableByName("naccept") / integrator.getGlobalVariableByName("ntrials")
+    if nsteps > 0:
+        get_acceptance_rate = lambda integrator : integrator.getGlobalVariableByName("naccept") / integrator.getGlobalVariableByName("ntrials")
 
     # Get equilibrium samples from the lambda=0 state
     ghmc = GHMCIntegrator()
@@ -481,7 +481,8 @@ def test_alchemical_langevin_integrator():
     for _ in range(n_equil_samples):
         ghmc.step(thinning)
         samples_at_0.append(context.getState(getPositions=True).getPositions(asNumpy=True))
-    print("GHMC acceptance rate: {:.3f}".format(get_acceptance_rate(ghmc)))
+    if nsteps > 0:
+        print("GHMC acceptance rate: {:.3f}".format(get_acceptance_rate(ghmc)))
 
     # Get the forward work values:
     w_f = numpy.zeros([n_iterations])
@@ -489,7 +490,8 @@ def test_alchemical_langevin_integrator():
     for i in range(n_iterations):
         init_x = samples_at_0[numpy.random.randint(len(samples_at_0))]
         w_f[i] = run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx)
-        f_acceptance_rates.append(get_acceptance_rate(alchemical_integrator))
+        if nsteps > 0:
+            f_acceptance_rates.append(get_acceptance_rate(alchemical_integrator))
 
     dF, ddF = pymbar.EXP(w_f)
     print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
@@ -518,6 +520,9 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
     alchemical_integrator.step(nsteps)
     return alchemical_integrator.getGlobalVariableByName("protocol_work")
 
+def test_alchemical_langevin_integrator():
+    for nsteps in [0, 10, 50]:
+        run_alchemical_langevin_integrator(nsteps=nsteps)
 
 if __name__=="__main__":
     test_alchemical_langevin_integrator()
