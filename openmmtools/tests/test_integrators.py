@@ -202,7 +202,9 @@ def test_single_force_update():
 
             if step_type == 5:
                 num_force_update += 1
-        assert num_force_update == 1
+
+        msg = "Integrator '%s' has %d calls to addUpdateContextState(), while there should be only one." % (integrator_name, num_force_update)
+        assert num_force_update == 1, msg
 
 
 def test_vvvr_shadow_work_accumulation():
@@ -296,7 +298,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         for nonbonded_method in ['CutoffPeriodic', 'PME']:
             testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
             for platform_name in platform_names:
-                name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)                
+                name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
                 self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
     def test_protocol_work_accumulation_waterbox_barostat(self):
