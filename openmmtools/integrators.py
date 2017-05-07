@@ -54,13 +54,14 @@ logger = logging.getLogger(__name__)
 # BASE CLASSES
 # ============================================================================================
 
-class PrettyPrintableCustomIntegrator(mm.CustomIntegrator):
+class PrettyPrintableIntegrator(object):
     """A PrettyPrintableIntegrator can format the contents of its step program for printing.
 
-    """
-    def __init__(self, *args, **kwargs):
-        super(PrettyPrintableCustomIntegrator, self).__init__(*args, **kwargs)
+    This is a mix-in.
 
+    TODO: We should check that the object (`self`) is a CustomIntegrator or subclass.
+
+    """
     def pretty_format(self, as_list=False, step_types_to_highlight=None):
         """Generate a human-readable version of each integrator step.
 
@@ -89,6 +90,9 @@ class PrettyPrintableCustomIntegrator(mm.CustomIntegrator):
             8: "end"
         }
 
+        if not hasattr(self, 'getNumComputations'):
+            raise Exception('This integrator is not a CustomIntegrator.')
+
         readable_lines = []
         indent_level = 0
         for step in range(self.getNumComputations()):
@@ -115,7 +119,7 @@ class PrettyPrintableCustomIntegrator(mm.CustomIntegrator):
         """Pretty-print the computation steps of this integrator."""
         print(self.pretty_format())
 
-class RestorableIntegrator(PrettyPrintableCustomIntegrator):
+class RestorableIntegrator(mm.CustomIntegrator,PrettyPrintableIntegrator):
     """A CustomIntegrator that can be restored after being copied.
 
     Normally, a CustomIntegrator loses its specific class (and all its

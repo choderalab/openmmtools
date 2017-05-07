@@ -183,6 +183,27 @@ def test_integrator_decorators():
     assert integrator.n_trials == nsteps
     assert integrator.acceptance_rate == 1.0
 
+def test_pretty_formatting():
+    """
+    Test pretty-printing and pretty-formatting of integrators.
+    """
+    custom_integrators = get_all_custom_integrators()
+    for integrator_name, integrator_class in custom_integrators:
+        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
+            integrator = integrator_class(alchemical_functions={})
+        else:
+            integrator = integrator_class()
+
+        if hasattr(integrator, 'pretty_format'):
+            # Check formatting as text
+            text = integrator.pretty_format()
+            # Check formatting as text with highlighted steps
+            text = integrator.pretty_format(step_types_to_highlight=[5])
+            # Check list format
+            lines = integrator.pretty_format(as_list=True)
+            msg = "integrator.pretty_format(as_list=True) has %d lines while integrator has %d steps" % (len(lines), integrator.getNumComputations())
+            assert len(lines) == integrator.getNumComputations(), msg
 
 def test_single_force_update():
     """
