@@ -204,6 +204,8 @@ def test_single_force_update():
                 num_force_update += 1
 
         msg = "Integrator '%s' has %d calls to addUpdateContextState(), while there should be only one." % (integrator_name, num_force_update)
+        if hasattr(integrator, 'pretty_format'):
+            msg += '\n' + integrator.pretty_format(step_types_to_highlight=[5])
         assert num_force_update == 1, msg
 
 

@@ -54,7 +54,68 @@ logger = logging.getLogger(__name__)
 # BASE CLASSES
 # ============================================================================================
 
-class RestorableIntegrator(mm.CustomIntegrator):
+class PrettyPrintableCustomIntegrator(mm.CustomIntegrator):
+    """A PrettyPrintableIntegrator can format the contents of its step program for printing.
+
+    """
+    def __init__(self, *args, **kwargs):
+        super(PrettyPrintableCustomIntegrator, self).__init__(*args, **kwargs)
+
+    def pretty_format(self, as_list=False, step_types_to_highlight=None):
+        """Generate a human-readable version of each integrator step.
+
+        Parameters
+        ----------
+        as_list : bool, optional, default=False
+           If True, a list of human-readable strings will be returned.
+           If False, these will be concatenated into a single human-readable string.
+        step_types_to_highlight : list of int, optional, default=None
+           If specified, these step types will be highlighted.
+
+        Returns
+        -------
+        readable_lines : list of str
+           A list of human-readable versions of each step of the integrator
+        """
+        step_type_dict = {
+            0 : "{target} <- {expr}",
+            1: "{target} <- {expr}",
+            2: "{target} <- sum({expr})",
+            3: "constrain positions",
+            4: "constrain velocities",
+            5: "allow forces to update the context state",
+            6: "if({expr}):",
+            7: "while({expr}):",
+            8: "end"
+        }
+
+        readable_lines = []
+        indent_level = 0
+        for step in range(self.getNumComputations()):
+            line = ''
+            step_type, target, expr = self.getComputationStep(step)
+            highlight = True if (step_types_to_highlight is not None) and (step_type in step_types_to_highlight) else False
+            if step_type in [8]:
+                indent_level -= 1
+            if highlight:
+                line += '\x1b[6;30;42m'
+            line += 'step {:6d} : '.format(step) + '   ' * indent_level + step_type_dict[step_type].format(target=target, expr=expr)
+            if highlight:
+                line += '\x1b[0m'
+            if step_type in [6, 7]:
+                indent_level += 1
+            readable_lines.append(line)
+
+        if as_list:
+            return readable_lines
+        else:
+            return '\n'.join(readable_lines)
+
+    def pretty_print(self):
+        """Pretty-print the computation steps of this integrator."""
+        print(self.pretty_format())
+
+class RestorableIntegrator(PrettyPrintableCustomIntegrator):
     """A CustomIntegrator that can be restored after being copied.
 
     Normally, a CustomIntegrator loses its specific class (and all its
