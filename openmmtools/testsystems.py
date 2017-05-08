@@ -3569,7 +3569,7 @@ class SrcExplicit(TestSystem):
         # Construct system.
         forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml']  # list of forcefields to use in parameterization
         forcefield = app.ForceField(*forcefields_to_use)
-        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds, 
+        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds,
                                          ewaldErrorTolerance=ewaldErrorTolerance, nonbondedCutoff=nonbondedCutoff)
 
         # Set dispersion correction use.

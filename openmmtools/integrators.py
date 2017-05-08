@@ -916,6 +916,10 @@ class LangevinIntegrator(ThermostatedIntegrator):
     ----------
     _kinetic_energy : str
         This is 0.5*m*v*v by default, and is the expression used for the kinetic energy
+    shadow_work : simtk.unit.Quantity with units of energy
+       Shadow work (if integrator was constructed with measure_shadow_work=True)
+    heat : simtk.unit.Quantity with units of energy
+       Heat (if integrator was constructed with measure_heat=True)
 
     References
     ----------
@@ -923,6 +927,9 @@ class LangevinIntegrator(ThermostatedIntegrator):
     """
 
     _kinetic_energy = "0.5 * m * v * v"
+
+    # Energy unit used by OpenMM unit system
+    OPENMM_ENERGY_UNIT = unit.kilojoules_per_mole
 
     def __init__(self,
                  splitting="V R O R V",
@@ -966,17 +973,27 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
         # Compute constants
         gamma = collision_rate
+        self._gamma = gamma
 
         # Check if integrator is metropolized by checking for M step:
         if splitting.find("{") > -1:
             self._metropolized_integrator = True
+            # We need to measure shadow work if Metropolization is used
             measure_shadow_work = True
-            self._measure_shadow_work = True
         else:
             self._metropolized_integrator = False
-            self._measure_shadow_work = False
+
+        # Record whether we are measuring heat and shadow work
+        self._measure_heat = measure_heat
+        self._measure_shadow_work = measure_shadow_work
 
         ORV_counts, mts, force_group_nV = self.parse_splitting_string(splitting)
+
+        # Record splitting.
+        self._splitting = splitting
+        self._ORV_counts = ORV_counts
+        self._mts = mts
+        self._force_group_nV = force_group_nV
 
         # Create a new CustomIntegrator
         super(LangevinIntegrator, self).__init__(temperature, timestep)
@@ -997,15 +1014,48 @@ class LangevinIntegrator(ThermostatedIntegrator):
         # Set constraint tolerance
         self.setConstraintTolerance(constraint_tolerance)
 
-        # Add bookkeeping variables
-        if measure_heat:
+        # Add global variables
+        self._add_global_variables()
+
+        # Register step types
+        self._reset_registered_step_types()
+        self._register_step_type('O', self._add_O_step)
+        self._register_step_type('R', self._add_R_step)
+        self._register_step_type('{', self._add_metropolize_start)
+        self._register_step_type('}', self._add_metropolize_finish)
+        self._register_step_type('V', self._add_V_step, can_accept_force_groups=True)
+
+        # Add integrator steps
+        self._add_integrator_steps()
+
+    def _clear_registered_step_types(self):
+        """Clear the list of registered step types."""
+        self._registered_step_types = dict()
+
+    def _register_step_type(self, step_string, function, can_accept_force_groups=False):
+        """Register a function that adds a new step type.
+
+        Parameters
+        ----------
+        step_string : str
+           The step string, such as 'V', 'R', 'O'
+        function : function
+           The function callback
+        can_accept_force_groups : bool, optional, default=False
+           If True, the function can accept a force group
+        """
+        self._registered_step_types[step_string] = (function, can_accept_force_groups)
+
+    def _add_global_variables(self):
+        """Add global bookkeeping variables."""
+        if self._measure_heat:
             self.addGlobalVariable("heat", 0)
 
-        if measure_shadow_work or measure_heat:
+        if self._measure_shadow_work or self._measure_heat:
             self.addGlobalVariable("old_ke", 0)
             self.addGlobalVariable("new_ke", 0)
 
-        if measure_shadow_work:
+        if self._measure_shadow_work:
             self.addGlobalVariable("old_pe", 0)
             self.addGlobalVariable("new_pe", 0)
             self.addGlobalVariable("shadow_work", 0)
@@ -1019,34 +1069,118 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.addPerDofVariable("vold", 0)
             self.addPerDofVariable("xold", 0)
 
-        self.add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
+    @property
+    def kT(self):
+        """The thermal energy in simtk.openmm.Quantity"""
+        return self.getGlobalVariableByName("kT") * OPENMM_ENERGY_UNIT
 
-    def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
-        """Add the steps to the integrator--this can be overridden to place steps around the integration.
+    def reset_heat(self):
+        """Reset heat."""
+        if self._measure_heat:
+            self.setGlobalVariableByName('heat', 0.0)
+
+    def reset_shadow_work(self):
+        """Reset shadow work."""
+        if self._measure_shadow_work:
+            self.setGlobalVariableByName('shadow_work', 0.0)
+
+    def reset_ghmc_statistics(self):
+        """Reset GHMC acceptance rate statistics."""
+        if self._metropolized_integrator:
+            self.setGlobalVariableByName('ntrials', 0)
+            self.setGlobalVariableByName('naccept', 0)
+            self.setGlobalVariableByName('nreject', 0)
+
+    def reset_steps(self):
+        """Reset step counter.
+        """
+        self.setGlobalVariableByName('step', 0)
+
+    def reset(self):
+        """Reset all statistics (heat, shadow work, acceptance rates, step).
+        """
+        self.reset_heat()
+        self.reset_shadow_work()
+        self.reset_ghmc_statistics()
+        self.reset_steps()
+
+    def _get_energy_with_units(self, variable_name, dimensionless=False):
+        """Retrive an energy/work quantity and return as unit-bearing or dimensionless quantity.
 
         Parameters
         ----------
-        splitting : str
-            The Langevin splitting string
-        measure_shadow_work : bool
-            Whether to measure shadow work
-        measure_heat : bool
-            Whether to measure heat
-        ORV_counts : dict
-            Dictionary of occurrences of O, R, V
-        force_group_nV : dict
-            Dictionary of the number of Vs per force group
-        mts : bool
-            Whether this integrator defines an MTS integrator
+        variable_name : str
+           Name of the global context variable to retrieve
+        dimensionless : bool, optional, default=False
+           If specified, the energy/work is returned in reduced (kT) units.
+
+        Returns
+        -------
+        work : simtk.unit.Quantity or float
+           If dimensionless=True, the work in kT (float).
+           Otherwise, the unit-bearing work in units of energy.
+        """
+        work = self.getGlobalVariableByName(variable_name) * OPENMM_ENERGY_UNIT
+        if dimensionless:
+            return work / self.kT
+        else:
+            return work
+
+    def get_shadow_work(self, dimensionless=False):
+        """Get the current accumulated shadow work.
+
+        Parameters
+        ----------
+        dimensionless : bool, optional, default=False
+           If specified, the work is returned in reduced (kT) units.
+
+        Returns
+        -------
+        work : simtk.unit.Quantity or float
+           If dimensionless=True, the protocol work in kT (float).
+           Otherwise, the unit-bearing protocol work in units of energy.
+        """
+        if not self._measure_heat:
+            raise Exception("This integrator must be constructed with 'measure_shadow_work=True' to measure shadow work.")
+        return self._get_energy_with_units("shadow_work", dimensionless=dimensionless)
+
+    @property
+    def shadow_work(self):
+        return self.get_shadow_work()
+
+    def get_heat(self, dimensionless=False):
+        """Get the current accumulated heat.
+
+        Parameters
+        ----------
+        dimensionless : bool, optional, default=False
+           If specified, the work is returned in reduced (kT) units.
+
+        Returns
+        -------
+        work : simtk.unit.Quantity or float
+           If dimensionless=True, the protocol work in kT (float).
+           Otherwise, the unit-bearing protocol work in units of energy.
+        """
+        if not self._measure_heat:
+            raise Exception("This integrator must be constructed with 'measure_heat=True' in order to measure heat.")
+        return self._get_heat_with_units("heat", dimensionless=dimensionless)
+
+    @property
+    def heat(self):
+        return self.get_heat()
+
+    def _add_integrator_steps(self):
+        """Add the steps to the integrator--this can be overridden to place steps around the integration.
         """
         # Integrate
         self.addUpdateContextState()
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
         for i, step in enumerate(splitting.split()):
-            self.substep_function(step, measure_shadow_work, measure_heat, ORV_counts['R'], force_group_nV, mts)
+            self._substep_function(step)
 
-    def sanity_check(self, splitting, allowed_characters="{}RVO0123456789"):
+    def _sanity_check(self, splitting, allowed_characters="{}RVO0123456789"):
         """Perform a basic sanity check on the splitting string to ensure that it makes sense.
 
         Parameters
@@ -1088,7 +1222,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         assert ("V" in splitting_no_space)
         assert ("O" in splitting_no_space)
 
-    def verify_metropolization(self, splitting):
+    def _verify_metropolization(self, splitting):
         """Verify that the shadow-work generating steps are all inside the metropolis block
 
         Returns False if they are not.
@@ -1127,7 +1261,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         else:
             return True
 
-    def R_step(self, measure_shadow_work, n_R):
+    def _add_R_step(self, measure_shadow_work, n_R):
         """Add an R step (position update) given the velocities.
 
         Parameters
@@ -1153,7 +1287,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.addComputeSum("new_ke", self._kinetic_energy)
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke + new_pe) - (old_ke + old_pe)")
 
-    def V_step(self, fg, measure_shadow_work, force_group_nV, mts):
+    def _add_V_step(self, fg, measure_shadow_work, force_group_nV, mts):
         """Deterministic velocity update, using only forces from force-group fg.
 
         Parameters
@@ -1184,7 +1318,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.addComputeSum("new_ke", self._kinetic_energy)
             self.addComputeGlobal("shadow_work", "shadow_work + (new_ke - old_ke)")
 
-    def O_step(self, measure_heat):
+    def _add_O_step(self, measure_heat):
         """Add an O step (stochastic velocity update)
 
         Parameters
@@ -1204,43 +1338,19 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.addComputeSum("new_ke", self._kinetic_energy)
             self.addComputeGlobal("heat", "heat + (new_ke - old_ke)")
 
-    def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
+    def _substep_function(self, step_string):
         """Take step string, and add the appropriate R, V, O step with appropriate parameters.
 
         The step string input here is a single character (or character + number, for MTS)
-
-        Parameters
-        ----------
-        step_string : str
-            R, O, V, {, }, or Vn (where n is a nonnegative integer specifying force group)
-        measure_shadow_work : bool
-            Whether the steps should measure shadow work
-        measure_heat : bool
-            Whether the O step should measure heat
-        n_R : int
-            The number of R steps per integrator step
-        n_V : int
-            The number of V steps per integrator step
-        force_group_nV : dict
-            The number of V steps per integrator step per force group. {0: nV} if not mts
-        mts : bool
-            Whether the integrator is a multiple timestep integrator
         """
-
-        if step_string == "O":
-            self.O_step(measure_heat)
-        elif step_string == "R":
-            self.R_step(measure_shadow_work, n_R)
-        elif step_string == "{":
-            self.begin_metropolize()
-        elif step_string == "}":
-            self.metropolize()
-        elif step_string[0] == "V":
-            # get the force group for this update--it's the number after the V
+        (function, can_accept_force_groups) = self._register_step_type[step_string[0]]
+        if can_accept_force_groups:
             force_group = step_string[1:]
-            self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
+            function(force_group, self._measure_shadow_work, self._force_group_nV, self._mts)
+        else:
+            function()
 
-    def parse_splitting_string(self, splitting_string):
+    def _parse_splitting_string(self, splitting_string):
         """Parse the splitting string to check for simple errors and extract necessary information
 
         Parameters
@@ -1307,7 +1417,12 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
         return ORV_counts, mts, force_group_n_V
 
-    def metropolize(self):
+    def _add_metropolize_start(self):
+        """Save the current x and v for a metropolization step later"""
+        self.addComputePerDof("xold", "x")
+        self.addComputePerDof("vold", "v")
+
+    def _add_metropolize_finish(self):
         """Add a Metropolization (based on shadow work) step to the integrator.
 
         When Metropolization occurs, shadow work is reset.
@@ -1322,13 +1437,75 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("naccept", "ntrials - nreject")
         self.addComputeGlobal("shadow_work", "0")
 
-    def begin_metropolize(self):
-        """Save the current x and v for a metropolization step later"""
-        self.addComputePerDof("xold", "x")
-        self.addComputePerDof("vold", "v")
-
-
 class NonequilibriumLangevinIntegrator(LangevinIntegrator):
+    """Nonequilibrium integrator mix-in.
+
+    Properties
+    ----------
+    protocol_work : simtk.unit.Quantity with units of energy
+       Protocol work
+
+    Public methods
+    --------------
+    reset_integrator
+       Reset the work and integrator statistics in the current context.
+    get_protocol_work
+        Get the current protocol work (with units), if available.
+    get_shadow_work
+        Get the current protocol work (with units), if available.
+    get_heat
+        Get the current heat (with units), if available.
+
+    Private methods
+    ---------------
+    reset_work_step
+        Create an integrator step that resets the protocol and shadow work.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
+
+    def _add_global_variables(self):
+        super(NonequilibriumLangevinIntegrator, self)._add_global_variables()
+        self.addGlobalVariable("protocol_work", 0)
+
+    def _add_reset_work_step(self):
+        """
+        Add a step that resets protocol and shadow work statistics.
+        """
+        self.addComputeGlobal("protocol_work", "0.0")
+
+    def reset_protocol_work(self):
+        self.setGlobalVariableByName("protocol_work", 0)
+
+    def get_protocol_work(self, dimensionless=False):
+        """Get the current accumulated protocol work.
+
+        Parameters
+        ----------
+        dimensionless : bool, optional, default=False
+           If specified, the work is returned in reduced (kT) units.
+
+        Returns
+        -------
+        work : simtk.unit.Quantity or float
+           If dimensionless=True, the protocol work in kT (float).
+           Otherwise, the unit-bearing protocol work in units of energy.
+        """
+        return self._get_work_with_units("protocol_work", dimensionless=dimensionless)
+
+    @property
+    def protocol_work(self):
+        return self.get_protocol_work()
+
+    def reset(self):
+        """
+        Manually reset protocol work and other statistics.
+        """
+        self.reset_protocol_work()
+        super(NonequilibriumLangevinIntegrator, self).reset()
+
+class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
     A variable named lambda is switched from 0 to 1 linearly throughout the nsteps of the protocol.
     The functions can use this to create more complex protocols for other global parameters.
@@ -1389,13 +1566,8 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
     def __init__(self,
                  alchemical_functions,
                  splitting="O { V R H R V } O",
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
-                 constraint_tolerance=1e-8,
-                 measure_shadow_work=False,
-                 measure_heat=True,
-                 nsteps_neq=100):
+                 nsteps_neq=100,
+                 **kwargs):
         """
         Parameters
         ----------
@@ -1444,27 +1616,41 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
 
         # call the base class constructor
-        super(NonequilibriumLangevinIntegrator, self).__init__(splitting=splitting, temperature=temperature,
-                                                               collision_rate=collision_rate, timestep=timestep,
-                                                               constraint_tolerance=constraint_tolerance,
-                                                               measure_shadow_work=measure_shadow_work,
-                                                               measure_heat=measure_heat,
-                                                               )
+        kwargs['splitting'] = splitting
+        super(AlchemicalNonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
 
-        # add some global variables relevant to the integrator
-        self.add_global_variables(nsteps=nsteps_neq)
+        # Register H step types
+        self._register_step_type('H', self._add_alchemical_perturbation_step)
 
-    def update_alchemical_parameters_step(self):
+    def _add_global_variables(self, nsteps):
+        """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
+        total steps in the protocol.
+
+        Parameters
+        ----------
+        nsteps : int, greater than 0
+            The number of steps in the switching protocol.
         """
-        Update Context parameters according to provided functions.
+        super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_global_variables()
+        self.addGlobalVariable('Eold', 0) #old energy value before perturbation
+        self.addGlobalVariable('Enew', 0) #new energy value after perturbation
+        self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
+        self.addGlobalVariable('nsteps', self._n_steps_neq) # total number of NCMC steps to perform; this SHOULD NOT BE CHANGED during the protocol
+
+    def _add_update_alchemical_parameters_step(self):
+        """
+        Add step to update Context parameters according to provided functions.
         """
         for context_parameter in self._alchemical_functions:
             if context_parameter in self._system_parameters:
                 self.addComputeGlobal(context_parameter, self._alchemical_functions[context_parameter])
 
-    def alchemical_perturbation_step(self):
+    def _add_alchemical_perturbation_step(self):
         """
         Add alchemical perturbation step, accumulating protocol work.
+
+        TODO: Extend this to be able to handle force groups?
+
         """
         # Store initial potential energy
         self.addComputeGlobal("Eold", "energy")
@@ -1476,52 +1662,16 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
             self.addComputeGlobal('lambda', '(step+1)/nsteps')
 
         # Update all slaved alchemical parameters
-        self.update_alchemical_parameters_step()
+        self._add_update_alchemical_parameters_step()
 
         # Accumulate protocol work
         self.addComputeGlobal("Enew", "energy")
-        self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)/kT")
+        self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)")
 
     def sanity_check(self, splitting, allowed_characters="H{}RVO0123456789"):
-        super(NonequilibriumLangevinIntegrator, self).sanity_check(splitting, allowed_characters=allowed_characters)
+        super(AlchemicalNonequilibriumLangevinIntegrator, self).sanity_check(splitting, allowed_characters=allowed_characters)
 
-    def substep_function(self, step_string, measure_shadow_work, measure_heat, n_R, force_group_nV, mts):
-        """Take step string, and add the appropriate R, V, O, M, or H step with appropriate parameters.
-
-        The step string input here is a single character (or character + number, for MTS)
-
-        Parameters
-        ----------
-        step_string : str
-            R, O, V, or Vn (where n is a nonnegative integer specifying force group)
-        measure_shadow_work : bool
-            Whether the steps should measure shadow work
-        measure_heat : bool
-            Whether the O step should measure heat
-        n_R : int
-            The number of R steps per integrator step
-        force_group_nV : dict
-            The number of V steps per integrator step per force group. {0: nV} if not mts
-        mts : bool
-            Whether the integrator is a multiple timestep integrator
-        """
-
-        if step_string == "O":
-            self.O_step(measure_heat)
-        elif step_string == "R":
-            self.R_step(measure_shadow_work, n_R)
-        elif step_string == "{":
-            self.begin_metropolize()
-        elif step_string == "}":
-            self.metropolize()
-        elif step_string[0] == "V":
-            # get the force group for this update--it's the number after the V
-            force_group = step_string[1:]
-            self.V_step(force_group, measure_shadow_work, force_group_nV, mts)
-        elif step_string == "H":
-            self.alchemical_perturbation_step()
-
-    def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
+    def _add_integrator_steps(self):
         """
         Override the base class to insert reset steps around the integrator.
         """
@@ -1530,74 +1680,35 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
         self.addConstrainVelocities()
-        self.reset_work_step()
-        self.alchemical_reset_step()
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step()
         self.endBlock()
 
         # Main body
         if self._n_steps_neq == 0:
             # If nsteps = 0, we need to force a step on the first step.
             self.beginIfBlock('step = 0')
-            super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
-                                                                           measure_heat, ORV_counts,
-                                                                           force_group_nV, mts)
+            super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
         else:
             #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
             self.beginIfBlock("step < nsteps")
-            super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
-                                                                           measure_heat, ORV_counts,
-                                                                           force_group_nV, mts)
-
+            super(AlchemicalNonequilibriumLangevinIntegrator, self).add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
 
-    def add_global_variables(self, nsteps):
-        """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
-        total steps in the protocol.
-
-        Parameters
-        ----------
-        nsteps : int, greater than 0
-            The number of steps in the switching protocol.
-        """
-        self.addGlobalVariable('Eold', 0) #old energy value before perturbation
-        self.addGlobalVariable('Enew', 0) #new energy value after perturbation
-        self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-        self.addGlobalVariable('kinetic', 0.0) # kinetic energy
-        self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform; this SHOULD NOT BE CHANGED during the protocol
-        self.addGlobalVariable('step', 0) # current NCMC step number
-        self.addGlobalVariable('protocol_work', 0) # work performed by NCMC protocol
-
-    def alchemical_reset_step(self):
+    def _add_alchemical_reset_step(self):
         """
         Reset the alchemical lambda to its starting value
-        This is 1 for reverse and 0 for forward
         """
         self.addComputeGlobal("lambda", "0")
+        self.addComputeGlobal("protocol_work", "0")
+        self.addComputeGlobal("step", "0")
+        # Add all dependent parameters
+        self._add_update_alchemical_parameters_step()
 
-        self.addComputeGlobal("protocol_work", "0.0")
-        if self._measure_shadow_work:
-            self.addComputeGlobal("shadow_work", "0.0")
-        self.addComputeGlobal("step", "0.0")
-        #add all dependent parameters
-        self.update_alchemical_parameters_step()
-
-    def reset_work_step(self):
-        """
-        This step resets work statistics that have been accumulated.
-        """
-        self.addComputeGlobal("protocol_work", "0.0")
-        self.addComputeGlobal("shadow_work", "0.0")
-
-    def reset_integrator(self):
-        """
-        Manually reset the work statistics and step
-        """
-        self.setGlobalVariableByName("step", 0)
-
-class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
+class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """
     LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work. An example of an
     external perturbation could be changing the forcefield parameters via
@@ -1613,30 +1724,20 @@ class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
     where integrator is an instance of ExternalPerturbationLangevinIntegrator.
     """
 
-    def __init__(self,
-                 splitting="V R O R V",
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
-                 constraint_tolerance=1e-8,
-                 measure_shadow_work=False,
-                 measure_heat=True):
+    def __init__(self, *args, **kwargs):
+        super(ExternalPerturbationLangevinIntegrator, self).__init__(*args, **kwargs)
 
+    def reset(self):
+        super(ExternalPerturbationLangevinIntegrator, self).reset()
+        self.setGlobalVariableByName('first_step', 0)
 
-        super(ExternalPerturbationLangevinIntegrator, self).__init__(splitting=splitting,
-                                                                     temperature=temperature,
-                                                                     collision_rate=collision_rate,
-                                                                     timestep=timestep,
-                                                                     constraint_tolerance=constraint_tolerance,
-                                                                     measure_shadow_work=measure_shadow_work,
-                                                                     measure_heat=measure_heat)
-
-        self.addGlobalVariable("protocol_work", 0)
+    def _add_global_variables(self):
+        super(ExternalPerturbationLangevinIntegrator, self)._add_global_variables()
         self.addGlobalVariable("perturbed_pe", 0)
         self.addGlobalVariable("unperturbed_pe", 0)
         self.addGlobalVariable("first_step", 0)
 
-    def add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
+    def _add_integrator_steps(self, splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts):
         self.addComputeGlobal("perturbed_pe", "energy")
         # Assumes no perturbation is done before doing the initial MD step.
         self.beginIfBlock("first_step < 1")
@@ -1649,20 +1750,14 @@ class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("protocol_work", "protocol_work + (perturbed_pe - unperturbed_pe)")
 
         # Computing context updates, such as from the barostat, _after_ computing protocol work.
-        super(ExternalPerturbationLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
-        self.addComputeGlobal("unperturbed_pe", "energy")
+        super(ExternalPerturbationLangevinIntegrator, self)._add_integrator_steps(splitting, measure_shadow_work, measure_heat, ORV_counts, force_group_nV, mts)
 
+        # Store final energy before perturbation
+        self.addComputeGlobal("unperturbed_pe", "energy")
 
 class VVVRIntegrator(LangevinIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
-    def __init__(self,
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=91.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
-                 constraint_tolerance=1e-8,
-                 measure_shadow_work=False,
-                 measure_heat=True,
-                 ):
+    def __init__(self, *args, **kwargs):
         """Create a velocity verlet with velocity randomization (VVVR) integrator.
         -----
         This integrator is equivalent to a Langevin integrator in the velocity Verlet discretization with a
@@ -1684,26 +1779,12 @@ class VVVRIntegrator(LangevinIntegrator):
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
         """
-        LangevinIntegrator.__init__(self, splitting="O V R V O",
-                                    temperature=temperature,
-                                    collision_rate=collision_rate,
-                                    timestep=timestep,
-                                    constraint_tolerance=constraint_tolerance,
-                                    measure_shadow_work=measure_shadow_work,
-                                    measure_heat=measure_heat,
-                                    )
-
+        kwargs['splitting'] = "O V R V O"
+        super(VVVRIntegrator, self).__init__(self, *args, **kwargs)
 
 class BAOABIntegrator(LangevinIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
-    def __init__(self,
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
-                 constraint_tolerance=1e-8,
-                 measure_shadow_work=False,
-                 measure_heat=True
-                 ):
+    def __init__(self, *args, **kwargs):
         """Create an integrator of Langevin dynamics using the BAOAB operator splitting.
 
         Parameters
@@ -1739,27 +1820,13 @@ class BAOABIntegrator(LangevinIntegrator):
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = BAOABIntegrator(temperature, collision_rate, timestep)
         """
-        LangevinIntegrator.__init__(self, splitting="V R O R V",
-                                    temperature=temperature,
-                                    collision_rate=collision_rate,
-                                    timestep=timestep,
-                                    constraint_tolerance=constraint_tolerance,
-                                    measure_shadow_work=measure_shadow_work,
-                                    measure_heat=measure_heat
-                                    )
-
+        kwargs['splitting'] = "V R O R V"
+        super(BAOABIntegrator, self).__init__(self, *args, **kwargs)
 
 class GeodesicBAOABIntegrator(LangevinIntegrator):
     """Create a geodesic-BAOAB integrator."""
 
-    def __init__(self, K_r=2,
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
-                 constraint_tolerance=1e-8,
-                 measure_shadow_work=False,
-                 measure_heat=True
-                 ):
+    def __init__(self, K_r=2, *args, **kwargs):
         """Create a geodesic BAOAB Langevin integrator.
 
         Parameters
@@ -1798,22 +1865,12 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         """
-        splitting = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
-        LangevinIntegrator.__init__(self, splitting=splitting,
-                                    temperature=temperature,
-                                    collision_rate=collision_rate,
-                                    timestep=timestep,
-                                    constraint_tolerance=constraint_tolerance,
-                                    measure_shadow_work=measure_shadow_work,
-                                    measure_heat=measure_heat
-                                    )
-
+        kwargs['splitting'] = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
+        super(BAOABIntegrator, self).__init__(self, *args, **kwargs)
 
 class GHMCIntegrator(LangevinIntegrator):
 
-    def __init__(self, temperature=298.0 * simtk.unit.kelvin, collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds, constraint_tolerance=1.0e-8, measure_shadow_work=False,
-                 measure_heat=True):
+    def __init__(self, *args, **kwargs):
         """
         Create a generalized hybrid Monte Carlo (GHMC) integrator.
 
@@ -1854,11 +1911,9 @@ class GHMCIntegrator(LangevinIntegrator):
         Lelievre T, Stoltz G, and Rousset M. Free Energy Computations: A Mathematical Perspective
         http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
         """
+        kwargs['splitting'] = "O { V R V } O"
+        super(GHMCIntegrator, self).__init__(*args, **kwargs)
 
-        super(GHMCIntegrator, self).__init__(splitting="O { V R V }", temperature=temperature, collision_rate=collision_rate,
-                                             timestep=timestep,
-                                             constraint_tolerance=constraint_tolerance,
-                                             measure_shadow_work=measure_shadow_work, measure_heat=measure_heat)
 if __name__ == '__main__':
     import doctest
     doctest.testmod()

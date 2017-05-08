@@ -465,7 +465,16 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
 
     # These are the alchemical functions that will be used to control the system
     # This function should start at 1 and return to 1, and lie within [0,1]
-    default_functions = {'lambda_sterics' : '1 + (lambda^2 - lambda)'}
+    #default_functions = {'lambda_sterics' : '1 + (lambda^2 - lambda)'}
+
+    # These are the alchemical functions that will be used to control the system
+    sigma = 1.0 * unit.angstrom # stddev of harmonic oscillator
+    K =
+    x0_initial = 0.0 * unit.angstroms
+    x0_final = 5.0 * unit.angstroms
+    default_functions = {
+        'testsystems_HarmonicOscillator_x0' : 'lambda*%f' % x0_final.value_in_unit_system(unit.md_unit_system)
+        }
 
     alchemical_integrator = NonequilibriumLangevinIntegrator(default_functions,
                                                              splitting=splitting,
@@ -522,31 +531,39 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if numpy.abs(dF) > NSIGMA_MAX * ddF:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
+def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
     """Perform a nonequilibrium switching protocol
 
     Parameters
     ----------
-    init_x
-    alchemical_integrator
-    nsteps
-    alchemical_ctx
+    init_x : simtk.openmm.Quantity of size [natoms,3] with units compatible with angstroms
+        Initial positions
+    alchemical_integrator : NonequilibriumLangevinIntegrator
+        Integrator to use for switching
+    alchemical_ctx : simtk.openmm.Context
+        Context to use for alchemical switching.
+    temperature : simtk.unit.Quantity, optional, default=298*kelvin
+        Temperature to initialize simulation with
 
     Returns
     -------
     protocol_work : float
         Work performed by protocol
     """
-
+    # Get number of NCMC steps
+    nsteps = alchemical_integrator.getGlobalVariableByName("nsteps")
+    # Set positions and velocities
     alchemical_ctx.setPositions(init_x)
-    alchemical_ctx.setVelocitiesToTemperature(298 * unit.kelvin)
+    alchemical_ctx.setVelocitiesToTemperature(temperature)
+    # Reset the integrator
     alchemical_integrator.reset_integrator()
     if (nsteps == 0):
         # We still need to take one step if nsteps == 0
         alchemical_integrator.step(1)
     else:
         alchemical_integrator.step(nsteps)
-    return alchemical_integrator.getGlobalVariableByName("protocol_work")
+    # Get the protocol work in dimensionless units (kT)
+    return alchemical_integrator.getGlobalVariableByName("protocol_work") # in kT
 
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "R V O H O V R", "H R V O V R H"]:
