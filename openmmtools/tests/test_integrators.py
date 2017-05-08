@@ -453,7 +453,7 @@ def test_thermostated_integrator_hash():
     assert len(all_hashes) == len(thermostated_integrators)
 
 
-def run_alchemical_langevin_integrator(nsteps=0):
+def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     """Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
     LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
@@ -464,9 +464,9 @@ def run_alchemical_langevin_integrator(nsteps=0):
     n_iterations = 100  # number of forward and reverse protocols
 
     # These are the alchemical functions that will be used to control the system
-    default_functions = {'lambda_sterics' : 'lambda^2 - lambda'}
+    # This function should start at 1 and return to 1, and lie within [0,1]
+    default_functions = {'lambda_sterics' : '1 + (lambda^2 - lambda)'}
 
-    splitting = "O { V R H R V } O"
     alchemical_integrator = NonequilibriumLangevinIntegrator(default_functions,
                                                              splitting=splitting,
                                                              nsteps_neq=nsteps,
@@ -520,7 +520,7 @@ def run_alchemical_langevin_integrator(nsteps=0):
     dF, ddF = pymbar.EXP(w_f)
     print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
     if numpy.abs(dF) > NSIGMA_MAX * ddF:
-        raise Exception("The free energy difference for the nonequilibrium switching is not correct.")
+        raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
 def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx):
     """Perform a nonequilibrium switching protocol
@@ -541,12 +541,17 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
     alchemical_ctx.setPositions(init_x)
     alchemical_ctx.setVelocitiesToTemperature(298 * unit.kelvin)
     alchemical_integrator.reset_integrator()
-    alchemical_integrator.step(nsteps)
+    if (nsteps == 0):
+        # We still need to take one step if nsteps == 0
+        alchemical_integrator.step(1)
+    else:
+        alchemical_integrator.step(nsteps)
     return alchemical_integrator.getGlobalVariableByName("protocol_work")
 
 def test_alchemical_langevin_integrator():
-    for nsteps in [0, 10, 50]:
-        run_alchemical_langevin_integrator(nsteps=nsteps)
+    for splitting in ["O { V R H R V } O", "O V R H R V O", "R V O H O V R", "H R V O V R H"]:
+        for nsteps in [0, 10, 50]:
+            run_alchemical_langevin_integrator(nsteps=nsteps)
 
 if __name__=="__main__":
     test_alchemical_langevin_integrator()
