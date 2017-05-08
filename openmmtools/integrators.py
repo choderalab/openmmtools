@@ -1532,6 +1532,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addConstrainVelocities()
         self.reset_work_step()
         self.alchemical_reset_step()
+        self.endBlock()
 
         # Main body
         if self._n_steps_neq == 0:
