@@ -1431,10 +1431,14 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
         nsteps_neq : int, default: 100
             Number of steps in nonequilibrium protocol. Default 100
+            This number cannot be changed without creating a new integrator.
         """
 
+        if (nsteps_neq < 0) or (nsteps_neq != int(nsteps_neq)):
+            raise Exception('nsteps_neq must be an integer >= 0')
+
         self._alchemical_functions = alchemical_functions
-        self._n_steps_neq = nsteps_neq
+        self._n_steps_neq = nsteps_neq # fixed during life of integrator
 
         # collect the system parameters.
         self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
@@ -1466,13 +1470,10 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("Eold", "energy")
 
         # Use an instantaneous jump if nsteps is 0
-        self.beginIfBlock('nsteps = 0')
-        self.addComputeGlobal('lambda', '1')
-        self.endBlock()
-
-        self.beginIfBlock('nsteps > 0')
-        self.addComputeGlobal('lambda', '(step+1)/nsteps')
-        self.endBlock()
+        if self._n_steps_neq == 0:
+            self.addComputeGlobal('lambda', '1')
+        else:
+            self.addComputeGlobal('lambda', '(step+1)/nsteps')
 
         # Update all slaved alchemical parameters
         self.update_alchemical_parameters_step()
@@ -1525,38 +1526,31 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         Override the base class to insert reset steps around the integrator.
         """
 
-        #if the step is zero,
+        # First step: Constrain positions and velocities and reset work accumulators and alchemical integrators
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
         self.addConstrainVelocities()
         self.reset_work_step()
         self.alchemical_reset_step()
 
-        #cover the case that nsteps is zero, so we must instantaneously jump
-        self.beginIfBlock('nsteps=0')
-        super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
+        # Main body
+        if self._n_steps_neq == 0:
+            # If nsteps = 0, we need to force a step on the first step.
+            self.beginIfBlock('step = 0')
+            super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
+                                                                           measure_heat, ORV_counts,
+                                                                           force_group_nV, mts)
+            self.addComputeGlobal("step", "step + 1")
+            self.endBlock()
+        else:
+            #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
+            self.beginIfBlock("step < nsteps")
+            super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
                                                                            measure_heat, ORV_counts,
                                                                            force_group_nV, mts)
 
-        #increment the step number
-        self.addComputeGlobal("step", "step + 1")
-        self.endBlock()
-        self.endBlock()
-
-
-        #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
-        self.beginIfBlock("step < nsteps")
-        super(NonequilibriumLangevinIntegrator, self).add_integrator_steps(splitting, measure_shadow_work,
-                                                                           measure_heat, ORV_counts,
-                                                                           force_group_nV, mts)
-
-        #increment the step number
-        self.addComputeGlobal("step", "step + 1")
-
-        self.endBlock()
-
-
-
+            self.addComputeGlobal("step", "step + 1")
+            self.endBlock()
 
     def add_global_variables(self, nsteps):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
@@ -1571,7 +1565,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addGlobalVariable('Enew', 0) #new energy value after perturbation
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
         self.addGlobalVariable('kinetic', 0.0) # kinetic energy
-        self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform
+        self.addGlobalVariable('nsteps', nsteps) # total number of NCMC steps to perform; this SHOULD NOT BE CHANGED during the protocol
         self.addGlobalVariable('step', 0) # current NCMC step number
         self.addGlobalVariable('protocol_work', 0) # work performed by NCMC protocol
 
@@ -1601,8 +1595,6 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         Manually reset the work statistics and step
         """
         self.setGlobalVariableByName("step", 0)
-
-
 
 class ExternalPerturbationLangevinIntegrator(LangevinIntegrator):
     """

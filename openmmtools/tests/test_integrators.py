@@ -205,10 +205,9 @@ def test_pretty_formatting():
             msg = "integrator.pretty_format(as_list=True) has %d lines while integrator has %d steps" % (len(lines), integrator.getNumComputations())
             assert len(lines) == integrator.getNumComputations(), msg
 
-def test_single_force_update():
+def test_update_context_state_calls():
     """
-    Ensures that addUpdateContextState() is called only once for all custom integrators, except the
-    NonequilibriumLangevinIntegrator which requires an alchmical system.
+    Ensure that all integrators only call addUpdateContextState() once.
     """
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
