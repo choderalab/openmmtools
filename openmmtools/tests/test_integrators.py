@@ -461,6 +461,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     """Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
     LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
     zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
+
+    The total work (protocol work + shadow work) is used.
     """
 
     #max deviation from the calculated free energy
@@ -520,7 +522,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             else:
                 alchemical_functions = reverse_functions
             nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
-                                                                                   alchemical_functions=alchemical_functions, splitting=splitting, nsteps_neq=nsteps)
+                                                                                   alchemical_functions=alchemical_functions, splitting=splitting, nsteps_neq=nsteps,
+                                                                                   measure_shadow_work=True)
             nonequilibrium_context = openmm.Context(system, nonequilibrium_integrator, platform)
             nonequilibrium_context.setPositions(positions)
             if nsteps == 0:
@@ -528,14 +531,15 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             else:
                 nonequilibrium_integrator.step(nsteps)
             if direction == 'forward':
-                w_f[iteration] = nonequilibrium_integrator.get_protocol_work(dimensionless=True)
+                w_f[iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
             else:
-                w_r[iteration] = nonequilibrium_integrator.get_protocol_work(dimensionless=True)
+                w_r[iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
             del nonequilibrium_context, nonequilibrium_integrator
 
     dF, ddF = pymbar.BAR(w_f, w_r)
-    print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
-    if np.abs(dF) > NSIGMA_MAX * ddF:
+    nsigma = np.abs(dF) / ddF
+    print("DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF, ddF, nsigma))
+    if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
 def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
