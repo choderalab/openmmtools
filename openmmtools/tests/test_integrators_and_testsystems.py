@@ -92,11 +92,7 @@ def test_integrators_and_testsystems():
             continue
 
         for integrator_name, integrator_class in custom_integrators:
-            # Create integrator.
-            if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-                integrator = integrator_class(dict())
-            else:
-                integrator = integrator_class()
+            integrator = integrator_class()
 
             # Create test.
             f = partial(check_combination, integrator, testsystem, platform)
