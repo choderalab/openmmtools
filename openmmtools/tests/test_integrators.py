@@ -347,8 +347,9 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         platform = openmm.Platform.getPlatformByName(platform_name)
         if platform_name in ['CPU', 'CUDA']:
             platform.setPropertyDefaultValue('DeterministicForces', 'true')
-        if platform_name in ['OpenCL', 'CUDA']:
-            platform.setPropertyDefaultValue('Precision', 'mixed')
+        # TODO: Use mixed precision on OpenCL/CUDA only if available
+        #if platform_name in ['OpenCL', 'CUDA']:
+        #    platform.setPropertyDefaultValue('Precision', 'mixed')
         nsteps = 20
         kT = kB * temperature
         integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
