@@ -937,10 +937,10 @@ class LangevinIntegrator(ThermostatedIntegrator):
     _kinetic_energy = "0.5 * m * v * v"
 
     def __init__(self,
-                 splitting="V R O R V",
                  temperature=298.0 * simtk.unit.kelvin,
                  collision_rate=1.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
+                 splitting="V R O R V",
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
                  measure_heat=True,
