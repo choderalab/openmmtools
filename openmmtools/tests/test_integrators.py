@@ -345,9 +345,10 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         system, topology = testsystem.system, testsystem.topology
         temperature = 298.0 * unit.kelvin
         platform = openmm.Platform.getPlatformByName(platform_name)
-
-        # TODO: Set precision and determinism if platform is ['OpenCL', 'CUDA']
-
+        if platform_name in ['CPU', 'CUDA']:
+            platform.setPropertyDefaultValue('DeterministicForces', 'true')
+        if platform_name in ['OpenCL', 'CUDA']:
+            platform.setPropertyDefaultValue('Precision', 'mixed')
         nsteps = 20
         kT = kB * temperature
         integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
