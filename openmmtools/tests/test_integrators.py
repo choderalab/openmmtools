@@ -13,7 +13,7 @@ Test custom integrators.
 # GLOBAL IMPORTS
 #=============================================================================================
 
-import numpy
+import numpy as np
 import inspect
 import pymbar
 
@@ -23,7 +23,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems, alchemy
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, NonequilibriumLangevinIntegrator, GHMCIntegrator
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator, GHMCIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -94,7 +94,7 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
     # Check that simulation has not exploded.
     state = context.getState(getEnergy=True)
     potential = state.getPotentialEnergy() / kT
-    if numpy.isnan(potential):
+    if np.isnan(potential):
         raise Exception("Potential energy for integrator %s became NaN." % integrator.__doc__)
 
     del context
@@ -102,10 +102,11 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 
 def check_integrator_temperature(integrator, temperature, has_changed):
     """Check integrator temperature has has_kT_changed variables."""
-    kT = (temperature * integrators.kB).value_in_unit_system(unit.md_unit_system)
+    kT = (temperature * integrators.kB)
     temperature = temperature / unit.kelvin
-    assert numpy.isclose(integrator.getTemperature() / unit.kelvin, temperature)
-    assert numpy.isclose(integrator.getGlobalVariableByName('kT'), kT)
+    assert np.isclose(integrator.getTemperature() / unit.kelvin, temperature)
+    assert np.isclose(integrator.getGlobalVariableByName('kT'), kT.value_in_unit_system(unit.md_unit_system))
+    assert np.isclose(integrator.kT.value_in_unit_system(unit.md_unit_system), kT.value_in_unit_system(unit.md_unit_system))
     try:
         has_kT_changed = integrator.getGlobalVariableByName('has_kT_changed')
     except Exception:
@@ -157,11 +158,7 @@ def test_stabilities():
 
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
-            # The NonequilibriumLangevinIntegrator requires an alchemical function.
-            if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-                integrator = integrator_class(alchemical_functions={})
-            else:
-                integrator = integrator_class()
+            integrator = integrator_class()
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
                                            "integration steps of a {}.").format(integrator_name, test_name)
@@ -190,10 +187,7 @@ def test_pretty_formatting():
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
         # The NonequilibriumLangevinIntegrator requires an alchemical function.
-        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-            integrator = integrator_class(alchemical_functions={})
-        else:
-            integrator = integrator_class()
+        integrator = integrator_class()
 
         if hasattr(integrator, 'pretty_format'):
             # Check formatting as text
@@ -212,10 +206,7 @@ def test_update_context_state_calls():
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
         # The NonequilibriumLangevinIntegrator requires an alchemical function.
-        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-            integrator = integrator_class(alchemical_functions={})
-        else:
-            integrator = integrator_class()
+        integrator = integrator_class()
         num_force_update = 0
         for i in range(integrator.getNumComputations()):
             step_type, target, expr = integrator.getComputationStep(i)
@@ -407,10 +398,7 @@ def test_temperature_getter_setter():
         # Test original integrator.
         check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
                                                                   'getter of {}').format(integrator_name)
-        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-            integrator = integrator_class(dict(),temperature=temperature)
-        else:
-            integrator = integrator_class(temperature=temperature)
+        integrator = integrator_class(temperature=temperature)
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
 
@@ -422,10 +410,7 @@ def test_temperature_getter_setter():
         # Test Context integrator wrapper.
         check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
                                                                   'of {}').format(integrator_name)
-        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-            integrator = integrator_class(dict())
-        else:
-            integrator = integrator_class()
+        integrator = integrator_class()
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
         integrator = context.getIntegrator()
@@ -445,10 +430,7 @@ def test_thermostated_integrator_hash():
     for integrator_name, integrator_class in thermostated_integrators:
         hash_float = RestorableIntegrator._compute_class_hash(integrator_class)
         all_hashes.add(hash_float)
-        if issubclass(integrator_class, integrators.NonequilibriumLangevinIntegrator):
-            integrator = integrator_class(dict())
-        else:
-            integrator = integrator_class()
+        integrator = integrator_class()
         assert integrator.getGlobalVariableByName('_restorable__class_hash') == hash_float
     assert len(all_hashes) == len(thermostated_integrators)
 
@@ -464,71 +446,74 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     n_iterations = 100  # number of forward and reverse protocols
 
     # These are the alchemical functions that will be used to control the system
-    # This function should start at 1 and return to 1, and lie within [0,1]
-    #default_functions = {'lambda_sterics' : '1 + (lambda^2 - lambda)'}
-
-    # These are the alchemical functions that will be used to control the system
+    temperature = 298.0 * unit.kelvin
     sigma = 1.0 * unit.angstrom # stddev of harmonic oscillator
-    K =
-    x0_initial = 0.0 * unit.angstroms
-    x0_final = 5.0 * unit.angstroms
-    default_functions = {
-        'testsystems_HarmonicOscillator_x0' : 'lambda*%f' % x0_final.value_in_unit_system(unit.md_unit_system)
+    kT = kB * temperature # thermal energy
+    beta = 1.0 / kT # inverse thermal energy
+    K = kT / sigma**2 # spring constant corresponding to sigma
+    parameter_initial_value = 0 * sigma # initial position for harmonic oscillator reference position
+    parameter_final_value = 3 * sigma # final position for harmonic oscillator reference position
+    mass = 39.948 * unit.amu
+    period = unit.sqrt(mass/K) # period of harmonic oscillator
+    timestep = period / 20.0
+    collision_rate = 1.0 / period
+    parameter_name = 'testsystems_HarmonicOscillator_x0'
+    forward_functions = {
+        parameter_name : '(1-lambda)*%f + lambda*%f' % (parameter_initial_value.value_in_unit_system(unit.md_unit_system), parameter_final_value.value_in_unit_system(unit.md_unit_system))
+        }
+    reverse_functions = {
+        parameter_name : '(1-lambda)*%f + lambda*%f' % (parameter_final_value.value_in_unit_system(unit.md_unit_system), parameter_initial_value.value_in_unit_system(unit.md_unit_system))
         }
 
-    alchemical_integrator = NonequilibriumLangevinIntegrator(default_functions,
-                                                             splitting=splitting,
-                                                             nsteps_neq=nsteps,
-                                                             )
+    # Create harmonic oscillator testsystem
+    testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
+    system = testsystem.system
+    positions = testsystem.positions
 
-    platform = openmm.Platform.getPlatformByName("Reference")
-
-    lj = testsystems.LennardJonesCluster()
-    positions = lj.positions
-
-    # Alchemically modify everything:
-    alchemical_factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
-    alchemical_region = alchemy.AlchemicalRegion([1], alchemical_bonds=False, alchemical_angles=False,
-                                                 alchemical_torsions=False)
-    modified_system = alchemical_factory.create_alchemical_system(reference_system=lj.system,
-                                                                  alchemical_regions=alchemical_region)
-
-    alchemical_ctx = openmm.Context(modified_system, alchemical_integrator, platform)
-
-    # Get equilibrium samples
+    # Get equilibrium samples from initial and final states
     burn_in = 1000
-    n_equil_samples = n_iterations
-    thinning = 10
+    thinning = 10 * 20 # number of steps between samples
 
-    samples_at_0, samples_at_1 = [], []
-    if nsteps > 0:
-        get_acceptance_rate = lambda integrator : integrator.getGlobalVariableByName("naccept") / integrator.getGlobalVariableByName("ntrials")
+    # Collect forward and reverse work values
+    w_f = np.zeros([n_iterations], np.float64)
+    w_r = np.zeros([n_iterations], np.float64)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    for direction in ['forward', 'reverse']:
+        positions = testsystem.positions
+        for iteration in range(n_iterations):
+            # Generate equilibrium sample
+            equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
+            equilibrium_context = openmm.Context(system, equilibrium_integrator, platform)
+            if direction == 'forward':
+                equilibrium_context.setParameter(parameter_name, parameter_initial_value.value_in_unit_system(unit.md_unit_system))
+            else:
+                equilibrium_context.setParameter(parameter_name, parameter_final_value.value_in_unit_system(unit.md_unit_system))
+            equilibrium_context.setPositions(positions)
+            equilibrium_integrator.step(thinning)
+            positions = equilibrium_context.getState(getPositions=True).getPositions(asNumpy=True)
+            del equilibrium_context, equilibrium_integrator
+            # Generate nonequilibrium work sample
+            if direction == 'forward':
+                alchemical_functions = forward_functions
+            else:
+                alchemical_functions = reverse_functions
+            nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
+                                                                                   alchemical_functions=alchemical_functions, splitting=splitting, nsteps_neq=nsteps)
+            nonequilibrium_context = openmm.Context(system, nonequilibrium_integrator, platform)
+            nonequilibrium_context.setPositions(positions)
+            if nsteps == 0:
+                nonequilibrium_integrator.step(1) # need to execute at least one step
+            else:
+                nonequilibrium_integrator.step(nsteps)
+            if direction == 'forward':
+                w_f[iteration] = nonequilibrium_integrator.get_protocol_work(dimensionless=True)
+            else:
+                w_r[iteration] = nonequilibrium_integrator.get_protocol_work(dimensionless=True)
+            del nonequilibrium_context, nonequilibrium_integrator
 
-    # Get equilibrium samples from the lambda=0 state
-    ghmc = GHMCIntegrator()
-    context = openmm.Context(modified_system, ghmc, platform)
-    context.setPositions(positions)
-    for parameter in default_functions.keys():
-        context.setParameter(parameter, 0.0)
-    ghmc.step(burn_in)
-    for _ in range(n_equil_samples):
-        ghmc.step(thinning)
-        samples_at_0.append(context.getState(getPositions=True).getPositions(asNumpy=True))
-    if nsteps > 0:
-        print("GHMC acceptance rate: {:.3f}".format(get_acceptance_rate(ghmc)))
-
-    # Get the forward work values:
-    w_f = numpy.zeros([n_iterations])
-    f_acceptance_rates = []
-    for i in range(n_iterations):
-        init_x = samples_at_0[numpy.random.randint(len(samples_at_0))]
-        w_f[i] = run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx)
-        if nsteps > 0:
-            f_acceptance_rates.append(get_acceptance_rate(alchemical_integrator))
-
-    dF, ddF = pymbar.EXP(w_f)
+    dF, ddF = pymbar.BAR(w_f, w_r)
     print("DeltaF: {:.4f}, dDeltaF: {:.4f}".format(dF, ddF))
-    if numpy.abs(dF) > NSIGMA_MAX * ddF:
+    if np.abs(dF) > NSIGMA_MAX * ddF:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
 def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
@@ -538,7 +523,7 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
     ----------
     init_x : simtk.openmm.Quantity of size [natoms,3] with units compatible with angstroms
         Initial positions
-    alchemical_integrator : NonequilibriumLangevinIntegrator
+    alchemical_integrator : AlchemicalNonequilibriumLangevinIntegrator
         Integrator to use for switching
     alchemical_ctx : simtk.openmm.Context
         Context to use for alchemical switching.
