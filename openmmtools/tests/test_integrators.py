@@ -219,12 +219,9 @@ def test_update_context_state_calls():
             msg += '\n' + integrator.pretty_format(step_types_to_highlight=[5])
         assert num_force_update == 1, msg
 
-
 def test_vvvr_shadow_work_accumulation():
     """When `measure_shadow_work==True`, assert that global `shadow_work` is initialized to zero and
-    reaches a nonzero value after integrating a few dozen steps.
-
-    By default (`measure_shadow_work=False`), assert that there is no global name for `shadow_work`."""
+    reaches a nonzero value after integrating a few dozen steps."""
 
     # test `measure_shadow_work=True` --> accumulation of a nonzero value in global `shadow_work`
     testsystem = testsystems.HarmonicOscillator()
@@ -234,9 +231,11 @@ def test_vvvr_shadow_work_accumulation():
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
-    assert(integrator.getGlobalVariableByName('shadow_work') == 0)
+    assert(integrator.get_shadow_work(dimensionless=True) == 0), "Shadow work should initially be zero."
+    assert(integrator.get_shadow_work() / unit.kilojoules_per_mole == 0), "integrator.get_shadow_work() should have units of energy."
+    assert(integrator.shadow_work / unit.kilojoules_per_mole == 0), "integrator.shadow_work should have units of energy."
     integrator.step(25)
-    assert(integrator.getGlobalVariableByName('shadow_work') != 0)
+    assert(integrator.get_shadow_work(dimensionless=True) != 0), "integrator.get_shadow_work() should be nonzero after dynamics"
 
     # test default (`measure_shadow_work=False`, `measure_heat=True`) --> absence of a global `shadow_work`
     integrator = integrators.VVVRIntegrator(temperature)
@@ -244,10 +243,35 @@ def test_vvvr_shadow_work_accumulation():
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
     integrator.step(25)
-    # get the names of all global variables
-    n_globals = integrator.getNumGlobalVariables()
-    names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
-    assert('shadow_work' not in names_of_globals)
+
+    del context, integrator
+
+def test_baoab_heat_accumulation():
+    """When `measure_heat==True`, assert that global `heat` is initialized to zero and
+    reaches a nonzero value after integrating a few dozen steps."""
+
+    # test `measure_shadow_work=True` --> accumulation of a nonzero value in global `shadow_work`
+    testsystem = testsystems.HarmonicOscillator()
+    system, topology = testsystem.system, testsystem.topology
+    temperature = 298.0 * unit.kelvin
+    integrator = integrators.BAOABIntegrator(temperature, measure_heat=True)
+    context = openmm.Context(system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(temperature)
+    assert(integrator.get_heat(dimensionless=True) == 0), "Heat should initially be zero."
+    assert(integrator.get_heat() / unit.kilojoules_per_mole == 0), "integrator.get_heat() should have units of energy."
+    assert(integrator.heat / unit.kilojoules_per_mole == 0), "integrator.heat should have units of energy."
+    integrator.step(25)
+    assert(integrator.get_heat(dimensionless=True) != 0), "integrator.get_heat() should be nonzero after dynamics"
+
+    # test default (`measure_shadow_work=False`, `measure_heat=True`) --> absence of a global `shadow_work`
+    integrator = integrators.VVVRIntegrator(temperature)
+    context = openmm.Context(system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(temperature)
+    integrator.step(25)
+
+    del context, integrator
 
 def test_external_protocol_work_accumulation():
     """When `measure_protocol_work==True`, assert that global `protocol_work` is initialized to zero and
@@ -263,18 +287,18 @@ def test_external_protocol_work_accumulation():
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
     # Check that initial step accumulates no protocol work
-    assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
+    assert(integrator.get_protocol_work(dimensionless=True) == 0), "Protocol work should be 0 initially"
+    assert(integrator.get_protocol_work() / unit.kilojoules_per_mole == 0), "Protocol work should have units of energy"
     integrator.step(1)
-    assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
+    assert(integrator.get_protocol_work(dimensionless=True) == 0), "There should be no protocol work."
     # Check that a single step accumulates protocol work
     pe_1 = context.getState(getEnergy=True).getPotentialEnergy()
     perturbed_K=99.0 * unit.kilocalories_per_mole / unit.angstroms**2
     context.setParameter('testsystems_HarmonicOscillator_K', perturbed_K)
     pe_2 = context.getState(getEnergy=True).getPotentialEnergy()
     integrator.step(1)
-    assert (integrator.getGlobalVariableByName('protocol_work') != 0), "There should be protocol work after perturbing."
-    assert (integrator.getGlobalVariableByName('protocol_work') * unit.kilojoule_per_mole == (pe_2 - pe_1)), \
-        "The potential energy difference should be equal to protocol work."
+    assert (integrator.get_protocol_work(dimensionless=True) != 0), "There should be protocol work after perturbing."
+    assert (integrator.protocol_work == (pe_2 - pe_1)), "The potential energy difference should be equal to protocol work."
     del context, integrator
 
     # Test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
@@ -283,10 +307,6 @@ def test_external_protocol_work_accumulation():
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
     integrator.step(25)
-    # get the names of all global variables
-    n_globals = integrator.getNumGlobalVariables()
-    names_of_globals = [integrator.getGlobalVariableName(i) for i in range(n_globals)]
-    assert('protocol_work' not in names_of_globals), "Protocol work should not be defined."
     del context, integrator
 
 class TestExternalPerturbationLangevinIntegrator(TestCase):
