@@ -303,7 +303,7 @@ class ThermostatedIntegrator(RestorableIntegrator):
             The temperature of the heat bath in kelvins.
 
         """
-        kT = self.getGlobalVariableByName('kT') * unit.kilojoule_per_mole
+        kT = self.getGlobalVariableByName('kT') * _OPENMM_ENERGY_UNIT
         temperature = kT / kB
         return temperature
 
@@ -404,6 +404,12 @@ class ThermostatedIntegrator(RestorableIntegrator):
                                    "but does not expose getter and setter for the temperature. "
                                    "Consider inheriting from ThermostatedIntegrator.")
         return restored
+
+    @property
+    def kT(self):
+        """The thermal energy in simtk.openmm.Quantity"""
+        return self.getGlobalVariableByName("kT") * _OPENMM_ENERGY_UNIT
+
 
 # ============================================================================================
 # INTEGRATORS
@@ -1071,11 +1077,6 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("naccept", 0)
             self.addPerDofVariable("vold", 0)
             self.addPerDofVariable("xold", 0)
-
-    @property
-    def kT(self):
-        """The thermal energy in simtk.openmm.Quantity"""
-        return self.getGlobalVariableByName("kT") * _OPENMM_ENERGY_UNIT
 
     def reset_heat(self):
         """Reset heat."""
@@ -1820,7 +1821,7 @@ class VVVRIntegrator(LangevinIntegrator):
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
         """
         kwargs['splitting'] = "O V R V O"
-        super(VVVRIntegrator, self).__init__(self, *args, **kwargs)
+        super(VVVRIntegrator, self).__init__(*args, **kwargs)
 
 class BAOABIntegrator(LangevinIntegrator):
     """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
@@ -1861,7 +1862,7 @@ class BAOABIntegrator(LangevinIntegrator):
         >>> integrator = BAOABIntegrator(temperature, collision_rate, timestep)
         """
         kwargs['splitting'] = "V R O R V"
-        super(BAOABIntegrator, self).__init__(self, *args, **kwargs)
+        super(BAOABIntegrator, self).__init__(*args, **kwargs)
 
 class GeodesicBAOABIntegrator(LangevinIntegrator):
     """Create a geodesic-BAOAB integrator."""
@@ -1906,7 +1907,7 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         """
         kwargs['splitting'] = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
-        super(BAOABIntegrator, self).__init__(self, *args, **kwargs)
+        super(GeodesicBAOABIntegrator, self).__init__(*args, **kwargs)
 
 class GHMCIntegrator(LangevinIntegrator):
 
