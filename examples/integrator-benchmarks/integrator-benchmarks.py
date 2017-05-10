@@ -28,7 +28,7 @@ nsteps = 200 # number of steps per timing trial
 
 # Cycle through test systems.
 for testsystem_name in testsystems_to_benchmark:
-    print testsystem_name
+    print(testsystem_name)
 
     # Create test system.
     testsystem = getattr(testsystems, testsystem_name)()
@@ -66,9 +66,9 @@ for testsystem_name in testsystems_to_benchmark:
             integrator.step(nsteps)
             final_time = time.time()
             elapsed_time[trial] = final_time - initial_time
-        print "%32s : mean %8.3f ms / std %8.3f ms" % (integrator_name, elapsed_time.mean(), elapsed_time.std())
+        print("%32s : mean %8.3f ms / std %8.3f ms" % (integrator_name, elapsed_time.mean(), elapsed_time.std()))
 
         # Clean up.
         del context, integrator
 
-    print ""
+    print("")

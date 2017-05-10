@@ -489,7 +489,7 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
 
-def compare_system_forces(reference_system, alchemical_system, positions, name=""):
+def compare_system_forces(reference_system, alchemical_system, positions, name="", platform=None):
     """Check that the forces of reference and modified systems are close.
 
     Parameters
@@ -502,11 +502,13 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
         The particle positions to use
     name : str, optional, default=""
         System name to use for debugging.
+    platform : simtk.openmm.Platform, optional, default=None
+        If specified, use this platform
 
     """
     # Compute forces
-    reference_force = compute_forces(reference_system, positions) / GLOBAL_FORCE_UNIT
-    alchemical_force = compute_forces(alchemical_system, positions) / GLOBAL_FORCE_UNIT
+    reference_force = compute_forces(reference_system, positions, platform=platform) / GLOBAL_FORCE_UNIT
+    alchemical_force = compute_forces(alchemical_system, positions, platform=platform) / GLOBAL_FORCE_UNIT
 
     # Check that error is small.
     def magnitude(vec):
@@ -1220,13 +1222,14 @@ class TestAlchemicalFactory(object):
         which atoms are within the cutoff will cause energy difference to vary wildly.
 
         """
+        platform = openmm.Platform.getPlatformByName('Reference')
         factory = AlchemicalFactory(alchemical_rf_treatment='switched', switch_width=None)
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             if (test_system.system.getNumForces() != test_system.modified_rf_system.getNumForces()):
                 modified_rf_system = factory.replace_reaction_field(test_system.system)
                 # Make sure positions are not at minimum
                 positions = generate_new_positions(test_system.system, test_system.positions)
-                f = partial(compare_system_forces, test_system.system, modified_rf_system, positions, name=test_name)
+                f = partial(compare_system_forces, test_system.system, modified_rf_system, positions, name=test_name, platform=platform)
                 f.description = "Testing replace_reaction_field on system {}".format(test_name)
                 yield f
 
