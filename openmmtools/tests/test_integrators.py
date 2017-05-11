@@ -489,12 +489,12 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         parameter_name = 'lambda_electrostatics'
         parameter_initial = 1.0
         parameter_final = 0.0
-        platform_names = [ openmm.Platform.getPlatform(index).getName() for index in range(openmm.Platform.getNumPlatforms()) ]
+        #platform_names = [ openmm.Platform.getPlatform(index).getName() for index in range(openmm.Platform.getNumPlatforms()) ]
+        platform_name = 'CPU'
         for nonbonded_method in ['CutoffPeriodic', 'PME']:
             testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
-            for platform_name in platform_names:
-                name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
-                self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
+            name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
+            self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
     def test_protocol_work_accumulation_waterbox_barostat(self, temperature=300*unit.kelvin):
         """
