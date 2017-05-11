@@ -355,7 +355,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             external_protocol_work += (final_energy - initial_energy) / kT
             integrator.step(1)
 
-        integrator_protocol_work = integrator.getGlobalVariableByName('protocol_work') * unit.kilojoules_per_mole / kT
+        integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
 
         return external_protocol_work, integrator_protocol_work
 
@@ -480,7 +480,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             external_protocol_work += (final_energy - initial_energy) / kT
 
             integrator.step(1)
-            integrator_protocol_work = integrator.getGlobalVariableByName('protocol_work') * unit.kilojoules_per_mole / kT
+            integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
 
             message = '\n'
             message += 'protocol work discrepancy noted for %s on platform %s\n' % (name, platform_name)
