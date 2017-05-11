@@ -331,7 +331,8 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
 
     def run_ncmc(self, context, integrator, temperature, nsteps, parameter_name, parameter_initial, parameter_final):
         """
-        A simple example of NCMC to be used with unit tests
+        A simple example of NCMC to be used with unit tests. The protocol work should be reset each time this command
+        is called.
 
         Returns
         -------
@@ -381,7 +382,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
     def test_reset_protocol_work(self):
         """
         Make sure the protocol work that is accumulated internally by the langevin integrator matches the protocol
-        work that is calculated with getState().
+        is correctly reset with the reset_protocol_work() command.
         """
         from simtk.openmm import app
         parameter_name = 'lambda_electrostatics'
