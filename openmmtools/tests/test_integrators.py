@@ -375,9 +375,9 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         testsystem.system.addForce(openmm.MonteCarloBarostat(1 * unit.atmospheres, temperature, 2))
         context, integrator = self.create_system(testsystem, parameter_name, parameter_initial, temperature, platform_name)
 
-        assert (integrator.getGlobalVariableByName('protocol_work') == 0)
+        assert (integrator.get_protocol_work(dimensionless=True) == 0)
         integrator.step(5)
-        assert(integrator.getGlobalVariableByName('protocol_work') == 0)
+        assert(integrator.get_protocol_work(dimensionless=True) == 0)
 
     def test_reset_protocol_work(self):
         """
@@ -408,6 +408,69 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             integrator.reset_protocol_work()
             external_protocol_work, integrator_protocol_work = self.run_ncmc(context, integrator, temperature, nsteps, parameter_name, parameter_initial, parameter_final)
             assert abs(external_protocol_work - integrator_protocol_work) < 1.E-5
+
+    def test_ncmc_update_parameters_in_context(self):
+        """
+        Testing that the protocol work is correctly calculated in cases when the parameters are updated using
+        context.updateParametersInContext() and the integrator is a compound integrator. The NCMC scheme tested below
+        is based on the one used by the saltswap and protons code-bases.
+        """
+        from simtk.openmm import app
+        from openmmtools.constants import kB
+
+        size = 20.0
+        temperature = 298.0 * unit.kelvin
+        kT = kB * temperature
+        nonbonded_method = 'CutoffPeriodic'
+        platform_name = 'CPU'
+        timestep = 1. * unit.femtoseconds
+        collision_rate = 90. / unit.picoseconds
+
+        wbox = testsystems.WaterBox(box_edge=size*unit.angstrom, cutoff=9.*unit.angstrom, nonbondedMethod=getattr(app, nonbonded_method))
+
+        integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="V R O R V", temperature=temperature, timestep=timestep, collision_rate=collision_rate)
+
+        # Create context
+        platform = openmm.Platform.getPlatformByName(platform_name)
+        context = openmm.Context(wbox.system, integrator, platform)
+        context.setPositions(wbox.positions)
+        context.setPositions(wbox.positions)
+        context.setVelocitiesToTemperature(temperature)
+
+        def switchoff(force, context, frac=0.9):
+            force.setParticleParameters(0, charge=-0.834 * frac, sigma=0.3150752406575124*frac, epsilon=0.635968 * frac)
+            force.setParticleParameters(1, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
+            force.setParticleParameters(2, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
+            force.updateParametersInContext(context)
+
+        def switchon(force, context):
+            force.setParticleParameters(0, charge=-0.834, sigma=0.3150752406575124, epsilon=0.635968)
+            force.setParticleParameters(1, charge=0.417, sigma=0, epsilon=1)
+            force.setParticleParameters(2, charge=0.417, sigma=0, epsilon=1)
+            force.updateParametersInContext(context)
+
+        force = wbox.system.getForce(2)  # Non-bonded force.
+
+        # Number of NCMC steps
+        nsteps = 20
+        niterations = 3
+
+        for i in range(niterations):
+            external_protocol_work = 0.0
+            integrator.reset_protocol_work()
+            integrator.step(1)
+            for step in range(nsteps):
+                fraction = float(step + 1) / float(nsteps)
+                initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
+                switchoff(force, context, frac=fraction)
+                final_energy = context.getState(getEnergy=True).getPotentialEnergy()
+                external_protocol_work += (final_energy - initial_energy) / kT
+                integrator.step(1)
+            integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
+            assert abs(external_protocol_work - integrator_protocol_work) < 1.E-5
+            # Return to unperturbed state
+            switchon(force, context)
+
 
     def test_protocol_work_accumulation_harmonic_oscillator(self):
         """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with HarmonicOscillator
