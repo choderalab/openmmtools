@@ -649,6 +649,8 @@ class HarmonicOscillator(TestSystem):
         Spring constant of harmonic oscillator
     testsystems_HarmonicOscillator_x0
         Reference x position for harmonic oscillator
+    testsystems_HarmonicOscillator_U0
+        Reference potential additive constant for harmonic oscillator
 
     Notes
     -----
@@ -707,12 +709,14 @@ class HarmonicOscillator(TestSystem):
         system.setDefaultPeriodicBoxVectors([edge,0,0], [0,edge,0], [0,0,edge])
 
         # Add a restrining potential centered at the origin.
-        energy_expression = '(K/2.0) * ((x-x0)^2 + y^2 + z^2);'
+        energy_expression = '(K/2.0) * ((x-x0)^2 + y^2 + z^2) + U0;'
         energy_expression += 'K = testsystems_HarmonicOscillator_K;'
         energy_expression += 'x0 = testsystems_HarmonicOscillator_x0;'
+        energy_expression += 'U0 = testsystems_HarmonicOscillator_U0;'
         force = openmm.CustomExternalForce(energy_expression)
         force.addGlobalParameter('testsystems_HarmonicOscillator_K', K)
         force.addGlobalParameter('testsystems_HarmonicOscillator_x0', 0.0)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_U0', 0.0)
         force.addParticle(0, [])
         system.addForce(force)
 

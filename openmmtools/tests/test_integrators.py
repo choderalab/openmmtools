@@ -475,19 +475,16 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     kT = kB * temperature # thermal energy
     beta = 1.0 / kT # inverse thermal energy
     K = kT / sigma**2 # spring constant corresponding to sigma
-    parameter_initial_value = 0 * sigma # initial position for harmonic oscillator reference position
-    parameter_final_value = 3 * sigma # final position for harmonic oscillator reference position
     mass = 39.948 * unit.amu
     period = unit.sqrt(mass/K) # period of harmonic oscillator
     timestep = period / 20.0
     collision_rate = 1.0 / period
-    parameter_name = 'testsystems_HarmonicOscillator_x0'
-    forward_functions = {
-        parameter_name : '(1-lambda)*%f + lambda*%f' % (parameter_initial_value.value_in_unit_system(unit.md_unit_system), parameter_final_value.value_in_unit_system(unit.md_unit_system))
-        }
-    reverse_functions = {
-        parameter_name : '(1-lambda)*%f + lambda*%f' % (parameter_final_value.value_in_unit_system(unit.md_unit_system), parameter_initial_value.value_in_unit_system(unit.md_unit_system))
-        }
+    dF_analytical = 1.0
+    parameters = dict()
+    parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, 2 * sigma)
+    parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 1 * kT)
+    forward_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
+    reverse_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
 
     # Create harmonic oscillator testsystem
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
@@ -508,10 +505,11 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             # Generate equilibrium sample
             equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
             equilibrium_context = openmm.Context(system, equilibrium_integrator, platform)
-            if direction == 'forward':
-                equilibrium_context.setParameter(parameter_name, parameter_initial_value.value_in_unit_system(unit.md_unit_system))
-            else:
-                equilibrium_context.setParameter(parameter_name, parameter_final_value.value_in_unit_system(unit.md_unit_system))
+            for (name, value) in parameters.items():
+                if direction == 'forward':
+                    equilibrium_context.setParameter(name, value[0].value_in_unit_system(unit.md_unit_system))
+                else:
+                    equilibrium_context.setParameter(name, value[1].value_in_unit_system(unit.md_unit_system))
             equilibrium_context.setPositions(positions)
             equilibrium_integrator.step(thinning)
             positions = equilibrium_context.getState(getPositions=True).getPositions(asNumpy=True)
@@ -537,8 +535,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             del nonequilibrium_context, nonequilibrium_integrator
 
     dF, ddF = pymbar.BAR(w_f, w_r)
-    nsigma = np.abs(dF) / ddF
-    print("DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF, ddF, nsigma))
+    nsigma = np.abs(dF - dF_analytical) / ddF
+    print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
