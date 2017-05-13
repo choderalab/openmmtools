@@ -17,9 +17,10 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-# import os
-# import sys
-# sys.path.insert(0, os.path.abspath('.'))
+import os
+import sys
+sys.path.insert(0, os.path.abspath('.'))
+sys.path.insert(0, os.path.abspath('../openmmtools'))
 
 
 # -- General configuration ------------------------------------------------
@@ -31,13 +32,21 @@
 # Add any Sphinx extension module names here, as strings. They can be
 # extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
 # ones.
-extensions = ['sphinx.ext.autodoc',
+extensions = [
+    'sphinx.ext.autodoc',
+    'sphinx.ext.autosummary',
+    'sphinx.ext.mathjax',
+    'numpydoc',
     'sphinx.ext.doctest',
     'sphinx.ext.todo',
     'sphinx.ext.coverage',
-    'sphinx.ext.mathjax',
     'sphinx.ext.viewcode',
-    'sphinx.ext.githubpages']
+    'sphinx.ext.githubpages'
+    ]
+
+autosummary_generate = True
+autodoc_default_flags = ['members', 'inherited-members']
+numpydoc_class_members_toctree = False
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -53,7 +62,7 @@ master_doc = 'index'
 
 # General information about the project.
 project = 'openmmtools'
-copyright = '2017, The Chodera Lab, MSKCC'
+copyright = '2015-2017, The Chodera Lab, MSKCC'
 author = 'The Chodera Lab, MSKCC'
 
 # The version info for the project you're documenting, acts as replacement for
@@ -78,13 +87,39 @@ language = None
 exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 
 # The name of the Pygments (syntax highlighting) style to use.
-pygments_style = 'sphinx'
+#pygments_style = 'sphinx'
+pygments_style = 'paraiso-dark'
 
 # If true, `todo` and `todoList` produce output, else they produce nothing.
 todo_include_todos = True
 
 
 # -- Options for HTML output ----------------------------------------------
+
+# Theme options are theme-specific and customize the look and feel of a theme
+# further.  For a list of options available for each theme, see the
+# documentation.
+html_theme_options = {
+    'logo' : 'images/logo.jpg',
+    "logo_name": 'true',
+    'page_width': 'auto',
+    'github_button': 'true',
+    'github_user': 'choderalab',
+    'github_repo': 'openmmtools',
+    'github_banner': 'true',
+    'travis_button': 'true',
+    'show_powered_by' :'true',
+    'font_family': 'calibri, helvetica, sans-serif',
+    'head_font_family': 'cambria, tahoma, serif',
+    'description' : 'A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation engine',
+    'pre_bg': '#41323f', # color used for syntax block
+    'body_text': "#41323f",
+    "pink_1": "peachpuff"
+
+}
+
+# Add any paths that contain custom themes here, relative to this directory.
+#html_theme_path = [alabaster.get_path()]
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
@@ -158,6 +193,3 @@ texinfo_documents = [
      author, 'openmmtools', 'One line description of project.',
      'Miscellaneous'),
 ]
-
-
-
