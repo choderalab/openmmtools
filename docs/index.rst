@@ -14,8 +14,8 @@
     * Follow `this feed`_ for updates on releases.
     * Check out the `github repository`_ .
 
-.. _this feed: https://github.com/choderalab/constph-openmm/releases.atom
-.. _github repository: https://github.com/choderalab/constph-openmm
+.. _this feed: https://github.com/choderalab/openmmtools/releases.atom
+.. _github repository: https://github.com/choderalab/openmmtools
 
 OpenMMTools
 ===========
