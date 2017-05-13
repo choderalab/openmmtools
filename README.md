@@ -53,3 +53,29 @@ The module `openmmtools.cache` implements a shared LRU cache for `Context` objec
 If differences in energies in excess of `ENERGY_TOLERANCE` (default: 0.06 kcal/mol) are detected, these systems will be serialized to XML for further debugging.
 
 This is installed onto the command line when the repository is installed.
+
+## Distributed computing with OpenMM
+
+You can use `openmmtools.distributed` to run various OpenMM tasks in a distributed manner using [`celery`](http://www.celeryproject.org/).
+
+To run, first start one or more workers:
+```bash
+$ celery -A openmmtools.distributed worker -l info
+```
+Then 
+```python
+from simtk import openmm, unit
+from openmmtools import testsystems, distributed
+
+# Set up a test system
+testsystem = testsystems.AlanineDipeptideVacuum()
+[system, positions] = [testsystem.system, testsystem.positions]
+
+# Run distributed simulation
+from celery import group, chain, chord
+for iteration in range(10):
+    c = chain(distributed.tasks.propagate.s(system, positions) | distributed.tasks.compute_energy.s(system=system))
+    c().get()
+```
+
+See [First Steps with Celery](http://docs.celeryproject.org/en/latest/getting-started/first-steps-with-celery.html) for information on getting started with celery.
