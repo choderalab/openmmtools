@@ -2,6 +2,7 @@ name: openmmtools
 channels:
     - omnia
 dependencies:
+    - sphinx
     - python
     - cython
     - numpy
