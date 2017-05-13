@@ -23,7 +23,9 @@ The examples below show how to configure these aspects.
    To use the ``ContextCache`` on the CUDA platform, the NVIDIA driver must be set to ``shared`` mode to allow the process to create multiple GPU contexts.
 
 Examples
---------
+````````
+
+Using the MCMC framework requires importing :class:`ThermodynamicState` and :class:`SamplerState` from :mod:`openmmtools.states`:
 
 ::
 
@@ -103,7 +105,7 @@ This book by Jun Liu is an excellent overview of Markov chain Monte Carlo:
 Jun S. Liu. Monte Carlo Strategies in Scientific Computing. Springer, 2008.
 
 MCMC samplers
----------------
+-------------
 
 An MCMC sampler driver is provided that can either utilize a programmed sequence of moves or draw from a weighted set of moves.
 
