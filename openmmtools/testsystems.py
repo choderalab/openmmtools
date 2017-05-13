@@ -635,6 +635,12 @@ class HarmonicOscillator(TestSystem):
         harmonic restraining potential
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
+    U0 : simtk.unit.Quantity, optional, default=0.0 * unit.kilocalories_per_mole
+        Potential offset for harmonic oscillator
+
+    The functional form is given by
+
+    U(x) = (K/2) * ( (x-x0)^2 + y^2 + z^2 ) + U0
 
     Attributes
     ----------
@@ -689,9 +695,13 @@ class HarmonicOscillator(TestSystem):
     >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
     >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
 
+    TODO:
+    * Add getters and setters for K, x0, U0 that access current global parameter in system
+    * Add method to compute free energy of the harmonic oscillator(s)
+
     """
 
-    def __init__(self, K=100.0 * unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948 * unit.amu, **kwargs):
+    def __init__(self, K=100.0*unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948*unit.amu, U0=0.0*unit.kilojoules_per_mole, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -714,9 +724,9 @@ class HarmonicOscillator(TestSystem):
         energy_expression += 'x0 = testsystems_HarmonicOscillator_x0;'
         energy_expression += 'U0 = testsystems_HarmonicOscillator_U0;'
         force = openmm.CustomExternalForce(energy_expression)
-        force.addGlobalParameter('testsystems_HarmonicOscillator_K', K)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_K', K.value_in_unit_system(unit.md_unit_system))
         force.addGlobalParameter('testsystems_HarmonicOscillator_x0', 0.0)
-        force.addGlobalParameter('testsystems_HarmonicOscillator_U0', 0.0)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_U0', U0.value_in_unit_system(unit.md_unit_system))
         force.addParticle(0, [])
         system.addForce(force)
 
@@ -728,7 +738,7 @@ class HarmonicOscillator(TestSystem):
         topology.addAtom('Ar', element, residue)
         self.topology = topology
 
-        self.K, self.mass = K, mass
+        self.K, self.mass, self.U0 = K, mass, U0
         self.system, self.positions = system, positions
 
         # Number of degrees of freedom.
