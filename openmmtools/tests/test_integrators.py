@@ -310,6 +310,168 @@ def test_external_protocol_work_accumulation():
     del context, integrator
 
 class TestExternalPerturbationLangevinIntegrator(TestCase):
+
+    def create_system(self, testsystem, parameter_name, parameter_initial, temperature = 298.0 * unit.kelvin, platform_name='Reference'):
+        """
+        Create an example system to be used by other tests
+        """
+        system, topology = testsystem.system, testsystem.topology
+        integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
+
+        # Create the context
+        platform = openmm.Platform.getPlatformByName(platform_name)
+        if platform_name in ['CPU', 'CUDA']:
+            platform.setPropertyDefaultValue('DeterministicForces', 'true')
+        context = openmm.Context(system, integrator, platform)
+        context.setParameter(parameter_name, parameter_initial)
+        context.setPositions(testsystem.positions)
+        context.setVelocitiesToTemperature(temperature)
+
+        return context, integrator
+
+    def run_ncmc(self, context, integrator, temperature, nsteps, parameter_name, parameter_initial, parameter_final):
+        """
+        A simple example of NCMC to be used with unit tests. The protocol work should be reset each time this command
+        is called.
+
+        Returns
+        -------
+        external_protocol_work: float
+            the protocol work calculated with context.getState()
+        integrator_protocol_work: float
+            the protocol work calculated inside the integrator.
+        """
+
+        kT = kB * temperature
+
+        external_protocol_work = 0.0
+        integrator.step(1)
+        for step in range(nsteps):
+            lambda_value = float(step + 1) / float(nsteps)
+            parameter_value = parameter_initial * (1 - lambda_value) + parameter_final * lambda_value
+            initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
+            context.setParameter(parameter_name, parameter_value)
+            final_energy = context.getState(getEnergy=True).getPotentialEnergy()
+            external_protocol_work += (final_energy - initial_energy) / kT
+            integrator.step(1)
+
+        integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
+
+        return external_protocol_work, integrator_protocol_work
+
+    def test_initial_protocol_work(self):
+        """
+        Ensure the protocol work is initially zero and remains zero after a number of integrator steps.
+        """
+        from simtk.openmm import app
+        parameter_name = 'lambda_electrostatics'
+        temperature = 298.0 * unit.kelvin
+        parameter_initial = 1.0
+        platform_name = 'CPU'
+        nonbonded_method = 'CutoffPeriodic'
+
+        # Create the system
+        testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
+        testsystem.system.addForce(openmm.MonteCarloBarostat(1 * unit.atmospheres, temperature, 2))
+        context, integrator = self.create_system(testsystem, parameter_name, parameter_initial, temperature, platform_name)
+
+        assert (integrator.get_protocol_work(dimensionless=True) == 0)
+        integrator.step(5)
+        assert(integrator.get_protocol_work(dimensionless=True) == 0)
+
+    def test_reset_protocol_work(self):
+        """
+        Make sure the protocol work that is accumulated internally by the langevin integrator matches the protocol
+        is correctly reset with the reset_protocol_work() command.
+        """
+        from simtk.openmm import app
+        parameter_name = 'lambda_electrostatics'
+        temperature = 298.0 * unit.kelvin
+        parameter_initial = 1.0
+        parameter_final = 0.0
+        platform_name = 'CPU'
+        nonbonded_method = 'CutoffPeriodic'
+
+        # Creating the test system with a high frequency barostat.
+        testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method))
+        testsystem.system.addForce(openmm.MonteCarloBarostat(1 * unit.atmospheres, temperature, 2))
+        context, integrator = self.create_system(testsystem, parameter_name, parameter_initial, temperature, platform_name)
+
+        # Number of NCMC steps
+        nsteps = 20
+        niterations = 3
+
+        # Running several rounds of configuration updates and NCMC
+        for i in range(niterations):
+            integrator.step(5)
+            # Reseting the protocol work inside the integrator
+            integrator.reset_protocol_work()
+            external_protocol_work, integrator_protocol_work = self.run_ncmc(context, integrator, temperature, nsteps, parameter_name, parameter_initial, parameter_final)
+            assert abs(external_protocol_work - integrator_protocol_work) < 1.E-5
+
+    def test_ncmc_update_parameters_in_context(self):
+        """
+        Testing that the protocol work is correctly calculated in cases when the parameters are updated using
+        context.updateParametersInContext() and the integrator is a compound integrator. The NCMC scheme tested below
+        is based on the one used by the saltswap and protons code-bases.
+        """
+        from simtk.openmm import app
+        from openmmtools.constants import kB
+
+        size = 20.0
+        temperature = 298.0 * unit.kelvin
+        kT = kB * temperature
+        nonbonded_method = 'CutoffPeriodic'
+        platform_name = 'CPU'
+        timestep = 1. * unit.femtoseconds
+        collision_rate = 90. / unit.picoseconds
+
+        wbox = testsystems.WaterBox(box_edge=size*unit.angstrom, cutoff=9.*unit.angstrom, nonbondedMethod=getattr(app, nonbonded_method))
+
+        integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="V R O R V", temperature=temperature, timestep=timestep, collision_rate=collision_rate)
+
+        # Create context
+        platform = openmm.Platform.getPlatformByName(platform_name)
+        context = openmm.Context(wbox.system, integrator, platform)
+        context.setPositions(wbox.positions)
+        context.setPositions(wbox.positions)
+        context.setVelocitiesToTemperature(temperature)
+
+        def switchoff(force, context, frac=0.9):
+            force.setParticleParameters(0, charge=-0.834 * frac, sigma=0.3150752406575124*frac, epsilon=0.635968 * frac)
+            force.setParticleParameters(1, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
+            force.setParticleParameters(2, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
+            force.updateParametersInContext(context)
+
+        def switchon(force, context):
+            force.setParticleParameters(0, charge=-0.834, sigma=0.3150752406575124, epsilon=0.635968)
+            force.setParticleParameters(1, charge=0.417, sigma=0, epsilon=1)
+            force.setParticleParameters(2, charge=0.417, sigma=0, epsilon=1)
+            force.updateParametersInContext(context)
+
+        force = wbox.system.getForce(2)  # Non-bonded force.
+
+        # Number of NCMC steps
+        nsteps = 20
+        niterations = 3
+
+        for i in range(niterations):
+            external_protocol_work = 0.0
+            integrator.reset_protocol_work()
+            integrator.step(1)
+            for step in range(nsteps):
+                fraction = float(step + 1) / float(nsteps)
+                initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
+                switchoff(force, context, frac=fraction)
+                final_energy = context.getState(getEnergy=True).getPotentialEnergy()
+                external_protocol_work += (final_energy - initial_energy) / kT
+                integrator.step(1)
+            integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
+            assert abs(external_protocol_work - integrator_protocol_work) < 1.E-5
+            # Return to unperturbed state
+            switchon(force, context)
+
+
     def test_protocol_work_accumulation_harmonic_oscillator(self):
         """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with HarmonicOscillator
         """
@@ -334,7 +496,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
                 name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
                 self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
-    def test_protocol_work_accumulation_waterbox_barostat(self):
+    def test_protocol_work_accumulation_waterbox_barostat(self, temperature=300*unit.kelvin):
         """
         Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicalWaterBox with barostat.
         For brevity, only using CutoffPeriodic as the non-bonded method.
@@ -348,7 +510,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method), box_edge=12.0*unit.angstroms, cutoff=5.0*unit.angstroms)
 
         # Adding the barostat with a high frequency
-        testsystem.system.addForce(openmm.MonteCarloBarostat(1*unit.atmospheres, 300*unit.kelvin, 2))
+        testsystem.system.addForce(openmm.MonteCarloBarostat(1*unit.atmospheres, temperature, 2))
 
         for platform_name in platform_names:
             name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
@@ -362,26 +524,16 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             name = testsystem.name
 
         from openmmtools.constants import kB
-        system, topology = testsystem.system, testsystem.topology
+
         temperature = 298.0 * unit.kelvin
-        platform = openmm.Platform.getPlatformByName(platform_name)
-        if platform_name in ['CPU', 'CUDA']:
-            platform.setPropertyDefaultValue('DeterministicForces', 'true')
-        # TODO: Use mixed precision on OpenCL/CUDA only if available
-        #if platform_name in ['OpenCL', 'CUDA']:
-        #    platform.setPropertyDefaultValue('Precision', 'mixed')
-        nsteps = 20
         kT = kB * temperature
-        integrator = integrators.ExternalPerturbationLangevinIntegrator(splitting="O V R V O", temperature=temperature)
-        context = openmm.Context(system, integrator, platform)
-        context.setParameter(parameter_name, parameter_initial)
-        context.setPositions(testsystem.positions)
-        context.setVelocitiesToTemperature(temperature)
-        assert(integrator.getGlobalVariableByName('protocol_work') == 0), "Protocol work should be 0 initially"
-        integrator.step(1)
-        assert(integrator.getGlobalVariableByName('protocol_work') == 0), "There should be no protocol work."
+
+        context, integrator = self.create_system(testsystem, parameter_name, parameter_initial,
+                                                 temperature=temperature, platform_name='Reference')
 
         external_protocol_work = 0.0
+        nsteps = 20
+        integrator.step(1)
         for step in range(nsteps):
             lambda_value = float(step+1) / float(nsteps)
             parameter_value = parameter_initial * (1-lambda_value) + parameter_final * lambda_value
@@ -391,7 +543,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             external_protocol_work += (final_energy - initial_energy) / kT
 
             integrator.step(1)
-            integrator_protocol_work = integrator.getGlobalVariableByName('protocol_work') * unit.kilojoules_per_mole / kT
+            integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
 
             message = '\n'
             message += 'protocol work discrepancy noted for %s on platform %s\n' % (name, platform_name)
