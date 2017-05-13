@@ -1,6 +1,0 @@
-sphinx
-matplotlib
-jinja2
-openmm
-nose
-numpydoc
