@@ -11,14 +11,14 @@ Absolute alchemical factories
 Absolute alchical factories modify the ``System`` object to allow part of the system to be alchemically annihilated or decoupled.
 This is useful for computing free energies of transfer, solvation, or binding for small molecules.
 
-.. currentmodule:: openmmtools.integrators
+.. currentmodule:: openmmtools.alchemy
 .. autosummary::
     :toctree: api/generated/
 
     AlchemicalFunction
     AlchemicalState
     AlchemicalFactory
-    
+
 Relative alchemical factories
 -----------------------------
 

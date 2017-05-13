@@ -119,6 +119,7 @@ html_theme_options = {
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
+#import alabaster
 #html_theme_path = [alabaster.get_path()]
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for

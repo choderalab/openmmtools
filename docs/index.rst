@@ -40,8 +40,8 @@ Features include:
    installation
    releasehistory
 
-API Reference
--------------
+Modules
+-------
 
 .. toctree::
   :maxdepth: 2
