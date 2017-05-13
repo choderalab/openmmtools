@@ -114,8 +114,8 @@ html_theme_options = {
     'description' : 'A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation engine',
     'pre_bg': '#41323f', # color used for syntax block
     'body_text': "#41323f",
-    "pink_1": "peachpuff"
-
+    "pink_1": "peachpuff",
+    "analytics_id" : "UA-99115718-1" # choderalab google analytics tracking id
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
