@@ -2,6 +2,7 @@
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/70knpvcgvmah2qin?svg=true)](https://ci.appveyor.com/project/jchodera/openmmtools)
 [![Anaconda Badge](https://anaconda.org/omnia/openmmtools/badges/version.svg)](https://anaconda.org/omnia/openmmtools)
 [![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
+[![Documentation Status](https://readthedocs.org/projects/openmmtools/badge/?version=latest)](http://openmmtools.readthedocs.io/en/latest/?badge=latest)
 
 # Various Python tools for OpenMM
 
