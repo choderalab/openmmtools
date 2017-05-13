@@ -33,7 +33,6 @@ test:
   requires:
     - nose
     - pymbar
-    - openmm >=7.3.0
   imports:
     - openmmtools
 
