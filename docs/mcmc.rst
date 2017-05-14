@@ -22,9 +22,6 @@ The examples below show how to configure these aspects.
 .. NOTE::
    To use the ``ContextCache`` on the CUDA platform, the NVIDIA driver must be set to ``shared`` mode to allow the process to create multiple GPU contexts.
 
-Examples
-````````
-
 Using the MCMC framework requires importing :class:`ThermodynamicState` and :class:`SamplerState` from :mod:`openmmtools.states`:
 
 ::
