@@ -14,6 +14,7 @@ Test systems
 
 .. currentmodule:: openmmtools.testsystems
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     TestSystem

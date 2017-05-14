@@ -111,6 +111,7 @@ An MCMC sampler driver is provided that can either utilize a programmed sequence
 
 .. currentmodule:: openmmtools.mcmc
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     MCMCSampler
@@ -124,6 +125,7 @@ A number of MCMC component move types that can be arranged into groups or subcla
 
 .. currentmodule:: openmmtools.mcmc
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     MCMCMove

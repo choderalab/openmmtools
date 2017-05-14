@@ -21,6 +21,7 @@ Temporary directories
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     temporary_directory
@@ -30,6 +31,7 @@ Symbolic mathematics
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     sanitize_expression
@@ -40,6 +42,7 @@ Quantity functions
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     is_quantity_close
@@ -49,6 +52,7 @@ OpenMM Platform utilities
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     get_available_platforms
@@ -59,6 +63,7 @@ Serialization utilities
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     serialize
@@ -70,6 +75,7 @@ Metaclass utilities
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     with_metaclass

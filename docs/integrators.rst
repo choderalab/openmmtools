@@ -25,6 +25,7 @@ In addition, we provide special subclasses for several popular classes of Langev
 
 .. currentmodule:: openmmtools.integrators
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     LangevinIntegrator
@@ -40,6 +41,7 @@ These integrators are available for nonequilibrium switching simulations, and pr
 
 .. currentmodule:: openmmtools.integrators
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     NonequilibriumLangevinIntegrator
@@ -55,6 +57,7 @@ Other miscellaneous integrators are available.
 
 .. currentmodule:: openmmtools.integrators
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     MTSIntegrator
@@ -74,6 +77,7 @@ A number of useful mix-ins are provided to endow integrators with additional fea
 
 .. currentmodule:: openmmtools.integrators
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     PrettyPrintableIntegrator
@@ -87,6 +91,7 @@ New integrators can inherit from these base classes to inherit extra features
 
 .. currentmodule:: openmmtools.integrators
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     RestorableIntegrator
