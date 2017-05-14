@@ -85,6 +85,7 @@ def test_properties_all_testsystems():
         logging.info(f.description)
         yield f
 
+# TODO: Convert these to 'fast' tags within testsystems
 fast_testsystems = [
     "HarmonicOscillator",
     "PowerOscillator",
@@ -139,6 +140,17 @@ def check_potential_energy(system, positions):
     # Clean up
     del context, integrator
 
+def test_tags():
+    """Test that all testsystems have working tag property.
+    """
+    testsystem_classes = get_all_subclasses(testsystems.TestSystem)
+    for testsystem_class in testsystem_classes:
+        class_name = testsystem_class.__name__
+        testsystem = testsystem_class()
+        tags = testsystem.tags
+        assert(type(tags) == set)
+        # TODO: Later enforce that all testsystems have at least one tag.
+
 def test_energy_all_testsystems(skip_slow_tests=False):
     """Testing computation of potential energy for all systems.
     """
@@ -156,9 +168,12 @@ def test_energy_all_testsystems(skip_slow_tests=False):
             print(e)
             print("Skipping %s due to missing dependency" % class_name)
             continue
-        f = partial(check_potential_energy, testsystem.system, testsystem.positions)
-        f.description = "Testing potential energy for testsystem %s" % class_name
-        yield f
+
+        # Only test systems not marked as slow
+        if 'slow' not in testsystem.tags:
+            f = partial(check_potential_energy, testsystem.system, testsystem.positions)
+            f.description = "Testing potential energy for testsystem %s" % class_name
+            yield f
 
 def check_topology(system, topology):
     """Check the topology object contains the correct number of atoms.
