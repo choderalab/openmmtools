@@ -54,6 +54,7 @@ Modules
   sampling
   alchemy
   utils
+  scripts
 
 Indices and tables
 ==================
