@@ -48,6 +48,7 @@ Modules
 
   testsystems
   integrators
+  states
   mcmc
   sampling
   alchemy
