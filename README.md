@@ -9,7 +9,7 @@
 
 A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation engine.
 
-``openmmtools`` is a Python library layer that sits on top of `OpenMM <http://openmm.org>`_ to provide access to a variety of useful tools for building full-featured molecular simulation packages.
+`openmmtools` is a Python library layer that sits on top of [OpenMM](http://openmm.org) to provide access to a variety of useful tools for building full-featured molecular simulation packages.
 
 Features include:
 
