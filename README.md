@@ -13,11 +13,11 @@ A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation
 
 Features include:
 
- - high-quality Langevin integrators, including `g-BAOAB <http://rspa.royalsocietypublishing.org/content/472/2189/20160138>`_, `VVVR <http://pubs.acs.org/doi/abs/10.1021/jp411770f>`_, and other splittings
- - integrators that support nonequilibrium switching for free energy calculations or `nonequilibrium candidate Monte Carlo (NCMC) <http://dx.doi.org/10.1073/pnas.1106094108>`_
+ - high-quality Langevin integrators, including [g-BAOAB](http://rspa.royalsocietypublishing.org/content/472/2189/20160138), [VVVR](http://pubs.acs.org/doi/abs/10.1021/jp411770f), and other splittings
+ - integrators that support nonequilibrium switching for free energy calculations or [nonequilibrium candidate Monte Carlo (NCMC)](http://dx.doi.org/10.1073/pnas.1106094108)
  - an extensible Markov chain Monte Carlo framework for mixing Monte Carlo and molecular dynamics-based methods
  - enhanced sampling methods, including replica-exchange (REMD) and self-adjusted mixture sampling (SAMS)
- - factories for generating `alchemically-modified <http://alchemistry.org>`_ systems for absolute and relative free energy calculations
+ - factories for generating [alchemically-modified](http://alchemistry.org) systems for absolute and relative free energy calculations
  - a suite of test systems for benchmarking, validation, and debugging
 
 See the [documentation](http://openmmtools.readthedocs.io) at [ReadTheDocs](http://openmmtools.readthedocs.io).
