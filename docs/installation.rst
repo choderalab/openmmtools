@@ -13,21 +13,21 @@ The `openmmtools Anaconda Cloud page <https://anaconda.org/omnia/openmmtools>`_ 
 If you are using the `anaconda <https://www.continuum.io/downloads/>`_ scientific Python distribution, you already have the ``conda`` package manager installed.
 If not, the quickest way to get started is to install the `miniconda <http://conda.pydata.org/miniconda.html>`_ distribution, a lightweight minimal installation of Anaconda Python.
 
-On ``linux``, you can install the Python 2.7 version into ``$HOME/miniconda2`` with (on ``bash`` systems):
+On ``linux``, you can install the Python 3 version into ``$HOME/miniconda3`` with (on ``bash`` systems):
 
 .. code-block:: bash
 
-   $ wget https://repo.continuum.io/miniconda/Miniconda2-latest-Linux-x86_64.sh
-   $ bash ./Miniconda2-latest-Linux-x86_64.sh -b -p $HOME/miniconda2
-   $ export PATH="$HOME/miniconda2/bin:$PATH"
+   $ wget https://repo.continuum.io/miniconda/Miniconda3-latest-Linux-x86_64.sh
+   $ bash ./Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda3
+   $ export PATH="$HOME/miniconda3/bin:$PATH"
 
 On ``osx``, you want to use the ```osx`` binary
 
 .. code-block:: bash
 
    $ wget https://repo.continuum.io/miniconda/Miniconda2-latest-MacOSX-x86_64.sh
-   $ bash ./Miniconda2-latest-Linux-x86_64.sh -b -p $HOME/miniconda2
-   $ export PATH="$HOME/miniconda2/bin:$PATH"
+   $ bash ./Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda3
+   $ export PATH="$HOME/miniconda3/bin:$PATH"
 
 You may want to add the new ```$PATH`` extension to your ``~/.bashrc`` file to ensure Anaconda Python is used by default.
 Note that openmmtools will be installed into this local Python installation, so that you will not need to worry about disrupting existing Python installations.
