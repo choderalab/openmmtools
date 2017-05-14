@@ -9,28 +9,41 @@ Test Systems
    Categories these tests into useful groupings, such as physical systems, artificial systems for testing OpenMM, easy to equilibrate systems, benchmarking systems, protein systems, protein-ligand systems, fluids, solids, etc.
    Can we tag the classes in the code with certain keywords and do this automatically?
 
-Test systems
-------------
+Analytically tractable systems
+------------------------------
+
+These test systems are simple test systems where some properties are analytically tractable.
 
 .. currentmodule:: openmmtools.testsystems
 .. autosummary::
     :nosignatures:
     :toctree: api/generated/
 
-    TestSystem
-    CustomExternalForcesTestSystem
     HarmonicOscillator
     PowerOscillator
     ConstraintCoupledHarmonicOscillator
     HarmonicOscillatorArray
+    IdealGas
+    MolecularIdealGas
     Diatom
+    CustomExternalForcesTestSystem
+    CustomGBForceSystem
+    LennardJonesPair
+
+Clusters and simple fluids
+--------------------------
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     DiatomicFluid
     UnconstrainedDiatomicFluid
     ConstrainedDiatomicFluid
     DipolarFluid
     UnconstrainedDipolarFluid
     ConstrainedDipolarFluid
-    SodiumChlorideCrystal
     LennardJonesCluster
     LennardJonesFluid
     LennardJonesFluidTruncated
@@ -38,7 +51,33 @@ Test systems
     LennardJonesGrid
     CustomLennardJonesFluidMixture
     WCAFluid
-    IdealGas
+    TolueneVacuum
+    TolueneImplicit
+    TolueneImplicitHCT
+    TolueneImplicitOBC1
+    TolueneImplicitOBC2
+    TolueneImplicitGBn
+    TolueneImplicitGBn2
+    MethanolBox
+
+Solids
+------
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    SodiumChlorideCrystal
+
+Water boxes
+-----------
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     WaterBox
     FlexibleWaterBox
     FlexibleReactionFieldWaterBox
@@ -52,16 +91,32 @@ Test systems
     GiantFlexibleDischargedWaterBox
     DischargedWaterBoxHsites
     AlchemicalWaterBox
+
+Peptide and protein systems
+---------------------------
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     AlanineDipeptideVacuum
     AlanineDipeptideImplicit
     AlanineDipeptideExplicit
-    TolueneVacuum
-    TolueneImplicit
-    TolueneImplicitHCT
-    TolueneImplicitOBC1
-    TolueneImplicitOBC2
-    TolueneImplicitGBn
-    TolueneImplicitGBn2
+    DHFRExplicit
+    LysozymeImplicit
+    SrcImplicit
+    SrcExplicit
+    SrcExplicitReactionField
+
+Complexes
+---------
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     HostGuestVacuum
     HostGuestImplicit
     HostGuestImplicitHCT
@@ -70,14 +125,26 @@ Test systems
     HostGuestImplicitGBn
     HostGuestImplicitGBn2
     HostGuestExplicit
-    DHFRExplicit
-    LysozymeImplicit
-    SrcImplicit
-    SrcExplicit
-    SrcExplicitReactionField
-    MethanolBox
-    MolecularIdealGas
-    CustomGBForceSystem
+
+Polarizable test systems
+------------------------
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     AMOEBAIonBox
     AMOEBAProteinBox
-    LennardJonesPair
+
+Test system base classes
+------------------------
+
+These are base classes you can inherit from to develop new test systems.
+
+.. currentmodule:: openmmtools.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    TestSystem
