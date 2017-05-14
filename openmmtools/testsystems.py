@@ -46,6 +46,7 @@ TODO
 
 import os
 import os.path
+import copy
 import numpy as np
 import numpy.random
 import itertools
@@ -416,6 +417,8 @@ class TestSystem(object):
         positions of test system
     topology : list
         topology of the test system
+    tags: set of str
+        Attributes that can be used to tag properties or categories of the test system.
 
     Notes
     -----
@@ -445,6 +448,10 @@ class TestSystem(object):
 
     >>> (system_xml, positions_xml) = testsystem.serialize()
 
+    Check if the test system has certain attributes.
+
+    >>> if 'slow' in testsystem.tags: print('system is slow to run')
+
     """
 
     def __init__(self, **kwargs):
@@ -463,6 +470,9 @@ class TestSystem(object):
 
         # Empty topology.
         self._topology = app.Topology()
+
+        # Set attributes
+        self._tags = set()
 
         return
 
@@ -504,6 +514,11 @@ class TestSystem(object):
     @topology.deleter
     def topology(self):
         del self._topology
+
+    @property
+    def tags(self):
+        """Attributes of the test system."""
+        return copy.deepcopy(self._tags)
 
     @property
     def analytical_properties(self):
@@ -3917,6 +3932,7 @@ class AMOEBAProteinBox(TestSystem):
 
     def __init__(self, **kwargs):
         TestSystem.__init__(self, **kwargs)
+        self._tags.add('slow')
 
         pdb_filename = get_data_filename("data/amoeba/1AP4_14_wat.pdb")
         pdbfile = app.PDBFile(pdb_filename)
