@@ -3,13 +3,14 @@
 Miscellaneous Utilities
 =======================
 
-``openmmtools`` provides a number of useful utilities for working with OpenMM.
+:mod:`openmmtools.utils` provides a number of useful utilities for working with OpenMM.
 
 Timing functions
 ----------------
 
 .. currentmodule:: openmmtools.utils
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     time_it

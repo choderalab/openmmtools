@@ -3,7 +3,7 @@
 Alchemical factories
 ====================
 
-:mod:`openmmtools.alchemy` contains factories for generating `alchemically-modified <http://alchemistry.org>`_ versions of OpenMM ```System`` <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.System.html#simtk.openmm.openmm.System>`_ objects for use in alchemical free energy calculations.
+:mod:`openmmtools.alchemy` contains factories for generating `alchemically-modified <http://alchemistry.org>`_ versions of OpenMM `System <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.System.html>`_ objects for use in alchemical free energy calculations.
 
 Absolute alchemical factories
 -----------------------------
@@ -13,6 +13,7 @@ This is useful for computing free energies of transfer, solvation, or binding fo
 
 .. currentmodule:: openmmtools.alchemy
 .. autosummary::
+    :nosignatures:
     :toctree: api/generated/
 
     AlchemicalFunction

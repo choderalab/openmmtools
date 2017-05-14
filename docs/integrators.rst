@@ -3,12 +3,12 @@
 Integrators
 ===========
 
-``openmmtools`` provides a number of high quality integrators implemented using OpenMM's ```CustomIntegrator`` <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CustomIntegrator.html>`_ facility.
+:mod:`openmmtools.integrators` provides a number of high quality integrators implemented using OpenMM's `CustomIntegrator <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CustomIntegrator.html>`_ facility.
 
-The integrators provided in the :mod:`openmmtools.integrators` package subclass the OpenMM ```CustomIntegrator`` <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CustomIntegrator.html>`_, providing a more full-featured Pythonic class wrapping the SWIG ``CustomIntegrator``.
+The integrators provided in the :mod:`openmmtools.integrators` package subclass the OpenMM `CustomIntegrator <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CustomIntegrator.html>`_, providing a more full-featured Pythonic class wrapping the Swig-wrapped `CustomIntegrator <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CustomIntegrator.html>`_.
 
-.. NOTE::
-   OpenMM's ```CompoundIntegrator` <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CompoundIntegrator.html>`_ caches OpenMM ``Integrator`` objects, but can only return the SWIG-wrapped base integrator object if you call ``CompoundIntegrator.getIntegrator()`` or ``CompoundIntegrator.getCurrentIntegrator()``.
+.. warning::
+   OpenMM's `CompoundIntegrator <http://docs.openmm.org/7.1.0/api-python/generated/simtk.openmm.openmm.CompoundIntegrator.html>`_ caches OpenMM ``Integrator`` objects, but can only return the SWIG-wrapped base integrator object if you call ``CompoundIntegrator.getIntegrator()`` or ``CompoundIntegrator.getCurrentIntegrator()``.
    If you want to hold onto one of the Python subclasses we make available in :mod:`openmmtools.integrators`, you will need to cache the original Python integrator you create.
    You can still use either ``integrator.step()`` call, but you *MUST MAKE SURE THAT INTEGRATOR IS SELECTED* currently in ``CompoundIntegrator.setCurrentIntegrator(index)`` before calling ``integrator.step()`` or else the behavior is undefined.
 

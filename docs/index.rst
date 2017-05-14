@@ -49,6 +49,7 @@ Modules
   testsystems
   integrators
   states
+  cache
   mcmc
   sampling
   alchemy
