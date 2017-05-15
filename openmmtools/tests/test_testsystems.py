@@ -139,7 +139,7 @@ def check_potential_energy(system, positions):
     # Clean up
     del context, integrator
 
-def test_energy_all_testsystems(skip_slow_tests=False):
+def test_energy_all_testsystems(skip_slow_tests=True):
     """Testing computation of potential energy for all systems.
     """
     testsystem_classes = get_all_subclasses(testsystems.TestSystem)
