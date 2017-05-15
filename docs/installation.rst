@@ -21,7 +21,7 @@ On ``linux``, you can install the Python 3 version into ``$HOME/miniconda3`` wit
    $ bash ./Miniconda3-latest-Linux-x86_64.sh -b -p $HOME/miniconda3
    $ export PATH="$HOME/miniconda3/bin:$PATH"
 
-On ``osx``, you want to use the ```osx`` binary
+On ``osx``, you want to use the ``osx`` binary
 
 .. code-block:: bash
 
