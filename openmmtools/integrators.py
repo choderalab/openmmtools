@@ -1824,7 +1824,7 @@ class VVVRIntegrator(LangevinIntegrator):
         super(VVVRIntegrator, self).__init__(*args, **kwargs)
 
 class BAOABIntegrator(LangevinIntegrator):
-    """Create a velocity Verlet with velocity randomization (VVVR) integrator."""
+    """Create a BAOAB integrator."""
     def __init__(self, *args, **kwargs):
         """Create an integrator of Langevin dynamics using the BAOAB operator splitting.
 
