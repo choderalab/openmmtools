@@ -534,9 +534,16 @@ class IntegratorMoveError(Exception):
 
         # Serialize MCMCMove.
         import json
+
+        # Create class to encode quantities
+        class quantity_encoder(json.JSONEncoder):
+            def default(self, o):
+                if type(o) in [unit.quantity.Quantity, unit.unit.Unit]:
+                    return str(o)
+                super(quantity_encoder, self).default(o)
         serialized_move = utils.serialize(self.move)
         with open(os.path.join(path_files_prefix + '-move.json'), 'w') as f:
-            json.dump(serialized_move, f)
+            json.dump(serialized_move, f, cls=quantity_encoder)
 
         # Serialize Context.
         openmm_state = self.context.getState(getPositions=True, getVelocities=True,
