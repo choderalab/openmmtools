@@ -236,7 +236,7 @@ class ThermodynamicState(object):
     >>> pressure = 1.0*unit.atmosphere
     >>> state.pressure = pressure
     >>> state.pressure
-    Quantity(value=1.01325, unit=bar)
+    Quantity(value=1.0, unit=atmosphere)
     >>> state.volume is None
     True
 
