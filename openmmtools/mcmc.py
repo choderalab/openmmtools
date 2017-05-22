@@ -671,20 +671,28 @@ class BaseIntegratorMove(object):
             # Subclasses may implement _before_integration().
             self._before_integration(context, thermodynamic_state)
 
-            # Run dynamics.
-            timer.start("{}: step({})".format(move_name, self.n_steps))
-            integrator.step(self.n_steps)
-            timer.stop("{}: step({})".format(move_name, self.n_steps))
+            try:
+                # Run dynamics.
+                timer.start("{}: step({})".format(move_name, self.n_steps))
+                integrator.step(self.n_steps)
+            except Exception:
+                # Catches particle positions becoming nan during integration.
+                restart = True
+            else:
+                timer.stop("{}: step({})".format(move_name, self.n_steps))
 
-            # We get also velocities here even if we don't need them because we
-            # will recycle this State to update the sampler state object. This
-            # way we won't need a second call to Context.getState().
-            context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
-                                             enforcePeriodicBox=thermodynamic_state.is_periodic)
+                # We get also velocities here even if we don't need them because we
+                # will recycle this State to update the sampler state object. This
+                # way we won't need a second call to Context.getState().
+                context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                                 enforcePeriodicBox=thermodynamic_state.is_periodic)
 
-            # Check for NaNs in energies.
-            potential_energy = context_state.getPotentialEnergy()
-            if np.isnan(potential_energy.value_in_unit(potential_energy.unit)):
+                # Check for NaNs in energies.
+                potential_energy = context_state.getPotentialEnergy()
+                restart = np.isnan(potential_energy.value_in_unit(potential_energy.unit))
+
+            # Restart the move if we found NaNs.
+            if restart:
                 err_msg = ('Potential energy is NaN after {} attempts of integration '
                            'with move {}'.format(attempt_counter, self.__class__.__name__))
 
@@ -869,7 +877,7 @@ class MetropolizedMove(object):
 
         # Compute the energy of the proposed positions.
         sampler_state.positions[atom_subset] = proposed_positions
-        sampler_state.apply_to_context(context)
+        sampler_state.apply_to_context(context, ignore_velocities=True)
         proposed_energy = thermodynamic_state.reduced_potential(context)
 
         # Accept or reject with Metropolis criteria.
