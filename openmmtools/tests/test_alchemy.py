@@ -1557,16 +1557,8 @@ class TestAlchemicalState(object):
         test_cases = copy.deepcopy(self.test_cases)
 
         for state, defined_lambdas in test_cases:
-            undefined_lambdas = AlchemicalState._get_supported_parameters() - defined_lambdas
             alchemical_state = AlchemicalState.from_system(state.system)
             compound_state = states.CompoundThermodynamicState(state, [alchemical_state])
-
-            # Undefined properties raise an exception when assigned.
-            for parameter_name in undefined_lambdas:
-                assert getattr(compound_state, parameter_name) is None
-                with nose.tools.assert_raises(AlchemicalStateError):
-                    setattr(compound_state, parameter_name, 0.4)
-                setattr(compound_state, parameter_name, None)  # Keep state consistent.
 
             # Defined properties can be assigned and read.
             for parameter_name in defined_lambdas:

@@ -370,7 +370,7 @@ class ContextCache(object):
                 context = self._lru[matching_context_ids[0]]  # Return first found.
             else:
                 # We have to create a new Context. Use a likely-to-be-used Integrator.
-                integrator = integrators.GHMCIntegrator(temperature=thermodynamic_state.temperature)
+                integrator = integrators.GeodesicBAOABIntegrator(temperature=thermodynamic_state.temperature)
 
         if context is None:
             # Determine the Context id matching the pair state-integrator.
