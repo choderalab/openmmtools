@@ -1,0 +1,47 @@
+# Set up abl-imatinib complex in explicit solvent.
+
+# Load AMBER '96 forcefield for protein.
+source leaprc.ff14SB
+
+# Load GAFF parameters.
+source leaprc.gaff
+
+# Load in protein.
+receptor = loadPdb receptor.pdb
+
+# Load parameters for ligand.
+mods = loadAmberParams ligand.gaff.frcmod
+
+# Load parameters for ligand.
+loadAmberParams ligand.gaff.frcmod
+
+# Load ligand.
+ligand = loadMol2 ligand.gaff.mol2
+
+# Create solvent.
+solvent = loadMol2 ligand.gaff.mol2
+solvatebox solvent TIP3PBOX 10.0 iso
+
+# Create complex.
+complex = combine { receptor ligand }
+solvatebox complex TIP3PBOX 10.0 iso
+
+# Check complex.
+check complex
+
+# Report on net charge.
+charge complex
+
+# Write parameters.
+saveAmberParm ligand vacuum.prmtop vacuum.inpcrd
+saveAmberParm solvent solvent.prmtop solvent.inpcrd
+saveAmberParm complex complex.prmtop complex.inpcrd
+
+# Write PDB files
+savepdb ligand vacuum.pdb
+savepdb solvent solvent.pdb
+savepdb complex complex.pdb
+
+# Exit
+quit
+
