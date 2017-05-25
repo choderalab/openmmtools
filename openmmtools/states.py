@@ -921,9 +921,11 @@ class ThermodynamicState(object):
         new_state.__dict__['_standard_system'] = self._standard_system
         return new_state
 
-    def __getstate__(self):
+    def __getstate__(self, skip_system=False):
         """Return a dictionary representation of the state."""
-        serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
+        serialized_system = None
+        if not skip_system:
+            serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
         return dict(standard_system=serialized_system, temperature=self.temperature,
                     pressure=self.pressure)
 
@@ -2109,7 +2111,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             # No attribute found. This is monkey patching.
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         # Create original ThermodynamicState to serialize.
         thermodynamic_state = object.__new__(self.__class__.__bases__[1])
@@ -2117,7 +2119,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # Set the instance _standardize_system method to CompoundState._standardize_system
         # so that the composable states standardization will be called during serialization.
         thermodynamic_state._standardize_system = self._standardize_system
-        serialized_thermodynamic_state = utils.serialize(thermodynamic_state)
+        serialized_thermodynamic_state = utils.serialize(thermodynamic_state, **kwargs)
 
         # Serialize composable states.
         serialized_composable_states = [utils.serialize(state)
