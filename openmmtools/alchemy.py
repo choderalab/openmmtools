@@ -890,7 +890,7 @@ class AbsoluteAlchemicalFactory(object):
         """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
 
         .. warning:: Unstable API.
-            This method is still experimental. It could be moved in some
+            This method is still experimental. It could be moved to some
             other module or have its signature changed in the near future.
 
         A deep copy of the system is made.
