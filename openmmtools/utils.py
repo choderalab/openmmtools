@@ -382,6 +382,10 @@ def serialize(instance, **kwargs):
         An instance of a new style class.
 
     kwargs : Keyword arguments which are passed onto the __getstate__ function.
+        If you implement your own class with a __getstate__ method, have it accept **kwargs and then manipulate
+            them inside the __getstate__ method itself.
+        These are primarily optimization settings and will not normally be publicly documented because they can
+        fundamentally change how the "state" of an object is returned.
 
     Returns
     -------
