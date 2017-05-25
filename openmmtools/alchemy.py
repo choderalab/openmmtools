@@ -12,7 +12,7 @@ DESCRIPTION
 This module contains enumerative factories for generating alchemically-modified System objects
 usable for the calculation of free energy differences of hydration or ligand binding.
 
-* `AlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
+* `AbsoluteAlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
 
 """
 
@@ -123,7 +123,7 @@ class AlchemicalState(object):
     Create an alchemically modified system.
 
     >>> from openmmtools import testsystems
-    >>> factory = AlchemicalFactory(consistent_exceptions=False)
+    >>> factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
     >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
     >>> alchemical_region = AlchemicalRegion(alchemical_atoms=range(22))
     >>> alanine_alchemical_system = factory.create_alchemical_system(reference_system=alanine_vacuum,
@@ -582,8 +582,8 @@ _ALCHEMICAL_REGION_ARGS = collections.OrderedDict([
 class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_REGION_ARGS.keys())):
     """Alchemical region.
 
-    This is a namedtuple used to tell the AlchemicalFactory which region
-    of the system to alchemically modify and how.
+    This is a namedtuple used to tell the AbsoluteAlchemicalFactory which
+    region of the system to alchemically modify and how.
 
     Parameters
     ----------
@@ -644,7 +644,7 @@ AlchemicalRegion.__new__.__defaults__ = tuple(_ALCHEMICAL_REGION_ARGS.values())
 # ABSOLUTE ALCHEMICAL FACTORY
 # =============================================================================
 
-class AlchemicalFactory(object):
+class AbsoluteAlchemicalFactory(object):
     """Factory of alchemically modified OpenMM Systems.
 
     The context parameters created are:
@@ -683,7 +683,7 @@ class AlchemicalFactory(object):
 
     Create an alchemical factory to alchemically modify OpenMM System objects.
 
-    >>> factory = AlchemicalFactory(consistent_exceptions=False)
+    >>> factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
 
     Create an alchemically modified version of p-xylene in T4 lysozyme L99A in GBSA.
 
@@ -888,6 +888,10 @@ class AlchemicalFactory(object):
 
     def replace_reaction_field(self, reference_system):
         """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
+
+        .. warning:: Unstable API.
+            This method is still experimental. It could be moved to some
+            other module or have its signature changed in the near future.
 
         A deep copy of the system is made.
 

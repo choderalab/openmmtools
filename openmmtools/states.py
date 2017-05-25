@@ -1951,7 +1951,7 @@ class CompoundThermodynamicState(ThermodynamicState):
     Create an alchemically modified system.
 
     >>> from openmmtools import testsystems, alchemy
-    >>> factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
+    >>> factory = alchemy.AbsoluteAlchemicalFactory(consistent_exceptions=False)
     >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
     >>> alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=range(22))
     >>> alanine_alchemical_system = factory.create_alchemical_system(reference_system=alanine_vacuum,
