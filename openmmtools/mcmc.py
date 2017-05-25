@@ -377,7 +377,7 @@ class SequenceMove(object):
     def __iter__(self):
         return iter(self.move_list)
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialized_moves = [utils.serialize(move) for move in self.move_list]
         return dict(move_list=serialized_moves)
 
@@ -464,7 +464,7 @@ class WeightedMove(object):
         move = np.random.choice(moves, p=weights)
         move.apply(thermodynamic_state, sampler_state)
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
         weights = [weight for _, weight in self.move_set]
         return dict(moves=serialized_moves, weights=weights)
@@ -734,7 +734,7 @@ class BaseIntegratorMove(object):
         """
         pass
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         if self.context_cache is None:
             context_cache_serialized = None
         else:
@@ -894,7 +894,7 @@ class MetropolizedMove(object):
         timer.stop(benchmark_id)
         timer.report_timing()
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         if self.context_cache is None:
             context_cache_serialized = None
         else:
@@ -972,7 +972,7 @@ class IntegratorMove(BaseIntegratorMove):
         integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
         return copied_integrator
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialization = super(IntegratorMove, self).__getstate__()
         serialization['integrator'] = openmm.XmlSerializer.serialize(self.integrator)
         return serialization
@@ -1103,7 +1103,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state)
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
@@ -1261,7 +1261,7 @@ class GHMCMove(BaseIntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(GHMCMove, self).apply(thermodynamic_state, sampler_state)
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialization = super(GHMCMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
@@ -1387,7 +1387,7 @@ class HMCMove(BaseIntegratorMove):
         # Explicitly implemented just to have more specific docstring.
         super(HMCMove, self).apply(thermodynamic_state, sampler_state)
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialization = super(HMCMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         return serialization
@@ -1576,7 +1576,7 @@ class MCDisplacementMove(MetropolizedMove):
                                             positions_unit)
         return positions + displacement_vector
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         serialization = super(MCDisplacementMove, self).__getstate__()
         serialization['displacement_sigma'] = self.displacement_sigma
         return serialization

@@ -1731,7 +1731,7 @@ class SamplerState(object):
         sampler_state.kinetic_energy = None
         return sampler_state
 
-    def __getstate__(self, **kwargs):
+    def __getstate__(self):
         """Return a dictionary representation of the state."""
         serialization = dict(
             positions=self.positions, velocities=self.velocities,
@@ -2119,7 +2119,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # Set the instance _standardize_system method to CompoundState._standardize_system
         # so that the composable states standardization will be called during serialization.
         thermodynamic_state._standardize_system = self._standardize_system
-        serialized_thermodynamic_state = utils.serialize(thermodynamic_state)
+        serialized_thermodynamic_state = utils.serialize(thermodynamic_state, **kwargs)
 
         # Serialize composable states.
         serialized_composable_states = [utils.serialize(state)
