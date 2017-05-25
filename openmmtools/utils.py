@@ -368,7 +368,7 @@ def get_fastest_platform():
 _SERIALIZED_MANGLED_PREFIX = '_serialized__'
 
 
-def serialize(instance):
+def serialize(instance, **kwargs):
     """Serialize an object.
 
     The object must expose a __getstate__ method that returns a
@@ -381,6 +381,8 @@ def serialize(instance):
     instance : object
         An instance of a new style class.
 
+    kwargs : Keyword arguments which are passed onto the __getstate__ function.
+
     Returns
     -------
     serialization : dict
@@ -392,7 +394,7 @@ def serialize(instance):
     module_name = instance.__module__
     class_name = instance.__class__.__name__
     try:
-        serialization = instance.__getstate__()
+        serialization = instance.__getstate__(**kwargs)
     except AttributeError:
         raise ValueError('Cannot serialize class {} without a __getstate__ method'.format(class_name))
     serialization[_SERIALIZED_MANGLED_PREFIX + 'module_name'] = module_name

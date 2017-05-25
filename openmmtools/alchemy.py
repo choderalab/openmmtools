@@ -350,7 +350,7 @@ class AlchemicalState(object):
     def __str__(self):
         return str(self._parameters)
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         serialization = dict(parameters={}, alchemical_variables={})
 

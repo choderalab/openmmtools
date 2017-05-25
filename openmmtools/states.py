@@ -921,7 +921,7 @@ class ThermodynamicState(object):
         new_state.__dict__['_standard_system'] = self._standard_system
         return new_state
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
         return dict(standard_system=serialized_system, temperature=self.temperature,
@@ -1729,7 +1729,7 @@ class SamplerState(object):
         sampler_state.kinetic_energy = None
         return sampler_state
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         serialization = dict(
             positions=self.positions, velocities=self.velocities,
@@ -2109,7 +2109,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             # No attribute found. This is monkey patching.
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         # Create original ThermodynamicState to serialize.
         thermodynamic_state = object.__new__(self.__class__.__bases__[1])

@@ -389,7 +389,7 @@ class ContextCache(object):
         thermodynamic_state.apply_to_context(context)
         return context, context_integrator
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         if self.platform is not None:
             platform_serialization = self.platform.getName()
         else:
@@ -505,7 +505,7 @@ class DummyContextCache(object):
         context = thermodynamic_state.create_context(integrator, self.platform)
         return context, integrator
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         if self.platform is not None:
             platform_serialization = self.platform.getName()
         else:
