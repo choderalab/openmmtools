@@ -889,6 +889,10 @@ class AbsoluteAlchemicalFactory(object):
     def replace_reaction_field(self, reference_system):
         """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
 
+        .. warning:: Unstable API.
+            This method is still experimental. It could be moved in some
+            other module or have its signature changed in the near future.
+
         A deep copy of the system is made.
 
         If reaction field electrostatics is in use, this will add a CustomNonbondedForce and CustomBondForce to the System
