@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 # SAMS SAMPLER
 ################################################################################
 
-class SAMSSampler(object):
+class SAMS(object):
     """
     Self-adjusted mixture sampling.
 
@@ -81,8 +81,8 @@ class SAMSSampler(object):
     >>> from openmmtools.samplers import ExpandedEnsembleSampler
     >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, thermodynamic_states)
     >>> # Create a SAMS sampler
-    >>> from openmmtools.samplers import SAMSSampler
-    >>> sams_sampler = SAMSSampler(exen_sampler)
+    >>> from openmmtools.samplers import SAMS
+    >>> sams_sampler = SAMS(exen_sampler)
     >>> # Run the simulation
     >>> sams_sampler.run(niterations=10)
     >>> # Estimate relative free energies between the thermodynamic states

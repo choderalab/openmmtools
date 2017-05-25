@@ -2,16 +2,12 @@
 
 .. warning::
 
-   These classes are still experimental and their API is subject to change.
+   These classes are experimental and their API is subject to change.
 
 Multistate sampling
 ===================
 
-The :mod:`openmmtools.samplers` module includes a number of samplers that can be layered on top of the :class:`openmmtools.mcmc.MCMCSampler` class to create samplers (or stacks of samplers) that efficiently sample multiple thermodynamic states in a single simulation.
-
-.. caution::
-
-   Should these classes include the suffix ``Sampler`` (as in ``ExpandedEnsembleSampler`` and ``SAMSSampler``), or is that implied and they should be short (``ExpandedEnsemble``, ``SAMS``)?
+The :mod:`openmmtools.samplers` module includes a number of samplers that can be layered on top of :class:`openmmtools.mcmc.MCMCSampler` to create samplers (or stacks of samplers) that efficiently sample multiple thermodynamic states.
 
 Expanded ensembles
 ------------------
@@ -63,8 +59,8 @@ Next, an expanded ensemble sampler could be specified:
 ::
 
     # Create an expanded ensembles sampler with initial zero log weights guess
-    from openmmtools.samplers import ExpandedEnsembleSampler
-    exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, thermodynamic_states)
+    from openmmtools.samplers import ExpandedEnsemble
+    exen_sampler = ExpandedEnsemble(mcmc_sampler, thermodynamic_states)
 
 Now, you can run the simulation:
 
@@ -100,8 +96,8 @@ If equal sampling of all states is desired, ``log_target_probabilities`` can be 
 ::
 
     # Create a SAMS sampler
-    from openmmtools.samplers import SAMSSampler
-    sams_sampler = SAMSSampler(exen_sampler)
+    from openmmtools.samplers import SAMS
+    sams_sampler = SAMS(exen_sampler)
 
 Now, you can run the simulation:
 
@@ -131,5 +127,5 @@ A number of schemes for sampling multiple thermodynamic states are provided.
     :nosignatures:
     :toctree: api/generated/
 
-    ExpandedEnsembleSampler
-    SAMSSampler
+    ExpandedEnsemble
+    SAMS

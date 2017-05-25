@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 # EXPANDED ENSEMBLE SAMPLER
 ################################################################################
 
-class ExpandedEnsembleSampler(object):
+class ExpandedEnsemble(object):
     """
     Sampler for the method of expanded ensembles.
 
@@ -88,8 +88,12 @@ class ExpandedEnsembleSampler(object):
     >>> ghmc_move = GHMCMove(timestep=1.0*unit.femtosecond, n_steps=500)
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, move=ghmc_move)
     >>> # Create an expanded ensembles sampler with initial zero log weights guess
-    >>> from openmmtools.samplers import ExpandedEnsembleSampler
-    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, thermodynamic_states)
+    >>> from openmmtools.samplers import ExpandedEnsemble
+    >>> exen_sampler = ExpandedEnsemble(mcmc_sampler, thermodynamic_states)
+    >>> # Run the sampler
+    >>> exen_sampler.run(niterations=10)
+    >>> # Analyze the data
+    >>> [Delta_f_ij, dDelta_f_ij] = exen_sampler.compute_free_energies()
 
     """
     def __init__(self, sampler, thermodynamic_states, log_weights=None, update_scheme='global-jump', locality=1):
