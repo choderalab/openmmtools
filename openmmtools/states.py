@@ -924,7 +924,7 @@ class ThermodynamicState(object):
     def __getstate__(self, skip_system=False):
         """Return a dictionary representation of the state."""
         serialized_system = None
-        if skip_system:
+        if not skip_system:
             serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
         return dict(standard_system=serialized_system, temperature=self.temperature,
                     pressure=self.pressure)
