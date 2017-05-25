@@ -2944,9 +2944,9 @@ class AlchemicalWaterBox(WaterBox):
         super(AlchemicalWaterBox, self).__init__(*args, **kwargs)
 
         # Alchemically modify the system
-        from openmmtools.alchemy import AlchemicalRegion, AlchemicalFactory
+        from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
         region = AlchemicalRegion(alchemical_atoms=range(3))
-        factory = AlchemicalFactory()
+        factory = AbsoluteAlchemicalFactory()
         alchemical_system = factory.create_alchemical_system(self.system, region)
         self.system = alchemical_system
 

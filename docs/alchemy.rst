@@ -18,7 +18,7 @@ This is useful for computing free energies of transfer, solvation, or binding fo
 
     AlchemicalFunction
     AlchemicalState
-    AlchemicalFactory
+    AbsoluteAlchemicalFactory
 
 Relative alchemical factories
 -----------------------------
