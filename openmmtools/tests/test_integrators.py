@@ -237,7 +237,6 @@ def test_vvvr_shadow_work_accumulation():
     integrator.step(25)
     assert(integrator.get_shadow_work(dimensionless=True) != 0), "integrator.get_shadow_work() should be nonzero after dynamics"
 
-    # test default (`measure_shadow_work=False`, `measure_heat=True`) --> absence of a global `shadow_work`
     integrator = integrators.VVVRIntegrator(temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
@@ -264,7 +263,6 @@ def test_baoab_heat_accumulation():
     integrator.step(25)
     assert(integrator.get_heat(dimensionless=True) != 0), "integrator.get_heat() should be nonzero after dynamics"
 
-    # test default (`measure_shadow_work=False`, `measure_heat=True`) --> absence of a global `shadow_work`
     integrator = integrators.VVVRIntegrator(temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
@@ -301,7 +299,6 @@ def test_external_protocol_work_accumulation():
     assert (integrator.protocol_work == (pe_2 - pe_1)), "The potential energy difference should be equal to protocol work."
     del context, integrator
 
-    # Test default (`measure_protocol_work=False`, `measure_heat=True`) --> absence of a global `protocol_work`
     integrator = integrators.VVVRIntegrator(temperature)
     context = openmm.Context(system, integrator)
     context.setPositions(testsystem.positions)
