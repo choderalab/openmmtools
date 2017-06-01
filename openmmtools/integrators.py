@@ -1144,7 +1144,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
            If dimensionless=True, the protocol work in kT (float).
            Otherwise, the unit-bearing protocol work in units of energy.
         """
-        if not self._measure_heat:
+        if not self._measure_work:
             raise Exception("This integrator must be constructed with 'measure_shadow_work=True' to measure shadow work.")
         return self._get_energy_with_units("shadow_work", dimensionless=dimensionless)
 
