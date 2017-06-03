@@ -167,6 +167,9 @@ class LRUCache(object):
     def __contains__(self, item):
         return item in self._data
 
+    def __iter__(self):
+        return self._data.__iter__()
+
     def _remove_expired(self):
         """Remove all expired cache entries.
 
@@ -322,11 +325,15 @@ class ContextCache(object):
         """Clear up cache and remove all Contexts."""
         self._lru.empty()
 
-    def get_context(self, thermodynamic_state, integrator):
+    def get_context(self, thermodynamic_state, integrator=None):
         """Return a context in the given thermodynamic state.
 
         In general, the Context must be considered newly initialized. This
         means that positions and velocities must be set afterwards.
+
+        If the integrator is not provided, this will search the cache for
+        any Context in the given ThermodynamicState, regardless of its
+        integrator.
 
         This creates a new Context if no compatible one has been cached.
         If a compatible Context exists, the ThermodynamicState is applied
@@ -340,8 +347,8 @@ class ContextCache(object):
         ----------
         thermodynamic_state : states.ThermodynamicState
             The thermodynamic state of the system.
-        integrator : simtk.openmm.Integrator
-            The integrator for the context.
+        integrator : simtk.openmm.Integrator, optional
+            The integrator for the context (default is None).
 
         Returns
         -------
@@ -352,11 +359,28 @@ class ContextCache(object):
             a difference instance from the one passed as an argument.
 
         """
-        context_id = self._generate_context_id(thermodynamic_state, integrator)
-        try:
-            context = self._lru[context_id]
-        except KeyError:
-            context = thermodynamic_state.create_context(integrator, self._platform)
+        context = None
+
+        # If the user requires a specific integrator, look for one that matches.
+        if integrator is None:
+            thermodynamic_state_id = self._generate_state_id(thermodynamic_state)
+            matching_context_ids = [context_id for context_id in self._lru
+                                    if context_id[0] == thermodynamic_state_id]
+            if len(matching_context_ids) > 0:
+                context = self._lru[matching_context_ids[0]]  # Return first found.
+            else:
+                # We have to create a new Context. Use a likely-to-be-used Integrator.
+                integrator = integrators.GeodesicBAOABIntegrator(temperature=thermodynamic_state.temperature)
+
+        if context is None:
+            # Determine the Context id matching the pair state-integrator.
+            context_id = self._generate_context_id(thermodynamic_state, integrator)
+
+            # Search for previously cached compatible Contexts or create new one.
+            try:
+                context = self._lru[context_id]
+            except KeyError:
+                context = thermodynamic_state.create_context(integrator, self._platform)
             self._lru[context_id] = context
         context_integrator = context.getIntegrator()
 
@@ -364,6 +388,21 @@ class ContextCache(object):
         self._copy_integrator_state(integrator, context_integrator)
         thermodynamic_state.apply_to_context(context)
         return context, context_integrator
+
+    def __getstate__(self):
+        if self.platform is not None:
+            platform_serialization = self.platform.getName()
+        else:
+            platform_serialization = None
+        return dict(platform=platform_serialization, capacity=self.capacity,
+                    time_to_live=self.time_to_live)
+
+    def __setstate__(self, serialization):
+        if serialization['platform'] is None:
+            self._platform = None
+        else:
+            self._platform = openmm.Platform.getPlatformByName(serialization['platform'])
+        self._lru = LRUCache(serialization['capacity'], serialization['time_to_live'])
 
     # -------------------------------------------------------------------------
     # Internal usage
@@ -415,15 +454,27 @@ class ContextCache(object):
                 pass
         return standard_integrator
 
-    @classmethod
-    def _generate_context_id(cls, thermodynamic_state, integrator):
-        """Return the unique string key of the context for this state."""
+    @staticmethod
+    def _generate_state_id(thermodynamic_state):
+        """Return a unique key for the ThermodynamicState."""
         # We take advantage of the cached _standard_system_hash property
         # to generate a compatible hash for the thermodynamic state.
-        state_id = str(thermodynamic_state._standard_system_hash)
+        return str(thermodynamic_state._standard_system_hash)
+
+    @classmethod
+    def _generate_context_id(cls, thermodynamic_state, integrator):
+        """Return a unique key for a context in the given state.
+
+        We return a tuple containing the ThermodynamicState hash and the
+        the serialization of the Integrator. Keeping the two separated
+        makes it possible to search for Contexts in a given state regardless
+        of the integrator.
+
+        """
+        state_id = cls._generate_state_id(thermodynamic_state)
         standard_integrator = cls._standardize_integrator(integrator)
-        integrator_id = openmm.XmlSerializer.serialize(standard_integrator)
-        return state_id + integrator_id
+        integrator_id = openmm.XmlSerializer.serialize(standard_integrator).__hash__()
+        return state_id, integrator_id
 
 
 # =============================================================================
@@ -454,12 +505,25 @@ class DummyContextCache(object):
         context = thermodynamic_state.create_context(integrator, self.platform)
         return context, integrator
 
+    def __getstate__(self):
+        if self.platform is not None:
+            platform_serialization = self.platform.getName()
+        else:
+            platform_serialization = None
+        return dict(platform=platform_serialization)
+
+    def __setstate__(self, serialization):
+        if serialization['platform'] is None:
+            self.platform = None
+        else:
+            self.platform = openmm.Platform.getPlatformByName(serialization['platform'])
+
 
 # =============================================================================
 # GLOBAL CONTEXT CACHE
 # =============================================================================
 
-global_context_cache = ContextCache(time_to_live=50)
+global_context_cache = ContextCache(capacity=3, time_to_live=50)
 
 
 # =============================================================================

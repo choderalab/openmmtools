@@ -14,7 +14,7 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.9.0"
+VERSION = "0.10.1"
 ISRELEASED = False
 __version__ = VERSION
 ########################
@@ -176,6 +176,9 @@ setup(
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,
-    entry_points={'console_scripts': ['test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main']},
+    entry_points={'console_scripts': [
+        'test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main',
+        'benchmark-alchemy = openmmtools.tests.test_alchemy:benchmark_alchemy_from_pdb',
+        ]},
     )
 check_dependencies()

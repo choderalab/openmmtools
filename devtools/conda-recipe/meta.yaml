@@ -29,7 +29,6 @@ requirements:
     - openmm
     - parmed
 
-
 test:
   requires:
     - nose
@@ -39,4 +38,4 @@ test:
 
 about:
   home: https://github.com/choderalab/openmmtools
-  license: GNU Lesser General Public License v2 or later (LGPLv2+)
+  license: MIT License

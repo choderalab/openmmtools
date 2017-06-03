@@ -12,7 +12,7 @@ DESCRIPTION
 This module contains enumerative factories for generating alchemically-modified System objects
 usable for the calculation of free energy differences of hydration or ligand binding.
 
-* `AlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
+* `AbsoluteAlchemicalFactory` uses fused elecrostatic and steric alchemical modifications.
 
 """
 
@@ -28,6 +28,7 @@ usable for the calculation of free energy differences of hydration or ligand bin
 # - Finish AMOEBA support.
 # - Can alchemically-modified System objects share unmodified Force objects to avoid overhead
 #   of duplicating Forces that are not modified?
+# - Add support for arbitrary softcore reprogramming of all Custom*Force classes
 
 
 # =============================================================================
@@ -108,9 +109,6 @@ class AlchemicalState(object):
         Scaling factor for alchemically-softened angles (default is 1.0).
     lambda_torsions : float, optional
         Scaling factor for alchemically-softened torsions (default is 1.0).
-    lambda_restraints : float, optional
-        Scaling factor for remaining receptor-ligand relative restraint
-        terms to help keep ligand near protein (default is 1.0).
 
     Attributes
     ----------
@@ -119,14 +117,13 @@ class AlchemicalState(object):
     lambda_bonds
     lambda_angles
     lambda_torsions
-    lambda_restraints
 
     Examples
     --------
     Create an alchemically modified system.
 
     >>> from openmmtools import testsystems
-    >>> factory = AlchemicalFactory(consistent_exceptions=False)
+    >>> factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
     >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
     >>> alchemical_region = AlchemicalRegion(alchemical_atoms=range(22))
     >>> alanine_alchemical_system = factory.create_alchemical_system(reference_system=alanine_vacuum,
@@ -277,7 +274,6 @@ class AlchemicalState(object):
     lambda_bonds = _LambdaProperty('lambda_bonds')
     lambda_angles = _LambdaProperty('lambda_angles')
     lambda_torsions = _LambdaProperty('lambda_torsions')
-    lambda_restraints = _LambdaProperty('lambda_restraints')
 
     def set_alchemical_parameters(self, new_value):
         """Set all defined parameters to the given value.
@@ -346,6 +342,10 @@ class AlchemicalState(object):
             other_value = getattr(other, parameter_name)
             is_equal = is_equal and self_value == other_value
         return is_equal
+
+    def __ne__(self, other):
+        # TODO: we can safely remove this when dropping support for Python 2
+        return not self == other
 
     def __str__(self):
         return str(self._parameters)
@@ -582,8 +582,8 @@ _ALCHEMICAL_REGION_ARGS = collections.OrderedDict([
 class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_REGION_ARGS.keys())):
     """Alchemical region.
 
-    This is a namedtuple used to tell the AlchemicalFactory which region
-    of the system to alchemically modify and how.
+    This is a namedtuple used to tell the AbsoluteAlchemicalFactory which
+    region of the system to alchemically modify and how.
 
     Parameters
     ----------
@@ -644,7 +644,7 @@ AlchemicalRegion.__new__.__defaults__ = tuple(_ALCHEMICAL_REGION_ARGS.values())
 # ABSOLUTE ALCHEMICAL FACTORY
 # =============================================================================
 
-class AlchemicalFactory(object):
+class AbsoluteAlchemicalFactory(object):
     """Factory of alchemically modified OpenMM Systems.
 
     The context parameters created are:
@@ -664,13 +664,26 @@ class AlchemicalFactory(object):
         method will be use to determine the electrostatics contribution
         to the potential energy of 1,4 exceptions instead of the
         classical q1*q2/(4*epsilon*epsilon0*pi*r).
+    switch_width : float, optional, default = 1.0 * angstroms
+        Default switch width for electrostatics in periodic cutoff systems
+        used in alchemical interactions only.
+    alchemical_pme_treatment : str, optional, default = 'direct-space'
+        Controls how alchemical region electrostatics are treated when PME is used.
+        Options are ['direct-space', 'coulomb'].
+        'direct-space' only models the direct space contribution
+        'coulomb' includes switched Coulomb interaction
+    alchemical_rf_treatment : str, optional, default = 'switched'
+         Controls how alchemical region electrostatics are treated when RF is used
+         Options are ['switched', 'shifted']
+         'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
+         'shifted' retains c_rf != 0 but can give erroneous results for hydration free energies
 
     Examples
     --------
 
     Create an alchemical factory to alchemically modify OpenMM System objects.
 
-    >>> factory = AlchemicalFactory(consistent_exceptions=False)
+    >>> factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
 
     Create an alchemically modified version of p-xylene in T4 lysozyme L99A in GBSA.
 
@@ -734,8 +747,11 @@ class AlchemicalFactory(object):
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, consistent_exceptions=False):
+    def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms, alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched'):
         self.consistent_exceptions = consistent_exceptions
+        self.switch_width = switch_width
+        self.alchemical_pme_treatment = alchemical_pme_treatment
+        self.alchemical_rf_treatment = alchemical_rf_treatment
 
     def create_alchemical_system(self, reference_system, alchemical_regions):
         """Create an alchemically modified version of the reference system.
@@ -775,6 +791,9 @@ class AlchemicalFactory(object):
         box_vectors = reference_system.getDefaultPeriodicBoxVectors()
         alchemical_system.setDefaultPeriodicBoxVectors(*box_vectors)
 
+        # TODO: Are we missing important components of the System here, such as vsites?
+        # Should we deepcopy instead?
+
         # Add particles.
         for particle_index in range(reference_system.getNumParticles()):
             mass = reference_system.getParticleMass(particle_index)
@@ -787,7 +806,7 @@ class AlchemicalFactory(object):
 
         # Modify forces as appropriate, copying other forces without modification.
         for reference_force in reference_system.getForces():
-            # TODO switch to functools.singledispatch when drop Python2
+            # TODO switch to functools.singledispatch when we drop Python2 support
             reference_force_name = reference_force.__class__.__name__
             alchemical_force_creator_name = '_alchemically_modify_{}'.format(reference_force_name)
             try:
@@ -802,6 +821,12 @@ class AlchemicalFactory(object):
         # Record timing statistics.
         timer.stop('Create alchemically modified system')
         timer.report_timing()
+
+        # If the System uses a NonbondedForce, replace its NonbondedForce implementation of reaction field
+        # with a Custom*Force implementation that uses c_rf = 0.
+        # NOTE: This adds an additional CustomNonbondedForce and CustomBondForce
+        if (self.alchemical_rf_treatment == 'switched'):
+            alchemical_system = self.replace_reaction_field(alchemical_system)
 
         return alchemical_system
 
@@ -860,6 +885,73 @@ class AlchemicalFactory(object):
         del context, integrator
 
         return energy_components
+
+    def replace_reaction_field(self, reference_system):
+        """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
+
+        .. warning:: Unstable API.
+            This method is still experimental. It could be moved to some
+            other module or have its signature changed in the near future.
+
+        A deep copy of the system is made.
+
+        If reaction field electrostatics is in use, this will add a CustomNonbondedForce and CustomBondForce to the System
+        for each NonbondedForce that utilizes CutoffPeriodic.
+
+        Note that the resulting System object can NOT be fed to `create_alchemical_system` since the CustomNonbondedForce
+        will not be recognized and re-coded.
+
+        Parameters
+        ----------
+        reference_system : simtk.openmm.System
+            The system to use as a reference for the creation of the
+            alchemical system. This will not be modified.
+
+        Returns
+        -------
+        system : simtk.openmm.System
+            System with reaction-field converted to c_rf = 0
+
+        """
+        system = copy.deepcopy(reference_system)
+        for force_index, reference_force in enumerate(system.getForces()):
+            reference_force_name = reference_force.__class__.__name__
+            if (reference_force_name == 'NonbondedForce' and
+                        reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
+                # Create CustomNonbondedForce to handle switched reaction field
+                epsilon_solvent = reference_force.getReactionFieldDielectric()
+                r_cutoff = reference_force.getCutoffDistance()
+                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2);"  # Omit c_rf constant term.
+                k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1.0) / (2.0*epsilon_solvent + 1.0))
+                energy_expression += "chargeprod = charge1*charge2;"
+                energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
+                energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
+                custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
+                custom_nonbonded_force.addPerParticleParameter("charge")
+                custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+                custom_nonbonded_force.setCutoffDistance(reference_force.getCutoffDistance())
+                custom_nonbonded_force.setUseLongRangeCorrection(False)
+                system.addForce(custom_nonbonded_force)
+
+                # Add switch
+                if self.switch_width is not None:
+                    custom_nonbonded_force.setUseSwitchingFunction(True)
+                    custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - self.switch_width)
+                else:
+                    custom_nonbonded_force.setUseSwitchingFunction(False)
+
+                # Rewrite particle charges
+                for particle_index in range(reference_force.getNumParticles()):
+                    [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
+                    reference_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, epsilon)
+                    custom_nonbonded_force.addParticle([charge])
+
+                # Add exclusions to CustomNonbondedForce.
+                for exception_index in range(reference_force.getNumExceptions()):
+                    iatom, jatom, chargeprod, sigma, epsilon = reference_force.getExceptionParameters(exception_index)
+                    custom_nonbonded_force.addExclusion(iatom, jatom)
+
+        return system
 
     # -------------------------------------------------------------------------
     # Internal usage: AlchemicalRegion
@@ -1326,20 +1418,33 @@ class AlchemicalFactory(object):
             r_cutoff = reference_force.getCutoffDistance()
             electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
             k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
-            c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
+            if self.alchemical_rf_treatment == 'switched':
+                c_rf = 0.0 / unit.nanometers
+            elif self.alchemical_rf_treatment == 'shifted':
+                # WARNING: Setting c_rf != 0 can cause large errors in DeltaG for hydration free energies
+                c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
+            else:
+                raise Exception("Unknown alchemical_rf_treatment scheme '%s'" % self.alchemical_rf_treatment)
             electrostatics_energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
             electrostatics_energy_expression += "c_rf = %f;" % (c_rf.value_in_unit_system(unit.md_unit_system))
         elif nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            # Ewald direct-space electrostatics
-            [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
-            if (alpha_ewald/alpha_ewald.unit) == 0.0:
-                # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                tol = reference_force.getEwaldErrorTolerance()
-                alpha_ewald = (1.0/reference_force.getCutoffDistance()) * np.sqrt(-np.log(2.0*tol))
-            electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-            electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
-            # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
-            # NOTE: There is currently no way to do this in OpenMM.
+            if self.alchemical_pme_treatment == 'direct-space':
+                # Ewald direct-space electrostatics
+                [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
+                if (alpha_ewald/alpha_ewald.unit) == 0.0:
+                    # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+                    tol = reference_force.getEwaldErrorTolerance()
+                    alpha_ewald = (1.0/reference_force.getCutoffDistance()) * np.sqrt(-np.log(2.0*tol))
+                electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
+                electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
+                # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
+                # NOTE: There is currently no way to do this in OpenMM.
+            elif self.alchemical_pme_treatment == 'coulomb':
+                # Use switched standard Coulomb potential, following MTS scheme described in
+                # http://dx.doi.org/10.1063/1.1385159
+                electrostatics_energy_expression += nocutoff_electrostatics_energy_expression
+            else:
+                raise Exception("Unknown alchemical_pme_treatment scheme '%s'" % self.alchemical_pme_treatment)
         else:
             raise Exception("Nonbonded method %s not supported yet." % str(nonbonded_method))
 
@@ -1447,7 +1552,11 @@ class AlchemicalFactory(object):
         for force in [na_electrostatics_custom_nonbonded_force, aa_electrostatics_custom_nonbonded_force]:
             force.addPerParticleParameter("charge")  # partial charge
             force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
-            force.setUseSwitchingFunction(False)  # no switch for electrostatics, since NonbondedForce doesn't use it
+            if (nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald] and self.alchemical_pme_treatment == 'coulomb') or (nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic] and self.alchemical_rf_treatment == 'switched'):
+                force.setUseSwitchingFunction(True)  # use switching function for alchemical electrostatics to ensure force continuity at cutoff
+            else:
+                force.setUseSwitchingFunction(False)
+            force.setSwitchingDistance(nonbonded_force.getCutoffDistance() - self.switch_width)
             force.setCutoffDistance(nonbonded_force.getCutoffDistance())
             force.setUseLongRangeCorrection(False)  # long-range dispersion correction is meaningless for electrostatics
 
@@ -1851,7 +1960,6 @@ class AlchemicalFactory(object):
                     add_label(label.format(''), force_index2)
 
         return force_labels
-
 
 if __name__ == '__main__':
     import doctest

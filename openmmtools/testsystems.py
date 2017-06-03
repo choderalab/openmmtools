@@ -63,6 +63,10 @@ from .constants import kB
 
 pi = np.pi
 
+DEFAULT_EWALD_ERROR_TOLERANCE = 1.0e-5 # default Ewald error tolerance
+DEFAULT_CUTOFF_DISTANCE = 10.0 * unit.angstroms # default cutoff distance
+DEFAULT_SWITCH_WIDTH = 1.5 * unit.angstroms # default switch width
+
 #=============================================================================================
 # SUBROUTINES
 #=============================================================================================
@@ -627,10 +631,16 @@ class HarmonicOscillator(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=90.0 * unit.kilocalories_per_mole/unit.angstrom**2
+    K : simtk.unit.Quantity, optional, default=100.0 * unit.kilocalories_per_mole/unit.angstrom**2
         harmonic restraining potential
     mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
+    U0 : simtk.unit.Quantity, optional, default=0.0 * unit.kilocalories_per_mole
+        Potential offset for harmonic oscillator
+
+    The functional form is given by
+
+    U(x) = (K/2) * ( (x-x0)^2 + y^2 + z^2 ) + U0
 
     Attributes
     ----------
@@ -638,6 +648,15 @@ class HarmonicOscillator(TestSystem):
         Openmm system with the harmonic oscillator
     positions : list
         positions of harmonic oscillator
+
+    Context parameters
+    ------------------
+    testsystems_HarmonicOscillator_K
+        Spring constant of harmonic oscillator
+    testsystems_HarmonicOscillator_x0
+        Reference x position for harmonic oscillator
+    testsystems_HarmonicOscillator_U0
+        Reference potential additive constant for harmonic oscillator
 
     Notes
     -----
@@ -676,9 +695,13 @@ class HarmonicOscillator(TestSystem):
     >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
     >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
 
+    TODO:
+    * Add getters and setters for K, x0, U0 that access current global parameter in system
+    * Add method to compute free energy of the harmonic oscillator(s)
+
     """
 
-    def __init__(self, K=100.0 * unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948 * unit.amu, **kwargs):
+    def __init__(self, K=100.0*unit.kilocalories_per_mole / unit.angstroms**2, mass=39.948*unit.amu, U0=0.0*unit.kilojoules_per_mole, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -696,10 +719,14 @@ class HarmonicOscillator(TestSystem):
         system.setDefaultPeriodicBoxVectors([edge,0,0], [0,edge,0], [0,0,edge])
 
         # Add a restrining potential centered at the origin.
-        energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
+        energy_expression = '(K/2.0) * ((x-x0)^2 + y^2 + z^2) + U0;'
         energy_expression += 'K = testsystems_HarmonicOscillator_K;'
+        energy_expression += 'x0 = testsystems_HarmonicOscillator_x0;'
+        energy_expression += 'U0 = testsystems_HarmonicOscillator_U0;'
         force = openmm.CustomExternalForce(energy_expression)
-        force.addGlobalParameter('testsystems_HarmonicOscillator_K', K)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_K', K.value_in_unit_system(unit.md_unit_system))
+        force.addGlobalParameter('testsystems_HarmonicOscillator_x0', 0.0)
+        force.addGlobalParameter('testsystems_HarmonicOscillator_U0', U0.value_in_unit_system(unit.md_unit_system))
         force.addParticle(0, [])
         system.addForce(force)
 
@@ -711,7 +738,7 @@ class HarmonicOscillator(TestSystem):
         topology.addAtom('Ar', element, residue)
         self.topology = topology
 
-        self.K, self.mass = K, mass
+        self.K, self.mass, self.U0 = K, mass, U0
         self.system, self.positions = system, positions
 
         # Number of degrees of freedom.
@@ -1741,7 +1768,7 @@ class LennardJonesFluid(TestSystem):
         Also, if not None, use PME for electrostatics.  Obviously this is no
         longer a traditional LJ system, but this option could be useful for
         testing the effect of charges in small systems.
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if charge is not None.
 
     Examples
@@ -2446,7 +2473,7 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=9*unit.angstroms, model='tip3p', switch_width=1.5*unit.angstroms, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=DEFAULT_CUTOFF_DISTANCE, model='tip3p', switch_width=DEFAULT_SWITCH_WIDTH, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
         """
         Create a water box test system.
 
@@ -2455,11 +2482,11 @@ class WaterBox(TestSystem):
 
         box_edge : simtk.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
            Edge length for cubic box [should be greater than 2*cutoff]
-        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.9 nm
+        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_CUTOFF_DISTANCE
            Nonbonded cutoff
         model : str, optional, default = 'tip3p'
            The name of the water model to use ['tip3p', 'tip4p', 'tip4pew', 'tip5p', 'spce']
-        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = 0.5 A
+        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_SWITCH_WIDTH
            Sets the width of the switch function for Lennard-Jones.
         constrained : bool, optional, default=True
            Sets whether water geometry should be constrained (rigid water implemented via SETTLE) or flexible.
@@ -2467,7 +2494,7 @@ class WaterBox(TestSystem):
            Sets whether the long-range dispersion correction should be used.
         nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
            Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
-        ewaldErrorTolerance : float, optional, default=5E-4
+        ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
 
         Examples
@@ -2626,7 +2653,7 @@ class FlexiblePMEWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, *args, **kwargs)
 
 class PMEWaterBox(WaterBox):
 
@@ -2650,7 +2677,7 @@ class PMEWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, ewaldErrorTolerance=1.0e-7, *args, **kwargs)
+        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, *args, **kwargs)
 
 class GiantFlexibleWaterBox(WaterBox):
 
@@ -2887,6 +2914,44 @@ class DischargedWaterBoxHsites(WaterBox):
 
         return
 
+class AlchemicalWaterBox(WaterBox):
+
+    """
+    Water box test system where a single water molecule can be alchemically modified.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        """
+        Create a water box test system where a single water molecule can be alchemical discharged.
+
+        Parameters are inherited from WaterBox.
+
+        Context parameters
+        ------------------
+        lambda_electrostatics
+            Coulomb interactions for the first water molecule are scaled by `lambda`
+
+        Examples
+        --------
+
+        Create a waterbox.
+
+        >>> waterbox = AlchemicalWaterBox()
+        >>> [system, positions] = [waterbox.system, waterbox.positions]
+
+        """
+        super(AlchemicalWaterBox, self).__init__(*args, **kwargs)
+
+        # Alchemically modify the system
+        from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
+        region = AlchemicalRegion(alchemical_atoms=range(3))
+        factory = AbsoluteAlchemicalFactory()
+        alchemical_system = factory.create_alchemical_system(self.system, region)
+        self.system = alchemical_system
+
+        return
+
 #=============================================================================================
 # Alanine dipeptide in vacuum.
 #=============================================================================================
@@ -2992,10 +3057,12 @@ class AlanineDipeptideExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    cutoff : simtk.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_CUTOFF_DISTANCE
+        Cutoff distance
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.
 
     Examples
@@ -3005,7 +3072,7 @@ class AlanineDipeptideExplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3281,7 +3348,7 @@ class HostGuestExplicit(TestSystem):
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
     rigid_water : bool, optional, default=True
-    nonbondedCutoff : Quantity, optional, default=9.0 * unit.angstroms
+    nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
@@ -3289,10 +3356,10 @@ class HostGuestExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.
 
     Examples
@@ -3302,7 +3369,7 @@ class HostGuestExplicit(TestSystem):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=9.0*unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=1.5*unit.angstroms, ewaldErrorTolerance=1.0e-6, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3347,7 +3414,7 @@ class DHFRExplicit(TestSystem):
     ----------
     constraints : optional, default=simtk.openmm.app.HBonds
     rigid_water : bool, optional, default=True
-    nonbondedCutoff : Quantity, optional, default=8.0 * unit.angstroms
+    nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
     nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
@@ -3355,10 +3422,10 @@ class DHFRExplicit(TestSystem):
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
-    ewaldErrorTolerance : float, optional, default=5E-4
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.
 
     Notes
@@ -3368,7 +3435,7 @@ class DHFRExplicit(TestSystem):
     hardware.  For modern GPUs, 0.95 nm may be a good place to start.
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=8.0 * unit.angstroms, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=None, ewaldErrorTolerance=5E-4, **kwargs):
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3506,7 +3573,7 @@ class SrcExplicit(TestSystem):
 
     """
 
-    def __init__(self, nonbondedMethod=app.PME, **kwargs):
+    def __init__(self, nonbondedMethod=app.PME, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, use_dispersion_correction=True, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3516,7 +3583,16 @@ class SrcExplicit(TestSystem):
         # Construct system.
         forcefields_to_use = ['amber99sbildn.xml', 'tip3p.xml']  # list of forcefields to use in parameterization
         forcefield = app.ForceField(*forcefields_to_use)
-        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds)
+        system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=nonbondedMethod, constraints=app.HBonds,
+                                         ewaldErrorTolerance=ewaldErrorTolerance, nonbondedCutoff=nonbondedCutoff)
+
+        # Set dispersion correction use.
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
         # Get positions.
         positions = pdbfile.getPositions()

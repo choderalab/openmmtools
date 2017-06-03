@@ -1,0 +1,13 @@
+name: openmmtools
+channels:
+    - omnia
+dependencies:
+    - python
+    - cython
+    - numpy
+    - scipy
+    - setuptools
+    - six
+    - openmm
+    - parmed
+    - numpydoc
