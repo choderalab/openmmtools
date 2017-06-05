@@ -142,8 +142,9 @@ class ExpandedEnsemble(object):
         self.number_of_state_visits = np.zeros([self.nstates], np.float64)
         self.verbose = False
 
-        self._timing = self.sampler._timing
-        self._initializeNetCDF(self.sampler.ncfile)
+        #self._timing = self.sampler._timing # TODO
+        if hasattr(self.sampler, 'ncfile'):
+            self._initializeNetCDF(self.sampler.ncfile)
 
     def _initializeNetCDF(self, ncfile):
         self.ncfile = ncfile
@@ -278,11 +279,11 @@ class ExpandedEnsemble(object):
             Neff = (P_k / P_k.max()).sum()
             print('Effective number of states with probability: %10.5f' % Neff)
 
-        # Update timing
-        final_time = time.time()
-        elapsed_time = final_time - initial_time
-        self._timing['update state time'] = elapsed_time
-        print('elapsed time %8.3f s' % elapsed_time)
+        # TODO: Update timing
+        #final_time = time.time()
+        #elapsed_time = final_time - initial_time
+        #self._timing['update state time'] = elapsed_time
+        #print('elapsed time %8.3f s' % elapsed_time)
 
         # Update statistics.
         self.update_statistics()
@@ -307,7 +308,7 @@ class ExpandedEnsemble(object):
             self.ncfile.variables['u_k'][self.iteration,:] = self.u_k[:]
             self.ncfile.variables['neighborhood'][self.iteration,:] = 0
             self.ncfile.variables['neighborhood'][self.iteration,self.neighborhood] = 1
-            self.ncfile.variables['update_state_time'][self.iteration] = self._timing['update state time']
+            #self.ncfile.variables['update_state_time'][self.iteration] = self._timing['update state time'] # TODO
 
         self.iteration += 1
 

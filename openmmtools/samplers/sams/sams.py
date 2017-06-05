@@ -145,8 +145,9 @@ class SAMS(object):
 
         self.mbar_update_interval = mbar_update_interval
 
-        self._timing = self.sampler._timing
-        self._initializeNetCDF(self.sampler.ncfile)
+        #self._timing = self.sampler._timing # TODO: Handle timing
+        if hasattr(self.sampler, 'ncfile'):
+            self._initializeNetCDF(self.sampler.ncfile)
 
     def _initializeNetCDF(self, ncfile):
         self.ncfile = ncfile
@@ -280,11 +281,12 @@ class SAMS(object):
         # Subtract off logZ[0] to prevent logZ from growing without bound
         self.logZ[:] -= self.logZ[0]
 
-        final_time = time.time()
-        elapsed_time = final_time - initial_time
-        self._timing['update logZ time'] = elapsed_time
-        if self.verbose:
-            print('time elapsed %8.3f s' % elapsed_time)
+        # TODO: Handle timing`
+        #final_time = time.time()
+        #elapsed_time = final_time - initial_time
+        #self._timing['update logZ time'] = elapsed_time
+        #if self.verbose:
+        #    print('time elapsed %8.3f s' % elapsed_time)
 
     def update_logZ_with_mbar(self):
         """
@@ -312,11 +314,13 @@ class SAMS(object):
         Deltaf_ij, dDeltaf_ij, Theta_ij = mbar.getFreeEnergyDifferences(compute_uncertainty=True, uncertainty_method='approximate')
         self.logZ[:] = -mbar.f_k[:]
         self.logZ -= self.logZ[0]
-        final_time = time.time()
-        elapsed_time = final_time - initial_time
-        self._timing['MBAR time'] = elapsed_time
-        if self.verbose:
-            print('MBAR time    %8.3f s' % elapsed_time)
+
+        # TODO: Handle timing
+        #final_time = time.time()
+        #elapsed_time = final_time - initial_time
+        #self._timing['MBAR time'] = elapsed_time
+        #if self.verbose:
+        #    print('MBAR time    %8.3f s' % elapsed_time)
 
     def update_log_weights(self):
         """
@@ -349,14 +353,15 @@ class SAMS(object):
         if self.ncfile:
             self.ncfile.variables['logZ'][self.iteration,:] = self.logZ[:]
             self.ncfile.variables['log_target_probabilities'][self.iteration,:] = self.log_target_probabilities[:]
-            self.ncfile.variables['update_logZ_time'][self.iteration] = self._timing['update logZ time']
+            #self.ncfile.variables['update_logZ_time'][self.iteration] = self._timing['update logZ time'] # TODO: Handle timing
             self.ncfile.sync()
 
-        final_time = time.time()
-        elapsed_time = final_time - initial_time
-        self._timing['sams time'] = elapsed_time
-        if self.verbose:
-            print('total time   %8.3f s' % elapsed_time)
+        # TODO: Handle timing
+        #final_time = time.time()
+        #elapsed_time = final_time - initial_time
+        #self._timing['sams time'] = elapsed_time
+        #if self.verbose:
+        #    print('total time   %8.3f s' % elapsed_time)
 
         self.iteration += 1
         if self.verbose:
