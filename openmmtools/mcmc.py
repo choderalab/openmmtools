@@ -233,9 +233,15 @@ class MCMCSampler(object):
 
     def __init__(self, thermodynamic_state, sampler_state, move):
         # Make a deep copy of the state so that initial state is unchanged.
-        self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        self.thermodynamic_state = thermodynamic_state
         self.sampler_state = copy.deepcopy(sampler_state)
         self.move = move
+
+    def update(self):
+        """
+        Update the sampler state by applying one iteration.
+        """
+        self.run(n_iterations=1)
 
     def run(self, n_iterations=1):
         """
