@@ -1,4 +1,4 @@
-.. _integrators::
+.. _integrators:
 
 Integrators
 ===========

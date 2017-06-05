@@ -1,4 +1,4 @@
-.. _utils::
+.. _utils:
 
 Miscellaneous Utilities
 =======================
@@ -16,6 +16,17 @@ Timing functions
     time_it
     with_timer
     Timer
+
+Logging functions
+-----------------
+
+.. currentmodule:: openmmtools.utils
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    is_terminal_verbose
+    config_root_logger
 
 Temporary directories
 ---------------------
@@ -73,7 +84,6 @@ Serialization utilities
 Metaclass utilities
 -------------------
 
-
 .. currentmodule:: openmmtools.utils
 .. autosummary::
     :nosignatures:
@@ -81,3 +91,14 @@ Metaclass utilities
 
     with_metaclass
     SubhookedABCMeta
+
+Python 2/3 compatibility
+-------------------------
+
+.. currentmodule:: openmmtools.utils
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    wraps_py2
+    unwraps_py2

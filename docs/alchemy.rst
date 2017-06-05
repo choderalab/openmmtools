@@ -1,4 +1,4 @@
-.. _alchemy::
+.. _alchemy:
 
 Alchemical factories
 ====================

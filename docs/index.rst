@@ -53,6 +53,7 @@ Modules
   mcmc
   sampling
   alchemy
+  distributed
   utils
   scripts
 
