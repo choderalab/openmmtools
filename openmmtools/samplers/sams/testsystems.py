@@ -124,7 +124,7 @@ class HarmonicOscillatorSimulatedTempering(SAMSTestSystem):
     Examples
     --------
 
-    >>> from sams.tests.testsystems import HarmonicOscillatorSimulatedTempering
+    >>> from openmmtools.samplers.sams.testsystems import HarmonicOscillatorSimulatedTempering
     >>> testsystem = HarmonicOscillatorSimulatedTempering()
 
     """
@@ -194,7 +194,7 @@ class AlanineDipeptideVacuumSimulatedTempering(SAMSTestSystem):
     Examples
     --------
 
-    >>> from sams.tests.testsystems import AlanineDipeptideVacuumSimulatedTempering
+    >>> from openmmtools.samplers.sams.testsystems import AlanineDipeptideVacuumSimulatedTempering
     >>> testsystem = AlanineDipeptideVacuumSimulatedTempering()
 
     """
@@ -250,7 +250,7 @@ class AlanineDipeptideExplicitSimulatedTempering(SAMSTestSystem):
     Examples
     --------
 
-    >>> from sams.tests.testsystems import AlanineDipeptideExplicitSimulatedTempering
+    >>> from openmmtools.samplers.sams.testsystems import AlanineDipeptideExplicitSimulatedTempering
     >>> testsystem = AlanineDipeptideExplicitSimulatedTempering()
 
     """
@@ -359,7 +359,7 @@ class AlchemicalSAMSTestSystem(SAMSTestSystem):
             self.system.addForce(barostat)
 
         # Create alchemically-modified system and populate thermodynamic states.
-        from alchemy import AbsoluteAlchemicalFactory
+        from openmmtools.alchemy import AbsoluteAlchemicalFactory
         from sams import ThermodynamicState
         self.thermodynamic_states = list()
         if alchemical_protocol == 'fused':
@@ -570,7 +570,7 @@ def test_testsystems():
     import sams
     # TODO: Automatically discover subclasses of SAMSTestSystem that are not abstract base classes
     for testsystem_name in ['AlanineDipeptideVacuumSimulatedTempering', 'AlanineDipeptideExplicitSimulatedTempering', 'AlanineDipeptideVacuumAlchemical', 'AlanineDipeptideExplicitAlchemical', 'WaterBoxAlchemical', 'HostGuestAlchemical']:
-        testsystem = getattr(sams.tests.testsystems, testsystem_name)
+        testsystem = getattr(testsystems, testsystem_name)
         test = testsystem()
         # Reduce number of steps for testing
         test.mcmc_sampler.nsteps = 2

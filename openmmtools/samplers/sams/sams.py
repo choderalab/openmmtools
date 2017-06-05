@@ -20,7 +20,7 @@ from scipy.misc import logsumexp
 
 from openmmtools.constants import kB
 
-from . import ExpandedEnsembleSampler
+from . import ExpandedEnsemble
 
 ################################################################################
 # LOGGER
@@ -78,8 +78,8 @@ class SAMS(object):
     >>> ghmc_move = GHMCMove(timestep=1.0*unit.femtosecond, n_steps=500)
     >>> mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, move=ghmc_move)
     >>> # Create an expanded ensembles sampler with initial zero log weights guess
-    >>> from openmmtools.samplers import ExpandedEnsembleSampler
-    >>> exen_sampler = ExpandedEnsembleSampler(mcmc_sampler, thermodynamic_states)
+    >>> from openmmtools.samplers import ExpandedEnsemble
+    >>> exen_sampler = ExpandedEnsemble(mcmc_sampler, thermodynamic_states)
     >>> # Create a SAMS sampler
     >>> from openmmtools.samplers import SAMS
     >>> sams_sampler = SAMS(exen_sampler)
@@ -96,7 +96,7 @@ class SAMS(object):
 
         Parameters
         ----------
-        sampler : ExpandedEnsembleSampler
+        sampler : ExpandedEnsemble
             The expanded ensemble sampler used to sample both configurations and discrete thermodynamic states.
         logZ : dict of key : float, optional, default=None
             If specified, the log partition functions for each state will be initialized to the specified dictionary.
