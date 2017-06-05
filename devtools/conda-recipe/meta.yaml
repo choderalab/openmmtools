@@ -20,6 +20,9 @@ requirements:
     - parmed
     - netcdf4
     - pymbar
+    - mdtraj
+    - matplotlib
+    - seaborn
 
   run:
     - python
@@ -32,6 +35,9 @@ requirements:
     - parmed
     - netcdf4
     - pymbar
+    - mdtraj
+    - matplotlib
+    - seaborn
 
 test:
   requires:

@@ -123,3 +123,17 @@ Analysis uses a similar interface to :class:`ExpandedEnsemble`:
 
     ExpandedEnsemble
     SAMS
+
+Analysis
+""""""""
+
+.. todo: This will be folded into the :class:`ExpandedEnsemble` class.
+
+.. currentmodule:: openmmtools.samplers.sams.analysis
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    analyze
+    write_trajectory
+    write_trajectory_dcd

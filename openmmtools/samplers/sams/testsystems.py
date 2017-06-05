@@ -29,6 +29,9 @@ from functools import partial
 from pkg_resources import resource_filename
 
 from openmmtools import testsystems
+from openmmtools.states import ThermodynamicState, SamplerState
+from openmmtools.mcmc import MCMCSampler, GHMCMove, LangevinDynamicsMove
+from openmmtools.samplers.sams import ExpandedEnsembleSampler, SAMSSampler
 
 ################################################################################
 # CONSTANTS
@@ -147,7 +150,6 @@ class HarmonicOscillatorSimulatedTempering(SAMSTestSystem):
         Tmin = 100 * unit.kelvin
         Tmax = 1000 * unit.kelvin
         ntemps = 8 # number of temperatures
-        from sams import ThermodynamicState
         temperatures = unit.Quantity(np.logspace(np.log10(Tmin / unit.kelvin), np.log10(Tmax / unit.kelvin), ntemps), unit.kelvin)
         self.thermodynamic_states = [ ThermodynamicState(system=self.system, temperature=temperature) for temperature in temperatures ]
 
@@ -159,7 +161,6 @@ class HarmonicOscillatorSimulatedTempering(SAMSTestSystem):
         self.logZ[:] -= self.logZ[0]
 
         # Create SAMS samplers
-        from sams.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
@@ -213,12 +214,10 @@ class AlanineDipeptideVacuumSimulatedTempering(SAMSTestSystem):
         Tmin = 270 * unit.kelvin
         Tmax = 600 * unit.kelvin
         ntemps = 8 # number of temperatures
-        from sams import ThermodynamicState
         temperatures = unit.Quantity(np.logspace(np.log10(Tmin / unit.kelvin), np.log10(Tmax / unit.kelvin), ntemps), unit.kelvin)
         self.thermodynamic_states = [ ThermodynamicState(system=self.system, temperature=temperature) for temperature in temperatures ]
 
         # Create SAMS samplers
-        from sams.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
@@ -281,12 +280,10 @@ class AlanineDipeptideExplicitSimulatedTempering(SAMSTestSystem):
         Tmin = 270 * unit.kelvin
         Tmax = 600 * unit.kelvin
         ntemps = 256 # number of temperatures
-        from sams import ThermodynamicState
         temperatures = unit.Quantity(np.logspace(np.log10(Tmin / unit.kelvin), np.log10(Tmax / unit.kelvin), ntemps), unit.kelvin)
         self.thermodynamic_states = [ ThermodynamicState(system=self.system, temperature=temperature, pressure=pressure) for temperature in temperatures ]
 
         # Create SAMS samplers
-        from sams.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
@@ -360,13 +357,11 @@ class AlchemicalSAMSTestSystem(SAMSTestSystem):
 
         # Create alchemically-modified system and populate thermodynamic states.
         from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
-        from sams import ThermodynamicState
         self.thermodynamic_states = list()
         if alchemical_protocol == 'fused':
             factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
             alchemical_region = AlchemicalRegion(alchemical_atoms=self.alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=False, softcore_beta=0.5)
             self.system = factory.create_alchemical_system(self.system, alchemical_region)
-            from sams import ThermodynamicState
             alchemical_lambdas = np.linspace(1.0, 0.0, nlambda)
             for alchemical_lambda in alchemical_lambdas:
                 parameters = {'lambda_sterics' : alchemical_lambda, 'lambda_electrostatics' : alchemical_lambda}
@@ -388,7 +383,6 @@ class AlchemicalSAMSTestSystem(SAMSTestSystem):
 
         # Create SAMS samplers
         print('Setting up samplers...')
-        from sams.samplers import SamplerState, MCMCSampler, ExpandedEnsembleSampler, SAMSSampler
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
@@ -647,7 +641,7 @@ if __name__ == '__main__':
     #testsystem.sams_sampler.run(niterations)
 
     # Test analysis
-    from sams.analysis import analyze, write_trajectory
+    from .analysis import analyze, write_trajectory
     netcdf_filename = 'output.nc'
     analyze(netcdf_filename, testsystem, 'analyze.pdf')
     reference_pdb_filename = 'output.pdb'
