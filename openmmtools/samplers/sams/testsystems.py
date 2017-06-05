@@ -31,7 +31,7 @@ from pkg_resources import resource_filename
 from openmmtools import testsystems
 from openmmtools.states import ThermodynamicState, SamplerState
 from openmmtools.mcmc import MCMCSampler, GHMCMove, LangevinDynamicsMove
-from openmmtools.samplers.sams import ExpandedEnsembleSampler, SAMSSampler
+from openmmtools.samplers.sams import ExpandedEnsemble, SAMS
 
 ################################################################################
 # CONSTANTS
@@ -97,10 +97,10 @@ class SAMSTestSystem(object):
         Themodynamic states for each environment
     mcmc_samplers : dict of MCMCSampler objects
         MCMCSampler objects for environments
-    exen_samplers : dict of ExpandedEnsembleSampler objects
-        ExpandedEnsembleSampler objects for environments
-    sams_samplers : dict of SAMSSampler objects
-        SAMSSampler objects for environments
+    exen_samplers : dict of ExpandedEnsemble objects
+        ExpandedEnsemble objects for environments
+    sams_samplers : dict of SAMS objects
+        SAMS objects for environments
 
     """
     def __init__(self, netcdf_filename=None):
@@ -141,6 +141,7 @@ class HarmonicOscillatorSimulatedTempering(SAMSTestSystem):
         mass = 39.948 * unit.amu # 3D harmonic oscillator particle mass
         period = 2.0 * np.pi * unit.sqrt(mass / K) # harmonic oscillator period
         timestep = 0.01 * period
+        collision_rate = 1.0 / (100 * timestep)
         testsystem = HarmonicOscillator(K=K, mass=mass)
         self.topology = testsystem.topology
         self.positions = testsystem.positions
@@ -164,16 +165,11 @@ class HarmonicOscillatorSimulatedTempering(SAMSTestSystem):
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
-        self.mcmc_sampler = MCMCSampler(sampler_state=sampler_state, thermodynamic_state=thermodynamic_state, ncfile=self.ncfile)
-        self.mcmc_sampler.pdbfile = open('output.pdb', 'w')
-        self.mcmc_sampler.topology = self.topology
-        self.mcmc_sampler.timestep = timestep
-        self.mcmc_sampler.collision_rate = 1.0 / (100 * timestep)
-        self.mcmc_sampler.nsteps = 1000
-        self.mcmc_sampler.verbose = True
-        self.exen_sampler = ExpandedEnsembleSampler(self.mcmc_sampler, self.thermodynamic_states)
+        mcmc_move = LangevinDynamicsMove(timestep=timestep, collision_rate=collision_rate, n_steps=1000)
+        self.mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, move=mcmc_move)
+        self.exen_sampler = ExpandedEnsemble(self.mcmc_sampler, self.thermodynamic_states)
         self.exen_sampler.verbose = True
-        self.sams_sampler = SAMSSampler(self.exen_sampler, update_stages='two-stage', update_method='optimal')
+        self.sams_sampler = SAMS(self.exen_sampler, update_stages='two-stage', update_method='optimal')
         self.sams_sampler.verbose = True
 
 
@@ -221,14 +217,11 @@ class AlanineDipeptideVacuumSimulatedTempering(SAMSTestSystem):
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
-        self.mcmc_sampler = MCMCSampler(sampler_state=sampler_state, thermodynamic_state=thermodynamic_state, ncfile=self.ncfile)
-        self.mcmc_sampler.pdbfile = open('output.pdb', 'w')
-        self.mcmc_sampler.topology = self.topology
-        self.mcmc_sampler.nsteps = 500 # reduce number of steps for testing
-        self.mcmc_sampler.verbose = True
-        self.exen_sampler = ExpandedEnsembleSampler(self.mcmc_sampler, self.thermodynamic_states)
+        mcmc_move = LangevinDynamicsMove(n_steps=500)
+        self.mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state, mcmc_move)
+        self.exen_sampler = ExpandedEnsemble(self.mcmc_sampler, self.thermodynamic_states)
         self.exen_sampler.verbose = True
-        self.sams_sampler = SAMSSampler(self.exen_sampler)
+        self.sams_sampler = SAMS(self.exen_sampler)
         self.sams_sampler.verbose = True
 
 class AlanineDipeptideExplicitSimulatedTempering(SAMSTestSystem):
@@ -287,15 +280,11 @@ class AlanineDipeptideExplicitSimulatedTempering(SAMSTestSystem):
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
-        self.mcmc_sampler = MCMCSampler(sampler_state=sampler_state, thermodynamic_state=thermodynamic_state, ncfile=self.ncfile)
-        #self.mcmc_sampler.pdbfile = open('output.pdb', 'w')
-        self.mcmc_sampler.topology = self.topology
-        self.mcmc_sampler.nsteps = 500
-        self.mcmc_sampler.timestep = 2.0 * unit.femtoseconds
-        self.mcmc_sampler.verbose = True
-        self.exen_sampler = ExpandedEnsembleSampler(self.mcmc_sampler, self.thermodynamic_states)
+        mcmc_move = LangevinDynamicsMove(timestep=2.0*unit.femtoseconds, n_steps=500)
+        self.mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state=sampler_state)
+        self.exen_sampler = ExpandedEnsemble(self.mcmc_sampler, self.thermodynamic_states)
         self.exen_sampler.verbose = True
-        self.sams_sampler = SAMSSampler(self.exen_sampler)
+        self.sams_sampler = SAMS(self.exen_sampler)
         self.sams_sampler.verbose = True
 
 class AlchemicalSAMSTestSystem(SAMSTestSystem):
@@ -386,15 +375,11 @@ class AlchemicalSAMSTestSystem(SAMSTestSystem):
         thermodynamic_state_index = 0 # initial thermodynamic state index
         thermodynamic_state = self.thermodynamic_states[thermodynamic_state_index]
         sampler_state = SamplerState(positions=self.positions)
-        self.mcmc_sampler = MCMCSampler(sampler_state=sampler_state, thermodynamic_state=thermodynamic_state, ncfile=self.ncfile)
-        self.mcmc_sampler.timestep = 2.0 * unit.femtoseconds
-        self.mcmc_sampler.nsteps = 500
-        #self.mcmc_sampler.pdbfile = open('output.pdb', 'w')
-        self.mcmc_sampler.topology = self.topology
-        self.mcmc_sampler.verbose = True
-        self.exen_sampler = ExpandedEnsembleSampler(self.mcmc_sampler, self.thermodynamic_states)
+        mcmc_move = LangevinDynamicsMove(timestep=2.0*unit.femtoseconds, n_steps=500)
+        self.mcmc_sampler = MCMCSampler(thermodynamic_state, sampler_state=sampler_state)
+        self.exen_sampler = ExpandedEnsemble(self.mcmc_sampler, self.thermodynamic_states)
         self.exen_sampler.verbose = True
-        self.sams_sampler = SAMSSampler(self.exen_sampler)
+        self.sams_sampler = SAMS(self.exen_sampler)
         self.sams_sampler.verbose = True
 
         # DEBUG: Write PDB of initial frame
