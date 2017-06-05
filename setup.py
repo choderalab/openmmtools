@@ -4,6 +4,10 @@ Various Python tools for OpenMM.
 from __future__ import print_function
 import os
 import sys
+
+import distutils.extension
+from Cython.Build import cythonize
+
 from distutils.core import setup, Extension
 from setuptools import setup, Extension, find_packages
 import numpy
@@ -153,7 +157,9 @@ def check_dependencies():
 # SETUP
 ################################################################################
 
-extensions = []
+extensions = [
+    distutils.extension.Extension("openmmtools.samplers.repex.mixing._mix_replicas", ['./openmmtools/samplers/repex/mixing/_mix_replicas.pyx']),
+    ]
 
 write_version_py('openmmtools/version.py')
 
@@ -168,7 +174,8 @@ setup(
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
-    packages=['openmmtools', 'openmmtools.samplers', 'openmmtools.tests', 'openmmtools.scripts'],
+    #packages=['openmmtools', 'openmmtools.samplers', 'openmmtools.tests', 'openmmtools.scripts'],
+    packages=find_packages(),
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     install_requires=['numpy', 'scipy', 'openmm', 'parmed'],

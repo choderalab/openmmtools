@@ -54,7 +54,8 @@ import netCDF4 as netcdf
 import openmmtools as mmtools
 from openmmtools.states import ThermodynamicState
 
-from . import utils, mpi, version
+from openmmtools import utils, version
+from openmmtools.distributed import mpi
 
 logger = logging.getLogger(__name__)
 
@@ -253,8 +254,8 @@ class Reporter(object):
                 ncfile.createDimension('spatial', 3)  # Number of spatial dimensions.
 
                 # Set global attributes.
-                ncfile.application = 'YANK'
-                ncfile.program = 'yank.py'
+                ncfile.application = 'openmmtools.repex'
+                ncfile.program = 'openmmtools'
                 ncfile.programVersion = version.short_version
                 ncfile.Conventions = 'ReplicaExchange'
                 ncfile.ConventionVersion = '0.2'
