@@ -21,6 +21,7 @@ import time
 import math
 import copy
 import shutil
+import inspect
 import logging
 import operator
 import tempfile
@@ -49,7 +50,6 @@ def wraps_py2(wrapped, *args):
         return wrapper
     return decorator
 
-
 def unwrap_py2(func):
     """Unwrap a wrapped function.
     The function inspect.unwrap has been implemented only in Python 3.4. With
@@ -62,6 +62,10 @@ def unwrap_py2(func):
     except AttributeError:
         return unwrapped_func
 
+# =============================================================================
+# TEMPORARY DIRECTORIES
+# =============================================================================
+
 @contextlib.contextmanager
 def temporary_directory():
     """Context for safe creation of temporary directories."""
@@ -70,7 +74,6 @@ def temporary_directory():
         yield tmp_dir
     finally:
         shutil.rmtree(tmp_dir)
-
 
 # =============================================================================
 # BENCHMARKING UTILITIES
@@ -248,7 +251,6 @@ def sanitize_expression(expression, variables):
 
     return sanitized_expression, sanitized_variables
 
-
 def math_eval(expression, variables=None):
     """Evaluate a mathematical expression with variables.
 
@@ -324,6 +326,44 @@ def math_eval(expression, variables=None):
 # =============================================================================
 # QUANTITY UTILITIES
 # =============================================================================
+
+def quantity_from_string(expression):
+    """Create a Quantity object from a string expression
+
+    All the functions in the standard module math are available together
+    with most of the methods inside the simtk.unit module.
+
+    Parameters
+    ----------
+    expression : str
+        The mathematical expression to rebuild a Quantity as a string.
+
+    Returns
+    -------
+    quantity
+        The result of the evaluated expression.
+
+    Examples
+    --------
+    >>> expr = '4 * kilojoules / mole'
+    >>> quantity_from_string(expr)
+    Quantity(value=4.000000000000002, unit=kilojoule/mole)
+
+    """
+    # Retrieve units from unit module.
+    if not hasattr(quantity_from_string, '_units'):
+        units_tuples = inspect.getmembers(unit, lambda x: isinstance(x, unit.Unit))
+        quantity_from_string._units = dict(units_tuples)
+
+    # Eliminate nested quotes and excess whitespace
+    expression = expression.strip('\'" ')
+
+    # Handle a special case of the unit when it is just "inverse unit",
+    # e.g. Hz == /second
+    if expression[0] == '/':
+        expression = '(' + expression[1:] + ')**(-1)'
+
+    return math_eval(expression, variables=quantity_from_string._units)
 
 def is_quantity_close(quantity1, quantity2):
     """Check if the quantities are equal up to floating-point precision errors.
@@ -660,7 +700,7 @@ else:
         return d.items()
     def dictiter(d):
         return d.iteritems()
-        
+
 #========================================================================================
 # MAIN
 #========================================================================================
