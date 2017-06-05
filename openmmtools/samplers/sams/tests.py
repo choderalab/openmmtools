@@ -42,8 +42,7 @@ def test_sampler_options():
     Test sampler options on a single test system.
 
     """
-    from testsystems import WaterBoxAlchemical
-    test = WaterBoxAlchemical()
+    test = testsystems.WaterBoxAlchemical()
     testsystem_name = test.__class__.__name__
     niterations = 5 # number of iterations to run
     test.mcmc_sampler.nsteps = 50

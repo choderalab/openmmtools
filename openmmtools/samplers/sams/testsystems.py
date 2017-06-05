@@ -6,7 +6,7 @@ Examples
 
 Alanine dipeptide in various environments (vacuum, implicit, explicit):
 
->>> from openmmtools.samplers.expanded_ensemble.testsystems import AlanineDipeptideVacuumSimulatedTempering
+>>> from openmmtools.samplers.sams.testsystems import AlanineDipeptideVacuumSimulatedTempering
 >>> testsystem = AlanineDipeptideVacuumSimulatedTempering()
 >>> exen_sampler = testsystem.exen_sampler['vacuum']
 >>> exen_sampler.run(10)
@@ -359,20 +359,22 @@ class AlchemicalSAMSTestSystem(SAMSTestSystem):
             self.system.addForce(barostat)
 
         # Create alchemically-modified system and populate thermodynamic states.
-        from openmmtools.alchemy import AbsoluteAlchemicalFactory
+        from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
         from sams import ThermodynamicState
         self.thermodynamic_states = list()
         if alchemical_protocol == 'fused':
-            factory = AbsoluteAlchemicalFactory(self.system, ligand_atoms=self.alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=False)
-            self.system = factory.createPerturbedSystem()
+            factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
+            alchemical_region = AlchemicalRegion(alchemical_atoms=self.alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=False, softcore_beta=0.5)
+            self.system = factory.create_alchemical_system(self.system, alchemical_region)
             from sams import ThermodynamicState
             alchemical_lambdas = np.linspace(1.0, 0.0, nlambda)
             for alchemical_lambda in alchemical_lambdas:
                 parameters = {'lambda_sterics' : alchemical_lambda, 'lambda_electrostatics' : alchemical_lambda}
                 self.thermodynamic_states.append( ThermodynamicState(system=self.system, temperature=self.temperature, pressure=self.pressure, parameters=parameters) )
         elif alchemical_protocol == 'two-phase':
-            factory = AbsoluteAlchemicalFactory(self.system, ligand_atoms=self.alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=False, softcore_beta=0.0) # turn off softcore electrostatics
-            self.system = factory.createPerturbedSystem()
+            factory = AbsoluteAlchemicalFactory(consistent_exceptions=False)
+            alchemical_region = AlchemicalRegion(alchemical_atoms=self.alchemical_atoms, annihilate_electrostatics=True, annihilate_sterics=False, softcore_beta=0.0) # turn off softcore
+            self.system = factory.create_alchemical_system(self.system, alchemical_region)
             nelec = int(nlambda/2.0)
             nvdw = nlambda - nelec
             for state in range(nelec+1):
@@ -564,13 +566,40 @@ class AblImatinibExplicitAlchemical(AlchemicalSAMSTestSystem):
         # This test case requires minimization to not explode.
         minimize(self)
 
+def get_all_subclasses(cls):
+    """
+    Return all subclasses of a specified class.
+
+    Parameters
+    ----------
+    cls : class
+       The class for which all subclasses are to be returned.
+
+    Returns
+    -------
+    all_subclasses : list of class
+       List of all subclasses of `cls`.
+
+    """
+
+    all_subclasses = []
+
+    for subclass in cls.__subclasses__():
+        all_subclasses.append(subclass)
+        all_subclasses.extend(get_all_subclasses(subclass))
+
+    return all_subclasses
+
 def test_testsystems():
     np.set_printoptions(linewidth=130, precision=3)
     niterations = 2
-    import sams
-    # TODO: Automatically discover subclasses of SAMSTestSystem that are not abstract base classes
-    for testsystem_name in ['AlanineDipeptideVacuumSimulatedTempering', 'AlanineDipeptideExplicitSimulatedTempering', 'AlanineDipeptideVacuumAlchemical', 'AlanineDipeptideExplicitAlchemical', 'WaterBoxAlchemical', 'HostGuestAlchemical']:
-        testsystem = getattr(testsystems, testsystem_name)
+    import sys
+    current_module = sys.modules[__name__]
+    for testsystem in get_all_subclasses(SAMSTestSystem):
+        # Skip any classes that have subclasses
+        if len(testsystem.__subclasses__()) > 0:
+            continue
+
         test = testsystem()
         # Reduce number of steps for testing
         test.mcmc_sampler.nsteps = 2
@@ -597,7 +626,6 @@ def generate_ffxml(pdb_filename):
     outfile = open('imatinib.xml', 'w')
     outfile.write(ffxml)
     outfile.close()
-
 
 if __name__ == '__main__':
     netcdf_filename = 'output2.nc'

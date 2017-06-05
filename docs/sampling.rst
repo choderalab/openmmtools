@@ -7,7 +7,7 @@
 Multistate sampling
 ===================
 
-The :mod:`openmmtools.samplers` module includes a number of samplers that can be layered on top of :class:`openmmtools.mcmc.MCMCSampler` to create samplers (or stacks of samplers) that efficiently sample multiple thermodynamic states.
+The :mod:`openmmtools.samplers` module includes a number of classes that can be layered on top of :class:`openmmtools.mcmc.MCMCSampler` to create samplers (or stacks of samplers) that efficiently sample multiple thermodynamic states.
 
 Expanded ensembles
 ------------------
@@ -128,4 +128,5 @@ A number of schemes for sampling multiple thermodynamic states are provided.
     :toctree: api/generated/
 
     ExpandedEnsemble
+    SimulatedTempering
     SAMS
