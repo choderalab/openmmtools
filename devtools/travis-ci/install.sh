@@ -17,7 +17,7 @@ bash $MINICONDA -b -p $MINICONDA_HOME
 export PIP_ARGS="-U"
 export PATH=$MINICONDA_HOME/bin:$PATH
 conda config --add channels conda-forge
-conda update --yes conda
+conda update --yes conda\>=4.3
 conda install --yes conda-build jinja2 anaconda-client pip
 
 # Restore original directory
