@@ -51,7 +51,7 @@ Modules
   states
   cache
   mcmc
-  sampling
+  samplers
   alchemy
   utils
   scripts

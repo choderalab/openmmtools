@@ -168,7 +168,7 @@ setup(
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
-    packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts'],
+    packages=find_packages(),
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     install_requires=['numpy', 'scipy', 'openmm', 'parmed'],

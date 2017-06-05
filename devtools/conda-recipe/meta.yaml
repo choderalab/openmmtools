@@ -18,6 +18,8 @@ requirements:
     - setuptools
     - openmm
     - parmed
+    - netcdf
+    - pymbar
 
   run:
     - python
@@ -28,11 +30,12 @@ requirements:
     - six
     - openmm
     - parmed
+    - netcdf
+    - pymbar
 
 test:
   requires:
     - nose
-    - pymbar
   imports:
     - openmmtools
 
