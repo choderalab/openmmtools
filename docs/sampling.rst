@@ -1,4 +1,4 @@
-.. _sampling::
+.. _sampling:
 
 .. warning::
 
@@ -9,10 +9,13 @@ Multistate sampling
 
 The :mod:`openmmtools.samplers` module includes a number of classes that can be layered on top of :class:`openmmtools.mcmc.MCMCSampler` to create samplers (or stacks of samplers) that efficiently sample multiple thermodynamic states either serially or in parallel.
 
-Expanded ensembles
-------------------
+Expanded ensembles and self-adjusted mixture sampling (SAMS)
+------------------------------------------------------------
 
-The method of Lyubartsev [1] with updates to the thermodynamic made through several possible Gibbs sampling approaches [2] is available via the :class:`openmmtools.samplers.ExpandedEnsembleSampler` class.
+Expanded ensembles
+""""""""""""""""""
+
+The method of Lyubartsev [1] with updates to the thermodynamic made through several possible Gibbs sampling approaches [2] is available via the :class:`openmmtools.samplers.sams.ExpandedEnsemble` class.
 
 ::
 
@@ -76,21 +79,19 @@ Analysis to estimate the free energy is straightforward:
     # Estimate relative free energies between the thermodynamic states
     [Delta_f_ij, dDelta_f_ij] = exen_sampler.compute_free_energies()
 
-:: todo
+.. todo:: Describe storage and binding to storage files.
 
-   Describe storage and binding to storage files.
+Self-adjusted mixture sampling (SAMS)
+"""""""""""""""""""""""""""""""""""""
 
-Self-adjusted mixture sampling
-------------------------------
-
-A self-adjusted mixture sampling (SAMS) sampler [3] is available through the :class:`SAMSSampler` class.
+A self-adjusted mixture sampling (SAMS) sampler [3] is available through the :class:`SAMS` class.
 
 ::
 
     [3] Tan, Z. Optimally adjusted mixture sampling and locally weighted histogram analysis, Journal of Computational and Graphical Statistics 26:54, 2017.
     http://dx.doi.org/10.1080/10618600.2015.1113975
 
-To use it, first configure an :class:`ExpandedEnsembleSampler` whose weights will be automatically adjusted by SAMS to achieve the target probabilities.
+To use it, first configure an :class:`ExpandedEnsemble` whose weights will be automatically adjusted by SAMS to achieve the target probabilities.
 If equal sampling of all states is desired, ``log_target_probabilities`` can be left unspecified.
 
 ::
@@ -106,7 +107,7 @@ Now, you can run the simulation:
     # Run the simulation
     sams_sampler.run(niterations=10)
 
-Analysis uses a similar interface to :class:`ExpandedEnsembleSampler`:
+Analysis uses a similar interface to :class:`ExpandedEnsemble`:
 
 ::
 
@@ -116,11 +117,6 @@ Analysis uses a similar interface to :class:`ExpandedEnsembleSampler`:
 :: todo
 
    Describe storage and binding to storage files.
-
-Expanded ensemble and self-adjusted mixture sampling (SAMS)
------------------------------------------------------------
-
-A number of schemes for sampling multiple thermodynamic states are provided.
 
 .. currentmodule:: openmmtools.samplers.sams
 .. autosummary::

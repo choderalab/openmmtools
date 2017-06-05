@@ -1,4 +1,4 @@
-.. _mcmc::
+.. _mcmc:
 
 Markov chain Monte Carlo (MCMC)
 ===============================
