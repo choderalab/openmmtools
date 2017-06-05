@@ -18,7 +18,7 @@ requirements:
     - setuptools
     - openmm
     - parmed
-    - netcdf
+    - netcdf4
     - pymbar
 
   run:
@@ -30,7 +30,7 @@ requirements:
     - six
     - openmm
     - parmed
-    - netcdf
+    - netcdf4
     - pymbar
 
 test:
