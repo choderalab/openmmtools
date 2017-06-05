@@ -16,6 +16,7 @@ Classes that represent a portion of the state of an OpenMM context.
 
 import abc
 import copy
+import weakref
 
 import numpy as np
 from simtk import openmm, unit
@@ -235,7 +236,7 @@ class ThermodynamicState(object):
     >>> pressure = 1.0*unit.atmosphere
     >>> state.pressure = pressure
     >>> state.pressure
-    Quantity(value=1.01325, unit=bar)
+    Quantity(value=1.0, unit=atmosphere)
     >>> state.volume is None
     True
 
@@ -287,14 +288,14 @@ class ThermodynamicState(object):
         The returned system is a copy and can be modified without
         altering the internal state of ThermodynamicState. In order
         to ensure a consistent thermodynamic state, the system has
-        a Thermostat force. You can use get_system() to obtained a
+        a Thermostat force. You can use `get_system()` to obtain a
         copy of the system without the thermostat. The method
-        create_context then takes care of removing the thermostat
+        `create_context()` then takes care of removing the thermostat
         when an integrator with a coupled heat bath is used (e.g.
-        LangevinIntegrator).
+        `LangevinIntegrator`).
 
         It can be set only to a system which is consistent with the
-        current thermodynamic state. Use set_system() if you want to
+        current thermodynamic state. Use `set_system()` if you want to
         correct the thermodynamic state of the system automatically
         before assignment.
 
@@ -303,9 +304,6 @@ class ThermodynamicState(object):
         ThermodynamicState.get_system
         ThermodynamicState.set_system
         ThermodynamicState.create_context
-
-        Examples
-        --------
 
         """
         return self.get_system()
@@ -363,16 +361,9 @@ class ThermodynamicState(object):
         >>> state.set_system(alanine.system, fix_state=True)
 
         """
+        # Copy the system to avoid modifications during standardization.
         system = copy.deepcopy(system)
-        if fix_state:
-            self._set_system_thermostat(system, self.temperature)
-            barostat = self._set_system_pressure(system, self.pressure)
-            if barostat is not None:
-                self._set_barostat_temperature(barostat, self.temperature)
-        else:
-            self._check_system_consistency(system)
-        self._system = system
-        self._cached_standard_system_hash = None  # Invalidate cache.
+        self._unsafe_set_system(system, fix_state)
 
     def get_system(self, remove_thermostat=False, remove_barostat=False):
         """Manipulate and return the system.
@@ -419,33 +410,43 @@ class ThermodynamicState(object):
         []
 
         """
-        system = copy.deepcopy(self._system)
-        if remove_thermostat:
-            self._remove_thermostat(system)
+        system = copy.deepcopy(self._standard_system)
+
+        # Remove or configure standard pressure barostat.
         if remove_barostat:
             self._pop_barostat(system)
+        else:  # Set pressure of standard barostat.
+            self._set_system_pressure(system, self.pressure)
+
+        # Set temperature of standard thermostat and barostat.
+        if not (remove_barostat and remove_thermostat):
+            self._set_system_temperature(system, self.temperature)
+
+        # Remove or configure standard temperature thermostat.
+        if remove_thermostat:
+            self._remove_thermostat(system)
+
         return system
 
     @property
     def temperature(self):
         """Constant temperature of the thermodynamic state."""
-        return self._thermostat.getDefaultTemperature()
+        return self._temperature
 
     @temperature.setter
     def temperature(self, value):
         if value is None:
             raise ThermodynamicsError(ThermodynamicsError.NONE_TEMPERATURE)
-        self._set_system_thermostat(self._system, value)
-        barostat = self._barostat
-        if barostat is not None:
-            self._set_barostat_temperature(barostat, value)
+        self._temperature = value
 
     @property
     def kT(self):
+        """Thermal energy per mole."""
         return constants.kB * self.temperature
 
     @property
     def beta(self):
+        """Thermodynamic beta in units of mole/energy."""
         return 1.0 / self.kT
 
     @property
@@ -457,17 +458,22 @@ class ThermodynamicState(object):
         If it is set to None, the barostat will be removed.
 
         """
-        barostat = self._barostat
-        if barostat is None:
-            return None
-        return barostat.getDefaultPressure()
+        return self._pressure
 
     @pressure.setter
-    def pressure(self, value):
-        # Invalidate cache if the ensemble changes.
-        if (value is None) != (self._barostat is None):
-            self._cached_standard_system_hash = None
-        self._set_system_pressure(self._system, value)
+    def pressure(self, new_pressure):
+        old_pressure = self._pressure
+        self._pressure = new_pressure
+
+        # If we change ensemble, we need to modify the standard system.
+        if (new_pressure is None) != (old_pressure is None):
+            # The barostat will be removed/added since fix_state is True.
+            try:
+                self.set_system(self._standard_system, fix_state=True)
+            except ThermodynamicsError:
+                # Restore old pressure to keep object consistent.
+                self._pressure = old_pressure
+                raise
 
     @property
     def barostat(self):
@@ -482,50 +488,61 @@ class ThermodynamicState(object):
         this to None will place the system in an NVT ensemble.
 
         """
-        return copy.deepcopy(self._barostat)
+        # Retrieve the barostat with standard temperature/pressure, then
+        # set temperature and pressure to the thermodynamic state values.
+        barostat = copy.deepcopy(self._find_barostat(self._standard_system))
+        if barostat is not None:  # NPT ensemble.
+            self._set_barostat_pressure(barostat, self.pressure)
+            self._set_barostat_temperature(barostat, self.temperature)
+        return barostat
 
     @barostat.setter
-    def barostat(self, value):
-        if value is None:
-            # Reset the standard system hash only if we actually switch to NVT.
-            if self._pop_barostat(self._system) is not None:
-                self._cached_standard_system_hash = None
-        else:
-            old_barostat = self._pop_barostat(self._system)
-            new_barostat = copy.deepcopy(value)
-            self._system.addForce(new_barostat)
-            try:
-                self._check_internal_consistency()
-            except Exception as e:
-                # Restore old barostat to leave state consistent.
-                self.barostat = old_barostat
-                raise e
-            self._cached_standard_system_hash = None
+    def barostat(self, new_barostat):
+        # If None, just remove the barostat from the standard system.
+        if new_barostat is None:
+            self.pressure = None
+            return
+
+        # Remember old pressure in case something goes wrong.
+        old_pressure = self.pressure
+
+        # Build the system with the new barostat.
+        system = self.get_system(remove_barostat=True)
+        system.addForce(copy.deepcopy(new_barostat))
+
+        # Update the internally stored standard system, and restore the old
+        # pressure if something goes wrong (e.g. the system is not periodic).
+        try:
+            self._pressure = new_barostat.getDefaultPressure()
+            self._unsafe_set_system(system, fix_state=False)
+        except ThermodynamicsError:
+            self._pressure = old_pressure
+            raise
 
     @property
     def volume(self):
-        """Constant volume of the thermodynamic state.
+        """Constant volume of the thermodynamic state (read-only).
 
-        Read-only. If the volume is allowed to fluctuate, or if the
-        system is not in a periodic box this is None.
+        If the volume is allowed to fluctuate, or if the system is
+        not in a periodic box this is None.
 
         """
         if self.pressure is not None:  # Volume fluctuates.
             return None
-        if not self._system.usesPeriodicBoundaryConditions():
+        if not self._standard_system.usesPeriodicBoundaryConditions():
             return None
-        box_vectors = self._system.getDefaultPeriodicBoxVectors()
+        box_vectors = self._standard_system.getDefaultPeriodicBoxVectors()
         return _box_vectors_volume(box_vectors)
 
     @property
     def n_particles(self):
         """Number of particles (read-only)."""
-        return self._system.getNumParticles()
+        return self._standard_system.getNumParticles()
 
     @property
     def is_periodic(self):
         """True if the system is in a periodic box (read-only)."""
-        return self._system.usesPeriodicBoundaryConditions()
+        return self._standard_system.usesPeriodicBoundaryConditions()
 
     def reduced_potential(self, context_state):
         """Reduced potential in this thermodynamic state.
@@ -629,8 +646,8 @@ class ThermodynamicState(object):
         The property is symmetric and transitive.
 
         This is faster than checking compatibility of a Context object
-        through is_context_compatible since, and it should be preferred
-        when possible.
+        through is_context_compatible, and it should be preferred when
+        possible.
 
         Parameters
         ----------
@@ -703,7 +720,20 @@ class ThermodynamicState(object):
         ThermodynamicState.is_state_compatible
 
         """
-        context_system_hash = self._get_standard_system_hash(context.getSystem())
+        # Avoid modifying the context system during standardization.
+        context_system = copy.deepcopy(context.getSystem())
+        context_integrator = context.getIntegrator()
+
+        # If the temperature is controlled by the integrator, the compatibility
+        # is independent on the parameters of the thermostat, so we add one
+        # identical to self._standard_system. We don't care if the integrator's
+        # temperature != self.temperature, so we set check_consistency=False.
+        if self._is_integrator_thermostated(context_integrator, check_consistency=False):
+            thermostat = self._find_thermostat(self._standard_system)
+            context_system.addForce(copy.deepcopy(thermostat))
+
+        # Compute and compare standard system hash.
+        context_system_hash = self._standardize_and_hash(context_system)
         is_compatible = self._standard_system_hash == context_system_hash
         return is_compatible
 
@@ -776,12 +806,11 @@ class ThermodynamicState(object):
         # With CompoundIntegrator, at least one must be thermostated.
         is_thermostated = self._is_integrator_thermostated(integrator)
 
-        # If integrator is coupled to heat bath, remove system thermostat.
-        system = copy.deepcopy(self._system)
-        if is_thermostated:
-            self._remove_thermostat(system)
+        # Get a copy of the system. If integrator is coupled
+        # to heat bath, remove the system thermostat.
+        system = self.get_system(remove_thermostat=is_thermostated)
 
-        # Create platform.
+        # Create context.
         if platform is None:
             return openmm.Context(system, integrator)
         else:
@@ -836,7 +865,7 @@ class ThermodynamicState(object):
         # Apply pressure and temperature to barostat.
         barostat = self._find_barostat(system)
         if barostat is not None:
-            if self._barostat is None:
+            if self._pressure is None:
                 # The context is NPT but this is NVT.
                 raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
 
@@ -853,7 +882,7 @@ class ThermodynamicState(object):
                                                     getParameters=True)
                     context.reinitialize()
                     context.setState(openmm_state)
-        elif self._barostat is not None:
+        elif self._pressure is not None:
             # The context is NVT but this is NPT.
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
 
@@ -868,26 +897,53 @@ class ThermodynamicState(object):
             integrator = context.getIntegrator()
             self._set_integrator_temperature(integrator)
 
-    def __getstate__(self):
+    # -------------------------------------------------------------------------
+    # Magic methods
+    # -------------------------------------------------------------------------
+
+    def __copy__(self):
+        """Overwrite normal implementation to share standard system."""
+        cls = self.__class__
+        new_state = cls.__new__(cls)
+        new_state.__dict__.update({k: v for k, v in self.__dict__.items()
+                                   if k != '_standard_system'})
+        new_state.__dict__['_standard_system'] = self._standard_system
+        return new_state
+
+    def __deepcopy__(self, memo):
+        """Overwrite normal implementation to share standard system."""
+        cls = self.__class__
+        new_state = cls.__new__(cls)
+        memo[id(self)] = new_state
+        for k, v in self.__dict__.items():
+            if k != '_standard_system':
+                new_state.__dict__[k] = copy.deepcopy(v, memo)
+        new_state.__dict__['_standard_system'] = self._standard_system
+        return new_state
+
+    def __getstate__(self, skip_system=False):
         """Return a dictionary representation of the state."""
-        # We serialize the standardized system, with temperature and pressure.
-        # This way, if the user wants to store multiple compatible ThermodynamicStates
-        # it is possible to store only one system for all of them, greatly reducing
-        # the hard disk consumption.
-        standardized_system = copy.deepcopy(self._system)
-        self._standardize_system(standardized_system)
-        serialized_system = openmm.XmlSerializer.serialize(standardized_system)
-        # We might as well update the cached hash.
-        if self._cached_standard_system_hash is None:
-            self._cached_standard_system_hash = serialized_system.__hash__()
+        serialized_system = None
+        if not skip_system:
+            serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
         return dict(standard_system=serialized_system, temperature=self.temperature,
                     pressure=self.pressure)
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
-        deserialized_system = openmm.XmlSerializer.deserialize(serialization['standard_system'])
-        self._initialize(deserialized_system, temperature=serialization['temperature'],
-                         pressure=serialization['pressure'])
+        self._temperature = serialization['temperature']
+        self._pressure = serialization['pressure']
+
+        serialized_system = serialization['standard_system']
+        self._standard_system_hash = serialized_system.__hash__()
+
+        # Check first if we have already the system in the cache.
+        try:
+            self._standard_system = self._standard_system_cache[self._standard_system_hash]
+        except KeyError:
+            system = openmm.XmlSerializer.deserialize(serialized_system)
+            self._standard_system_cache[self._standard_system_hash] = system
+            self._standard_system = system
 
     # -------------------------------------------------------------------------
     # Internal-usage: initialization
@@ -895,27 +951,33 @@ class ThermodynamicState(object):
 
     def _initialize(self, system, temperature=None, pressure=None):
         """Initialize the thermodynamic state."""
-        # The standard system hash is cached and computed on-demand.
-        self._cached_standard_system_hash = None
+        # Avoid modifying the original system when setting temperature and pressure.
+        system = copy.deepcopy(system)
 
-        # Do not modify original system.
-        self._system = copy.deepcopy(system)
+        # If pressure is None, we try to infer the pressure from the barostat.
+        barostat = self._find_barostat(system)
+        if pressure is None and barostat is not None:
+            self._pressure = barostat.getDefaultPressure()
+        else:
+            self._pressure = pressure  # Pressure here can also be None.
 
-        # If temperature is None, the user must specify a thermostat.
+        # If temperature is None, we infer the temperature from a thermostat.
         if temperature is None:
-            if self._thermostat is None:
+            thermostat = self._find_thermostat(system)
+            if thermostat is None:
                 raise ThermodynamicsError(ThermodynamicsError.NO_THERMOSTAT)
-            # Read temperature from thermostat and pass it to barostat.
-            temperature = self.temperature
+            self._temperature = thermostat.getDefaultTemperature()
+        else:
+            self._temperature = temperature
 
-        # Set thermostat and barostat temperature.
-        self.temperature = temperature
-
-        # Set barostat pressure.
+        # Fix system temperature/pressure if requested.
+        if temperature is not None:
+            self._set_system_temperature(system, temperature)
         if pressure is not None:
-            self.pressure = pressure
+            self._set_system_pressure(system, pressure)
 
-        self._check_internal_consistency()
+        # We can use the unsafe set_system since the system has been copied.
+        self._unsafe_set_system(system, fix_state=False)
 
     # -------------------------------------------------------------------------
     # Internal-usage: system handling
@@ -925,16 +987,41 @@ class ThermodynamicState(object):
     # just consistent between ThermodynamicStates to make comparison
     # of standard system hashes possible. We set this to round floats
     # and use OpenMM units to avoid funniness due to precision errors
-    # caused by periodic binary representation/unit conversion.
+    # caused by unit conversion.
     _STANDARD_PRESSURE = 1.0*unit.bar
     _STANDARD_TEMPERATURE = 273.0*unit.kelvin
 
     _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
                                       openmm.NonbondedForce.CutoffNonPeriodic}
 
-    def _check_internal_consistency(self):
-        """Shortcut self._check_system_consistency(self._system)."""
-        self._check_system_consistency(self._system)
+    # Shared cache of standard systems to minimize memory consumption
+    # when simulating a lot of thermodynamic states. The cache holds
+    # only weak references so ThermodynamicState objects must keep the
+    # system as an internal variable.
+    _standard_system_cache = weakref.WeakValueDictionary()
+
+    def _unsafe_set_system(self, system, fix_state):
+        """This implements self.set_system but modifies the passed system."""
+        # Configure temperature and pressure.
+        if fix_state:
+            # We just need to add/remove the barostat according to the ensemble.
+            # Temperature and pressure of thermostat and barostat will be set
+            # to their standard value afterwards.
+            self._set_system_pressure(system, self.pressure)
+        else:
+            # If the flag is deactivated, we check that temperature
+            # and pressure of the system are correct.
+            self._check_system_consistency(system)
+
+        # Standardize system and compute hash.
+        self._standard_system_hash = self._standardize_and_hash(system)
+
+        # Check if the standard system is already in the weakref cache.
+        try:
+            self._standard_system = self._standard_system_cache[self._standard_system_hash]
+        except KeyError:
+            self._standard_system_cache[self._standard_system_hash] = system
+            self._standard_system = system
 
     def _check_system_consistency(self, system):
         """Check system consistency with this ThermodynamicState.
@@ -969,7 +1056,7 @@ class ThermodynamicState(object):
                                          self.temperature):
             raise TE(TE.INCONSISTENT_THERMOSTAT)
 
-        # This raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
+        # This line raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
         barostat = self._find_barostat(system)
         if barostat is not None:
             if not self._is_barostat_consistent(barostat):
@@ -984,7 +1071,7 @@ class ThermodynamicState(object):
                     nonbonded_method = force.getNonbondedMethod()
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
                         raise TE(TE.BAROSTATED_NONPERIODIC)
-        elif self._barostat is not None:
+        elif self.pressure is not None:
             raise TE(TE.NO_BAROSTAT)
 
     @classmethod
@@ -996,12 +1083,12 @@ class ThermodynamicState(object):
         standard systems, and is_state_compatible will return True if
         the (cached) serialization of the standard systems are identical.
 
-        Here, the standard system has the barostat pressure/temperature
-        set to _STANDARD_PRESSURE/TEMPERATURE (if a barostat exist), and
-        the thermostat removed (if it is present). Removing the thermostat
-        means that systems that will enforce a temperature through an
-        integrator coupled to a heat bath will be compatible as well. The
-        method apply_to_context then sets the parameters in the Context.
+        If no thermostat is present, an AndersenThermostat is added. The
+        presence of absence of a barostat determine whether this system is
+        in NPT or NVT ensemble. Pressure and temperature of barostat (if
+        any) and thermostat are set to _STANDARD_PRESSURE/TEMPERATURE.
+        If present, the barostat force is pushed at the end so that the
+        order of the two forces won't matter.
 
         Effectively this means that only same systems in the same ensemble
         (NPT or NVT) are compatible between each other.
@@ -1018,37 +1105,25 @@ class ThermodynamicState(object):
         ThermodynamicState.is_context_compatible
 
         """
-        cls._remove_thermostat(system)
-        barostat = cls._find_barostat(system)
+        # This adds a thermostat if it doesn't exist already. This way
+        # the comparison between system using thermostat with different
+        # parameters (e.g. collision frequency) will fail as expected.
+        cls._set_system_temperature(system, cls._STANDARD_TEMPERATURE)
+
+        # We need to be sure that thermostat and barostat always are
+        # in the same order, as the hash depends on the Forces order.
+        # Here we push the barostat at the end.
+        barostat = cls._pop_barostat(system)
         if barostat is not None:
             barostat.setDefaultPressure(cls._STANDARD_PRESSURE)
-            cls._set_barostat_temperature(barostat, cls._STANDARD_TEMPERATURE)
-
+            system.addForce(barostat)
 
     @classmethod
-    def _get_standard_system_hash(cls, system):
-        """Return the serialization hash of the standard system."""
-        standard_system = copy.deepcopy(system)
-        cls._standardize_system(standard_system)
-        system_serialization = openmm.XmlSerializer.serialize(standard_system)
+    def _standardize_and_hash(cls, system):
+        """Standardize the system and return its hash."""
+        cls._standardize_system(system)
+        system_serialization = openmm.XmlSerializer.serialize(system)
         return system_serialization.__hash__()
-
-    @property
-    def _standard_system_hash(self):
-        """Shortcut for _get_standard_system_hash(self._system).
-
-        This property is marked for internal usage since we may change
-        this system in the future, but ContextCache makes use of this
-        property too.
-
-        See Also
-        --------
-        cache.ContextCache._generate_context_id
-
-        """
-        if self._cached_standard_system_hash is None:
-            self._cached_standard_system_hash = self._get_standard_system_hash(self._system)
-        return self._cached_standard_system_hash
 
     # -------------------------------------------------------------------------
     # Internal-usage: integrator handling
@@ -1066,7 +1141,7 @@ class ThermodynamicState(object):
             integrators.ThermostatedIntegrator.restore_interface(integrator)
             yield integrator
 
-    def _is_integrator_thermostated(self, integrator):
+    def _is_integrator_thermostated(self, integrator, check_consistency=True):
         """True if integrator is coupled to a heat bath.
 
         If integrator is a CompoundIntegrator, it returns true if at least
@@ -1075,8 +1150,9 @@ class ThermodynamicState(object):
         Raises
         ------
         ThermodynamicsError
-            If integrator is couple to a heat bath at a different
-            temperature than this thermodynamic state.
+            If check_consistency is True and the integrator is
+            coupled to a heat bath at a different temperature
+            than this thermodynamic state.
 
         """
         # Loop over integrators to handle CompoundIntegrators.
@@ -1088,7 +1164,8 @@ class ThermodynamicState(object):
                 pass
             else:
                 # Raise exception if the heat bath is at the wrong temperature.
-                if not utils.is_quantity_close(temperature, self.temperature):
+                if (check_consistency and
+                        not utils.is_quantity_close(temperature, self.temperature)):
                     err_code = ThermodynamicsError.INCONSISTENT_INTEGRATOR
                     raise ThermodynamicsError(err_code)
                 is_thermostated = True
@@ -1102,38 +1179,24 @@ class ThermodynamicState(object):
         If integrator is a CompoundIntegrator, it sets the temperature
         of every sub-integrator.
 
-        Returns
-        -------
-        has_changed : bool
-            True if the integrator temperature has changed.
-
         """
         def set_temp(_integrator):
             try:
                 if not utils.is_quantity_close(_integrator.getTemperature(),
                                                self.temperature):
                     _integrator.setTemperature(self.temperature)
-                    return True
             except AttributeError:
                 pass
-            return False
 
         # Loop over integrators to handle CompoundIntegrators.
-        has_changed = False
         for _integrator in self._loop_over_integrators(integrator):
-            has_changed = has_changed or set_temp(_integrator)
-        return has_changed
+            set_temp(_integrator)
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
     # -------------------------------------------------------------------------
 
     _SUPPORTED_BAROSTATS = {'MonteCarloBarostat'}
-
-    @property
-    def _barostat(self):
-        """Shortcut for self._find_barostat(self._system)."""
-        return self._find_barostat(self._system)
 
     @classmethod
     def _find_barostat(cls, system):
@@ -1170,7 +1233,9 @@ class ThermodynamicState(object):
         """
         barostat_id = cls._find_barostat_index(system)
         if barostat_id is not None:
-            barostat = system.getForce(barostat_id)
+            # We need to copy the barostat since we don't own
+            # its memory (i.e. we can't add it back to the system).
+            barostat = copy.deepcopy(system.getForce(barostat_id))
             system.removeForce(barostat_id)
             return barostat
         return None
@@ -1182,7 +1247,7 @@ class ThermodynamicState(object):
         Returns
         -------
         barostat_id : int
-            The index of the barostat force in self._system or None if
+            The index of the barostat force in system or None if
             no barostat is found.
 
         Raises
@@ -1225,12 +1290,6 @@ class ThermodynamicState(object):
             The pressure with units compatible to bars. If None, the
             barostat of the system is removed.
 
-        Returns
-        -------
-        barostat : OpenMM Force object or None
-            The current barostat of the system. None if the barostat
-            was removed.
-
         Raises
         ------
         ThermodynamicsError
@@ -1239,7 +1298,7 @@ class ThermodynamicState(object):
         """
         if pressure is None:  # If new pressure is None, remove barostat.
             self._pop_barostat(system)
-            return None
+            return
 
         if not system.usesPeriodicBoundaryConditions():
             raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
@@ -1250,7 +1309,6 @@ class ThermodynamicState(object):
             system.addForce(barostat)
         else:  # Set existing barostat
             self._set_barostat_pressure(barostat, pressure)
-        return barostat
 
     @staticmethod
     def _set_barostat_pressure(barostat, pressure):
@@ -1296,11 +1354,6 @@ class ThermodynamicState(object):
     # Internal-usage: thermostat handling
     # -------------------------------------------------------------------------
 
-    @property
-    def _thermostat(self):
-        """Shortcut for self._find_thermostat(self._system)."""
-        return self._find_thermostat(self._system)
-
     @classmethod
     def _find_thermostat(cls, system):
         """Return the first thermostat in the system.
@@ -1328,8 +1381,6 @@ class ThermodynamicState(object):
         thermostat_id = cls._find_thermostat_index(system)
         if thermostat_id is not None:
             system.removeForce(thermostat_id)
-            return True
-        return False
 
     @staticmethod
     def _find_thermostat_index(system):
@@ -1342,46 +1393,31 @@ class ThermodynamicState(object):
             raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_THERMOSTATS)
         return thermostat_ids[0]
 
-    def _is_thermostat_consistent(self, thermostat):
-        """Check thermostat temperature."""
-        return utils.is_quantity_close(thermostat.getDefaultTemperature(), self.temperature)
-
     @classmethod
-    def _set_system_thermostat(cls, system, temperature):
-        """Configure the system thermostat.
+    def _set_system_temperature(cls, system, temperature):
+        """Configure thermostat and barostat to the given temperature.
 
-        If temperature is None and the system has a thermostat, it is
-        removed. Otherwise the thermostat temperature is set, or a new
-        AndersenThermostat is added if it doesn't exist.
+        The thermostat temperature is set, or a new AndersenThermostat
+        is added if it doesn't exist.
 
         Parameters
         ----------
         system : simtk.openmm.System
             The system to modify.
-        temperature : simtk.unit.Quantity or None
-            The temperature for the thermostat, or None to remove it.
-
-        Returns
-        -------
-        has_changed : bool
-            True if the thermostat has changed, False if it was already
-            configured with the correct temperature.
+        temperature : simtk.unit.Quantity
+            The temperature for the thermostat.
 
         """
-        has_changed = False
-        if temperature is None:  # Remove thermostat.
-            has_changed = cls._remove_thermostat(system)
-        else:  # Add/configure existing thermostat.
-            thermostat = cls._find_thermostat(system)
-            if thermostat is None:
-                thermostat = openmm.AndersenThermostat(temperature, 1.0/unit.picosecond)
-                system.addForce(thermostat)
-                has_changed = True
-            elif not utils.is_quantity_close(thermostat.getDefaultTemperature(),
-                                             temperature):
-                thermostat.setDefaultTemperature(temperature)
-                has_changed = True
-        return has_changed
+        thermostat = cls._find_thermostat(system)
+        if thermostat is None:
+            thermostat = openmm.AndersenThermostat(temperature, 1.0/unit.picosecond)
+            system.addForce(thermostat)
+        else:
+            thermostat.setDefaultTemperature(temperature)
+
+        barostat = cls._find_barostat(system)
+        if barostat is not None:
+            cls._set_barostat_temperature(barostat, temperature)
 
 
 # =============================================================================
@@ -1915,7 +1951,7 @@ class CompoundThermodynamicState(ThermodynamicState):
     Create an alchemically modified system.
 
     >>> from openmmtools import testsystems, alchemy
-    >>> factory = alchemy.AlchemicalFactory(consistent_exceptions=False)
+    >>> factory = alchemy.AbsoluteAlchemicalFactory(consistent_exceptions=False)
     >>> alanine_vacuum = testsystems.AlanineDipeptideVacuum().system
     >>> alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=range(22))
     >>> alanine_alchemical_system = factory.create_alchemical_system(reference_system=alanine_vacuum,
@@ -1953,6 +1989,34 @@ class CompoundThermodynamicState(ThermodynamicState):
     def __init__(self, thermodynamic_state, composable_states):
         self._initialize(thermodynamic_state, composable_states)
 
+    def get_system(self, **kwargs):
+        """Manipulate and return the system.
+
+        With default arguments, this is equivalent as the system property.
+        By setting the arguments it is possible to obtain a modified copy
+        of the system without the thermostat or the barostat.
+
+        Parameters
+        ----------
+        remove_thermostat : bool
+            If True, the system thermostat is removed.
+        remove_barostat : bool
+            If True, the system barostat is removed.
+
+        Returns
+        -------
+        system : simtk.openmm.System
+            The system of this ThermodynamicState.
+
+        """
+        system = super(CompoundThermodynamicState, self).get_system(**kwargs)
+
+        # The system returned by ThermodynamicState has standard parameters,
+        # so we need to set them to the actual value of the composable states.
+        for s in self._composable_states:
+            s.apply_to_system(system)
+        return system
+
     def set_system(self, system, fix_state=False):
         """Allow to set the system and fix its thermodynamic state.
 
@@ -1973,10 +2037,8 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState.set_system
 
         """
-        for s in self._composable_states:
-            if fix_state is True:
-                s.apply_to_system(system)
-            else:
+        if fix_state is False:
+            for s in self._composable_states:
                 s.check_system_consistency(system)
         super(CompoundThermodynamicState, self).set_system(system, fix_state)
 
@@ -2019,25 +2081,13 @@ class CompoundThermodynamicState(ThermodynamicState):
             s.apply_to_context(context)
 
     def __getattr__(self, name):
-        def setter_decorator(func, composable_state):
-            def _setter_decorator(*args, **kwargs):
-                func(*args, **kwargs)
-                composable_state.apply_to_system(self._system)
-            return _setter_decorator
-
         # Called only if the attribute couldn't be found in __dict__.
         # In this case we fall back to composable state, in the given order.
         for s in self._composable_states:
             try:
-                attr = getattr(s, name)
+                return getattr(s, name)
             except AttributeError:
                 pass
-            else:
-                if name.startswith('set_'):
-                    # Decorate the setter so that apply_to_system is called
-                    # after the attribute is modified.
-                    attr = setter_decorator(attr, s)
-                return attr
 
         # Attribute not found, fall back to normal behavior.
         return super(CompoundThermodynamicState, self).__getattribute__(name)
@@ -2056,13 +2106,12 @@ class CompoundThermodynamicState(ThermodynamicState):
             for s in self._composable_states:
                 if any(name in C.__dict__ for C in s.__class__.__mro__):
                     s.__setattr__(name, value)
-                    s.apply_to_system(self._system)
                     return
 
             # No attribute found. This is monkey patching.
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
-    def __getstate__(self):
+    def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         # Create original ThermodynamicState to serialize.
         thermodynamic_state = object.__new__(self.__class__.__bases__[1])
@@ -2070,7 +2119,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # Set the instance _standardize_system method to CompoundState._standardize_system
         # so that the composable states standardization will be called during serialization.
         thermodynamic_state._standardize_system = self._standardize_system
-        serialized_thermodynamic_state = utils.serialize(thermodynamic_state)
+        serialized_thermodynamic_state = utils.serialize(thermodynamic_state, **kwargs)
 
         # Serialize composable states.
         serialized_composable_states = [utils.serialize(state)
@@ -2107,13 +2156,14 @@ class CompoundThermodynamicState(ThermodynamicState):
                               {'_composable_bases': composable_bases})
         self.__dict__ = thermodynamic_state.__dict__
 
-        # Set the stored system to the given states. Setting
-        # self._composable_states signals __setattr__ to start
-        # searching in composable states as well, so this must
-        # be the last new attribute set in the constructor.
+        # Setting self._composable_states signals __setattr__ to start
+        # searching in composable states as well, so this must be the
+        # last new attribute set in the constructor.
         self._composable_states = composable_states
-        for s in self._composable_states:
-            s.apply_to_system(self._system)
+
+        # This call causes the thermodynamic state standard system
+        # to be standardized also w.r.t. all the composable states.
+        self.set_system(self._standard_system, fix_state=True)
 
     @classmethod
     def _standardize_system(cls, system):

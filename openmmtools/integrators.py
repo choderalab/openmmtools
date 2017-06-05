@@ -943,7 +943,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
                  splitting="V R O R V",
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
-                 measure_heat=True,
+                 measure_heat=False,
                  ):
         """Create a Langevin integrator with the prescribed operator splitting.
 
@@ -972,7 +972,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean, default: True
+        measure_heat : boolean, default: False
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
         """
 
@@ -1144,7 +1144,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
            If dimensionless=True, the protocol work in kT (float).
            Otherwise, the unit-bearing protocol work in units of energy.
         """
-        if not self._measure_heat:
+        if not self._measure_shadow_work:
             raise Exception("This integrator must be constructed with 'measure_shadow_work=True' to measure shadow work.")
         return self._get_energy_with_units("shadow_work", dimensionless=dimensionless)
 
@@ -1630,7 +1630,7 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean, default: True
+        measure_heat : boolean, default: False
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         nsteps_neq : int, default: 100
@@ -1845,7 +1845,7 @@ class BAOABIntegrator(LangevinIntegrator):
         measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean, default: True
+        measure_heat : boolean, default: False
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         References
@@ -1890,7 +1890,7 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         measure_shadow_work : boolean, default: False
             Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
 
-        measure_heat : boolean, default: True
+        measure_heat : boolean, default: False
             Accumulate the heat exchanged with the bath in each step, in the global `heat`
 
         References
