@@ -673,10 +673,16 @@ class AbsoluteAlchemicalFactory(object):
         'direct-space' only models the direct space contribution
         'coulomb' includes switched Coulomb interaction
     alchemical_rf_treatment : str, optional, default = 'switched'
-         Controls how alchemical region electrostatics are treated when RF is used
-         Options are ['switched', 'shifted']
-         'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
-         'shifted' retains c_rf != 0 but can give erroneous results for hydration free energies
+        Controls how alchemical region electrostatics are treated when RF is used
+        Options are ['switched', 'shifted']
+        'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
+        'shifted' retains c_rf != 0 but can give erroneous results for hydration free energies
+    disable_alchemical_dispersion_correction : bool, optional, default=False
+        If True, the long-range dispersion correction will not be included for the alchemical
+        region to avoid the need to recompute the correction (a CPU operation that takes ~ 0.5 s)
+        every time 'lambda_sterics' is changed. If using nonequilibrium protocols, it is recommended
+        that this be set to True since this can lead to enormous (100x) slowdowns if the correction
+        must be recomputed every timestep.
 
     Examples
     --------
@@ -735,6 +741,15 @@ class AbsoluteAlchemicalFactory(object):
     >>> alchemical_state.set_alchemical_parameters(0.0)  # Set all lambda to 0
     >>> alchemical_state.apply_to_context(context)
 
+    Neglecting the long-range dispersion correction for the alchemical region
+    (for nonequilibrium switching, for example) requires instantiating a factory
+    with the appropriate options:
+
+    >>> new_factory = AbsoluteAlchemicalFactory(consistent_exceptions=False, disable_alchemical_dispersion_correction=True)
+    >>> reference_system = testsystems.WaterBox().system
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=[0, 1, 2])
+    >>> alchemical_system = new_factory.create_alchemical_system(reference_system, alchemical_region)
+
     References
     ----------
     [1] Pham TT and Shirts MR. Identifying low variance pathways for free
@@ -747,11 +762,15 @@ class AbsoluteAlchemicalFactory(object):
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms, alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched'):
+    def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms,
+                 alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched',
+                 disable_alchemical_dispersion_correction=False):
+
         self.consistent_exceptions = consistent_exceptions
         self.switch_width = switch_width
         self.alchemical_pme_treatment = alchemical_pme_treatment
         self.alchemical_rf_treatment = alchemical_rf_treatment
+        self.disable_alchemical_dispersion_correction = disable_alchemical_dispersion_correction
 
     def create_alchemical_system(self, reference_system, alchemical_regions):
         """Create an alchemically modified version of the reference system.
@@ -1526,7 +1545,10 @@ class AbsoluteAlchemicalFactory(object):
             force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
             force.setCutoffDistance(nonbonded_force.getCutoffDistance())
             force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
-            force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
+            if (self.disable_alchemical_dispersion_correction is True):
+                force.setUseLongRangeCorrection(False)
+            else:
+                force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
 
             if is_method_periodic:
                 force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
