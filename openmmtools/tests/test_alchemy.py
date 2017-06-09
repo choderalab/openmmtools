@@ -1307,15 +1307,12 @@ class TestDispersionlessAlchemicalFactory(object):
         cls.test_systems = dict()
         cls.test_systems['LennardJonesFluid with dispersion correction'] = \
             testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
-        cls.test_systems['WaterBox with PME, switch, dispersion correction'] = \
-            testsystems.WaterBox(dispersion_correction=True, switch=True, nonbondedMethod=openmm.app.PME)
 
     @classmethod
     def define_regions(cls):
         """Create shared AlchemicalRegions for test systems in cls.test_regions."""
         cls.test_regions = dict()
         cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
-        cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
 
     @classmethod
     def generate_cases(cls):

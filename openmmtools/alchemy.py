@@ -1545,7 +1545,7 @@ class AbsoluteAlchemicalFactory(object):
             force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
             force.setCutoffDistance(nonbonded_force.getCutoffDistance())
             force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
-            if (self.disable_alchemical_dispersion_correction is True):
+            if self.disable_alchemical_dispersion_correction:
                 force.setUseLongRangeCorrection(False)
             else:
                 force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
