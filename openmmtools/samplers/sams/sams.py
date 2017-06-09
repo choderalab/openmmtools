@@ -19,6 +19,7 @@ import time
 from scipy.misc import logsumexp
 
 from openmmtools.constants import kB
+from openmmtools.utils import SubhookedABCMeta, Timer
 
 from . import ExpandedEnsemble
 
@@ -37,7 +38,7 @@ class SAMS(object):
     """
     Self-adjusted mixture sampling.
 
-    Properties
+    Attributes
     ----------
     state_keys : set of objects
         The names of states sampled by the sampler.
@@ -145,19 +146,37 @@ class SAMS(object):
 
         self.mbar_update_interval = mbar_update_interval
 
-        #self._timing = self.sampler._timing # TODO: Handle timing
         if hasattr(self.sampler, 'ncfile'):
-            self._initializeNetCDF(self.sampler.ncfile)
+            self._initialize_storage(ncfile=self.sampler.ncfile)
 
-    def _initializeNetCDF(self, ncfile):
+    def _initialize_storage(self, ncfile=None, chunksize=50):
+        """
+        Initialize persistent storage of SAMS data.
+
+        Parameters
+        ----------
+        ncfile : netCDF4.Dataset, optional, default=None
+            NetCDF4 Dataset to use as persistent data store.
+            If None, no storage is initialized.
+        chunksize : int, optional, default=50
+            Number of iterations per chunk (for efficiency).
+
+        """
+        self._ncfile = ncfile
+        if self._ncfile == None:
+            return
         self.ncfile = ncfile
         if self.ncfile == None:
             return
 
         nstates = self.sampler.nstates
-        self.ncfile.createVariable('logZ', 'f4', dimensions=('iterations', 'states'), zlib=True, chunksizes=(1,nstates))
-        self.ncfile.createVariable('log_target_probabilities', 'f4', dimensions=('iterations', 'states'), chunksizes=(1,nstates))
-        self.ncfile.createVariable('update_logZ_time', 'f4', dimensions=('iterations',), chunksizes=(1,))
+        self.ncfile.createVariable('logZ', 'f4', dimensions=('iterations', 'states'), zlib=True, chunksizes=(chunksize,nstates))
+        self.ncfile.createVariable('log_target_probabilities', 'f4', dimensions=('iterations', 'states'), chunksizes=(chunksize,nstates))
+        self.ncfile.createVariable('update_logZ_time', 'f4', dimensions=('iterations',), chunksizes=(chunksize,))
+
+        # Weight adaptation information
+        self.ncfile.createVariable('stage', 'i2', dimensions=('iterations',), chunksizes=(chunksize,))
+        self.ncfile.createVariable('gamma', 'f8', dimensions=('iterations',), chunksizes=(chunksize,))
 
     def compute_free_energies(self, uncertainty_method=None):
         """
@@ -222,8 +241,6 @@ class SAMS(object):
         [1] http://www.stat.rutgers.edu/home/ztan/Publication/SAMS_redo4.pdf
 
         """
-        initial_time = time.time()
-
         current_state = self.sampler.thermodynamic_state_index
         log_pi_k = self.log_target_probabilities
         pi_k = np.exp(self.log_target_probabilities)
@@ -281,13 +298,6 @@ class SAMS(object):
         # Subtract off logZ[0] to prevent logZ from growing without bound
         self.logZ[:] -= self.logZ[0]
 
-        # TODO: Handle timing`
-        #final_time = time.time()
-        #elapsed_time = final_time - initial_time
-        #self._timing['update logZ time'] = elapsed_time
-        #if self.verbose:
-        #    print('time elapsed %8.3f s' % elapsed_time)
-
     def update_logZ_with_mbar(self):
         """
         Use MBAR to update logZ estimates.
@@ -304,7 +314,6 @@ class SAMS(object):
         # Extract relative energies.
         if self.verbose:
             print('Updating logZ estimate with MBAR...')
-        initial_time = time.time()
         from pymbar import MBAR
         #first = int(self.iteration / 2)
         first = 0
@@ -315,12 +324,14 @@ class SAMS(object):
         self.logZ[:] = -mbar.f_k[:]
         self.logZ -= self.logZ[0]
 
-        # TODO: Handle timing
-        #final_time = time.time()
-        #elapsed_time = final_time - initial_time
-        #self._timing['MBAR time'] = elapsed_time
-        #if self.verbose:
-        #    print('MBAR time    %8.3f s' % elapsed_time)
+    def online_free_energies(self):
+        """
+        Return online estimate of free energies from SAMS log weights.
+
+        TODO: Implement asymptotic variance estimates or BAMS uncertainty estimates.
+
+        """
+        return copy.deepcopy(self.logZ)
 
     def update_log_weights(self):
         """
@@ -331,9 +342,13 @@ class SAMS(object):
 
     def update(self):
         """
-        Update the sampler with one step of sampling.
+        Update the SAMS sampler with one cycle of sampling:
+        * Update expanded ensemble sampler (sampler state, thermodynamic state)
+        * Update log weight estimates
+        * Update log weights within the expanded ensemble sampler
+
         """
-        initial_time = time.time()
+        timer = Timer()
 
         if self.verbose:
             print('')
@@ -344,24 +359,20 @@ class SAMS(object):
         self.update_sampler()
 
         # Update logZ estimates and expanded ensemble sampler log weights.
+        timer.start('update log weights')
         self.update_logZ_estimates()
         if self.mbar_update_interval and (not hasattr(self, 'second_stage_iteration_start')) and (((self.iteration+1) % self.mbar_update_interval) == 0):
             self.update_logZ_with_mbar()
-
         self.update_log_weights()
+        timer.stop('update log weights')
 
         if self.ncfile:
             self.ncfile.variables['logZ'][self.iteration,:] = self.logZ[:]
             self.ncfile.variables['log_target_probabilities'][self.iteration,:] = self.log_target_probabilities[:]
-            #self.ncfile.variables['update_logZ_time'][self.iteration] = self._timing['update logZ time'] # TODO: Handle timing
+            self.ncfile.variables['update_logZ_time'][self.iteration] = timer['update log weights']
             self.ncfile.sync()
 
-        # TODO: Handle timing
-        #final_time = time.time()
-        #elapsed_time = final_time - initial_time
-        #self._timing['sams time'] = elapsed_time
-        #if self.verbose:
-        #    print('total time   %8.3f s' % elapsed_time)
+        timer.report_timing()
 
         self.iteration += 1
         if self.verbose:

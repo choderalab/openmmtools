@@ -114,6 +114,14 @@ Analysis uses a similar interface to :class:`ExpandedEnsemble`:
     # Estimate relative free energies between the thermodynamic states
     [Delta_f_ij, dDelta_f_ij] = sams_sampler.compute_free_energies()
 
+Alternatively, you can obtain the online (SAMS) estimates of free energies,
+though these are currently provided without an uncertainty estimate:
+
+::
+
+    # Estimate relative free energies between the thermodynamic states
+    Delta_f_ij = sams_sampler.online_free_energies()
+
 .. todo: Describe storage and binding to storage files.
 
 .. currentmodule:: openmmtools.samplers.sams

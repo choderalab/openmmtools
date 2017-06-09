@@ -56,6 +56,25 @@ def test_sampler_options():
             f.description = "Testing SAMS sampler with %s using expanded ensemble update scheme '%s' and SAMS update method '%s'" % (testsystem_name, update_scheme, update_method)
             yield f
 
+def test_storage_and_analysis():
+    """
+    Test storage and offline estimation of free energies.
+
+    """
+    from testsystems import AlanineDipeptideVacuumSimulatedTempering
+    netcdf_filename = 'output.nc'
+    test = AlanineDipeptideVacuumSimulatedTempering(netcdf_filename=netcdf_filename)
+    testsystem_name = test.__class__.__name__
+    niterations = 10 # number of iterations to run
+
+    # Test SAMSSampler.
+    test.sams_sampler.run(niterations)
+
+    # Retrieve online estimate of free energies
+    [Delta_f_ij, dDelta_f_ij] = test.sams_sampler.compute_free_energies(method='SAMS')
+
+    # Estimate relative free energies between the thermodynamic states
+    [Delta_f_ij, dDelta_f_ij] = test.sams_sampler.compute_free_energies()
 
 if __name__=="__main__":
     test_sampler_options()

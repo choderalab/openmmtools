@@ -20,6 +20,7 @@ from scipy.misc import logsumexp
 
 from openmmtools import testsystems
 from openmmtools.constants import kB
+from openmmtools.utils import SubhookedABCMeta, Timer
 
 ################################################################################
 # LOGGER
@@ -39,7 +40,7 @@ class ExpandedEnsemble(object):
     A Gibbs sampling framework is used to alternate between updates of the SamplersState
     (using the provided MCMCSampler) and the current ThermodynamicState.
 
-    Properties
+    Attributes
     ----------
     sampler : MCMCSampler
         The MCMC sampler used for updating positions
@@ -142,11 +143,21 @@ class ExpandedEnsemble(object):
         self.number_of_state_visits = np.zeros([self.nstates], np.float64)
         self.verbose = False
 
-        #self._timing = self.sampler._timing # TODO
-        if hasattr(self.sampler, 'ncfile'):
-            self._initializeNetCDF(self.sampler.ncfile)
+        self._initialize_storage(ncfile=self.sampler.ncfile)
 
-    def _initializeNetCDF(self, ncfile):
+    def _initialize_storage(self, ncfile=None, chunksize=50):
+        """
+        Initialize persistent storage of expanded ensemble data.
+
+        Parameters
+        ----------
+        ncfile : netCDF4.Dataset, optional, default=None
+            NetCDF4 Dataset to use as persistent data store.
+            If None, no storage is initialized.
+        chunksize : int, optional, default=50
+            Number of iterations per chunk (for efficiency).
+
+        """
         self.ncfile = ncfile
         if self.ncfile == None:
             return
@@ -157,12 +168,12 @@ class ExpandedEnsemble(object):
 
         self.ncfile.createDimension('states', nstates)
 
-        self.ncfile.createVariable('state_index', 'i4', dimensions=('iterations',), chunksizes=(1,))
-        self.ncfile.createVariable('log_weights', 'f4', dimensions=('iterations', 'states'), chunksizes=(1,nstates))
-        self.ncfile.createVariable('log_P_k', 'f4', dimensions=('iterations', 'states'), chunksizes=(1,nstates))
+        self.ncfile.createVariable('state_index', 'i4', dimensions=('iterations',), chunksizes=(chunksize,))
+        self.ncfile.createVariable('log_weights', 'f4', dimensions=('iterations', 'states'), chunksizes=(chunksize,nstates))
+        self.ncfile.createVariable('log_P_k', 'f4', dimensions=('iterations', 'states'), chunksizes=(chunksize,nstates))
         self.ncfile.createVariable('u_k', 'f4', dimensions=('iterations', 'states'), chunksizes=(1,nstates))
-        self.ncfile.createVariable('update_state_time', 'f4', dimensions=('iterations',), chunksizes=(1,))
-        self.ncfile.createVariable('neighborhood', 'i1', dimensions=('iterations','states'), chunksizes=(1,nstates))
+        self.ncfile.createVariable('update_state_time', 'f4', dimensions=('iterations',), chunksizes=(chunksize,))
+        self.ncfile.createVariable('neighborhood', 'i1', dimensions=('iterations','states'), chunksizes=(chunksize,nstates))
 
     def compute_free_energies(self, uncertainty_method=None):
         """
@@ -279,12 +290,6 @@ class ExpandedEnsemble(object):
             Neff = (P_k / P_k.max()).sum()
             print('Effective number of states with probability: %10.5f' % Neff)
 
-        # TODO: Update timing
-        #final_time = time.time()
-        #elapsed_time = final_time - initial_time
-        #self._timing['update state time'] = elapsed_time
-        #print('elapsed time %8.3f s' % elapsed_time)
-
         # Update statistics.
         self.update_statistics()
 
@@ -296,8 +301,13 @@ class ExpandedEnsemble(object):
             print("-" * 80)
             print("Expanded Ensemble sampler iteration %8d" % self.iteration)
 
+        timer = Timer()
+
         self.update_positions()
+
+        timer.start('update state')
         self.update_state()
+        timer.stop('update state')
 
         if self.ncfile:
             self.ncfile.variables['state_index'][self.iteration] = self.thermodynamic_state_index
@@ -308,9 +318,12 @@ class ExpandedEnsemble(object):
             self.ncfile.variables['u_k'][self.iteration,:] = self.u_k[:]
             self.ncfile.variables['neighborhood'][self.iteration,:] = 0
             self.ncfile.variables['neighborhood'][self.iteration,self.neighborhood] = 1
-            #self.ncfile.variables['update_state_time'][self.iteration] = self._timing['update state time'] # TODO
+            self.ncfile.variables['update_state_time'][self.iteration] = timer['update state']
+            self.ncfile.sync()
 
         self.iteration += 1
+
+        timer.report_timing()
 
         if self.verbose:
             print("-" * 80)
