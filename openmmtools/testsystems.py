@@ -3480,10 +3480,10 @@ class DHFRExplicit(TestSystem):
 
 class DDDExplicit(TestSystem):
     """
-    Drew-Dickerson B-DNA dodecamer (CGCGAATTCGCG) explicit solvent. Structure taken from the RCSB PDB accession code
-    4C64. Solvated using the TIP3P water model in a cubic box with at least a 10 Angstrom clearance between the edge
-    of the box and the DNA. The DNA is parametrized with the AMBER 14SB forcefield. The system has a total charge of
-    -22 as no neutralizing counterions have been included.
+    Drew-Dickerson B-DNA dodecamer (CGCGAATTCGCG) in explicit solvent. Structure taken from the RCSB PDB accession code
+    4C64 (1.3 Angstrom resolution). Solvated using the TIP3P water model in a cuboidal box with at least a 10 Angstrom
+    clearance between the edge of the box and the DNA. The DNA is parametrized with the AMBER 14SB forcefield. The
+    system has a total charge of -22 as no neutralizing counterions have been included.
 
     Parameters
     ----------
