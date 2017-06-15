@@ -3517,11 +3517,11 @@ class DNADodecamerExplicit(TestSystem):
         try:
             from parmed.amber import AmberParm
         except ImportError as e:
-            print("DDD test system requires Parmed (`import parmed`).")
+            print("DNA dodecamer test system requires Parmed (`import parmed`).")
             raise (e)
 
-        prmtop_filename = get_data_filename("data/ddd-dodecamer/prmtop")
-        crd_filename = get_data_filename("data/ddd-dodecamer/inpcrd")
+        prmtop_filename = get_data_filename("data/dna_dodecamer_explicit/prmtop")
+        crd_filename = get_data_filename("data/dna_dodecamer_explicit/inpcrd")
 
         # Initialize system.
         self.prmtop = AmberParm(prmtop_filename, crd_filename)
