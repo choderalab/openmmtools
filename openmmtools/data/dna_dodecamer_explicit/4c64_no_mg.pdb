@@ -1584,14 +1584,5 @@ ANISOU  618  O   HOH B2047     5000   4864   5288   -269  -1024   -425       O
 HETATM  619  O   HOH B2048       0.397   1.705  28.817  1.00 26.58           O  
 ANISOU  619  O   HOH B2048     3758   3394   2946   -188    -24   -167       O  
 HETATM  620  O   HOH B2049       0.366   5.147  27.764  1.00 40.23           O  
-ANISOU  620  O   HOH B2049     4678   6874   3734   1754   1246    988       O  
-CONECT  489  492  510  569  570                                                 
-CONECT  489  571  612                                                           
-CONECT  492  489                                                                
-CONECT  510  489                                                                
-CONECT  569  489                                                                
-CONECT  570  489                                                                
-CONECT  571  489                                                                
-CONECT  612  489                                                                
-MASTER      304    0    1    0    0    0    2    6  618    2    8    2          
-END                                                                             
+ANISOU  620  O   HOH B2049     4678   6874   3734   1754   1246    988       O
+END

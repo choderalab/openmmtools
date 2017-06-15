@@ -3465,7 +3465,6 @@ class DHFRExplicit(TestSystem):
             forces['NonbondedForce'].setUseSwitchingFunction(True)
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
-
         positions = self.prmtop.positions
 
         # Set box vectors.
@@ -3514,17 +3513,11 @@ class DNADodecamerExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        try:
-            from parmed.amber import AmberParm
-        except ImportError as e:
-            print("DNA dodecamer test system requires Parmed (`import parmed`).")
-            raise (e)
-
         prmtop_filename = get_data_filename("data/dna_dodecamer_explicit/prmtop")
         crd_filename = get_data_filename("data/dna_dodecamer_explicit/inpcrd")
 
         # Initialize system.
-        self.prmtop = AmberParm(prmtop_filename, crd_filename)
+        self.prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = self.prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod,
                                           rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff,
                                           hydrogenMass=hydrogenMass)
@@ -3542,10 +3535,11 @@ class DNADodecamerExplicit(TestSystem):
             forces['NonbondedForce'].setUseSwitchingFunction(True)
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
-        positions = self.prmtop.positions
+        inpcrd = app.AmberInpcrdFile(crd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
-        box_vectors = self.prmtop.box_vectors
+        box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
         self.system, self.positions = system, positions
