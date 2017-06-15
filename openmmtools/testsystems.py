@@ -3478,7 +3478,7 @@ class DHFRExplicit(TestSystem):
 # Drew-Dickerson B-DNA dodecamer in explicit solvent
 # =============================================================================================
 
-class DDDExplicit(TestSystem):
+class DNADodecamerExplicit(TestSystem):
     """
     Drew-Dickerson B-DNA dodecamer (CGCGAATTCGCG) in explicit solvent. Structure taken from the RCSB PDB accession code
     4C64 (1.3 Angstrom resolution). Solvated using the TIP3P water model in a cuboidal box with at least a 10 Angstrom

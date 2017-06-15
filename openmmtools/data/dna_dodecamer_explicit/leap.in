@@ -1,0 +1,5 @@
+source leaprc.ff14SB
+dna = loadpdb 4c64_no_mg.pdb
+solvateBox dna TIP3PBOX 10
+saveAmberParm dna prmtop inpcrd
+quit
