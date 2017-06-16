@@ -36,6 +36,7 @@ PARTICULAR PURPOSE.  See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with
 this program.  If not, see <http://www.gnu.org/licenses/>.
+this program.  If not, see <http://www.gnu.org/licenses/>.
 
 TODO
 
@@ -3403,7 +3404,7 @@ class HostGuestExplicit(TestSystem):
         self.system, self.positions = system, positions
 
 #=============================================================================================
-# Alanine dipeptide in explicit solvent
+# DHFR in explicit solvent
 #=============================================================================================
 
 class DHFRExplicit(TestSystem):
@@ -3464,12 +3465,79 @@ class DHFRExplicit(TestSystem):
             forces['NonbondedForce'].setUseSwitchingFunction(True)
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
-
         positions = self.prmtop.positions
 
         # Set box vectors.
         box_vectors = self.prmtop.box_vectors
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
+
+        self.system, self.positions = system, positions
+
+# =============================================================================================
+# Drew-Dickerson B-DNA dodecamer in explicit solvent
+# =============================================================================================
+
+class DNADodecamerExplicit(TestSystem):
+    """
+    Drew-Dickerson B-DNA dodecamer (CGCGAATTCGCG) in explicit solvent. Structure taken from the RCSB PDB accession code
+    4C64 (1.3 Angstrom resolution). Solvated using the TIP3P water model in a cuboidal box with at least a 10 Angstrom
+    clearance between the edge of the box and the DNA. The DNA is parametrized with the AMBER OL15 DNA forcefield. The
+    system has a total charge of -22 as no neutralizing counterions have been included.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    rigid_water : bool, optional, default=True
+    nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
+    use_dispersion_correction : bool, optional, default=True
+        If True, the long-range disperson correction will be used.
+    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+       Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
+        switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
+           The Ewald or PME tolerance.
+
+    Reference
+    ---------
+    Structure taken from Chem.Commun.(Camb.), 50, page 1794, 2014.
+    """
+
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE,
+                 use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None,
+                 switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        # Load the topology and positions
+        prmtop_filename = get_data_filename("data/dna_dodecamer_explicit/prmtop")
+        pdbfile_name = get_data_filename('data/dna_dodecamer_explicit/minimized_dna_dodecamer.pdb')
+        pdbfile = app.PDBFile(pdbfile_name)
+
+        # Initialize system.
+        self.prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = self.prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod,
+                                          rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff,
+                                          hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = self.prmtop.topology
+
+        # Set dispersion correction use.
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in
+                  range(system.getNumForces())}
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
+
+        positions = pdbfile.getPositions()
 
         self.system, self.positions = system, positions
 
