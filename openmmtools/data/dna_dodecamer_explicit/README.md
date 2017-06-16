@@ -2,7 +2,10 @@
 ## Preparation
 * Download PDB structure with accession code 4C64
 * Removed Mg ion to create file 4c64_no_mg.pdb
-* Ran tleap on the crystal structure with the input file crystal_leap.in
+* Ran tleap on the crystal structure with the input file leap.in.
+    * This created prmtop and inpcrd
+* Briefly minimized and thermalized the structure with openmm using minimize.py
+*   * This created `minimized_dna_dodecamer.pdb`.
 
 ### Notes
 * Crystal structure was resolved to a 1.3 Angs. level of resolution

@@ -3513,8 +3513,10 @@ class DNADodecamerExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
+        # Load the topology and positions
         prmtop_filename = get_data_filename("data/dna_dodecamer_explicit/prmtop")
-        crd_filename = get_data_filename("data/dna_dodecamer_explicit/inpcrd")
+        pdbfile_name = get_data_filename('data/dna_dodecamer_explicit/minimized_dna_dodecamer.pdb')
+        pdbfile = app.PDBFile(pdbfile_name)
 
         # Initialize system.
         self.prmtop = app.AmberPrmtopFile(prmtop_filename)
@@ -3535,12 +3537,7 @@ class DNADodecamerExplicit(TestSystem):
             forces['NonbondedForce'].setUseSwitchingFunction(True)
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
-        inpcrd = app.AmberInpcrdFile(crd_filename)
-        positions = inpcrd.getPositions(asNumpy=True)
-
-        # Set box vectors.
-        box_vectors = inpcrd.getBoxVectors(asNumpy=True)
-        system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
+        positions = pdbfile.getPositions()
 
         self.system, self.positions = system, positions
 
