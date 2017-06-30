@@ -952,14 +952,14 @@ class ThermodynamicState(object):
         self._pressure = serialization['pressure']
 
         serialized_system = serialization['standard_system']
+        # Decompress system
+        serialized_system = zlib.decompress(serialized_system).decode(self._ENCODING)
         self._standard_system_hash = serialized_system.__hash__()
 
         # Check first if we have already the system in the cache.
         try:
             self._standard_system = self._standard_system_cache[self._standard_system_hash]
         except KeyError:
-            # Decompress system
-            serialized_system = zlib.decompress(serialized_system).decode(self._ENCODING)
             system = openmm.XmlSerializer.deserialize(serialized_system)
             self._standard_system_cache[self._standard_system_hash] = system
             self._standard_system = system
@@ -1142,8 +1142,6 @@ class ThermodynamicState(object):
         """Standardize the system and return its hash."""
         cls._standardize_system(system)
         system_serialization = openmm.XmlSerializer.serialize(system)
-        # Compress
-        system_serialization = zlib.compress(system_serialization.encode(cls._ENCODING))
         return system_serialization.__hash__()
 
     # -------------------------------------------------------------------------
