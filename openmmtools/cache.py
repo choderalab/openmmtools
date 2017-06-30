@@ -427,8 +427,8 @@ class ContextCache(object):
 
         """
         # Restore temperature getter/setter before copying attributes.
-        integrators.ThermostatedIntegrator.restore_interface(integrator)
-        integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
+        integrators.RestorableIntegrator.restore_interface(integrator)
+        integrators.RestorableIntegrator.restore_interface(copied_integrator)
 
         for attribute in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES:
             try:
@@ -447,6 +447,7 @@ class ContextCache(object):
 
         """
         standard_integrator = copy.deepcopy(integrator)
+        integrators.RestorableIntegrator.restore_interface(standard_integrator)
         for attribute, std_value in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
             try:
                 getattr(standard_integrator, 'set' + attribute)(std_value)
