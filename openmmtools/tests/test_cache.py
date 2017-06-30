@@ -226,19 +226,25 @@ class TestContextCache(object):
         cache = ContextCache()
         state1, state2 = self.incompatible_states[:2]
 
-        # First we create a Context in state1.
-        cache.get_context(state1, copy.deepcopy(self.verlet_2fs))
+        # If there are no previous Contexts, a default integrator is used to create a new one.
+        context, default_integrator = cache.get_context(state1)
         assert len(cache) == 1
 
-        # When we don't specify the integrator, it first looks for cached Contexts.
+        # Now we create another Context in state1 with a different integrator.
+        assert type(self.verlet_2fs) is not type(default_integrator)  # test precondition
+        cache.get_context(state1, copy.deepcopy(self.verlet_2fs))
+        assert len(cache) == 2
+
+        # When we don't specify the integrator, it first looks
+        # for cached Contexts, and non-default contexts are preferred.
         context, integrator = cache.get_context(state1)
-        assert len(cache) == 1
+        assert len(cache) == 2
         assert state1.is_context_compatible(context)
-        assert isinstance(integrator, openmm.VerletIntegrator)
+        assert isinstance(integrator, type(self.verlet_2fs)), type(integrator)
 
         # With an incompatible state, a new Context is created.
         cache.get_context(state2)
-        assert len(cache) == 2
+        assert len(cache) == 3
 
     def test_cache_capacity_ttl(self):
         """Check that the cache capacity and time_to_live work as expected."""
