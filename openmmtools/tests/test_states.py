@@ -14,6 +14,7 @@ Test State classes in states.py.
 # =============================================================================
 
 import nose
+import zlib
 import pickle
 import operator
 
@@ -1056,7 +1057,10 @@ class TestCompoundThermodynamicState(object):
         assert self.get_dummy_parameter(system) == self.DummyState.standard_dummy_parameter
 
         # Check that the standard system hash is correct.
-        standard_hash = openmm.XmlSerializer.serialize(system).__hash__()
+        standard_hash = zlib.compress(
+            openmm.XmlSerializer.serialize(system).encode(
+                ThermodynamicState._ENCODING)
+            ).__hash__()
         assert standard_hash == compound_state._standard_system_hash
 
         # Check that is_state_compatible works.
