@@ -114,12 +114,26 @@ class LRUCache(object):
     @time_to_live.setter
     def time_to_live(self, new_time_to_live):
         # Update entries only if we are changing the ttl.
-        ttl_diff = new_time_to_live - self._ttl
-        if ttl_diff == 0:
+        if new_time_to_live == self._ttl:
             return
+
+        # Update expiration of cache entries.
         for entry in self._data.values():
-            entry.expiration += ttl_diff
-        self._remove_expired()
+            # If there was no time to live before, just let entries
+            # expire in new_time_to_live accesses
+            if self._ttl is None:
+                entry.expiration = self._n_access + new_time_to_live
+            # If we don't want expiration anymore, delete the field.
+            # This way we save memory in case there are a lot of entries.
+            elif new_time_to_live is None:
+                del entry.expiration
+            # Otherwise just add/subtract the difference.
+            else:
+                entry.expiration += new_time_to_live - self._ttl
+
+        # Purge cache only if there is a time to live.
+        if new_time_to_live is not None:
+            self._remove_expired()
         self._ttl = new_time_to_live
 
     def empty(self):

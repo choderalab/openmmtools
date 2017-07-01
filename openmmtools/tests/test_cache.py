@@ -124,14 +124,32 @@ def test_lru_cache_capacity_property():
 
 def test_lru_cache_time_to_live_property():
     """Decreasing the time to live updates the expiration of elements."""
-    cache = LRUCache(time_to_live=50)
-    for i in range(4):
-        cache[str(i)] = i
+    def add_4_elements(_cache):
+        for i in range(4):
+            _cache[str(i)] = i
+
+    cache = LRUCache(time_to_live=None)
+    add_4_elements(cache)
     assert len(cache) == 4
+
+    # Setting time to live to 1 cause all 4 entries to expire on next access.
     cache.time_to_live = 1
-    assert len(cache) == 1
+    assert len(cache) == 4
     assert cache.time_to_live == 1
-    assert '3' in cache
+    cache['4'] = 4
+    assert len(cache) == 1
+    assert '4' in cache
+
+    # Increase time_to_live.
+    cache.time_to_live = 2
+    add_4_elements(cache)
+    assert len(cache) == 2
+    assert '2' in cache and '3' in cache
+
+    # Setting it back to None makes it limitless.
+    cache.time_to_live = None
+    add_4_elements(cache)
+    assert len(cache) == 4
 
 
 # =============================================================================
