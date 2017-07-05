@@ -1107,3 +1107,20 @@ def test_states_serialization():
         original_pickle = pickle.dumps(test_state)
         deserialized_pickle = pickle.dumps(deserialized_state)
         assert original_pickle == deserialized_pickle
+
+
+def test_backwards_serialization_compression_compatibility():
+    test_system = testsystems.AlanineDipeptideImplicit()
+    system = test_system.system
+    state = ThermodynamicState(system, temperature=300 * unit.kelvin)
+    new_system = state.system
+    # Cast the system to a standard system
+    state._standardize_system(new_system)
+    uncompressed_system_serialization = openmm.XmlSerializer.serialize(new_system)
+    compressed_serialization = utils.serialize(state)
+    replaced_serialization = copy.deepcopy(compressed_serialization)
+    replaced_serialization['standard_system'] = uncompressed_system_serialization
+    replaced_state = utils.deserialize(replaced_serialization)
+    assert state.is_state_compatible(replaced_state)
+    assert utils.serialize(replaced_state)['standard_system'] == compressed_serialization['standard_system']
+

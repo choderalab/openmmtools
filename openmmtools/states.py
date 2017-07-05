@@ -16,6 +16,7 @@ Classes that represent a portion of the state of an OpenMM context.
 
 import abc
 import copy
+import zlib
 import weakref
 
 import numpy as np
@@ -921,11 +922,27 @@ class ThermodynamicState(object):
         new_state.__dict__['_standard_system'] = self._standard_system
         return new_state
 
+    _ENCODING = 'utf-8'
+
     def __getstate__(self, skip_system=False):
-        """Return a dictionary representation of the state."""
+        """Return a dictionary representation of the state.
+
+        Zlib compresses the serialized system after its created
+        Many alchemical systems have very long serializations, so this method  helps reduce space in memory and on disk
+        Forces encoding for compatibility between separate Python installs (utf-8 by default)
+
+        Parameters
+        ----------
+        skip_system: bool, Default: False
+            Chooses whether or not to get the serialized system as the part of the return.
+            If False, then the serialized system is computed and returned
+            If True, Then "None" is returned for the "standard_system"
+
+        """
         serialized_system = None
         if not skip_system:
             serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
+            serialized_system = zlib.compress(serialized_system.encode(self._ENCODING))
         return dict(standard_system=serialized_system, temperature=self.temperature,
                     pressure=self.pressure)
 
@@ -935,6 +952,14 @@ class ThermodynamicState(object):
         self._pressure = serialization['pressure']
 
         serialized_system = serialization['standard_system']
+        # Decompress system, if need be
+        try:
+            serialized_system = zlib.decompress(serialized_system).decode(self._ENCODING)
+        except (TypeError, zlib.error):  # Py3/2 throws different error types
+            # Catch the "serialization is not compressed" error, do nothing to string.
+            # Preserves backwards compatibility
+            pass
+
         self._standard_system_hash = serialized_system.__hash__()
 
         # Check first if we have already the system in the cache.

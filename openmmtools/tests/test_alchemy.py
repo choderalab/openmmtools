@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import os
 import sys
+import zlib
 import pickle
 import itertools
 from functools import partial
@@ -1732,6 +1733,9 @@ class TestAlchemicalState(object):
         # The serialized system is standard.
         serialization = utils.serialize(compound_state)
         serialized_standard_system = serialization['thermodynamic_state']['standard_system']
+        # Decompress the serialized_system
+        serialized_standard_system = zlib.decompress(serialized_standard_system).decode(
+            states.ThermodynamicState._ENCODING)
         assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
 
         # The object is deserialized correctly.
