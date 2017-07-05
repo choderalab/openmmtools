@@ -952,8 +952,14 @@ class ThermodynamicState(object):
         self._pressure = serialization['pressure']
 
         serialized_system = serialization['standard_system']
-        # Decompress system
-        serialized_system = zlib.decompress(serialized_system).decode(self._ENCODING)
+        # Decompress system, if need be
+        try:
+            serialized_system = zlib.decompress(serialized_system).decode(self._ENCODING)
+        except (TypeError, zlib.error):  # Py3/2 throws different error types
+            # Catch the "serialization is not compressed" error, do nothing to string.
+            # Preserves backwards compatibility
+            pass
+
         self._standard_system_hash = serialized_system.__hash__()
 
         # Check first if we have already the system in the cache.
