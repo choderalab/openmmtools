@@ -1111,8 +1111,12 @@ def test_states_serialization():
 
 def test_backwards_serialization_compression_compatibility():
     test_system = testsystems.AlanineDipeptideImplicit()
-    state = ThermodynamicState(test_system.system, temperature=300 * unit.kelvin)
-    uncompressed_system_serialization = openmm.XmlSerializer.serialize(test_system.system)
+    system = test_system.system
+    state = ThermodynamicState(system, temperature=300 * unit.kelvin)
+    new_system = state.system
+    # Cast the system to a standard system
+    state._standardize_system(new_system)
+    uncompressed_system_serialization = openmm.XmlSerializer.serialize(new_system)
     compressed_serialization = utils.serialize(state)
     replaced_serialization = copy.deepcopy(compressed_serialization)
     replaced_serialization['standard_system'] = uncompressed_system_serialization
