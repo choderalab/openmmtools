@@ -124,14 +124,32 @@ def test_lru_cache_capacity_property():
 
 def test_lru_cache_time_to_live_property():
     """Decreasing the time to live updates the expiration of elements."""
-    cache = LRUCache(time_to_live=50)
-    for i in range(4):
-        cache[str(i)] = i
+    def add_4_elements(_cache):
+        for i in range(4):
+            _cache[str(i)] = i
+
+    cache = LRUCache(time_to_live=None)
+    add_4_elements(cache)
     assert len(cache) == 4
+
+    # Setting time to live to 1 cause all 4 entries to expire on next access.
     cache.time_to_live = 1
-    assert len(cache) == 1
+    assert len(cache) == 4
     assert cache.time_to_live == 1
-    assert '3' in cache
+    cache['4'] = 4
+    assert len(cache) == 1
+    assert '4' in cache
+
+    # Increase time_to_live.
+    cache.time_to_live = 2
+    add_4_elements(cache)
+    assert len(cache) == 2
+    assert '2' in cache and '3' in cache
+
+    # Setting it back to None makes it limitless.
+    cache.time_to_live = None
+    add_4_elements(cache)
+    assert len(cache) == 4
 
 
 # =============================================================================
@@ -226,19 +244,25 @@ class TestContextCache(object):
         cache = ContextCache()
         state1, state2 = self.incompatible_states[:2]
 
-        # First we create a Context in state1.
-        cache.get_context(state1, copy.deepcopy(self.verlet_2fs))
+        # If there are no previous Contexts, a default integrator is used to create a new one.
+        context, default_integrator = cache.get_context(state1)
         assert len(cache) == 1
 
-        # When we don't specify the integrator, it first looks for cached Contexts.
+        # Now we create another Context in state1 with a different integrator.
+        assert type(self.verlet_2fs) is not type(default_integrator)  # test precondition
+        cache.get_context(state1, copy.deepcopy(self.verlet_2fs))
+        assert len(cache) == 2
+
+        # When we don't specify the integrator, it first looks
+        # for cached Contexts, and non-default contexts are preferred.
         context, integrator = cache.get_context(state1)
-        assert len(cache) == 1
+        assert len(cache) == 2
         assert state1.is_context_compatible(context)
-        assert isinstance(integrator, openmm.VerletIntegrator)
+        assert isinstance(integrator, type(self.verlet_2fs)), type(integrator)
 
         # With an incompatible state, a new Context is created.
         cache.get_context(state2)
-        assert len(cache) == 2
+        assert len(cache) == 3
 
     def test_cache_capacity_ttl(self):
         """Check that the cache capacity and time_to_live work as expected."""
