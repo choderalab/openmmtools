@@ -3004,7 +3004,7 @@ class AlchemicalAlanineDipeptide(AlanineDipeptideVacuum):
         Context parameters
         ------------------
         lambda_electrostatics
-            Coulomb interactions for the first water molecule are scaled by `lambda`
+            Coulomb interactions are scaled by `lambda`
 
         Examples
         --------
