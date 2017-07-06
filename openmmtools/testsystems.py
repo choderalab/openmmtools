@@ -2995,6 +2995,34 @@ class AlanineDipeptideVacuum(TestSystem):
 
         self.system, self.positions = system, positions
 
+class AlchemicalAlanineDipeptide(AlanineDipeptideVacuum):
+    """AlanineDipeptideVacuum test system where all atoms can be alchemically discharged"""
+
+    def __init__(self, *args, **kwargs):
+        """Create a test system where all atoms can be alchemical discharged.
+
+        Context parameters
+        ------------------
+        lambda_electrostatics
+            Coulomb interactions for the first water molecule are scaled by `lambda`
+
+        Examples
+        --------
+
+        >>> alanine_dipeptide = AlchemicalAlanineDipeptide()
+        >>> [system, positions] = [alanine_dipeptide.system, alanine_dipeptide.positions]
+
+        """
+        super(AlchemicalAlanineDipeptide, self).__init__(*args, **kwargs)
+
+        # Alchemically modify the system
+        from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
+        region = AlchemicalRegion(alchemical_atoms=range(22))
+        factory = AbsoluteAlchemicalFactory()
+        alchemical_system = factory.create_alchemical_system(self.system, region)
+        self.system = alchemical_system
+
+        return
 #=============================================================================================
 # Alanine dipeptide in implicit solvent.
 #=============================================================================================
