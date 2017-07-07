@@ -1093,9 +1093,15 @@ class TestCompoundThermodynamicState(object):
 # TEST SERIALIZATION
 # =============================================================================
 
+def are_pickle_equal(state1, state2):
+    """Check if they two ThermodynamicStates are identical."""
+    # Pickle internally uses __getstate__ so we are effectively
+    # comparing the serialization of the two objects.
+    return pickle.dumps(state1) == pickle.dumps(state2)
+
+
 def test_states_serialization():
     """Test serialization compatibility with utils.serialize."""
-
     test_system = testsystems.AlanineDipeptideImplicit()
     thermodynamic_state = ThermodynamicState(test_system.system, temperature=300*unit.kelvin)
     sampler_state = SamplerState(positions=test_system.positions)
@@ -1103,24 +1109,39 @@ def test_states_serialization():
     test_cases = [thermodynamic_state, sampler_state]
     for test_state in test_cases:
         serialization = utils.serialize(test_state)
+
+        # First test serialization with cache. Copy
+        # serialization so that we can use it again.
+        deserialized_state = utils.deserialize(copy.deepcopy(serialization))
+        assert are_pickle_equal(test_state, deserialized_state)
+
+        # Now test without cache.
+        ThermodynamicState._standard_system_cache = {}
         deserialized_state = utils.deserialize(serialization)
-        original_pickle = pickle.dumps(test_state)
-        deserialized_pickle = pickle.dumps(deserialized_state)
-        assert original_pickle == deserialized_pickle
+        assert are_pickle_equal(test_state, deserialized_state)
 
 
-def test_backwards_serialization_compression_compatibility():
-    test_system = testsystems.AlanineDipeptideImplicit()
-    system = test_system.system
+def test_uncompressed_thermodynamic_state_serialization():
+    """Test for backwards compatibility.
+
+    Until openmmtools 0.11.0, the ThermodynamicStates serialized
+    system was not compressed.
+    """
+    system = testsystems.AlanineDipeptideImplicit().system
     state = ThermodynamicState(system, temperature=300 * unit.kelvin)
-    new_system = state.system
-    # Cast the system to a standard system
-    state._standardize_system(new_system)
-    uncompressed_system_serialization = openmm.XmlSerializer.serialize(new_system)
     compressed_serialization = utils.serialize(state)
-    replaced_serialization = copy.deepcopy(compressed_serialization)
-    replaced_serialization['standard_system'] = uncompressed_system_serialization
-    replaced_state = utils.deserialize(replaced_serialization)
-    assert state.is_state_compatible(replaced_state)
-    assert utils.serialize(replaced_state)['standard_system'] == compressed_serialization['standard_system']
 
+    # Create uncompressed ThermodynamicState serialization.
+    state._standardize_system(system)
+    uncompressed_serialization = copy.deepcopy(compressed_serialization)
+    uncompressed_serialization['standard_system'] = openmm.XmlSerializer.serialize(system)
+
+    # First test serialization with cache. Copy
+    # serialization so that we can use it again.
+    deserialized_state = utils.deserialize(copy.deepcopy(uncompressed_serialization))
+    assert are_pickle_equal(state, deserialized_state)
+
+    # Now test without cache.
+    ThermodynamicState._standard_system_cache = {}
+    deserialized_state = utils.deserialize(uncompressed_serialization)
+    assert are_pickle_equal(state, deserialized_state)

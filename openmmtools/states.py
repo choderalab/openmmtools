@@ -15,6 +15,7 @@ Classes that represent a portion of the state of an OpenMM context.
 # =============================================================================
 
 import abc
+import sys
 import copy
 import zlib
 import weakref
@@ -954,7 +955,11 @@ class ThermodynamicState(object):
         serialized_system = serialization['standard_system']
         # Decompress system, if need be
         try:
-            serialized_system = zlib.decompress(serialized_system).decode(self._ENCODING)
+            serialized_system = zlib.decompress(serialized_system)
+            # Py2 returns the string, Py3 returns a byte string to decode, but if we
+            # decode the string in Py2 we get a unicode object that OpenMM can't parse.
+            if sys.version_info > (3, 0):
+                serialized_system = serialized_system.decode(self._ENCODING)
         except (TypeError, zlib.error):  # Py3/2 throws different error types
             # Catch the "serialization is not compressed" error, do nothing to string.
             # Preserves backwards compatibility
