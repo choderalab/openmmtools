@@ -607,10 +607,8 @@ def test_thermostated_integrator_hash():
 
 
 def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
-    """Check that the AlchemicalLangevinSplittingIntegrator, when performing nonequilibrium switching from
-    LennardJonesCluster to the same with nonbonded forces decoupled and back, results in an approximately
-    zero free energy difference (using BAR). Up to 6*sigma is tolerated for error.
-
+    """Check that the AlchemicalLangevinSplittingIntegrator reproduces the analytical free energy difference for a harmonic oscillator deformation, using BAR.
+    Up to 6*sigma is tolerated for error.
     The total work (protocol work + shadow work) is used.
     """
 
@@ -641,8 +639,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     positions = testsystem.positions
 
     # Get equilibrium samples from initial and final states
-    burn_in = 1000
-    thinning = 10 * 20 # number of steps between samples
+    burn_in = 5 * 20 # 5 periods
+    thinning = 5 * 20 # 5 periods
 
     # Collect forward and reverse work values
     w_f = np.zeros([n_iterations], np.float64)
@@ -724,8 +722,8 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
     return alchemical_integrator.getGlobalVariableByName("protocol_work") # in kT
 
 def test_alchemical_langevin_integrator():
-    for splitting in ["O { V R H R V } O", "O V R H R V O", "R V O H O V R", "H R V O V R H"]:
-        for nsteps in [0, 10, 50]:
+    for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
+        for nsteps in [0, 1, 10]:
             run_alchemical_langevin_integrator(nsteps=nsteps)
 
 if __name__=="__main__":
