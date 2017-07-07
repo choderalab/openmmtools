@@ -391,7 +391,6 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
 
         # Creating the test system with a high frequency barostat.
         testsystem = testsystems.AlchemicalAlanineDipeptide(nonbondedMethod=getattr(app, nonbonded_method))
-        testsystem.system.addForce(openmm.MonteCarloBarostat(1 * unit.atmospheres, temperature, 2))
         context, integrator = self.create_system(testsystem, parameter_name, parameter_initial, temperature, platform_name)
 
         # Number of NCMC steps
