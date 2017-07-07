@@ -145,3 +145,35 @@ Analysis
     analyze
     write_trajectory
     write_trajectory_dcd
+
+
+SAMS test systems
+"""""""""""""""""
+
+A number of SAMS test systems are provided to make testing of SAMS schemes more convenient.
+Objects for these classes are initialized with a SAMS sampler stack.
+
+::
+
+    from openmmtools.samplers.sams.testsystems import AlanineDipeptideExplicitSimulatedTempering
+    testsystem = AlanineDipeptideExplicitSimulatedTempering()
+    testsystem.mcmc_sampler.run(2)
+    testsystem.exen_sampler.run(2)
+    testsystem.sams_sampler.run(2)
+
+.. currentmodule:: openmmtools.samplers.sams.testsystems
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    SAMSTestSystem
+    HarmonicOscillatorSimulatedTempering
+    AlanineDipeptideVacuumSimulatedTempering
+    AlanineDipeptideExplicitSimulatedTempering
+    AlchemicalSAMSTestSystem
+    AlanineDipeptideVacuumAlchemical
+    AlanineDipeptideExplicitAlchemical
+    WaterBoxAlchemical
+    HostGuestAlchemical
+    AblImatinibVacuumAlchemical
+    AblImatinibExplicitAlchemical
