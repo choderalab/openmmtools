@@ -657,7 +657,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     # Check forces other than nonbonded
     # ----------------------------------
-    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'GBSAOBCForce']:
+    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce',
+                       'GBSAOBCForce', 'CustomGBForce']:
         alchemical_forces_energies = [energy for label, energy in energy_components.items() if force_name in label]
         reference_force_energy = compute_energy_force(reference_system, positions, force_name)
 
@@ -674,11 +675,13 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
                             '{} energy '.format(force_name))
 
 
-def check_noninteracting_energy_components(alchemical_system, alchemical_regions, positions):
+def check_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Check non-interacting energy components are zero when appropriate.
 
     Parameters
     ----------
+    reference_system : simtk.openmm.System
+        The reference system (not alchemically modified).
     alchemical_system : simtk.openmm.System
         The alchemically modified system to test.
     alchemical_regions : AlchemicalRegion.
@@ -699,7 +702,7 @@ def check_noninteracting_energy_components(alchemical_system, alchemical_regions
         print('testing {}'.format(label))
         value = energy_components[label]
         assert abs(value / GLOBAL_ENERGY_UNIT) == 0.0, ("'{}' should have zero energy in annihilated alchemical"
-                                                         " state, but energy is {}").format(label, str(value))
+                                                        " state, but energy is {}").format(label, str(value))
 
     # Check that non-alchemical/alchemical particle interactions and 1,4 exceptions have been annihilated
     assert_zero_energy('alchemically modified NonbondedForce for non-alchemical/alchemical sterics')
@@ -716,10 +719,41 @@ def check_noninteracting_energy_components(alchemical_system, alchemical_regions
         assert_zero_energy('alchemically modified BondForce for alchemical/alchemical electrostatics exceptions')
 
     # Check valence terms
-    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'GBSAOBCForce']:
+    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']:
         force_label = 'alchemically modified ' + force_name
         if force_label in energy_components:
             assert_zero_energy(force_label)
+
+    # Check implicit solvent force.
+    for force_name in ['CustomGBForce', 'GBSAOBCForce']:
+        try:
+            alchemical_energy = energy_components['alchemically modified ' + force_name]
+        except KeyError:  # No implicit solvent.
+            pass
+        else:  # Compute reference value.
+            # First find implicit solvent force in reference system.
+            system = copy.deepcopy(reference_system)
+            for force in system.getForces():
+                if force.__class__.__name__ == force_name:
+                    break
+
+            # Zero-out contribution of alchemical atoms in reference implicit solvent force.
+            # This assumes that the first per-particle parameter is the particle charge.
+            for particle_index in range(force.getNumParticles()):
+                if particle_index not in alchemical_regions.alchemical_atoms:
+                    continue
+                parameters = force.getParticleParameters(particle_index)
+                parameters = list(parameters)  # Convert tuple to list to change it.
+                parameters[0] = 0.0  # This is the charge in OBC and GBn models.
+                try:  # GBSAOBCForce
+                    force.setParticleParameters(particle_index, *parameters)
+                except TypeError:  # CustomGBForce
+                    force.setParticleParameters(particle_index, parameters)
+
+            # Compute reference force energy.
+            reference_force_energy = compute_energy_force(system, positions, force_name)
+            assert_almost_equal(reference_force_energy, alchemical_energy,
+                                'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
 
 # =============================================================================
@@ -1120,7 +1154,8 @@ class TestAbsoluteAlchemicalFactory(object):
         # Vacuum and implicit.
         cls.test_systems['AlanineDipeptideVacuum'] = testsystems.AlanineDipeptideVacuum()
         cls.test_systems['AlanineDipeptideImplicit'] = testsystems.AlanineDipeptideImplicit()
-        cls.test_systems['TolueneImplicit'] = testsystems.TolueneImplicit()
+        cls.test_systems['TolueneImplicitOBC2'] = testsystems.TolueneImplicitOBC2()
+        cls.test_systems['TolueneImplicitGBn'] = testsystems.TolueneImplicitGBn()
 
         # Explicit test system: PME and CutoffPeriodic.
         #cls.test_systems['AlanineDipeptideExplicit with CutoffPeriodic'] = \
@@ -1210,7 +1245,7 @@ class TestAbsoluteAlchemicalFactory(object):
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            f = partial(check_noninteracting_energy_components, alchemical_system,
+            f = partial(check_noninteracting_energy_components, test_system.system, alchemical_system,
                         alchemical_region, test_system.positions)
             f.description = "Testing non-interacting energy of {}".format(test_name)
             yield f
@@ -1290,6 +1325,7 @@ class TestAbsoluteAlchemicalFactory(object):
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
             yield f
 
+
 class TestDispersionlessAlchemicalFactory(object):
     """
     Only test overlap for dispersionless alchemical factory, since energy agreement
@@ -1360,6 +1396,7 @@ class TestDispersionlessAlchemicalFactory(object):
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
             f.description = "Testing reference/alchemical overlap for no alchemical dispersion {}".format(test_name)
             yield f
+
 
 @attr('slow')
 class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
