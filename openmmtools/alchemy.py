@@ -1885,6 +1885,120 @@ class AbsoluteAlchemicalFactory(object):
 
         return [custom_force]
 
+    def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region):
+        """Create alchemically-modified version of CustomGBForce.
+
+        The GB functions are meta-programmed using the following rules:
+        - 'lambda_electrostatics' is added as a global parameter.
+        - 'alchemical' is added as a per-particle parameter. All atoms in
+          the alchemical group have this parameter set to 1; otherwise 0.
+        - Any single-particle energy term (`CustomGBForce.SingleParticle`)
+          is scaled by `(lambda_electrostatics*alchemical+(1-alchemical))`
+        - Any two-particle energy term (`CustomGBForce.ParticlePairNoExclusions`)
+          has charge 1 (`charge1`) replaced by `(lambda_electrostatics*alchemical1+(1-alchemical1))*charge1`
+          and charge 2 (`charge2`) replaced by `(lambda_electrostatics*alchemical2+(1-alchemical2))*charge2`.
+        - Any single-particle computed value (`CustomGBForce.SingleParticle`)
+          remains unmodified
+        - Any two-particle computed value (`CustomGBForce.ParticlePairNoExclusions`)
+          is scaled by `(lambda_electrostatics*alchemical2 + (1-alchemical2))`
+
+        Scaling of a term should always prepend and capture the value with
+        an intermediate variable. For example, prepending `scaling * unscaled; unscaled =`
+        will capture the value of the expression as `unscaled` and multiple by `scaled`.
+        This avoids the need to identify the head expression and add parentheses.
+
+        .. warning::
+            This may not work correctly for all GB models.
+
+        Parameters
+        ----------
+        reference_force : simtk.openmm.GBSAOBCForce
+            The reference GBSAOBCForce to be alchemically modify.
+        alchemical_region : AlchemicalRegion
+            The alchemical region containing the indices of the atoms to
+            alchemically modify.
+
+        Returns
+        -------
+        custom_force : simtk.openmm.CustomGBForce
+            The alchemical version of the reference force.
+
+        """
+        custom_force = openmm.CustomGBForce()
+
+        # Add global parameters
+        for index in range(reference_force.getNumGlobalParameters()):
+            name = reference_force.getGlobalParameterName(index)
+            default_value = reference_force.getGlobalParameterDefaultValue(index)
+            custom_force.addGlobalParameter(name, default_value)
+        custom_force.addGlobalParameter("lambda_electrostatics", 1.0)
+
+        # Add per-particle parameters.
+        for index in range(reference_force.getNumPerParticleParameters()):
+            name = reference_force.getPerParticleParameterName(index)
+            custom_force.addPerParticleParameter(name)
+        custom_force.addPerParticleParameter("alchemical")
+
+        # Set nonbonded methods.
+        custom_force.setNonbondedMethod(reference_force.getNonbondedMethod())
+        custom_force.setCutoffDistance(reference_force.getCutoffDistance())
+
+        # Add computations.
+        for index in range(reference_force.getNumComputedValues()):
+            name, expression, computation_type = reference_force.getComputedValueParameters(index)
+
+            # Alter expression for particle pair terms only.
+            if computation_type is not openmm.CustomGBForce.SingleParticle:
+                prepend = ('alchemical_scaling*unscaled; '
+                           'alchemical_scaling = (lambda_electrostatics*alchemical2 + (1-alchemical2)); '
+                           'unscaled = ')
+                expression = prepend + expression
+
+            custom_force.addComputedValue(name, expression, computation_type)
+
+        # Add energy terms.
+        for index in range(reference_force.getNumEnergyTerms()):
+            expression, computation_type = reference_force.getEnergyTermParameters(index)
+
+            # Alter expressions
+            if computation_type is openmm.CustomGBForce.SingleParticle:
+                prepend = ('alchemical_scaling*unscaled; '
+                           'alchemical_scaling = (lambda_electrostatics*alchemical + (1-alchemical)); '
+                           'unscaled = ')
+                expression = prepend + expression
+            else:
+                expression = expression.replace('charge1', 'alchemically_scaled_charge1')
+                expression = expression.replace('charge2', 'alchemically_scaled_charge2')
+                expression += ' ; alchemically_scaled_charge1 = (lambda_electrostatics*alchemical1+(1-alchemical1)) * charge1;'
+                expression += ' ; alchemically_scaled_charge2 = (lambda_electrostatics*alchemical2+(1-alchemical2)) * charge2;'
+
+            custom_force.addEnergyTerm(expression, computation_type)
+
+        # Add particle parameters
+        for particle_index in range(reference_force.getNumParticles()):
+            parameters = reference_force.getParticleParameters(particle_index)
+            # Append alchemical parameter
+            parameters = list(parameters)
+            if particle_index in alchemical_region.alchemical_atoms:
+                parameters.append(1.0)
+            else:
+                parameters.append(0.0)
+            custom_force.addParticle(parameters)
+
+        # Add tabulated functions
+        for function_index in range(reference_force.getNumTabulatedFunctions()):
+            name = reference_force.getTabulatedFunctionName(function_index)
+            function = reference_force.getTabulatedFunction(function_index)
+            function_copy = copy.deepcopy(function)#.Copy()
+            custom_force.addTabulatedFunction(name, function_copy)
+
+        # Add exclusions
+        for exclusion_index in range(reference_force.getNumExclusions()):
+            [particle1, particle2] = reference_force.getExclusionParticles(exclusion_index)
+            custom_force.addExclusion(particle1, particle2)
+
+        return [custom_force]
+
     # -------------------------------------------------------------------------
     # Internal usage: Infer force labels
     # -------------------------------------------------------------------------
@@ -1903,9 +2017,17 @@ class AbsoluteAlchemicalFactory(object):
                     return True
             return False
 
-        def check_function(custom_force, parameter):
-            energy_function = custom_force.getEnergyFunction()
-            return parameter in energy_function
+        def check_energy_expression(custom_force, parameter):
+            try:
+                found = parameter in custom_force.getEnergyFunction()
+            except AttributeError:  # CustomGBForce
+                found = False
+                for index in range(custom_force.getNumEnergyTerms()):
+                    expression, _ = custom_force.getEnergyTermParameters(index)
+                    if parameter in expression:
+                        found = True
+                        break
+            return found
 
         force_labels = {}
         nonbonded_forces = []
@@ -1922,14 +2044,17 @@ class AbsoluteAlchemicalFactory(object):
             elif isinstance(force, openmm.CustomTorsionForce) and check_parameter(force, 'lambda_torsions'):
                 add_label('alchemically modified PeriodicTorsionForce', force_index)
             elif isinstance(force, openmm.CustomGBForce) and check_parameter(force, 'lambda_electrostatics'):
-                add_label('alchemically modified GBSAOBCForce', force_index)
-            elif isinstance(force, openmm.CustomBondForce) and check_function(force, 'lambda'):
-                if check_function(force, 'lambda_sterics'):
+                if check_energy_expression(force, 'unscaled'):
+                    add_label('alchemically modified CustomGBForce', force_index)
+                else:
+                    add_label('alchemically modified GBSAOBCForce', force_index)
+            elif isinstance(force, openmm.CustomBondForce) and check_energy_expression(force, 'lambda'):
+                if check_energy_expression(force, 'lambda_sterics'):
                     sterics_bond_forces.append([force_index, force])
                 else:
                     electro_bond_forces.append([force_index, force])
-            elif isinstance(force, openmm.CustomNonbondedForce) and check_function(force, 'lambda'):
-                if check_function(force, 'lambda_sterics'):
+            elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, 'lambda'):
+                if check_energy_expression(force, 'lambda_sterics'):
                     nonbonded_forces.append(['sterics', force_index, force])
                 else:
                     nonbonded_forces.append(['electrostatics', force_index, force])
