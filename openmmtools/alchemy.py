@@ -1989,7 +1989,7 @@ class AbsoluteAlchemicalFactory(object):
         for function_index in range(reference_force.getNumTabulatedFunctions()):
             name = reference_force.getTabulatedFunctionName(function_index)
             function = reference_force.getTabulatedFunction(function_index)
-            function_copy = copy.deepcopy(function)#.Copy()
+            function_copy = copy.deepcopy(function)
             custom_force.addTabulatedFunction(name, function_copy)
 
         # Add exclusions
@@ -2097,7 +2097,7 @@ class AbsoluteAlchemicalFactory(object):
 
             # We check that the bond atoms are both alchemical or not.
             else:
-                atom_i, atom_j = force1.getBondParameters(0)
+                atom_i, atom_j, _ = force1.getBondParameters(0)
                 both_alchemical = atom_i in alchemical_atoms and atom_j in alchemical_atoms
                 if both_alchemical:
                     add_label(label.format(''), force_index1)

@@ -726,34 +726,78 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
 
     # Check implicit solvent force.
     for force_name in ['CustomGBForce', 'GBSAOBCForce']:
+        label = 'alchemically modified ' + force_name
+
+        # Check if the system has an implicit solvent force.
         try:
-            alchemical_energy = energy_components['alchemically modified ' + force_name]
+            alchemical_energy = energy_components[label]
         except KeyError:  # No implicit solvent.
-            pass
-        else:  # Compute reference value.
-            # First find implicit solvent force in reference system.
-            system = copy.deepcopy(reference_system)
-            for force in system.getForces():
-                if force.__class__.__name__ == force_name:
-                    break
+            continue
 
-            # Zero-out contribution of alchemical atoms in reference implicit solvent force.
-            # This assumes that the first per-particle parameter is the particle charge.
-            for particle_index in range(force.getNumParticles()):
-                if particle_index not in alchemical_regions.alchemical_atoms:
-                    continue
-                parameters = force.getParticleParameters(particle_index)
-                parameters = list(parameters)  # Convert tuple to list to change it.
-                parameters[0] = 0.0  # This is the charge in OBC and GBn models.
+        # If all alchemical particles are modified, the alchemical energy should be zero.
+        if len(alchemical_regions.alchemical_atoms) == reference_system.getNumParticles():
+            assert_zero_energy(label)
+            continue
+
+        # Otherwise compare the alchemical energy with a
+        # reference system with only non-alchemical particles.
+        # Find implicit solvent force in reference system.
+        for reference_force in reference_system.getForces():
+            if reference_force.__class__.__name__ == force_name:
+                break
+
+        system = openmm.System()
+        force = reference_force.__class__()
+
+        # For custom GB forces, we need to copy all computed values,
+        # energy terms, parameters, tabulated functions and exclusions.
+        if isinstance(force, openmm.CustomGBForce):
+            for index in range(reference_force.getNumPerParticleParameters()):
+                name = reference_force.getPerParticleParameterName(index)
+                force.addPerParticleParameter(name)
+            for index in range(reference_force.getNumComputedValues()):
+                computed_value = reference_force.getComputedValueParameters(index)
+                force.addComputedValue(*computed_value)
+            for index in range(reference_force.getNumEnergyTerms()):
+                energy_term = reference_force.getEnergyTermParameters(index)
+                force.addEnergyTerm(*energy_term)
+            for index in range(reference_force.getNumGlobalParameters()):
+                name = reference_force.getGlobalParameterName(index)
+                default_value = reference_force.getGlobalParameterDefaultValue(index)
+                force.addGlobalParameter(name, default_value)
+            for function_index in range(reference_force.getNumTabulatedFunctions()):
+                name = reference_force.getTabulatedFunctionName(function_index)
+                function = reference_force.getTabulatedFunction(function_index)
+                function_copy = copy.deepcopy(function)
+                force.addTabulatedFunction(name, function_copy)
+            for exclusion_index in range(reference_force.getNumExclusions()):
+                particles = reference_force.getExclusionParticles(exclusion_index)
+                force.addExclusion(*particles)
+
+        # Create a system with only the non-alchemical particles.
+        for particle_index in range(reference_system.getNumParticles()):
+            if particle_index not in alchemical_regions.alchemical_atoms:
+                # Add particle to System.
+                mass = reference_system.getParticleMass(particle_index)
+                system.addParticle(mass)
+
+                # Add particle to Force..
+                parameters = reference_force.getParticleParameters(particle_index)
                 try:  # GBSAOBCForce
-                    force.setParticleParameters(particle_index, *parameters)
-                except TypeError:  # CustomGBForce
-                    force.setParticleParameters(particle_index, parameters)
+                    force.addParticle(*parameters)
+                except NotImplementedError:  # CustomGBForce
+                    force.addParticle(parameters)
 
-            # Compute reference force energy.
-            reference_force_energy = compute_energy_force(system, positions, force_name)
-            assert_almost_equal(reference_force_energy, alchemical_energy,
-                                'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
+        system.addForce(force)
+
+        # Get positions for all non-alchemical particles.
+        non_alchemical_positions = [pos for i, pos in enumerate(positions)
+                                    if i not in alchemical_regions.alchemical_atoms]
+
+        # Compute reference force energy.
+        reference_force_energy = compute_energy_force(system, non_alchemical_positions, force_name)
+        assert_almost_equal(reference_force_energy, alchemical_energy,
+                            'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
 
 # =============================================================================
@@ -1172,7 +1216,7 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2))
         cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
         cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
-        cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(2))  # Only partially modified.
+        cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
 
