@@ -165,6 +165,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addComputeSum("ke", "0.5*m*v*v")
         self.addComputeGlobal("Eold", "ke + energy")
         self.addComputePerDof("xold", "x")
+        self.addComputePerDof("vold", "v")
 
         self.addComputeGlobal("mu1", "0.0")  # XCGHMC Fig. 3 O1
         self.addComputeGlobal("uni", "uniform")  # XCGHMC Fig. 3 O1
