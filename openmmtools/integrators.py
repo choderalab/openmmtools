@@ -15,19 +15,16 @@ COPYRIGHT
 
 @author John D. Chodera <john.chodera@choderalab.org>
 
-All code in this repository is released under the GNU General Public License.
+All code in this repository is released under the MIT License.
 
 This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
+the terms of the MIT License.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+PARTICULAR PURPOSE.  See the MIT License for more details.
 
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
+You should have received a copy of the MIT License along with this program.
 
 """
 
@@ -38,6 +35,7 @@ this program.  If not, see <http://www.gnu.org/licenses/>.
 import numpy as np
 import logging
 import re
+import zlib
 
 import simtk.unit
 
@@ -213,9 +211,18 @@ class RestorableIntegrator(mm.CustomIntegrator,PrettyPrintableIntegrator):
 
     @staticmethod
     def _compute_class_hash(integrator_class):
-        """Return a numeric hash for the integrator class."""
-        # We need to convert to float because some digits may be lost in the conversion
-        return float(hash(integrator_class.__name__))
+        """Return a numeric hash for the integrator class.
+
+        The hash will become part of the Integrator serialization,
+        so it is important for it consistent across processes in case
+        the integrator is sent to a remote worker. The hash() built-in
+        function is seeded by the PYTHONHASHSEED environmental variable,
+        so we can't use it here.
+
+        We also need to convert to float because some digits may be
+        lost in the conversion.
+        """
+        return float(zlib.adler32(integrator_class.__name__.encode()))
 
 
 class ThermostatedIntegrator(RestorableIntegrator):

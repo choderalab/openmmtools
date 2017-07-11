@@ -17,7 +17,7 @@ Provide cache classes to handle creation of OpenMM Context objects.
 import copy
 import collections
 
-from simtk import openmm
+from simtk import openmm, unit
 
 from openmmtools import integrators
 
@@ -114,12 +114,26 @@ class LRUCache(object):
     @time_to_live.setter
     def time_to_live(self, new_time_to_live):
         # Update entries only if we are changing the ttl.
-        ttl_diff = new_time_to_live - self._ttl
-        if ttl_diff == 0:
+        if new_time_to_live == self._ttl:
             return
+
+        # Update expiration of cache entries.
         for entry in self._data.values():
-            entry.expiration += ttl_diff
-        self._remove_expired()
+            # If there was no time to live before, just let entries
+            # expire in new_time_to_live accesses
+            if self._ttl is None:
+                entry.expiration = self._n_access + new_time_to_live
+            # If we don't want expiration anymore, delete the field.
+            # This way we save memory in case there are a lot of entries.
+            elif new_time_to_live is None:
+                del entry.expiration
+            # Otherwise just add/subtract the difference.
+            else:
+                entry.expiration += new_time_to_live - self._ttl
+
+        # Purge cache only if there is a time to live.
+        if new_time_to_live is not None:
+            self._remove_expired()
         self._ttl = new_time_to_live
 
     def empty(self):
@@ -366,11 +380,18 @@ class ContextCache(object):
             thermodynamic_state_id = self._generate_state_id(thermodynamic_state)
             matching_context_ids = [context_id for context_id in self._lru
                                     if context_id[0] == thermodynamic_state_id]
-            if len(matching_context_ids) > 0:
-                context = self._lru[matching_context_ids[0]]  # Return first found.
+            if len(matching_context_ids) == 0:
+                # We have to create a new Context.
+                integrator = self._get_default_integrator(thermodynamic_state.temperature)
+            elif len(matching_context_ids) == 1:
+                # Only one match.
+                context = self._lru[matching_context_ids[0]]
             else:
-                # We have to create a new Context. Use a likely-to-be-used Integrator.
-                integrator = integrators.GeodesicBAOABIntegrator(temperature=thermodynamic_state.temperature)
+                # Multiple matches, prefer non-default Integrator.
+                for context_id in matching_context_ids:
+                    if context_id[1] != self._default_integrator_id():
+                        context = self._lru[context_id]
+                        break
 
         if context is None:
             # Determine the Context id matching the pair state-integrator.
@@ -447,6 +468,7 @@ class ContextCache(object):
 
         """
         standard_integrator = copy.deepcopy(integrator)
+        integrators.RestorableIntegrator.restore_interface(standard_integrator)
         for attribute, std_value in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
             try:
                 getattr(standard_integrator, 'set' + attribute)(std_value)
@@ -459,7 +481,13 @@ class ContextCache(object):
         """Return a unique key for the ThermodynamicState."""
         # We take advantage of the cached _standard_system_hash property
         # to generate a compatible hash for the thermodynamic state.
-        return str(thermodynamic_state._standard_system_hash)
+        return thermodynamic_state._standard_system_hash
+
+    @classmethod
+    def _generate_integrator_id(cls, integrator):
+        """Return a unique key for the given Integrator."""
+        standard_integrator = cls._standardize_integrator(integrator)
+        return openmm.XmlSerializer.serialize(standard_integrator).__hash__()
 
     @classmethod
     def _generate_context_id(cls, thermodynamic_state, integrator):
@@ -472,9 +500,24 @@ class ContextCache(object):
 
         """
         state_id = cls._generate_state_id(thermodynamic_state)
-        standard_integrator = cls._standardize_integrator(integrator)
-        integrator_id = openmm.XmlSerializer.serialize(standard_integrator).__hash__()
+        integrator_id = cls._generate_integrator_id(integrator)
         return state_id, integrator_id
+
+    @staticmethod
+    def _get_default_integrator(temperature):
+        """Return a new instance of the default integrator."""
+        # Use a likely-to-be-used Integrator.
+        return integrators.GeodesicBAOABIntegrator(temperature=temperature)
+
+    @classmethod
+    def _default_integrator_id(cls):
+        """Return the unique key of the default integrator."""
+        if cls._cached_default_integrator_id is None:
+            default_integrator = cls._get_default_integrator(300*unit.kelvin)
+            default_integrator_id = cls._generate_integrator_id(default_integrator)
+            cls._cached_default_integrator_id = default_integrator_id
+        return cls._cached_default_integrator_id
+    _cached_default_integrator_id = None
 
 
 # =============================================================================
@@ -523,7 +566,7 @@ class DummyContextCache(object):
 # GLOBAL CONTEXT CACHE
 # =============================================================================
 
-global_context_cache = ContextCache(capacity=3, time_to_live=50)
+global_context_cache = ContextCache(capacity=None, time_to_live=None)
 
 
 # =============================================================================

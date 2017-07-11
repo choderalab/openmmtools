@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import os
 import sys
+import zlib
 import pickle
 import itertools
 from functools import partial
@@ -1289,6 +1290,76 @@ class TestAbsoluteAlchemicalFactory(object):
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
             yield f
 
+class TestDispersionlessAlchemicalFactory(object):
+    """
+    Only test overlap for dispersionless alchemical factory, since energy agreement
+    will be poor.
+    """
+    @classmethod
+    def setup_class(cls):
+        """Create test systems and shared objects."""
+        cls.define_systems()
+        cls.define_regions()
+        cls.generate_cases()
+
+    @classmethod
+    def define_systems(cls):
+        """Create test systems and shared objects."""
+        cls.test_systems = dict()
+        cls.test_systems['LennardJonesFluid with dispersion correction'] = \
+            testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
+
+    @classmethod
+    def define_regions(cls):
+        """Create shared AlchemicalRegions for test systems in cls.test_regions."""
+        cls.test_regions = dict()
+        cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
+
+    @classmethod
+    def generate_cases(cls):
+        """Generate all test cases in cls.test_cases combinatorially."""
+        cls.test_cases = dict()
+        factory = AbsoluteAlchemicalFactory(disable_alchemical_dispersion_correction=True)
+
+        # We generate all possible combinations of annihilate_sterics/electrostatics
+        # for each test system. We also annihilate bonds, angles and torsions every
+        # 3 test cases so that we test it at least one for each test system and for
+        # each combination of annihilate_sterics/electrostatics.
+        n_test_cases = 0
+        for test_system_name, test_system in cls.test_systems.items():
+
+            # Find standard alchemical region.
+            for region_name, region in cls.test_regions.items():
+                if region_name in test_system_name:
+                    break
+            assert region_name in test_system_name
+
+            # Create all combinations of annihilate_sterics.
+            for annihilate_sterics in itertools.product((True, False), repeat=1):
+                region = region._replace(annihilate_sterics=annihilate_sterics,
+                                         annihilate_electrostatics=True)
+
+                # Create test name.
+                test_case_name = test_system_name[:]
+                if annihilate_sterics:
+                    test_case_name += ', annihilated sterics'
+
+                # Pre-generate alchemical system
+                alchemical_system = factory.create_alchemical_system(test_system.system, region)
+                cls.test_cases[test_case_name] = (test_system, alchemical_system, region)
+
+                n_test_cases += 1
+
+    def test_overlap(self):
+        """Tests overlap between reference and alchemical systems."""
+        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
+            #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
+            #                                           test_name + '.pickle')
+            cached_trajectory_filename = None
+            f = partial(overlap_check, test_system.system, alchemical_system, test_system.positions,
+                        cached_trajectory_filename=cached_trajectory_filename, name=test_name)
+            f.description = "Testing reference/alchemical overlap for no alchemical dispersion {}".format(test_name)
+            yield f
 
 @attr('slow')
 class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
@@ -1662,6 +1733,9 @@ class TestAlchemicalState(object):
         # The serialized system is standard.
         serialization = utils.serialize(compound_state)
         serialized_standard_system = serialization['thermodynamic_state']['standard_system']
+        # Decompress the serialized_system
+        serialized_standard_system = zlib.decompress(serialized_standard_system).decode(
+            states.ThermodynamicState._ENCODING)
         assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
 
         # The object is deserialized correctly.
