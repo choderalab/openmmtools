@@ -192,11 +192,11 @@ def assert_almost_equal(energy1, energy2, err_msg):
 
 
 def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
-    """Dissect the contributions to NonbondedForce of the reference system by atom group
-    and sterics/electrostatics.
+    """Dissect the nonbonded energy contributions of the reference system
+    by atom group and sterics/electrostatics.
 
-    Note that this can only work on reference_system objects whose CutoffPeriodic forces
-    have not been replaced by Custom*Force objects to set c_rf = 0.
+    This works also for systems objects whose CutoffPeriodic force
+    has been replaced by a CustomNonbondedForce to set c_rf = 0.
 
     Parameters
     ----------
@@ -229,60 +229,76 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
 
     """
 
-    def turn_off(force, sterics=False, electrostatics=False,
+    def turn_off(system, sterics=False, electrostatics=False,
                  exceptions=False, only_atoms=frozenset()):
-        if len(only_atoms) == 0:  # if empty, turn off all particles
-            only_atoms = set(range(force.getNumParticles()))
-        e_coeff = 0.0 if sterics else 1.0
-        c_coeff = 0.0 if electrostatics else 1.0
-        if exceptions:  # Turn off exceptions
-            for exception_index in range(force.getNumExceptions()):
-                [iatom, jatom, charge, sigma, epsilon] = force.getExceptionParameters(exception_index)
-                if iatom in only_atoms or jatom in only_atoms:
-                    force.setExceptionParameters(exception_index, iatom, jatom, c_coeff*charge,
-                                                 sigma, e_coeff*epsilon)
-        else:  # Turn off particle interactions
-            for particle_index in range(force.getNumParticles()):
-                if particle_index in only_atoms:
-                    [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
-                    force.setParticleParameters(particle_index, c_coeff*charge, sigma, e_coeff*epsilon)
+        """Turn off sterics and/or electrostatics interactions.
 
-    def restore_system(reference_system):
-        system = copy.deepcopy(reference_system)
-        nonbonded_force = system.getForces()[0]
-        return system, nonbonded_force
+        If `exceptions` is True, only the exceptions are turned off.
+        Support also system that have gone through replace_reaction_field.
+        The `system` must have only nonbonded forces.
+        If `only_atoms` is specified, only the those atoms will be turned off.
+
+        """
+        if len(only_atoms) == 0:  # if empty, turn off all particles
+            only_atoms = set(range(system.getNumParticles()))
+        epsilon_coeff = 0.0 if sterics else 1.0
+        charge_coeff = 0.0 if electrostatics else 1.0
+
+        # Only a Nonbonded and a CustomNonbonded (for RF) force should be here.
+        if exceptions:  # Turn off exceptions
+            nonbonded_force = system.getForces()[0]  # NonbondedForce
+            for exception_index in range(nonbonded_force.getNumExceptions()):
+                iatom, jatom, charge, sigma, epsilon = nonbonded_force.getExceptionParameters(exception_index)
+                if iatom in only_atoms or jatom in only_atoms:
+                    nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
+                                                           charge_coeff*charge, sigma, epsilon_coeff*epsilon)
+        else:  # Turn off particle interactions
+            for force in system.getForces():
+                for particle_index in range(force.getNumParticles()):
+                    if particle_index in only_atoms:
+                        # Convert tuple parameters to list to allow changes.
+                        parameters = list(force.getParticleParameters(particle_index))
+                        parameters[0] *= charge_coeff  # charge
+                        try:  # CustomNonbondedForce
+                            force.setParticleParameters(particle_index, parameters)
+                        except TypeError:  # NonbondedForce
+                            parameters[2] *= epsilon_coeff  # epsilon
+                            force.setParticleParameters(particle_index, *parameters)
 
     nonalchemical_atoms = set(range(reference_system.getNumParticles())).difference(alchemical_atoms)
 
-    # Remove all forces but NonbondedForce and, if CutoffPeriodic is in use,
-    # the CustomNonbondedForce and CustomBondForce used to replace it
+    # Remove all forces but NonbondedForce and eventually the
+    # CustomNonbondedForce used to model reaction field.
     reference_system = copy.deepcopy(reference_system)  # don't modify original system
     forces_to_remove = list()
     for force_index, force in enumerate(reference_system.getForces()):
-        if force.__class__.__name__ != 'NonbondedForce':
-            forces_to_remove.append(force_index)
-        else:
-            force.setForceGroup(0)
+        force.setForceGroup(0)
+        if isinstance(force, openmm.NonbondedForce):
             force.setReciprocalSpaceForceGroup(30)  # separate PME reciprocal from direct space
+        # We keep only CustomNonbondedForces that are not alchemically modified.
+        elif not (isinstance(force, openmm.CustomNonbondedForce) and
+                          'lambda' not in force.getEnergyFunction()):
+            forces_to_remove.append(force_index)
+
     for force_index in reversed(forces_to_remove):
         reference_system.removeForce(force_index)
-    assert len(reference_system.getForces()) == 1
+    assert len(reference_system.getForces()) <= 2
 
     # Compute particle interactions between different groups of atoms
     # ----------------------------------------------------------------
-    system, nonbonded_force = restore_system(reference_system)
+    system = copy.deepcopy(reference_system)
 
     # Compute total energy from nonbonded interactions
     tot_energy = compute_energy(system, positions)
     tot_reciprocal_energy = compute_energy(system, positions, force_group={30})
 
     # Compute contributions from particle sterics
-    turn_off(nonbonded_force, sterics=True, only_atoms=alchemical_atoms)
+    turn_off(system, sterics=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_particle_sterics = compute_energy(system, positions)
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical sterics
-    turn_off(nonbonded_force, sterics=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical sterics
+    turn_off(system, sterics=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_particle_sterics = compute_energy(system, positions)
-    turn_off(nonbonded_force, sterics=True)
+    turn_off(system, sterics=True)
     tot_energy_no_particle_sterics = compute_energy(system, positions)
 
     tot_particle_sterics = tot_energy - tot_energy_no_particle_sterics
@@ -291,15 +307,15 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
     na_particle_sterics = tot_particle_sterics - nn_particle_sterics - aa_particle_sterics
 
     # Compute contributions from particle electrostatics
-    system, nonbonded_force = restore_system(reference_system)  # Restore sterics
-    turn_off(nonbonded_force, electrostatics=True, only_atoms=alchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore sterics
+    turn_off(system, electrostatics=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_particle_electro = compute_energy(system, positions)
     nn_reciprocal_energy = compute_energy(system, positions, force_group={30})
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical electrostatics
-    turn_off(nonbonded_force, electrostatics=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical electrostatics
+    turn_off(system, electrostatics=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_particle_electro = compute_energy(system, positions)
     aa_reciprocal_energy = compute_energy(system, positions, force_group={30})
-    turn_off(nonbonded_force, electrostatics=True)
+    turn_off(system, electrostatics=True)
     tot_energy_no_particle_electro = compute_energy(system, positions)
 
     na_reciprocal_energy = tot_reciprocal_energy - nn_reciprocal_energy - aa_reciprocal_energy
@@ -316,13 +332,13 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
     # -----------------------------------------------------
 
     # Compute contributions from exceptions sterics
-    system, nonbonded_force = restore_system(reference_system)  # Restore particle interactions
-    turn_off(nonbonded_force, sterics=True, exceptions=True, only_atoms=alchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore particle interactions
+    turn_off(system, sterics=True, exceptions=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_exception_sterics = compute_energy(system, positions)
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical sterics
-    turn_off(nonbonded_force, sterics=True, exceptions=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical sterics
+    turn_off(system, sterics=True, exceptions=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_exception_sterics = compute_energy(system, positions)
-    turn_off(nonbonded_force, sterics=True, exceptions=True)
+    turn_off(system, sterics=True, exceptions=True)
     tot_energy_no_exception_sterics = compute_energy(system, positions)
 
     tot_exception_sterics = tot_energy - tot_energy_no_exception_sterics
@@ -331,13 +347,13 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
     na_exception_sterics = tot_exception_sterics - nn_exception_sterics - aa_exception_sterics
 
     # Compute contributions from exceptions electrostatics
-    system, nonbonded_force = restore_system(reference_system)  # Restore exceptions sterics
-    turn_off(nonbonded_force, electrostatics=True, exceptions=True, only_atoms=alchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore exceptions sterics
+    turn_off(system, electrostatics=True, exceptions=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_exception_electro = compute_energy(system, positions)
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical electrostatics
-    turn_off(nonbonded_force, electrostatics=True, exceptions=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical electrostatics
+    turn_off(system, electrostatics=True, exceptions=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_exception_electro = compute_energy(system, positions)
-    turn_off(nonbonded_force, electrostatics=True, exceptions=True)
+    turn_off(system, electrostatics=True, exceptions=True)
     tot_energy_no_exception_electro = compute_energy(system, positions)
 
     tot_exception_electro = tot_energy - tot_energy_no_exception_electro
