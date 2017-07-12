@@ -2091,20 +2091,20 @@ class AbsoluteAlchemicalFactory(object):
                     add_label(label.format('non-'), force_index2)
 
             # If they are both empty they are identical and any label works.
-            elif force1.getNumBonds() == 0:
+            elif force1.getNumBonds() == 0 and force2.getNumBonds() == 0:
                 add_label(label.format(''), force_index1)
                 add_label(label.format('non-'), force_index2)
 
             # We check that the bond atoms are both alchemical or not.
             else:
-                atom_i, atom_j, _ = force1.getBondParameters(0)
+                atom_i, atom_j, _ = force2.getBondParameters(0)
                 both_alchemical = atom_i in alchemical_atoms and atom_j in alchemical_atoms
                 if both_alchemical:
-                    add_label(label.format(''), force_index1)
-                    add_label(label.format('non-'), force_index2)
-                else:
-                    add_label(label.format('non-'), force_index1)
                     add_label(label.format(''), force_index2)
+                    add_label(label.format('non-'), force_index1)
+                else:
+                    add_label(label.format('non-'), force_index2)
+                    add_label(label.format(''), force_index1)
 
         return force_labels
 
