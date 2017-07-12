@@ -260,9 +260,19 @@ class TestContextCache(object):
         assert state1.is_context_compatible(context)
         assert isinstance(integrator, type(self.verlet_2fs)), type(integrator)
 
+        # When it has a choice, ContextCache picks the same context
+        # in consecutive calls with same thermodynamic state.
+        # First add another integrator so that ContextCache has 2 possible options.
+        assert type(self.langevin_2fs_310k) is not type(default_integrator)  # test precondition
+        cache.get_context(state1, copy.deepcopy(self.langevin_2fs_310k))
+        assert len(cache) == 3
+        context, integrator = cache.get_context(state1)
+        for i in range(5):  # 5 attempts to make the test fail
+            assert cache.get_context(state1)[0] is context
+
         # With an incompatible state, a new Context is created.
         cache.get_context(state2)
-        assert len(cache) == 3
+        assert len(cache) == 4
 
     def test_cache_capacity_ttl(self):
         """Check that the cache capacity and time_to_live work as expected."""
