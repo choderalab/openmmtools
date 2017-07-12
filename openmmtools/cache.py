@@ -347,7 +347,8 @@ class ContextCache(object):
 
         If the integrator is not provided, this will search the cache for
         any Context in the given ThermodynamicState, regardless of its
-        integrator.
+        integrator. In this case, the method guarantees that two consecutive
+        calls with the same thermodynamic state will retrieve the same context.
 
         This creates a new Context if no compatible one has been cached.
         If a compatible Context exists, the ThermodynamicState is applied
@@ -387,8 +388,10 @@ class ContextCache(object):
                 # Only one match.
                 context = self._lru[matching_context_ids[0]]
             else:
-                # Multiple matches, prefer non-default Integrator.
-                for context_id in matching_context_ids:
+                # Multiple matches, prefer the non-default Integrator.
+                # Always pick the least recently used to make two consective
+                # calls retrieving the same integrator.
+                for context_id in reversed(matching_context_ids):
                     if context_id[1] != self._default_integrator_id():
                         context = self._lru[context_id]
                         break
