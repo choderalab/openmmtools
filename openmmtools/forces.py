@@ -199,9 +199,10 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
             The reaction field force with copied particles.
 
         """
+        # OpenMM gives unitless values.
         cutoff_distance = nonbonded_force.getCutoffDistance()
         reaction_field_dielectric = nonbonded_force.getReactionFieldDielectric()
-        reaction_field_force = cls.__init__(reaction_field_dielectric, cutoff_distance, switch_width)
+        reaction_field_force = cls(cutoff_distance, switch_width, reaction_field_dielectric)
 
         # Set particle charges.
         for particle_index in range(nonbonded_force.getNumParticles()):
@@ -212,6 +213,8 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
         for exception_index in range(nonbonded_force.getNumExceptions()):
             iatom, jatom, chargeprod, sigma, epsilon = nonbonded_force.getExceptionParameters(exception_index)
             reaction_field_force.addExclusion(iatom, jatom)
+
+        return reaction_field_force
 
     @classmethod
     def from_system(cls, system, switch_width=1.0*unit.angstrom):
