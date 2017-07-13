@@ -1200,16 +1200,16 @@ class TestAbsoluteAlchemicalFactory(object):
                 # Pre-generate alchemical system.
                 alchemical_system = factory.create_alchemical_system(test_system.system, region)
 
-                # If the test system uses reaction field replace reaction field
-                # of the reference system to allow comparisons.
-                nonbonded_force = forces.find_nonbonded_force(test_system.system)
-                if nonbonded_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic:
-                    forcefactories.replace_reaction_field(test_system.system, return_copy=False,
-                                                          switch_width=factory.switch_width)
-
                 # Add test case.
                 cls.test_cases[test_case_name] = (test_system, alchemical_system, region)
                 n_test_cases += 1
+
+            # If the test system uses reaction field replace reaction field
+            # of the reference system to allow comparisons.
+            nonbonded_force = forces.find_nonbonded_force(test_system.system)
+            if nonbonded_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic:
+                forcefactories.replace_reaction_field(test_system.system, return_copy=False,
+                                                      switch_width=factory.switch_width)
 
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
