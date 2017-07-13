@@ -36,14 +36,13 @@ usable for the calculation of free energy differences of hydration or ligand bin
 # =============================================================================
 
 import copy
-import inspect
 import logging
 import collections
 
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import states, utils
+from openmmtools import states, forcefactories, utils
 from openmmtools.constants import ONE_4PI_EPS0
 
 logger = logging.getLogger(__name__)
@@ -843,9 +842,10 @@ class AbsoluteAlchemicalFactory(object):
 
         # If the System uses a NonbondedForce, replace its NonbondedForce implementation of reaction field
         # with a Custom*Force implementation that uses c_rf = 0.
-        # NOTE: This adds an additional CustomNonbondedForce and CustomBondForce
-        if (self.alchemical_rf_treatment == 'switched'):
-            alchemical_system = self.replace_reaction_field(alchemical_system)
+        # NOTE: This adds an additional CustomNonbondedForce
+        if self.alchemical_rf_treatment == 'switched':
+            forcefactories.replace_reaction_field(alchemical_system, return_copy=False,
+                                                  switch_width=self.switch_width)
 
         return alchemical_system
 
@@ -904,73 +904,6 @@ class AbsoluteAlchemicalFactory(object):
         del context, integrator
 
         return energy_components
-
-    def replace_reaction_field(self, reference_system):
-        """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
-
-        .. warning:: Unstable API.
-            This method is still experimental. It could be moved to some
-            other module or have its signature changed in the near future.
-
-        A deep copy of the system is made.
-
-        If reaction field electrostatics is in use, this will add a CustomNonbondedForce and CustomBondForce to the System
-        for each NonbondedForce that utilizes CutoffPeriodic.
-
-        Note that the resulting System object can NOT be fed to `create_alchemical_system` since the CustomNonbondedForce
-        will not be recognized and re-coded.
-
-        Parameters
-        ----------
-        reference_system : simtk.openmm.System
-            The system to use as a reference for the creation of the
-            alchemical system. This will not be modified.
-
-        Returns
-        -------
-        system : simtk.openmm.System
-            System with reaction-field converted to c_rf = 0
-
-        """
-        system = copy.deepcopy(reference_system)
-        for force_index, reference_force in enumerate(system.getForces()):
-            reference_force_name = reference_force.__class__.__name__
-            if (reference_force_name == 'NonbondedForce' and
-                        reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
-                # Create CustomNonbondedForce to handle switched reaction field
-                epsilon_solvent = reference_force.getReactionFieldDielectric()
-                r_cutoff = reference_force.getCutoffDistance()
-                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2);"  # Omit c_rf constant term.
-                k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1.0) / (2.0*epsilon_solvent + 1.0))
-                energy_expression += "chargeprod = charge1*charge2;"
-                energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
-                energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-                custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
-                custom_nonbonded_force.addPerParticleParameter("charge")
-                custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-                custom_nonbonded_force.setCutoffDistance(reference_force.getCutoffDistance())
-                custom_nonbonded_force.setUseLongRangeCorrection(False)
-                system.addForce(custom_nonbonded_force)
-
-                # Add switch
-                if self.switch_width is not None:
-                    custom_nonbonded_force.setUseSwitchingFunction(True)
-                    custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - self.switch_width)
-                else:
-                    custom_nonbonded_force.setUseSwitchingFunction(False)
-
-                # Rewrite particle charges
-                for particle_index in range(reference_force.getNumParticles()):
-                    [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
-                    reference_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, epsilon)
-                    custom_nonbonded_force.addParticle([charge])
-
-                # Add exclusions to CustomNonbondedForce.
-                for exception_index in range(reference_force.getNumExceptions()):
-                    iatom, jatom, chargeprod, sigma, epsilon = reference_force.getExceptionParameters(exception_index)
-                    custom_nonbonded_force.addExclusion(iatom, jatom)
-
-        return system
 
     # -------------------------------------------------------------------------
     # Internal usage: AlchemicalRegion
