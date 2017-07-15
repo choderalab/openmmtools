@@ -104,7 +104,7 @@ def handle_kwargs(func, defaults, input_kwargs):
     # Add defaults
     kwargs = { k : v for (k,v) in defaults.items() }
     # Override those that appear in args
-    kwargs = { k : v for (k,v) in input_kwargs.items() if k in args }
+    kwargs.update({ k : v for (k,v) in input_kwargs.items() if k in args })
 
     return kwargs
 
