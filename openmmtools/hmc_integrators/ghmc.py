@@ -183,6 +183,7 @@ class GHMCBase(mm.CustomIntegrator):
     def is_GHMC(self):
         return self.collision_rate is not None
 
+
 class GHMCIntegrator(GHMCBase):
     """Generalized hybrid Monte Carlo (GHMC) integrator.
 
@@ -260,7 +261,6 @@ class GHMCIntegrator(GHMCBase):
             self.addComputePerDof("v", "sigma*gaussian")
 
         self.addConstrainVelocities()
-
 
     def add_cache_variables_step(self):
         """Store old positions and energies."""

@@ -5,6 +5,6 @@ from .mjhmc import MJHMCIntegrator
 
 
 __all__ = ["GHMCIntegrator", "XCGHMCIntegrator", "XCGHMCRESPAIntegrator",
-"RESPAMixIn", "GHMCRESPAIntegrator", "check_groups", "guess_force_groups",
-"MJHMCIntegrator",
-]
+           "RESPAMixIn", "GHMCRESPAIntegrator", "check_groups", "guess_force_groups",
+           "MJHMCIntegrator",
+           ]

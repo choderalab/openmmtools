@@ -17,7 +17,6 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-
 class XCGHMCIntegrator(GHMCIntegrator):
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
 
@@ -116,8 +115,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addComputeGlobal("steps_accepted", "steps_accepted + terminal_chance + 1")
         self.endBlock()
 
-
-
     def initialize_variables(self):
 
         self.addGlobalVariable("accept", 1.0)  # accept or reject
@@ -152,7 +149,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
         self.addGlobalVariable("uni", 0)  # Uniform random number draw in XCHMC
         self.addComputePerDof("sigma", "sqrt(kT/m)")
-
 
         if self.is_GHMC:
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
