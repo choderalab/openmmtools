@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 def check_groups(groups, guess=True):
     """Check that `groups` is list of tuples suitable for force group / RESPA."""
+    print(groups)
     if groups is None or len(groups) == 0:
         if guess:
             logger.info("No force groups specified, using [(0, 1)]!")
@@ -57,6 +58,7 @@ class RESPAMixIn(object):
         logger.debug("Adding step of RESPA hamiltonian dynamics.""")
         self._create_substeps(1, self.groups)
         self.addConstrainVelocities()
+        print("RESPA hamiltonian step")
 
     def _create_substeps(self, parentSubsteps, groups):
 
@@ -142,13 +144,10 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=1.0 / u.picoseconds, groups=None):
         warn_experimental()
-        mm.CustomIntegrator.__init__(self, timestep)
-
         self.groups = check_groups(groups)
-        self.steps_per_hmc = steps_per_hmc
+        super(GHMCRESPAIntegrator, self).__init__(temperature=temperature, steps_per_hmc=steps_per_hmc, timestep=timestep, collision_rate=collision_rate)
+        #self.steps_per_hmc = steps_per_hmc
+        #self.collision_rate = collision_rate
+        #self.timestep = timestep
 
-        self.collision_rate = collision_rate
-        self.timestep = timestep
-        self.temperature = temperature
-
-        self.add_compute_steps()
+        #self.add_compute_steps()

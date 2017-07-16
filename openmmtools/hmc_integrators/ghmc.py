@@ -12,14 +12,14 @@ import numpy as np
 import simtk.unit as u
 import simtk.openmm as mm
 
-from ..constants import kB
+from ..integrators import ThermostatedIntegrator
 from .utils import warn_experimental
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-class GHMCBase(mm.CustomIntegrator):
+class GHMCBase(ThermostatedIntegrator):
     """Generalized hybrid Monte Carlo integrator base class.
 
     Notes
@@ -125,11 +125,6 @@ class GHMCBase(mm.CustomIntegrator):
         """The scaling factor for preserving versus randomizing velocities."""
         return np.exp(-self.collision_rate * self.timestep)
 
-    @property
-    def kT(self):
-        """The thermal energy."""
-        return kB * self.temperature
-
     def summary(self):
         """Return a dictionary of relevant state variables for XHMC, useful for debugging.
         Append self.summary() to a list and print out as a dataframe.
@@ -221,17 +216,15 @@ class GHMCIntegrator(GHMCBase):
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=None):
         warn_experimental()
-        mm.CustomIntegrator.__init__(self, timestep)
+        super(GHMCIntegrator, self).__init__(temperature, timestep)
 
         self.steps_per_hmc = steps_per_hmc
-        self.temperature = temperature
         self.collision_rate = collision_rate
         self.timestep = timestep
         self.add_compute_steps()
 
     def initialize_variables(self):
 
-        self.addGlobalVariable("kT", self.kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
@@ -245,9 +238,10 @@ class GHMCIntegrator(GHMCBase):
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
 
         if self.is_GHMC:
-            self.addGlobalVariable("b", self.b)  # velocity mixing parameter
+            val = np.exp(-1.0 * self.collision_rate * self.timestep)
+            self.addGlobalVariable("b", val)
 
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
         self.addUpdateContextState()
 

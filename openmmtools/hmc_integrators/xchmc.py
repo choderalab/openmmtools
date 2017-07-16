@@ -53,16 +53,9 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
         warn_experimental()
-        mm.CustomIntegrator.__init__(self, timestep)
-
-        self.temperature = temperature
-        self.steps_per_hmc = steps_per_hmc
-        self.steps_per_extra_hmc = steps_per_extra_hmc
-        self.timestep = timestep
         self.extra_chances = extra_chances
-        self.collision_rate = collision_rate
-
-        self.add_compute_steps()
+        self.steps_per_extra_hmc = steps_per_extra_hmc
+        super(XCGHMCIntegrator, self).__init__(temperature=temperature, steps_per_hmc=steps_per_hmc, timestep=timestep, collision_rate=collision_rate)
 
     @property
     def all_counts(self):
@@ -135,7 +128,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
         # Below this point is possible base class material
 
-        self.addGlobalVariable("kT", self.kT)  # thermal energy
+        self.addComputeTemperatureDependentConstants()
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
@@ -150,7 +143,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
 
         self.addGlobalVariable("uni", 0)  # Uniform random number draw in XCHMC
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
         if self.is_GHMC:
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
@@ -210,14 +203,9 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None, groups=None):
         warn_experimental()
-        mm.CustomIntegrator.__init__(self, timestep)
-
         self.groups = check_groups(groups)
-        self.temperature = temperature
-        self.steps_per_hmc = steps_per_hmc
         self.steps_per_extra_hmc = steps_per_extra_hmc
-        self.timestep = timestep
         self.extra_chances = extra_chances
-        self.collision_rate = collision_rate
 
-        self.add_compute_steps()
+        super(XCGHMCRESPAIntegrator, self).__init__(temperature=temperature, steps_per_hmc=steps_per_hmc, timestep=timestep,
+                                                    extra_chances=extra_chances, steps_per_extra_hmc=steps_per_extra_hmc, collision_rate=collision_rate)
