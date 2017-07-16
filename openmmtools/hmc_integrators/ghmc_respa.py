@@ -10,6 +10,7 @@ import simtk.unit as u
 import simtk.openmm as mm
 
 from .ghmc import GHMCIntegrator
+from .utils import warn_experimental
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -140,6 +141,7 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=1.0 / u.picoseconds, groups=None):
+        warn_experimental()
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.groups = check_groups(groups)

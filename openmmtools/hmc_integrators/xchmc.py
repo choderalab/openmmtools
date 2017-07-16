@@ -10,6 +10,7 @@ import pandas as pd
 import simtk.unit as u
 import simtk.openmm as mm
 
+from .utils import warn_experimental
 from .ghmc import GHMCIntegrator
 from .ghmc_respa import RESPAMixIn, check_groups
 
@@ -51,6 +52,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
+        warn_experimental()
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.temperature = temperature
@@ -207,6 +209,7 @@ class XCGHMCRESPAIntegrator(RESPAMixIn, XCGHMCIntegrator):
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None, groups=None):
+        warn_experimental()
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.groups = check_groups(groups)
