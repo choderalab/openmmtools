@@ -18,7 +18,6 @@ logger = logging.getLogger(__name__)
 
 def check_groups(groups, guess=True):
     """Check that `groups` is list of tuples suitable for force group / RESPA."""
-    print(groups)
     if groups is None or len(groups) == 0:
         if guess:
             logger.info("No force groups specified, using [(0, 1)]!")
@@ -58,7 +57,6 @@ class RESPAMixIn(object):
         logger.debug("Adding step of RESPA hamiltonian dynamics.""")
         self._create_substeps(1, self.groups)
         self.addConstrainVelocities()
-        print("RESPA hamiltonian step")
 
     def _create_substeps(self, parentSubsteps, groups):
 
