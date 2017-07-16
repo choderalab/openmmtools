@@ -128,7 +128,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
         # Below this point is possible base class material
 
-        self.addComputeTemperatureDependentConstants()
         self.addPerDofVariable("sigma", 0)
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
