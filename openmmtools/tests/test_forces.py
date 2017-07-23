@@ -167,3 +167,17 @@ def test_replace_reaction_field():
         f.description = "Testing replace_reaction_field on system {}".format(test_name)
         yield f
 
+    for test_system in test_cases:
+        test_name = test_system.__class__.__name__
+
+        # Replace reaction field.
+        modified_rf_system = replace_reaction_field(test_system.system, switch_width=None, shifted=True)
+
+        # Make sure positions are not at minimum.
+        positions = generate_new_positions(test_system.system, test_system.positions)
+
+        # Test forces.
+        f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
+                    name=test_name, platform=platform)
+        f.description = "Testing replace_reaction_field on system {} with shifted=True".format(test_name)
+        yield f
