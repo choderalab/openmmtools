@@ -18,6 +18,7 @@ requirements:
     - setuptools
     - openmm
     - parmed
+    - mdtraj
 
   run:
     - python
@@ -28,6 +29,7 @@ requirements:
     - six
     - openmm
     - parmed
+    - mdtraj
 
 test:
   requires:
