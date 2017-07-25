@@ -17,6 +17,7 @@ Factories to manipulate OpenMM System forces.
 import copy
 
 import numpy as np
+import mdtraj
 from simtk import openmm, unit
 
 from openmmtools import forces
@@ -79,7 +80,7 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
 # RESTRAIN ATOMS
 # =============================================================================
 
-def restrain_atoms(thermodynamic_state, sampler_state, mdtraj_topology,
+def restrain_atoms(thermodynamic_state, sampler_state, topology,
                    atoms_dsl, sigma=3.0*unit.angstroms):
     """Apply a soft harmonic restraint to the given atoms.
 
@@ -91,8 +92,8 @@ def restrain_atoms(thermodynamic_state, sampler_state, mdtraj_topology,
         The thermodynamic state with the system. This will be modified.
     sampler_state : openmmtools.states.SamplerState
         The sampler state with the positions.
-    mdtraj_topology : mdtraj.Topology
-        The topology.
+    topology : mdtraj.Topology or simtk.openmm.Topology
+        The topology of the system.
     atoms_dsl : str
         The MDTraj DSL string for selecting the atoms to restrain.
     sigma : simtk.unit.Quantity, optional
@@ -100,8 +101,14 @@ def restrain_atoms(thermodynamic_state, sampler_state, mdtraj_topology,
         (units of distance, default is 3.0*angstrom).
 
     """
-    K = thermodynamic_state.kT / sigma  # Spring constant.
+    K = thermodynamic_state.kT / sigma**2  # Spring constant.
     system = thermodynamic_state.system  # This is a copy.
+
+    # Make sure the topology is an MDTraj topology.
+    if isinstance(topology, mdtraj.Topology):
+        mdtraj_topology = topology
+    else:
+        mdtraj_topology = mdtraj.Topology.from_openmm(topology)
 
     # Translate the system to the origin to avoid
     # MonteCarloBarostat rejections (see openmm#1854).
