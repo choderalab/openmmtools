@@ -1343,6 +1343,11 @@ class AbsoluteAlchemicalFactory(object):
 
         nonbonded_method = reference_force.getNonbondedMethod()
 
+        # Warn about reaction field.
+        if nonbonded_method == openmm.NonbondedForce.CutoffPeriodic:
+            logger.warning('Reaction field support is still experimental. For free energy '
+                           'calculations in explicit solvent, we suggest using PME for now.')
+
         # --------------------------------------------------
         # Determine energy expression for all custom forces
         # --------------------------------------------------

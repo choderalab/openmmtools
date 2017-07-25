@@ -16,6 +16,8 @@ Factories to manipulate OpenMM System forces.
 
 import copy
 
+import numpy as np
+import mdtraj
 from simtk import openmm, unit
 
 from openmmtools import forces
@@ -72,6 +74,64 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
                 reference_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, epsilon)
 
     return system
+
+
+# =============================================================================
+# RESTRAIN ATOMS
+# =============================================================================
+
+def restrain_atoms(thermodynamic_state, sampler_state, topology,
+                   atoms_dsl, sigma=3.0*unit.angstroms):
+    """Apply a soft harmonic restraint to the given atoms.
+
+    This modifies the ``ThermodynamicState`` object.
+
+    Parameters
+    ----------
+    thermodynamic_state : openmmtools.states.ThermodynamicState
+        The thermodynamic state with the system. This will be modified.
+    sampler_state : openmmtools.states.SamplerState
+        The sampler state with the positions.
+    topology : mdtraj.Topology or simtk.openmm.Topology
+        The topology of the system.
+    atoms_dsl : str
+        The MDTraj DSL string for selecting the atoms to restrain.
+    sigma : simtk.unit.Quantity, optional
+        Controls the strength of the restrain. The smaller, the tighter
+        (units of distance, default is 3.0*angstrom).
+
+    """
+    K = thermodynamic_state.kT / sigma**2  # Spring constant.
+    system = thermodynamic_state.system  # This is a copy.
+
+    # Make sure the topology is an MDTraj topology.
+    if isinstance(topology, mdtraj.Topology):
+        mdtraj_topology = topology
+    else:
+        mdtraj_topology = mdtraj.Topology.from_openmm(topology)
+
+    # Translate the system to the origin to avoid
+    # MonteCarloBarostat rejections (see openmm#1854).
+    protein_atoms = mdtraj_topology.select('protein')
+    distance_unit = sampler_state.positions.unit
+    centroid = np.mean(sampler_state.positions[protein_atoms,:] / distance_unit, 0) * distance_unit
+    sampler_state.positions -= centroid
+
+    # Create a CustomExternalForce to restrain all atoms.
+    restraint_force = openmm.CustomExternalForce('(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)')
+    restrained_atoms = mdtraj_topology.select(atoms_dsl).tolist()
+    # Adding the spring constant as a global parameter allows us to turn it off if desired
+    restraint_force.addGlobalParameter('K', K)
+    restraint_force.addPerParticleParameter('x0')
+    restraint_force.addPerParticleParameter('y0')
+    restraint_force.addPerParticleParameter('z0')
+    for index in restrained_atoms:
+        parameters = sampler_state.positions[index,:].value_in_unit_system(unit.md_unit_system)
+        restraint_force.addParticle(index, parameters)
+
+    # Update thermodynamic state.
+    system.addForce(restraint_force)
+    thermodynamic_state.system = system
 
 
 if __name__ == '__main__':
