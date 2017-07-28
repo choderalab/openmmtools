@@ -2470,7 +2470,10 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=DEFAULT_CUTOFF_DISTANCE, model='tip3p', switch_width=DEFAULT_SWITCH_WIDTH, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=DEFAULT_CUTOFF_DISTANCE, model='tip3p',
+                 switch_width=DEFAULT_SWITCH_WIDTH, constrained=True, dispersion_correction=True,
+                 nonbondedMethod=app.PME, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE,
+                 positive_ion='Na+', negative_ion='Cl-', ionic_strength=0*unit.molar, **kwargs):
         """
         Create a water box test system.
 
@@ -2493,6 +2496,13 @@ class WaterBox(TestSystem):
            Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
         ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
+        positive_ion : str, optional
+            The positive ion to add (default is Na+).
+        negative_ion : str, optional
+            The negative ion to add (default is Cl-).
+        ionic_strength : simtk.unit.Quantity, optional
+            The total concentration of ions (both positive and negative)
+            to add (default is 0.0*molar).
 
         Examples
         --------
@@ -2538,8 +2548,11 @@ class WaterBox(TestSystem):
         if model not in supported_models:
             raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
 
-        # Load forcefield for solvent model.
-        ff = app.ForceField(model + '.xml')
+        # Load forcefield for solvent model and ions.
+        force_fields = [model + '.xml']
+        if ionic_strength != 0.0*unit.molar:
+            force_fields.append('amber99sb.xml')  # For the ions.
+        ff = app.ForceField(*force_fields)
 
         # Create empty topology and coordinates.
         top = app.Topology()
@@ -2550,7 +2563,8 @@ class WaterBox(TestSystem):
 
         # Add solvent to specified box dimensions.
         boxSize = unit.Quantity(numpy.ones([3]) * box_edge / box_edge.unit, box_edge.unit)
-        m.addSolvent(ff, boxSize=boxSize, model=model)
+        m.addSolvent(ff, boxSize=boxSize, model=model, positiveIon=positive_ion,
+                     negativeIon=negative_ion, ionicStrength=ionic_strength)
 
         # Get new topology and coordinates.
         newtop = m.getTopology()
