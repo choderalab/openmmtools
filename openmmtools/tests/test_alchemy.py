@@ -1126,8 +1126,10 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_systems['LennardJonesCluster'] = testsystems.LennardJonesCluster()
         cls.test_systems['LennardJonesFluid with dispersion correction'] = \
             testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
-        cls.test_systems['WaterBox with reaction field, no switch, no dispersion correction'] = \
+        cls.test_systems['TIP3P WaterBox with reaction field, no switch, no dispersion correction'] = \
             testsystems.WaterBox(dispersion_correction=False, switch=False, nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['TIP4P-EW WaterBox and NaCl with PME'] = \
+            testsystems.WaterBox(nonbondedMethod=openmm.app.PME, model='tip4pew', ionic_strength=200*unit.millimolar)
 
         # Vacuum and implicit.
         cls.test_systems['AlanineDipeptideVacuum'] = testsystems.AlanineDipeptideVacuum()
@@ -1149,7 +1151,8 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions = dict()
         cls.test_regions['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2))
         cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
-        cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
+        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
+        cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(4))  # Modify ions.
         cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
