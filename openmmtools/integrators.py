@@ -945,7 +945,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
     def __init__(self,
                  temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
+                 collision_rate=91.0 / simtk.unit.picoseconds,
                  timestep=1.0 * simtk.unit.femtoseconds,
                  splitting="V R O R V",
                  constraint_tolerance=1e-8,
