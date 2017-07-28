@@ -802,39 +802,31 @@ class AbsoluteAlchemicalFactory(object):
         timer = utils.Timer()
         timer.start('Create alchemically modified system')
 
-        # Build alchemical system to modify.
-        alchemical_system = openmm.System()
+        # Build alchemical system to modify. This copies particles, vsites,
+        # constraints, box vectors and all the forces. We'll later remove
+        # the forces that we remodel to be alchemically modified.
+        alchemical_system = copy.deepcopy(reference_system)
 
-        # Set periodic box vectors.
-        box_vectors = reference_system.getDefaultPeriodicBoxVectors()
-        alchemical_system.setDefaultPeriodicBoxVectors(*box_vectors)
-
-        # TODO: Are we missing important components of the System here, such as vsites?
-        # Should we deepcopy instead?
-
-        # Add particles.
-        for particle_index in range(reference_system.getNumParticles()):
-            mass = reference_system.getParticleMass(particle_index)
-            alchemical_system.addParticle(mass)
-
-        # Add constraints.
-        for constraint_index in range(reference_system.getNumConstraints()):
-            atom_i, atom_j, r0 = reference_system.getConstraintParameters(constraint_index)
-            alchemical_system.addConstraint(atom_i, atom_j, r0)
-
-        # Modify forces as appropriate, copying other forces without modification.
-        for reference_force in reference_system.getForces():
+        # Modify forces as appropriate. We delete the forces that
+        # have been processed modified at the end of the for loop.
+        forces_to_remove = []
+        for force_index, reference_force in enumerate(reference_system.getForces()):
             # TODO switch to functools.singledispatch when we drop Python2 support
             reference_force_name = reference_force.__class__.__name__
             alchemical_force_creator_name = '_alchemically_modify_{}'.format(reference_force_name)
             try:
                 alchemical_force_creator_func = getattr(self, alchemical_force_creator_name)
             except AttributeError:
-                alchemical_forces = [copy.deepcopy(reference_force)]
+                pass
             else:
+                forces_to_remove.append(force_index)
                 alchemical_forces = alchemical_force_creator_func(reference_force, alchemical_region)
-            for alchemical_force in alchemical_forces:
-                alchemical_system.addForce(alchemical_force)
+                for alchemical_force in alchemical_forces:
+                    alchemical_system.addForce(alchemical_force)
+
+        # Remove original forces that have been alchemically modified.
+        for force_index in reversed(forces_to_remove):
+            alchemical_system.removeForce(force_index)
 
         # Record timing statistics.
         timer.stop('Create alchemically modified system')
