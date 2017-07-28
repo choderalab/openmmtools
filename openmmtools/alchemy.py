@@ -807,6 +807,12 @@ class AbsoluteAlchemicalFactory(object):
         # the forces that we remodel to be alchemically modified.
         alchemical_system = copy.deepcopy(reference_system)
 
+        # Check that there are no virtual sites to alchemically modify.
+        for particle_index in range(reference_system.getNumParticles()):
+            if (reference_system.isVirtualSite(particle_index) and
+                        particle_index in alchemical_region.alchemical_atoms):
+                raise ValueError('Alchemically modified virtual sites are not supported')
+
         # Modify forces as appropriate. We delete the forces that
         # have been processed modified at the end of the for loop.
         forces_to_remove = []
