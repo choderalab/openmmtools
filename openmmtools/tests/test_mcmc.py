@@ -91,7 +91,7 @@ def subtest_mcmc_expectation(testsystem, move):
 
     # Test settings.
     temperature = 298.0 * unit.kelvin
-    niterations = 250  # number of production iterations
+    niterations = 500  # number of production iterations
     if system.usesPeriodicBoundaryConditions():
         pressure = 1.0*unit.atmosphere
     else:
