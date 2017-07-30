@@ -658,7 +658,7 @@ class HarmonicOscillator(TestSystem):
     Notes
     -----
 
-    The natural period of a harmonic oscillator is T = sqrt(m/K), so you will want to use an
+    The natural period of a harmonic oscillator is T = 2*pi*sqrt(m/K), so you will want to use an
     integration timestep smaller than ~ T/10.
 
     The standard deviation in position in each dimension is sigma = (kT / K)^(1/2)
