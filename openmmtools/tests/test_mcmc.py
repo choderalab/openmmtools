@@ -141,9 +141,9 @@ def subtest_mcmc_expectation(testsystem, move):
             testsystem.__class__.__name__)
 
         potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
-        [t0, g, Neff_max] = timeseries.detectEquilibration(potential_n, fast=False)
+        [t0, g, Neff_max] = timeseries.detectEquilibration(potential_n)
         potential_mean = potential_n[t0:].mean()
-        dpotential_mean = potential_n[t0:].std() / Neff_max
+        dpotential_mean = potential_n[t0:].std() / np.sqrt(Neff_max)
         potential_error = potential_mean - potential_expectation
         nsigma = abs(potential_error) / dpotential_mean
 
@@ -164,9 +164,9 @@ def subtest_mcmc_expectation(testsystem, move):
             testsystem.__class__.__name__)
 
         volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
-        [t0, g, Neff_max] = timeseries.detectEquilibration(volume_n, fast=False)
+        [t0, g, Neff_max] = timeseries.detectEquilibration(volume_n)
         volume_mean = volume_n[t0:].mean()
-        dvolume_mean = volume_n[t0:].std() / Neff_max
+        dvolume_mean = volume_n[t0:].std() / np.sqrt(Neff_max)
         volume_error = volume_mean - volume_expectation
         nsigma = abs(volume_error) / dvolume_mean
 
