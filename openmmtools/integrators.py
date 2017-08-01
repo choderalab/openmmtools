@@ -967,7 +967,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         temperature : np.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
            Fictitious "bath" temperature
 
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 1.0/simtk.unit.picoseconds
            Collision rate
 
         timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
@@ -1823,7 +1823,7 @@ class VVVRIntegrator(LangevinIntegrator):
         --------
         Create a VVVR integrator.
         >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> collision_rate = 1.0 / simtk.unit.picoseconds
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
         """
@@ -1864,7 +1864,7 @@ class BAOABIntegrator(LangevinIntegrator):
         --------
         Create a BAOAB integrator.
         >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> collision_rate = 1.0 / simtk.unit.picoseconds
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = BAOABIntegrator(temperature, collision_rate, timestep)
         """
@@ -1885,7 +1885,7 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         temperature : np.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
            Fictitious "bath" temperature
 
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 1.0/simtk.unit.picoseconds
            Collision rate
 
         timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
@@ -1909,7 +1909,7 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         --------
         Create a geodesic BAOAB integrator.
         >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> collision_rate = 1.0 / simtk.unit.picoseconds
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         """
@@ -1950,7 +1950,7 @@ class GHMCIntegrator(LangevinIntegrator):
         Create a GHMC integrator.
 
         >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 91.0 / simtk.unit.picoseconds
+        >>> collision_rate = 1.0 / simtk.unit.picoseconds
         >>> timestep = 1.0 * simtk.unit.femtoseconds
         >>> integrator = GHMCIntegrator(temperature, collision_rate, timestep)
 
