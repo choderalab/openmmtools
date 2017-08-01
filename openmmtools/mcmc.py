@@ -288,7 +288,7 @@ class MCMCSampler(object):
         # Retrieve data.
         self.sampler_state.update_from_context(context)
 
-        timer.report_timing()
+        #timer.report_timing()
 
 
 # =============================================================================
@@ -656,8 +656,8 @@ class BaseIntegratorMove(object):
         timer.start("{}: Context request".format(move_name))
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
-        logger.debug("{}: Context obtained, platform is {}".format(
-            move_name, context.getPlatform().getName()))
+        #logger.debug("{}: Context obtained, platform is {}".format(
+        #    move_name, context.getPlatform().getName()))
 
         # Perform the integration.
         for attempt_counter in range(self.n_restart_attempts + 1):
@@ -714,7 +714,7 @@ class BaseIntegratorMove(object):
         sampler_state.update_from_context(context_state)
         timer.stop("{}: update sampler state".format(move_name))
 
-        timer.report_timing()
+        #timer.report_timing()
 
     @abc.abstractmethod
     def _get_integrator(self, thermodynamic_state):
@@ -891,7 +891,7 @@ class MetropolizedMove(object):
 
         # Print timing information.
         timer.stop(benchmark_id)
-        timer.report_timing()
+        #timer.report_timing()
 
     def __getstate__(self):
         if self.context_cache is None:

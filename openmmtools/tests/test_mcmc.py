@@ -91,8 +91,7 @@ def subtest_mcmc_expectation(testsystem, move):
 
     # Test settings.
     temperature = 298.0 * unit.kelvin
-    nequil = 10  # number of equilibration iterations
-    niterations = 40  # number of production iterations
+    niterations = 500  # number of production iterations
     if system.usesPeriodicBoundaryConditions():
         pressure = 1.0*unit.atmosphere
     else:
@@ -109,9 +108,8 @@ def subtest_mcmc_expectation(testsystem, move):
                                              temperature=temperature,
                                              pressure=pressure)
 
-    # Create MCMC sampler and equilibrate.
+    # Create MCMC sampler
     sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
-    sampler.run(nequil)
 
     # Accumulate statistics.
     x_n = np.zeros([niterations], np.float64)  # x_n[i] is the x position of atom 1 after iteration i, in angstroms
@@ -143,17 +141,17 @@ def subtest_mcmc_expectation(testsystem, move):
             testsystem.__class__.__name__)
 
         potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
-        potential_mean = potential_n.mean()
-        g = timeseries.statisticalInefficiency(potential_n, fast=True)
-        dpotential_mean = potential_n.std() / np.sqrt(niterations / g)
+        [t0, g, Neff_max] = timeseries.detectEquilibration(potential_n)
+        potential_mean = potential_n[t0:].mean()
+        dpotential_mean = potential_n[t0:].std() / np.sqrt(Neff_max)
         potential_error = potential_mean - potential_expectation
         nsigma = abs(potential_error) / dpotential_mean
 
         err_msg = ('Potential energy expectation\n'
                    'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
-                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
+                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma) | t0 {:5d} | g {:5.1f} | Neff {:8.1f}\n'
                    '----------------------------------------------------------------------------').format(
-            potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma)
+            potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma, t0, g, Neff_max)
         assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
         if debug:
             print(err_msg)
@@ -166,17 +164,17 @@ def subtest_mcmc_expectation(testsystem, move):
             testsystem.__class__.__name__)
 
         volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
-        volume_mean = volume_n.mean()
-        g = timeseries.statisticalInefficiency(volume_n, fast=True)
-        dvolume_mean = volume_n.std() / np.sqrt(niterations / g)
+        [t0, g, Neff_max] = timeseries.detectEquilibration(volume_n)
+        volume_mean = volume_n[t0:].mean()
+        dvolume_mean = volume_n[t0:].std() / np.sqrt(Neff_max)
         volume_error = volume_mean - volume_expectation
         nsigma = abs(volume_error) / dvolume_mean
 
         err_msg = ('Volume expectation\n'
                    'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
-                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma)\n'
+                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma) | t0 {:5d} | g {:5.1f} | Neff {:8.1f}\n'
                    '----------------------------------------------------------------------------').format(
-            volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma)
+            volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma, t0, g, Neff_max)
         assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
         if debug:
             print(err_msg)
