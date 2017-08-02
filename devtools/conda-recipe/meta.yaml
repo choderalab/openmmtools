@@ -18,8 +18,13 @@ requirements:
     - setuptools
     - openmm
     - parmed
+    - netcdf4
+    - pymbar
     - mdtraj
-    
+    - matplotlib
+    - seaborn
+    - mdtraj
+
   run:
     - python
     - cython
@@ -29,12 +34,16 @@ requirements:
     - six
     - openmm
     - parmed
+    - netcdf4
+    - pymbar
+    - mdtraj
+    - matplotlib
+    - seaborn
     - mdtraj
 
 test:
   requires:
     - nose
-    - pymbar
   imports:
     - openmmtools
 

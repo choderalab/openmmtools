@@ -112,7 +112,6 @@ the DummyCache.
 import os
 import abc
 import copy
-import logging
 
 import numpy as np
 from simtk import openmm, unit
@@ -120,8 +119,12 @@ from simtk import openmm, unit
 from openmmtools import integrators, cache, utils
 from openmmtools.utils import SubhookedABCMeta, Timer
 
-logger = logging.getLogger(__name__)
+################################################################################
+# LOGGER
+################################################################################
 
+import logging
+logger = logging.getLogger(__name__)
 
 # =============================================================================
 # MODULE CONSTANTS
@@ -191,6 +194,8 @@ class MCMCSampler(object):
         Moves to attempt during MCMC run. If list or tuple, will run all moves each
         iteration in specified sequence (e.g. [move1, move2, move3]). If dict, will
         use specified unnormalized weights (e.g. { move1 : 0.3, move2 : 0.5, move3, 0.9 })
+    ncfile : netCDF4.Dataset
+        If not None, the Dataset store file that this sampler is bound to.
 
     Examples
     --------
@@ -228,13 +233,79 @@ class MCMCSampler(object):
     >>> np.allclose(sampler.sampler_state.positions, test.positions)
     False
 
+    Bind to a NetCDF4 dataset:
+
+    >>> from netCDF4 import Dataset
+    >>> ncfile = Dataset('output.nc', mode='w')
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> # Create a move set specifying probabilities fo each type of move.
+    >>> move = LangevinDynamicsMove(n_steps=10)
+    >>> # Create an MCMC sampler instance and run 10 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move, storage=ncfile)
+    >>> sampler.run(n_iterations=2)
+    >>> del sampler
+
     """
 
-    def __init__(self, thermodynamic_state, sampler_state, move):
+    def __init__(self, thermodynamic_state, sampler_state, move, storage=None):
         # Make a deep copy of the state so that initial state is unchanged.
-        self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        self.thermodynamic_state = thermodynamic_state
         self.sampler_state = copy.deepcopy(sampler_state)
         self.move = move
+
+        # Initialize storage
+        self._initialize_storage(ncfile=storage)
+
+    def _initialize_storage(self, ncfile=None, chunksize=50):
+        """
+        Initialize persistent storage of MCMCSampler data.
+
+        Parameters
+        ----------
+        ncfile : netCDF4.Dataset, optional, default=None
+            NetCDF4 Dataset to use as persistent data store.
+            If None, no storage is initialized.
+        chunksize : int, optional, default=50
+            Number of iterations per chunk (for efficiency).
+
+        """
+        self.ncfile = ncfile
+        if self.ncfile == None:
+            return
+
+        natoms = self.thermodynamic_state.system.getNumParticles()
+        self.ncfile.createDimension('iterations', None)
+        self.ncfile.createDimension('atoms', natoms) # TODO: What do we do if dimension can change?
+        self.ncfile.createDimension('spatial', 3)
+
+        self.ncfile.createVariable('positions', 'f4', dimensions=('iterations', 'atoms', 'spatial'), zlib=True, chunksizes=(chunksize,natoms,3))
+        self.ncfile.createVariable('box_vectors', 'f4', dimensions=('iterations', 'spatial', 'spatial'), zlib=True, chunksizes=(chunksize,3,3))
+        self.ncfile.createVariable('potential', 'f8', dimensions=('iterations',), chunksizes=(chunksize,))
+        self.ncfile.createVariable('sample_positions_time', 'f4', dimensions=('iterations',), chunksizes=(chunksize,))
+
+    def update(self):
+        """
+        Update the sampler state by applying one iteration.
+
+        """
+        timer = Timer()
+
+        timer.start("MCMC move apply")
+        self.move.apply(self.thermodynamic_state, self.sampler_state)
+        timer.stop("MCMC move apply")
+
+        if self.ncfile:
+            self.ncfile.variables['positions'][self.iteration,:,:] = self.sampler_state.positions[:,:] / unit.nanometers
+            for k in range(3):
+                self.ncfile.variables['box_vectors'][self.iteration,k,:] = self.sampler_state.box_vectors[k,:] / unit.nanometers
+            self.ncfile.variables['potential'][self.iteration] = self.thermodynamic_state.beta * self.context.getState(getEnergy=True).getPotentialEnergy()
+            self.ncfile.variables['sample_positions_time'][self.iteration] = timer['MCMC move apply']
+            self.ncfile.sync()
+
+        timer.report_timing()
 
     def run(self, n_iterations=1):
         """
@@ -248,7 +319,7 @@ class MCMCSampler(object):
         """
         # Apply move for n_iterations.
         for iteration in range(n_iterations):
-            self.move.apply(self.thermodynamic_state, self.sampler_state)
+            self.update()
 
     def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
                  max_iterations=100, context_cache=None):
@@ -289,7 +360,6 @@ class MCMCSampler(object):
         self.sampler_state.update_from_context(context)
 
         #timer.report_timing()
-
 
 # =============================================================================
 # MCMC MOVE CONTAINERS
