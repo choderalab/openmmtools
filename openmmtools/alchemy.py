@@ -36,14 +36,13 @@ usable for the calculation of free energy differences of hydration or ligand bin
 # =============================================================================
 
 import copy
-import inspect
 import logging
 import collections
 
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import states, utils
+from openmmtools import states, forcefactories, utils
 from openmmtools.constants import ONE_4PI_EPS0
 
 logger = logging.getLogger(__name__)
@@ -673,10 +672,16 @@ class AbsoluteAlchemicalFactory(object):
         'direct-space' only models the direct space contribution
         'coulomb' includes switched Coulomb interaction
     alchemical_rf_treatment : str, optional, default = 'switched'
-         Controls how alchemical region electrostatics are treated when RF is used
-         Options are ['switched', 'shifted']
-         'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
-         'shifted' retains c_rf != 0 but can give erroneous results for hydration free energies
+        Controls how alchemical region electrostatics are treated when RF is used
+        Options are ['switched', 'shifted']
+        'switched' sets c_rf = 0 for all reaction-field interactions and ensures continuity with a switch
+        'shifted' retains c_rf != 0 but can give erroneous results for hydration free energies
+    disable_alchemical_dispersion_correction : bool, optional, default=False
+        If True, the long-range dispersion correction will not be included for the alchemical
+        region to avoid the need to recompute the correction (a CPU operation that takes ~ 0.5 s)
+        every time 'lambda_sterics' is changed. If using nonequilibrium protocols, it is recommended
+        that this be set to True since this can lead to enormous (100x) slowdowns if the correction
+        must be recomputed every timestep.
 
     Examples
     --------
@@ -735,6 +740,15 @@ class AbsoluteAlchemicalFactory(object):
     >>> alchemical_state.set_alchemical_parameters(0.0)  # Set all lambda to 0
     >>> alchemical_state.apply_to_context(context)
 
+    Neglecting the long-range dispersion correction for the alchemical region
+    (for nonequilibrium switching, for example) requires instantiating a factory
+    with the appropriate options:
+
+    >>> new_factory = AbsoluteAlchemicalFactory(consistent_exceptions=False, disable_alchemical_dispersion_correction=True)
+    >>> reference_system = testsystems.WaterBox().system
+    >>> alchemical_region = AlchemicalRegion(alchemical_atoms=[0, 1, 2])
+    >>> alchemical_system = new_factory.create_alchemical_system(reference_system, alchemical_region)
+
     References
     ----------
     [1] Pham TT and Shirts MR. Identifying low variance pathways for free
@@ -747,11 +761,15 @@ class AbsoluteAlchemicalFactory(object):
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms, alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched'):
+    def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms,
+                 alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched',
+                 disable_alchemical_dispersion_correction=False):
+
         self.consistent_exceptions = consistent_exceptions
         self.switch_width = switch_width
         self.alchemical_pme_treatment = alchemical_pme_treatment
         self.alchemical_rf_treatment = alchemical_rf_treatment
+        self.disable_alchemical_dispersion_correction = disable_alchemical_dispersion_correction
 
     def create_alchemical_system(self, reference_system, alchemical_regions):
         """Create an alchemically modified version of the reference system.
@@ -784,39 +802,37 @@ class AbsoluteAlchemicalFactory(object):
         timer = utils.Timer()
         timer.start('Create alchemically modified system')
 
-        # Build alchemical system to modify.
-        alchemical_system = openmm.System()
+        # Build alchemical system to modify. This copies particles, vsites,
+        # constraints, box vectors and all the forces. We'll later remove
+        # the forces that we remodel to be alchemically modified.
+        alchemical_system = copy.deepcopy(reference_system)
 
-        # Set periodic box vectors.
-        box_vectors = reference_system.getDefaultPeriodicBoxVectors()
-        alchemical_system.setDefaultPeriodicBoxVectors(*box_vectors)
-
-        # TODO: Are we missing important components of the System here, such as vsites?
-        # Should we deepcopy instead?
-
-        # Add particles.
+        # Check that there are no virtual sites to alchemically modify.
         for particle_index in range(reference_system.getNumParticles()):
-            mass = reference_system.getParticleMass(particle_index)
-            alchemical_system.addParticle(mass)
+            if (reference_system.isVirtualSite(particle_index) and
+                        particle_index in alchemical_region.alchemical_atoms):
+                raise ValueError('Alchemically modified virtual sites are not supported')
 
-        # Add constraints.
-        for constraint_index in range(reference_system.getNumConstraints()):
-            atom_i, atom_j, r0 = reference_system.getConstraintParameters(constraint_index)
-            alchemical_system.addConstraint(atom_i, atom_j, r0)
-
-        # Modify forces as appropriate, copying other forces without modification.
-        for reference_force in reference_system.getForces():
+        # Modify forces as appropriate. We delete the forces that
+        # have been processed modified at the end of the for loop.
+        forces_to_remove = []
+        for force_index, reference_force in enumerate(reference_system.getForces()):
             # TODO switch to functools.singledispatch when we drop Python2 support
             reference_force_name = reference_force.__class__.__name__
             alchemical_force_creator_name = '_alchemically_modify_{}'.format(reference_force_name)
             try:
                 alchemical_force_creator_func = getattr(self, alchemical_force_creator_name)
             except AttributeError:
-                alchemical_forces = [copy.deepcopy(reference_force)]
+                pass
             else:
+                forces_to_remove.append(force_index)
                 alchemical_forces = alchemical_force_creator_func(reference_force, alchemical_region)
-            for alchemical_force in alchemical_forces:
-                alchemical_system.addForce(alchemical_force)
+                for alchemical_force in alchemical_forces:
+                    alchemical_system.addForce(alchemical_force)
+
+        # Remove original forces that have been alchemically modified.
+        for force_index in reversed(forces_to_remove):
+            alchemical_system.removeForce(force_index)
 
         # Record timing statistics.
         timer.stop('Create alchemically modified system')
@@ -824,9 +840,10 @@ class AbsoluteAlchemicalFactory(object):
 
         # If the System uses a NonbondedForce, replace its NonbondedForce implementation of reaction field
         # with a Custom*Force implementation that uses c_rf = 0.
-        # NOTE: This adds an additional CustomNonbondedForce and CustomBondForce
-        if (self.alchemical_rf_treatment == 'switched'):
-            alchemical_system = self.replace_reaction_field(alchemical_system)
+        # NOTE: This adds an additional CustomNonbondedForce
+        if self.alchemical_rf_treatment == 'switched':
+            forcefactories.replace_reaction_field(alchemical_system, return_copy=False,
+                                                  switch_width=self.switch_width)
 
         return alchemical_system
 
@@ -885,73 +902,6 @@ class AbsoluteAlchemicalFactory(object):
         del context, integrator
 
         return energy_components
-
-    def replace_reaction_field(self, reference_system):
-        """Replace reaction-field electrostatics with Custom*Force terms to ensure c_rf = 0.
-
-        .. warning:: Unstable API.
-            This method is still experimental. It could be moved to some
-            other module or have its signature changed in the near future.
-
-        A deep copy of the system is made.
-
-        If reaction field electrostatics is in use, this will add a CustomNonbondedForce and CustomBondForce to the System
-        for each NonbondedForce that utilizes CutoffPeriodic.
-
-        Note that the resulting System object can NOT be fed to `create_alchemical_system` since the CustomNonbondedForce
-        will not be recognized and re-coded.
-
-        Parameters
-        ----------
-        reference_system : simtk.openmm.System
-            The system to use as a reference for the creation of the
-            alchemical system. This will not be modified.
-
-        Returns
-        -------
-        system : simtk.openmm.System
-            System with reaction-field converted to c_rf = 0
-
-        """
-        system = copy.deepcopy(reference_system)
-        for force_index, reference_force in enumerate(system.getForces()):
-            reference_force_name = reference_force.__class__.__name__
-            if (reference_force_name == 'NonbondedForce' and
-                        reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic):
-                # Create CustomNonbondedForce to handle switched reaction field
-                epsilon_solvent = reference_force.getReactionFieldDielectric()
-                r_cutoff = reference_force.getCutoffDistance()
-                energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2);"  # Omit c_rf constant term.
-                k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1.0) / (2.0*epsilon_solvent + 1.0))
-                energy_expression += "chargeprod = charge1*charge2;"
-                energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
-                energy_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-                custom_nonbonded_force = openmm.CustomNonbondedForce(energy_expression)
-                custom_nonbonded_force.addPerParticleParameter("charge")
-                custom_nonbonded_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-                custom_nonbonded_force.setCutoffDistance(reference_force.getCutoffDistance())
-                custom_nonbonded_force.setUseLongRangeCorrection(False)
-                system.addForce(custom_nonbonded_force)
-
-                # Add switch
-                if self.switch_width is not None:
-                    custom_nonbonded_force.setUseSwitchingFunction(True)
-                    custom_nonbonded_force.setSwitchingDistance(reference_force.getCutoffDistance() - self.switch_width)
-                else:
-                    custom_nonbonded_force.setUseSwitchingFunction(False)
-
-                # Rewrite particle charges
-                for particle_index in range(reference_force.getNumParticles()):
-                    [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
-                    reference_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, epsilon)
-                    custom_nonbonded_force.addParticle([charge])
-
-                # Add exclusions to CustomNonbondedForce.
-                for exception_index in range(reference_force.getNumExceptions()):
-                    iatom, jatom, chargeprod, sigma, epsilon = reference_force.getExceptionParameters(exception_index)
-                    custom_nonbonded_force.addExclusion(iatom, jatom)
-
-        return system
 
     # -------------------------------------------------------------------------
     # Internal usage: AlchemicalRegion
@@ -1391,6 +1341,11 @@ class AbsoluteAlchemicalFactory(object):
 
         nonbonded_method = reference_force.getNonbondedMethod()
 
+        # Warn about reaction field.
+        if nonbonded_method == openmm.NonbondedForce.CutoffPeriodic:
+            logger.warning('Reaction field support is still experimental. For free energy '
+                           'calculations in explicit solvent, we suggest using PME for now.')
+
         # --------------------------------------------------
         # Determine energy expression for all custom forces
         # --------------------------------------------------
@@ -1526,7 +1481,10 @@ class AbsoluteAlchemicalFactory(object):
             force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
             force.setCutoffDistance(nonbonded_force.getCutoffDistance())
             force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
-            force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
+            if self.disable_alchemical_dispersion_correction:
+                force.setUseLongRangeCorrection(False)
+            else:
+                force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
 
             if is_method_periodic:
                 force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
@@ -1863,6 +1821,120 @@ class AbsoluteAlchemicalFactory(object):
 
         return [custom_force]
 
+    def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region):
+        """Create alchemically-modified version of CustomGBForce.
+
+        The GB functions are meta-programmed using the following rules:
+        - 'lambda_electrostatics' is added as a global parameter.
+        - 'alchemical' is added as a per-particle parameter. All atoms in
+          the alchemical group have this parameter set to 1; otherwise 0.
+        - Any single-particle energy term (`CustomGBForce.SingleParticle`)
+          is scaled by `(lambda_electrostatics*alchemical+(1-alchemical))`
+        - Any two-particle energy term (`CustomGBForce.ParticlePairNoExclusions`)
+          has charge 1 (`charge1`) replaced by `(lambda_electrostatics*alchemical1+(1-alchemical1))*charge1`
+          and charge 2 (`charge2`) replaced by `(lambda_electrostatics*alchemical2+(1-alchemical2))*charge2`.
+        - Any single-particle computed value (`CustomGBForce.SingleParticle`)
+          remains unmodified
+        - Any two-particle computed value (`CustomGBForce.ParticlePairNoExclusions`)
+          is scaled by `(lambda_electrostatics*alchemical2 + (1-alchemical2))`
+
+        Scaling of a term should always prepend and capture the value with
+        an intermediate variable. For example, prepending `scaling * unscaled; unscaled =`
+        will capture the value of the expression as `unscaled` and multiple by `scaled`.
+        This avoids the need to identify the head expression and add parentheses.
+
+        .. warning::
+            This may not work correctly for all GB models.
+
+        Parameters
+        ----------
+        reference_force : simtk.openmm.GBSAOBCForce
+            The reference GBSAOBCForce to be alchemically modify.
+        alchemical_region : AlchemicalRegion
+            The alchemical region containing the indices of the atoms to
+            alchemically modify.
+
+        Returns
+        -------
+        custom_force : simtk.openmm.CustomGBForce
+            The alchemical version of the reference force.
+
+        """
+        custom_force = openmm.CustomGBForce()
+
+        # Add global parameters
+        for index in range(reference_force.getNumGlobalParameters()):
+            name = reference_force.getGlobalParameterName(index)
+            default_value = reference_force.getGlobalParameterDefaultValue(index)
+            custom_force.addGlobalParameter(name, default_value)
+        custom_force.addGlobalParameter("lambda_electrostatics", 1.0)
+
+        # Add per-particle parameters.
+        for index in range(reference_force.getNumPerParticleParameters()):
+            name = reference_force.getPerParticleParameterName(index)
+            custom_force.addPerParticleParameter(name)
+        custom_force.addPerParticleParameter("alchemical")
+
+        # Set nonbonded methods.
+        custom_force.setNonbondedMethod(reference_force.getNonbondedMethod())
+        custom_force.setCutoffDistance(reference_force.getCutoffDistance())
+
+        # Add computations.
+        for index in range(reference_force.getNumComputedValues()):
+            name, expression, computation_type = reference_force.getComputedValueParameters(index)
+
+            # Alter expression for particle pair terms only.
+            if computation_type is not openmm.CustomGBForce.SingleParticle:
+                prepend = ('alchemical_scaling*unscaled; '
+                           'alchemical_scaling = (lambda_electrostatics*alchemical2 + (1-alchemical2)); '
+                           'unscaled = ')
+                expression = prepend + expression
+
+            custom_force.addComputedValue(name, expression, computation_type)
+
+        # Add energy terms.
+        for index in range(reference_force.getNumEnergyTerms()):
+            expression, computation_type = reference_force.getEnergyTermParameters(index)
+
+            # Alter expressions
+            if computation_type is openmm.CustomGBForce.SingleParticle:
+                prepend = ('alchemical_scaling*unscaled; '
+                           'alchemical_scaling = (lambda_electrostatics*alchemical + (1-alchemical)); '
+                           'unscaled = ')
+                expression = prepend + expression
+            else:
+                expression = expression.replace('charge1', 'alchemically_scaled_charge1')
+                expression = expression.replace('charge2', 'alchemically_scaled_charge2')
+                expression += ' ; alchemically_scaled_charge1 = (lambda_electrostatics*alchemical1+(1-alchemical1)) * charge1;'
+                expression += ' ; alchemically_scaled_charge2 = (lambda_electrostatics*alchemical2+(1-alchemical2)) * charge2;'
+
+            custom_force.addEnergyTerm(expression, computation_type)
+
+        # Add particle parameters
+        for particle_index in range(reference_force.getNumParticles()):
+            parameters = reference_force.getParticleParameters(particle_index)
+            # Append alchemical parameter
+            parameters = list(parameters)
+            if particle_index in alchemical_region.alchemical_atoms:
+                parameters.append(1.0)
+            else:
+                parameters.append(0.0)
+            custom_force.addParticle(parameters)
+
+        # Add tabulated functions
+        for function_index in range(reference_force.getNumTabulatedFunctions()):
+            name = reference_force.getTabulatedFunctionName(function_index)
+            function = reference_force.getTabulatedFunction(function_index)
+            function_copy = copy.deepcopy(function)
+            custom_force.addTabulatedFunction(name, function_copy)
+
+        # Add exclusions
+        for exclusion_index in range(reference_force.getNumExclusions()):
+            [particle1, particle2] = reference_force.getExclusionParticles(exclusion_index)
+            custom_force.addExclusion(particle1, particle2)
+
+        return [custom_force]
+
     # -------------------------------------------------------------------------
     # Internal usage: Infer force labels
     # -------------------------------------------------------------------------
@@ -1881,9 +1953,17 @@ class AbsoluteAlchemicalFactory(object):
                     return True
             return False
 
-        def check_function(custom_force, parameter):
-            energy_function = custom_force.getEnergyFunction()
-            return parameter in energy_function
+        def check_energy_expression(custom_force, parameter):
+            try:
+                found = parameter in custom_force.getEnergyFunction()
+            except AttributeError:  # CustomGBForce
+                found = False
+                for index in range(custom_force.getNumEnergyTerms()):
+                    expression, _ = custom_force.getEnergyTermParameters(index)
+                    if parameter in expression:
+                        found = True
+                        break
+            return found
 
         force_labels = {}
         nonbonded_forces = []
@@ -1900,14 +1980,17 @@ class AbsoluteAlchemicalFactory(object):
             elif isinstance(force, openmm.CustomTorsionForce) and check_parameter(force, 'lambda_torsions'):
                 add_label('alchemically modified PeriodicTorsionForce', force_index)
             elif isinstance(force, openmm.CustomGBForce) and check_parameter(force, 'lambda_electrostatics'):
-                add_label('alchemically modified GBSAOBCForce', force_index)
-            elif isinstance(force, openmm.CustomBondForce) and check_function(force, 'lambda'):
-                if check_function(force, 'lambda_sterics'):
+                if check_energy_expression(force, 'unscaled'):
+                    add_label('alchemically modified CustomGBForce', force_index)
+                else:
+                    add_label('alchemically modified GBSAOBCForce', force_index)
+            elif isinstance(force, openmm.CustomBondForce) and check_energy_expression(force, 'lambda'):
+                if check_energy_expression(force, 'lambda_sterics'):
                     sterics_bond_forces.append([force_index, force])
                 else:
                     electro_bond_forces.append([force_index, force])
-            elif isinstance(force, openmm.CustomNonbondedForce) and check_function(force, 'lambda'):
-                if check_function(force, 'lambda_sterics'):
+            elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, 'lambda'):
+                if check_energy_expression(force, 'lambda_sterics'):
                     nonbonded_forces.append(['sterics', force_index, force])
                 else:
                     nonbonded_forces.append(['electrostatics', force_index, force])
@@ -1944,20 +2027,20 @@ class AbsoluteAlchemicalFactory(object):
                     add_label(label.format('non-'), force_index2)
 
             # If they are both empty they are identical and any label works.
-            elif force1.getNumBonds() == 0:
+            elif force1.getNumBonds() == 0 and force2.getNumBonds() == 0:
                 add_label(label.format(''), force_index1)
                 add_label(label.format('non-'), force_index2)
 
             # We check that the bond atoms are both alchemical or not.
             else:
-                atom_i, atom_j = force1.getBondParameters(0)
+                atom_i, atom_j, _ = force2.getBondParameters(0)
                 both_alchemical = atom_i in alchemical_atoms and atom_j in alchemical_atoms
                 if both_alchemical:
-                    add_label(label.format(''), force_index1)
-                    add_label(label.format('non-'), force_index2)
-                else:
-                    add_label(label.format('non-'), force_index1)
                     add_label(label.format(''), force_index2)
+                    add_label(label.format('non-'), force_index1)
+                else:
+                    add_label(label.format('non-'), force_index2)
+                    add_label(label.format(''), force_index1)
 
         return force_labels
 

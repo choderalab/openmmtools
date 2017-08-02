@@ -23,6 +23,7 @@ requirements:
     - mdtraj
     - matplotlib
     - seaborn
+    - mdtraj
 
   run:
     - python
@@ -38,6 +39,7 @@ requirements:
     - mdtraj
     - matplotlib
     - seaborn
+    - mdtraj
 
 test:
   requires:

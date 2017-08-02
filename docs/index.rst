@@ -53,6 +53,8 @@ Modules
   mcmc
   samplers
   alchemy
+  forces
+  forcefactories
   utils
   scripts
 

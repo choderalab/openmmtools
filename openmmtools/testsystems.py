@@ -23,19 +23,16 @@ COPYRIGHT
 @author John D. Chodera <john.chodera@choderalab.org>
 @author Randall J. Radmer <radmer@stanford.edu>
 
-All code in this repository is released under the GNU General Public License.
+All code in this repository is released under the MIT License.
 
 This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
+the terms of the MIT License.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY
 WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
+PARTICULAR PURPOSE.  See the MIT License for more details.
 
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
+You should have received a copy of the MIT License along with this program.
 
 TODO
 
@@ -107,7 +104,7 @@ def handle_kwargs(func, defaults, input_kwargs):
     # Add defaults
     kwargs = { k : v for (k,v) in defaults.items() }
     # Override those that appear in args
-    kwargs = { k : v for (k,v) in input_kwargs.items() if k in args }
+    kwargs.update({ k : v for (k,v) in input_kwargs.items() if k in args })
 
     return kwargs
 
@@ -661,7 +658,7 @@ class HarmonicOscillator(TestSystem):
     Notes
     -----
 
-    The natural period of a harmonic oscillator is T = sqrt(m/K), so you will want to use an
+    The natural period of a harmonic oscillator is T = 2*pi*sqrt(m/K), so you will want to use an
     integration timestep smaller than ~ T/10.
 
     The standard deviation in position in each dimension is sigma = (kT / K)^(1/2)
@@ -2473,7 +2470,10 @@ class WaterBox(TestSystem):
 
     """
 
-    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=DEFAULT_CUTOFF_DISTANCE, model='tip3p', switch_width=DEFAULT_SWITCH_WIDTH, constrained=True, dispersion_correction=True, nonbondedMethod=app.PME, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+    def __init__(self, box_edge=25.0*unit.angstroms, cutoff=DEFAULT_CUTOFF_DISTANCE, model='tip3p',
+                 switch_width=DEFAULT_SWITCH_WIDTH, constrained=True, dispersion_correction=True,
+                 nonbondedMethod=app.PME, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE,
+                 positive_ion='Na+', negative_ion='Cl-', ionic_strength=0*unit.molar, **kwargs):
         """
         Create a water box test system.
 
@@ -2496,6 +2496,13 @@ class WaterBox(TestSystem):
            Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
         ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
+        positive_ion : str, optional
+            The positive ion to add (default is Na+).
+        negative_ion : str, optional
+            The negative ion to add (default is Cl-).
+        ionic_strength : simtk.unit.Quantity, optional
+            The total concentration of ions (both positive and negative)
+            to add (default is 0.0*molar).
 
         Examples
         --------
@@ -2541,8 +2548,11 @@ class WaterBox(TestSystem):
         if model not in supported_models:
             raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
 
-        # Load forcefield for solvent model.
-        ff = app.ForceField(model + '.xml')
+        # Load forcefield for solvent model and ions.
+        force_fields = [model + '.xml']
+        if ionic_strength != 0.0*unit.molar:
+            force_fields.append('amber99sb.xml')  # For the ions.
+        ff = app.ForceField(*force_fields)
 
         # Create empty topology and coordinates.
         top = app.Topology()
@@ -2553,7 +2563,8 @@ class WaterBox(TestSystem):
 
         # Add solvent to specified box dimensions.
         boxSize = unit.Quantity(numpy.ones([3]) * box_edge / box_edge.unit, box_edge.unit)
-        m.addSolvent(ff, boxSize=boxSize, model=model)
+        m.addSolvent(ff, boxSize=boxSize, model=model, positiveIon=positive_ion,
+                     negativeIon=negative_ion, ionicStrength=ionic_strength)
 
         # Get new topology and coordinates.
         newtop = m.getTopology()
@@ -2994,6 +3005,34 @@ class AlanineDipeptideVacuum(TestSystem):
 
         self.system, self.positions = system, positions
 
+class AlchemicalAlanineDipeptide(AlanineDipeptideVacuum):
+    """AlanineDipeptideVacuum test system where all atoms can be alchemically discharged"""
+
+    def __init__(self, *args, **kwargs):
+        """Create a test system where all atoms can be alchemical discharged.
+
+        Context parameters
+        ------------------
+        lambda_electrostatics
+            Coulomb interactions are scaled by `lambda`
+
+        Examples
+        --------
+
+        >>> alanine_dipeptide = AlchemicalAlanineDipeptide()
+        >>> [system, positions] = [alanine_dipeptide.system, alanine_dipeptide.positions]
+
+        """
+        super(AlchemicalAlanineDipeptide, self).__init__(*args, **kwargs)
+
+        # Alchemically modify the system
+        from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
+        region = AlchemicalRegion(alchemical_atoms=range(22))
+        factory = AbsoluteAlchemicalFactory()
+        alchemical_system = factory.create_alchemical_system(self.system, region)
+        self.system = alchemical_system
+
+        return
 #=============================================================================================
 # Alanine dipeptide in implicit solvent.
 #=============================================================================================
@@ -3403,7 +3442,7 @@ class HostGuestExplicit(TestSystem):
         self.system, self.positions = system, positions
 
 #=============================================================================================
-# Alanine dipeptide in explicit solvent
+# DHFR in explicit solvent
 #=============================================================================================
 
 class DHFRExplicit(TestSystem):
@@ -3464,12 +3503,79 @@ class DHFRExplicit(TestSystem):
             forces['NonbondedForce'].setUseSwitchingFunction(True)
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
-
         positions = self.prmtop.positions
 
         # Set box vectors.
         box_vectors = self.prmtop.box_vectors
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
+
+        self.system, self.positions = system, positions
+
+# =============================================================================================
+# Drew-Dickerson B-DNA dodecamer in explicit solvent
+# =============================================================================================
+
+class DNADodecamerExplicit(TestSystem):
+    """
+    Drew-Dickerson B-DNA dodecamer (CGCGAATTCGCG) in explicit solvent. Structure taken from the RCSB PDB accession code
+    4C64 (1.3 Angstrom resolution). Solvated using the TIP3P water model in a cuboidal box with at least a 10 Angstrom
+    clearance between the edge of the box and the DNA. The DNA is parametrized with the AMBER OL15 DNA forcefield. The
+    system has a total charge of -22 as no neutralizing counterions have been included.
+
+    Parameters
+    ----------
+    constraints : optional, default=simtk.openmm.app.HBonds
+    rigid_water : bool, optional, default=True
+    nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
+    use_dispersion_correction : bool, optional, default=True
+        If True, the long-range disperson correction will be used.
+    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+       Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
+    hydrogenMass : unit, optional, default=None
+        If set, will pass along a modified hydrogen mass for OpenMM to
+        use mass repartitioning.
+    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
+        switching function is turned on at cutoff - switch_width
+        If None, no switch will be applied (e.g. hard cutoff).
+    ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
+           The Ewald or PME tolerance.
+
+    Reference
+    ---------
+    Structure taken from Chem.Commun.(Camb.), 50, page 1794, 2014.
+    """
+
+    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE,
+                 use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None,
+                 switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+
+        TestSystem.__init__(self, **kwargs)
+
+        # Load the topology and positions
+        prmtop_filename = get_data_filename("data/dna_dodecamer_explicit/prmtop")
+        pdbfile_name = get_data_filename('data/dna_dodecamer_explicit/minimized_dna_dodecamer.pdb')
+        pdbfile = app.PDBFile(pdbfile_name)
+
+        # Initialize system.
+        self.prmtop = app.AmberPrmtopFile(prmtop_filename)
+        system = self.prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod,
+                                          rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff,
+                                          hydrogenMass=hydrogenMass)
+
+        # Extract topology
+        self.topology = self.prmtop.topology
+
+        # Set dispersion correction use.
+        forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in
+                  range(system.getNumForces())}
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
+
+        if switch_width is not None:
+            forces['NonbondedForce'].setUseSwitchingFunction(True)
+            forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
+
+        positions = pdbfile.getPositions()
 
         self.system, self.positions = system, positions
 

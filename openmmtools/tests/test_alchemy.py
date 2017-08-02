@@ -18,6 +18,7 @@ from __future__ import print_function
 
 import os
 import sys
+import zlib
 import pickle
 import itertools
 from functools import partial
@@ -26,7 +27,7 @@ import nose
 import scipy
 from nose.plugins.attrib import attr
 
-from openmmtools import testsystems
+from openmmtools import testsystems, forces
 from openmmtools.constants import kB
 from openmmtools.alchemy import *
 
@@ -40,9 +41,7 @@ logger = logging.getLogger(__name__)
 temperature = 300.0 * unit.kelvin  # reference temperature
 # MAX_DELTA = 0.01 * kB * temperature # maximum allowable deviation
 MAX_DELTA = 1.0 * kB * temperature  # maximum allowable deviation
-MAX_FORCE_RELATIVE_ERROR = 1.0e-6 # maximum allowable relative force error
 GLOBAL_ENERGY_UNIT = unit.kilojoules_per_mole  # controls printed units
-GLOBAL_FORCE_UNIT = unit.kilojoules_per_mole / unit.nanometers # controls printed units
 GLOBAL_ALCHEMY_PLATFORM = None  # This is used in every energy calculation.
 # GLOBAL_ALCHEMY_PLATFORM = openmm.Platform.getPlatformByName('OpenCL') # DEBUG: Use OpenCL over CPU platform for testing since OpenCL is deterministic, while CPU is not
 
@@ -87,52 +86,6 @@ def compute_energy(system, positions, platform=None, force_group=-1):
     return potential
 
 
-def compute_forces(system, positions, platform=None, force_group=-1):
-    """Compute forces of the system in the given positions.
-
-    Parameters
-    ----------
-    platform : simtk.openmm.Platform or None, optional
-        If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
-    force_group : int flag or set of int, optional
-        Passed to the groups argument of Context.getState().
-
-    """
-    timestep = 1.0 * unit.femtoseconds
-    integrator = openmm.VerletIntegrator(timestep)
-    context = create_context(system, integrator, platform)
-    context.setPositions(positions)
-    state = context.getState(getForces=True, groups=force_group)
-    forces = state.getForces(asNumpy=True)
-    del context, integrator, state
-    return forces
-
-
-def generate_new_positions(system, positions, platform=None, nsteps=50):
-    """Generate new positions by taking a few steps from the old positions.
-    Parameters
-    ----------
-    platform : simtk.openmm.Platform or None, optional
-        If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
-    nsteps : int, optional, default=50
-        Number of steps of dynamics to take.
-    Returns
-    -------
-    new_positions : simtk.unit.Quantity of shape [nparticles,3] with units compatible with distance
-        New positions
-    """
-    temperature = 300 * unit.kelvin
-    collision_rate = 90 / unit.picoseconds
-    timestep = 1.0 * unit.femtoseconds
-    integrator = openmm.LangevinIntegrator(temperature, collision_rate, timestep)
-    context = create_context(system, integrator, platform)
-    context.setPositions(positions)
-    integrator.step(nsteps)
-    new_positions = context.getState(getPositions=True).getPositions(asNumpy=True)
-    del context, integrator
-    return new_positions
-
-
 def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms, maxIterations=50):
     """Minimize the energy of the given system.
 
@@ -161,7 +114,7 @@ def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_p
     return minimized_positions
 
 
-def compute_energy_force(system, positions, force_name):
+def compute_force_energy(system, positions, force_name):
     """Compute the energy of the force with the given name."""
     system = copy.deepcopy(system)  # Copy to avoid modifications
     force_name_index = 1
@@ -191,11 +144,11 @@ def assert_almost_equal(energy1, energy2, err_msg):
 
 
 def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
-    """Dissect the contributions to NonbondedForce of the reference system by atom group
-    and sterics/electrostatics.
+    """Dissect the nonbonded energy contributions of the reference system
+    by atom group and sterics/electrostatics.
 
-    Note that this can only work on reference_system objects whose CutoffPeriodic forces
-    have not been replaced by Custom*Force objects to set c_rf = 0.
+    This works also for systems objects whose CutoffPeriodic force
+    has been replaced by a CustomNonbondedForce to set c_rf = 0.
 
     Parameters
     ----------
@@ -228,60 +181,76 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
 
     """
 
-    def turn_off(force, sterics=False, electrostatics=False,
+    def turn_off(system, sterics=False, electrostatics=False,
                  exceptions=False, only_atoms=frozenset()):
-        if len(only_atoms) == 0:  # if empty, turn off all particles
-            only_atoms = set(range(force.getNumParticles()))
-        e_coeff = 0.0 if sterics else 1.0
-        c_coeff = 0.0 if electrostatics else 1.0
-        if exceptions:  # Turn off exceptions
-            for exception_index in range(force.getNumExceptions()):
-                [iatom, jatom, charge, sigma, epsilon] = force.getExceptionParameters(exception_index)
-                if iatom in only_atoms or jatom in only_atoms:
-                    force.setExceptionParameters(exception_index, iatom, jatom, c_coeff*charge,
-                                                 sigma, e_coeff*epsilon)
-        else:  # Turn off particle interactions
-            for particle_index in range(force.getNumParticles()):
-                if particle_index in only_atoms:
-                    [charge, sigma, epsilon] = force.getParticleParameters(particle_index)
-                    force.setParticleParameters(particle_index, c_coeff*charge, sigma, e_coeff*epsilon)
+        """Turn off sterics and/or electrostatics interactions.
 
-    def restore_system(reference_system):
-        system = copy.deepcopy(reference_system)
-        nonbonded_force = system.getForces()[0]
-        return system, nonbonded_force
+        If `exceptions` is True, only the exceptions are turned off.
+        Support also system that have gone through replace_reaction_field.
+        The `system` must have only nonbonded forces.
+        If `only_atoms` is specified, only the those atoms will be turned off.
+
+        """
+        if len(only_atoms) == 0:  # if empty, turn off all particles
+            only_atoms = set(range(system.getNumParticles()))
+        epsilon_coeff = 0.0 if sterics else 1.0
+        charge_coeff = 0.0 if electrostatics else 1.0
+
+        # Only a Nonbonded and a CustomNonbonded (for RF) force should be here.
+        if exceptions:  # Turn off exceptions
+            nonbonded_force = system.getForces()[0]  # NonbondedForce
+            for exception_index in range(nonbonded_force.getNumExceptions()):
+                iatom, jatom, charge, sigma, epsilon = nonbonded_force.getExceptionParameters(exception_index)
+                if iatom in only_atoms or jatom in only_atoms:
+                    nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
+                                                           charge_coeff*charge, sigma, epsilon_coeff*epsilon)
+        else:  # Turn off particle interactions
+            for force in system.getForces():
+                for particle_index in range(force.getNumParticles()):
+                    if particle_index in only_atoms:
+                        # Convert tuple parameters to list to allow changes.
+                        parameters = list(force.getParticleParameters(particle_index))
+                        parameters[0] *= charge_coeff  # charge
+                        try:  # CustomNonbondedForce
+                            force.setParticleParameters(particle_index, parameters)
+                        except TypeError:  # NonbondedForce
+                            parameters[2] *= epsilon_coeff  # epsilon
+                            force.setParticleParameters(particle_index, *parameters)
 
     nonalchemical_atoms = set(range(reference_system.getNumParticles())).difference(alchemical_atoms)
 
-    # Remove all forces but NonbondedForce and, if CutoffPeriodic is in use,
-    # the CustomNonbondedForce and CustomBondForce used to replace it
+    # Remove all forces but NonbondedForce and eventually the
+    # CustomNonbondedForce used to model reaction field.
     reference_system = copy.deepcopy(reference_system)  # don't modify original system
     forces_to_remove = list()
     for force_index, force in enumerate(reference_system.getForces()):
-        if force.__class__.__name__ != 'NonbondedForce':
-            forces_to_remove.append(force_index)
-        else:
-            force.setForceGroup(0)
+        force.setForceGroup(0)
+        if isinstance(force, openmm.NonbondedForce):
             force.setReciprocalSpaceForceGroup(30)  # separate PME reciprocal from direct space
+        # We keep only CustomNonbondedForces that are not alchemically modified.
+        elif not (isinstance(force, openmm.CustomNonbondedForce) and
+                          'lambda' not in force.getEnergyFunction()):
+            forces_to_remove.append(force_index)
+
     for force_index in reversed(forces_to_remove):
         reference_system.removeForce(force_index)
-    assert len(reference_system.getForces()) == 1
+    assert len(reference_system.getForces()) <= 2
 
     # Compute particle interactions between different groups of atoms
     # ----------------------------------------------------------------
-    system, nonbonded_force = restore_system(reference_system)
+    system = copy.deepcopy(reference_system)
 
     # Compute total energy from nonbonded interactions
     tot_energy = compute_energy(system, positions)
     tot_reciprocal_energy = compute_energy(system, positions, force_group={30})
 
     # Compute contributions from particle sterics
-    turn_off(nonbonded_force, sterics=True, only_atoms=alchemical_atoms)
+    turn_off(system, sterics=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_particle_sterics = compute_energy(system, positions)
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical sterics
-    turn_off(nonbonded_force, sterics=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical sterics
+    turn_off(system, sterics=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_particle_sterics = compute_energy(system, positions)
-    turn_off(nonbonded_force, sterics=True)
+    turn_off(system, sterics=True)
     tot_energy_no_particle_sterics = compute_energy(system, positions)
 
     tot_particle_sterics = tot_energy - tot_energy_no_particle_sterics
@@ -290,15 +259,15 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
     na_particle_sterics = tot_particle_sterics - nn_particle_sterics - aa_particle_sterics
 
     # Compute contributions from particle electrostatics
-    system, nonbonded_force = restore_system(reference_system)  # Restore sterics
-    turn_off(nonbonded_force, electrostatics=True, only_atoms=alchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore sterics
+    turn_off(system, electrostatics=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_particle_electro = compute_energy(system, positions)
     nn_reciprocal_energy = compute_energy(system, positions, force_group={30})
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical electrostatics
-    turn_off(nonbonded_force, electrostatics=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical electrostatics
+    turn_off(system, electrostatics=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_particle_electro = compute_energy(system, positions)
     aa_reciprocal_energy = compute_energy(system, positions, force_group={30})
-    turn_off(nonbonded_force, electrostatics=True)
+    turn_off(system, electrostatics=True)
     tot_energy_no_particle_electro = compute_energy(system, positions)
 
     na_reciprocal_energy = tot_reciprocal_energy - nn_reciprocal_energy - aa_reciprocal_energy
@@ -315,13 +284,13 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
     # -----------------------------------------------------
 
     # Compute contributions from exceptions sterics
-    system, nonbonded_force = restore_system(reference_system)  # Restore particle interactions
-    turn_off(nonbonded_force, sterics=True, exceptions=True, only_atoms=alchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore particle interactions
+    turn_off(system, sterics=True, exceptions=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_exception_sterics = compute_energy(system, positions)
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical sterics
-    turn_off(nonbonded_force, sterics=True, exceptions=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical sterics
+    turn_off(system, sterics=True, exceptions=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_exception_sterics = compute_energy(system, positions)
-    turn_off(nonbonded_force, sterics=True, exceptions=True)
+    turn_off(system, sterics=True, exceptions=True)
     tot_energy_no_exception_sterics = compute_energy(system, positions)
 
     tot_exception_sterics = tot_energy - tot_energy_no_exception_sterics
@@ -330,13 +299,13 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
     na_exception_sterics = tot_exception_sterics - nn_exception_sterics - aa_exception_sterics
 
     # Compute contributions from exceptions electrostatics
-    system, nonbonded_force = restore_system(reference_system)  # Restore exceptions sterics
-    turn_off(nonbonded_force, electrostatics=True, exceptions=True, only_atoms=alchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore exceptions sterics
+    turn_off(system, electrostatics=True, exceptions=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_exception_electro = compute_energy(system, positions)
-    system, nonbonded_force = restore_system(reference_system)  # Restore alchemical electrostatics
-    turn_off(nonbonded_force, electrostatics=True, exceptions=True, only_atoms=nonalchemical_atoms)
+    system = copy.deepcopy(reference_system)  # Restore alchemical electrostatics
+    turn_off(system, electrostatics=True, exceptions=True, only_atoms=nonalchemical_atoms)
     tot_energy_no_nonalchem_exception_electro = compute_energy(system, positions)
-    turn_off(nonbonded_force, electrostatics=True, exceptions=True)
+    turn_off(system, electrostatics=True, exceptions=True)
     tot_energy_no_exception_electro = compute_energy(system, positions)
 
     tot_exception_electro = tot_energy - tot_energy_no_exception_electro
@@ -489,40 +458,6 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
 
-def compare_system_forces(reference_system, alchemical_system, positions, name="", platform=None):
-    """Check that the forces of reference and modified systems are close.
-
-    Parameters
-    ---------
-    reference_system : simtk.openmm.System
-        Reference System
-    alchemical_system : simtk.openmm.System
-        System to compare to reference
-    positions : simtk.unit.Quantity of shape [nparticles,3] with units of distance
-        The particle positions to use
-    name : str, optional, default=""
-        System name to use for debugging.
-    platform : simtk.openmm.Platform, optional, default=None
-        If specified, use this platform
-
-    """
-    # Compute forces
-    reference_force = compute_forces(reference_system, positions, platform=platform) / GLOBAL_FORCE_UNIT
-    alchemical_force = compute_forces(alchemical_system, positions, platform=platform) / GLOBAL_FORCE_UNIT
-
-    # Check that error is small.
-    def magnitude(vec):
-        return np.sqrt(np.mean(np.sum(vec**2, axis=1)))
-
-    relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
-    if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
-        print("========")
-        err_msg = ("Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f}).\n"
-                   "alchemical_force = {:.8f}, reference_force = {:.8f}, difference = {:.8f}")
-        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force),
-                                       magnitude(reference_force), magnitude(alchemical_force-reference_force)))
-
-
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Compare full and alchemically-modified system energies by energy component.
 
@@ -656,9 +591,10 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     # Check forces other than nonbonded
     # ----------------------------------
-    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'GBSAOBCForce']:
+    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce',
+                       'GBSAOBCForce', 'CustomGBForce']:
         alchemical_forces_energies = [energy for label, energy in energy_components.items() if force_name in label]
-        reference_force_energy = compute_energy_force(reference_system, positions, force_name)
+        reference_force_energy = compute_force_energy(reference_system, positions, force_name)
 
         # There should be no force in the alchemical system if force_name is missing from the reference
         if reference_force_energy is None:
@@ -673,11 +609,13 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
                             '{} energy '.format(force_name))
 
 
-def check_noninteracting_energy_components(alchemical_system, alchemical_regions, positions):
+def check_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """Check non-interacting energy components are zero when appropriate.
 
     Parameters
     ----------
+    reference_system : simtk.openmm.System
+        The reference system (not alchemically modified).
     alchemical_system : simtk.openmm.System
         The alchemically modified system to test.
     alchemical_regions : AlchemicalRegion.
@@ -698,7 +636,7 @@ def check_noninteracting_energy_components(alchemical_system, alchemical_regions
         print('testing {}'.format(label))
         value = energy_components[label]
         assert abs(value / GLOBAL_ENERGY_UNIT) == 0.0, ("'{}' should have zero energy in annihilated alchemical"
-                                                         " state, but energy is {}").format(label, str(value))
+                                                        " state, but energy is {}").format(label, str(value))
 
     # Check that non-alchemical/alchemical particle interactions and 1,4 exceptions have been annihilated
     assert_zero_energy('alchemically modified NonbondedForce for non-alchemical/alchemical sterics')
@@ -715,10 +653,85 @@ def check_noninteracting_energy_components(alchemical_system, alchemical_regions
         assert_zero_energy('alchemically modified BondForce for alchemical/alchemical electrostatics exceptions')
 
     # Check valence terms
-    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce', 'GBSAOBCForce']:
+    for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']:
         force_label = 'alchemically modified ' + force_name
         if force_label in energy_components:
             assert_zero_energy(force_label)
+
+    # Check implicit solvent force.
+    for force_name in ['CustomGBForce', 'GBSAOBCForce']:
+        label = 'alchemically modified ' + force_name
+
+        # Check if the system has an implicit solvent force.
+        try:
+            alchemical_energy = energy_components[label]
+        except KeyError:  # No implicit solvent.
+            continue
+
+        # If all alchemical particles are modified, the alchemical energy should be zero.
+        if len(alchemical_regions.alchemical_atoms) == reference_system.getNumParticles():
+            assert_zero_energy(label)
+            continue
+
+        # Otherwise compare the alchemical energy with a
+        # reference system with only non-alchemical particles.
+        # Find implicit solvent force in reference system.
+        for reference_force in reference_system.getForces():
+            if reference_force.__class__.__name__ == force_name:
+                break
+
+        system = openmm.System()
+        force = reference_force.__class__()
+
+        # For custom GB forces, we need to copy all computed values,
+        # energy terms, parameters, tabulated functions and exclusions.
+        if isinstance(force, openmm.CustomGBForce):
+            for index in range(reference_force.getNumPerParticleParameters()):
+                name = reference_force.getPerParticleParameterName(index)
+                force.addPerParticleParameter(name)
+            for index in range(reference_force.getNumComputedValues()):
+                computed_value = reference_force.getComputedValueParameters(index)
+                force.addComputedValue(*computed_value)
+            for index in range(reference_force.getNumEnergyTerms()):
+                energy_term = reference_force.getEnergyTermParameters(index)
+                force.addEnergyTerm(*energy_term)
+            for index in range(reference_force.getNumGlobalParameters()):
+                name = reference_force.getGlobalParameterName(index)
+                default_value = reference_force.getGlobalParameterDefaultValue(index)
+                force.addGlobalParameter(name, default_value)
+            for function_index in range(reference_force.getNumTabulatedFunctions()):
+                name = reference_force.getTabulatedFunctionName(function_index)
+                function = reference_force.getTabulatedFunction(function_index)
+                function_copy = copy.deepcopy(function)
+                force.addTabulatedFunction(name, function_copy)
+            for exclusion_index in range(reference_force.getNumExclusions()):
+                particles = reference_force.getExclusionParticles(exclusion_index)
+                force.addExclusion(*particles)
+
+        # Create a system with only the non-alchemical particles.
+        for particle_index in range(reference_system.getNumParticles()):
+            if particle_index not in alchemical_regions.alchemical_atoms:
+                # Add particle to System.
+                mass = reference_system.getParticleMass(particle_index)
+                system.addParticle(mass)
+
+                # Add particle to Force..
+                parameters = reference_force.getParticleParameters(particle_index)
+                try:  # GBSAOBCForce
+                    force.addParticle(*parameters)
+                except NotImplementedError:  # CustomGBForce
+                    force.addParticle(parameters)
+
+        system.addForce(force)
+
+        # Get positions for all non-alchemical particles.
+        non_alchemical_positions = [pos for i, pos in enumerate(positions)
+                                    if i not in alchemical_regions.alchemical_atoms]
+
+        # Compute reference force energy.
+        reference_force_energy = compute_force_energy(system, non_alchemical_positions, force_name)
+        assert_almost_equal(reference_force_energy, alchemical_energy,
+                            'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
 
 # =============================================================================
@@ -1113,13 +1126,16 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_systems['LennardJonesCluster'] = testsystems.LennardJonesCluster()
         cls.test_systems['LennardJonesFluid with dispersion correction'] = \
             testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
-        cls.test_systems['WaterBox with reaction field, no switch, no dispersion correction'] = \
+        cls.test_systems['TIP3P WaterBox with reaction field, no switch, no dispersion correction'] = \
             testsystems.WaterBox(dispersion_correction=False, switch=False, nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['TIP4P-EW WaterBox and NaCl with PME'] = \
+            testsystems.WaterBox(nonbondedMethod=openmm.app.PME, model='tip4pew', ionic_strength=200*unit.millimolar)
 
         # Vacuum and implicit.
         cls.test_systems['AlanineDipeptideVacuum'] = testsystems.AlanineDipeptideVacuum()
         cls.test_systems['AlanineDipeptideImplicit'] = testsystems.AlanineDipeptideImplicit()
-        cls.test_systems['TolueneImplicit'] = testsystems.TolueneImplicit()
+        cls.test_systems['TolueneImplicitOBC2'] = testsystems.TolueneImplicitOBC2()
+        cls.test_systems['TolueneImplicitGBn'] = testsystems.TolueneImplicitGBn()
 
         # Explicit test system: PME and CutoffPeriodic.
         #cls.test_systems['AlanineDipeptideExplicit with CutoffPeriodic'] = \
@@ -1135,8 +1151,9 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions = dict()
         cls.test_regions['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2))
         cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
-        cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
-        cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(2))  # Only partially modified.
+        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
+        cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(4))  # Modify ions.
+        cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
 
@@ -1144,12 +1161,7 @@ class TestAbsoluteAlchemicalFactory(object):
     def generate_cases(cls):
         """Generate all test cases in cls.test_cases combinatorially."""
         cls.test_cases = dict()
-        switched_rf_factory = AbsoluteAlchemicalFactory(alchemical_rf_treatment='switched')
-        shifted_rf_factory = AbsoluteAlchemicalFactory(alchemical_rf_treatment='shifted')
-
-        # Create reference versions of all rf-containing systems with their switched counterparts with c_rf = 0
-        for (name, testsystem) in cls.test_systems.items():
-            setattr(testsystem, 'modified_rf_system', switched_rf_factory.replace_reaction_field(testsystem.system))
+        factory = AbsoluteAlchemicalFactory(alchemical_rf_treatment='switched')
 
         # We generate all possible combinations of annihilate_sterics/electrostatics
         # for each test system. We also annihilate bonds, angles and torsions every
@@ -1188,20 +1200,24 @@ class TestAbsoluteAlchemicalFactory(object):
                                              softcore_c=1.0, softcore_d=1.0, softcore_e=1.0, softcore_f=1.0)
                     test_case_name += ', modified softcore parameters'
 
-                # Also store shifted rf alchemical system for energy component comparisons
-                shifted_rf_alchemical_system = shifted_rf_factory.create_alchemical_system(test_system.system, region)
-                setattr(test_system, 'shifted_rf_alchemical_system', shifted_rf_alchemical_system)
+                # Pre-generate alchemical system.
+                alchemical_system = factory.create_alchemical_system(test_system.system, region)
 
-                # Pre-generate alchemical system with switched rf
-                alchemical_system = switched_rf_factory.create_alchemical_system(test_system.system, region)
+                # Add test case.
                 cls.test_cases[test_case_name] = (test_system, alchemical_system, region)
-
                 n_test_cases += 1
+
+            # If the test system uses reaction field replace reaction field
+            # of the reference system to allow comparisons.
+            nonbonded_force = forces.find_nonbonded_force(test_system.system)
+            if nonbonded_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic:
+                forcefactories.replace_reaction_field(test_system.system, return_copy=False,
+                                                      switch_width=factory.switch_width)
 
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            f = partial(compare_system_energies, test_system.modified_rf_system,
+            f = partial(compare_system_energies, test_system.system,
                         alchemical_system, alchemical_region, test_system.positions)
             f.description = "Testing fully interacting energy of {}".format(test_name)
             yield f
@@ -1209,29 +1225,10 @@ class TestAbsoluteAlchemicalFactory(object):
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            f = partial(check_noninteracting_energy_components, alchemical_system,
+            f = partial(check_noninteracting_energy_components, test_system.system, alchemical_system,
                         alchemical_region, test_system.positions)
             f.description = "Testing non-interacting energy of {}".format(test_name)
             yield f
-
-    def test_replace_reaction_field(self):
-        """Check that replacing reaction-field electrostatics with Custom*Force
-        yields minimal force differences with original system.
-
-        Note that we cannot test for energy consistency or energy overlap because
-        which atoms are within the cutoff will cause energy difference to vary wildly.
-
-        """
-        platform = openmm.Platform.getPlatformByName('Reference')
-        factory = AbsoluteAlchemicalFactory(alchemical_rf_treatment='switched', switch_width=None)
-        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-            if (test_system.system.getNumForces() != test_system.modified_rf_system.getNumForces()):
-                modified_rf_system = factory.replace_reaction_field(test_system.system)
-                # Make sure positions are not at minimum
-                positions = generate_new_positions(test_system.system, test_system.positions)
-                f = partial(compare_system_forces, test_system.system, modified_rf_system, positions, name=test_name, platform=platform)
-                f.description = "Testing replace_reaction_field on system {}".format(test_name)
-                yield f
 
     @attr('slow')
     def test_fully_interacting_energy_components(self):
@@ -1242,10 +1239,8 @@ class TestAbsoluteAlchemicalFactory(object):
                             if 'Explicit' in test_name]
         for test_name in test_cases_names:
             test_system, alchemical_system, alchemical_region = self.test_cases[test_name]
-            # We have to compare shifted rf system with original system because test cannot handle
-            # re-coded reaction-field forces with c_rf = 0
-            f = partial(check_interacting_energy_components, test_system.system, test_system.shifted_rf_alchemical_system,
-                    alchemical_region, test_system.positions)
+            f = partial(check_interacting_energy_components, test_system.system, alchemical_system,
+                        alchemical_region, test_system.positions)
             f.description = "Testing energy components of %s..." % test_name
             yield f
 
@@ -1267,10 +1262,12 @@ class TestAbsoluteAlchemicalFactory(object):
         for platform in platforms:
             GLOBAL_ALCHEMY_PLATFORM = platform
             for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
-                f = partial(compare_system_energies, test_system.modified_rf_system, alchemical_system, alchemical_region, test_system.positions)
+                f = partial(compare_system_energies, test_system.system, alchemical_system,
+                            alchemical_region, test_system.positions)
                 f.description = "Test fully interacting energy of {} on {}".format(test_name, platform.getName())
                 yield f
-                f = partial(check_noninteracting_energy_components, alchemical_system, alchemical_region, test_system.positions)
+                f = partial(check_noninteracting_energy_components, test_system.system, alchemical_system,
+                            alchemical_region, test_system.positions)
                 f.description = "Test non-interacting energy of {} on {}".format(test_name, platform.getName())
                 yield f
 
@@ -1284,9 +1281,81 @@ class TestAbsoluteAlchemicalFactory(object):
             #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
-            f = partial(overlap_check, test_system.modified_rf_system, alchemical_system, test_system.positions,
+            f = partial(overlap_check, test_system.system, alchemical_system, test_system.positions,
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
+            yield f
+
+
+class TestDispersionlessAlchemicalFactory(object):
+    """
+    Only test overlap for dispersionless alchemical factory, since energy agreement
+    will be poor.
+    """
+    @classmethod
+    def setup_class(cls):
+        """Create test systems and shared objects."""
+        cls.define_systems()
+        cls.define_regions()
+        cls.generate_cases()
+
+    @classmethod
+    def define_systems(cls):
+        """Create test systems and shared objects."""
+        cls.test_systems = dict()
+        cls.test_systems['LennardJonesFluid with dispersion correction'] = \
+            testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
+
+    @classmethod
+    def define_regions(cls):
+        """Create shared AlchemicalRegions for test systems in cls.test_regions."""
+        cls.test_regions = dict()
+        cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
+
+    @classmethod
+    def generate_cases(cls):
+        """Generate all test cases in cls.test_cases combinatorially."""
+        cls.test_cases = dict()
+        factory = AbsoluteAlchemicalFactory(disable_alchemical_dispersion_correction=True)
+
+        # We generate all possible combinations of annihilate_sterics/electrostatics
+        # for each test system. We also annihilate bonds, angles and torsions every
+        # 3 test cases so that we test it at least one for each test system and for
+        # each combination of annihilate_sterics/electrostatics.
+        n_test_cases = 0
+        for test_system_name, test_system in cls.test_systems.items():
+
+            # Find standard alchemical region.
+            for region_name, region in cls.test_regions.items():
+                if region_name in test_system_name:
+                    break
+            assert region_name in test_system_name
+
+            # Create all combinations of annihilate_sterics.
+            for annihilate_sterics in itertools.product((True, False), repeat=1):
+                region = region._replace(annihilate_sterics=annihilate_sterics,
+                                         annihilate_electrostatics=True)
+
+                # Create test name.
+                test_case_name = test_system_name[:]
+                if annihilate_sterics:
+                    test_case_name += ', annihilated sterics'
+
+                # Pre-generate alchemical system
+                alchemical_system = factory.create_alchemical_system(test_system.system, region)
+                cls.test_cases[test_case_name] = (test_system, alchemical_system, region)
+
+                n_test_cases += 1
+
+    def test_overlap(self):
+        """Tests overlap between reference and alchemical systems."""
+        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
+            #cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
+            #                                           test_name + '.pickle')
+            cached_trajectory_filename = None
+            f = partial(overlap_check, test_system.system, alchemical_system, test_system.positions,
+                        cached_trajectory_filename=cached_trajectory_filename, name=test_name)
+            f.description = "Testing reference/alchemical overlap for no alchemical dispersion {}".format(test_name)
             yield f
 
 
@@ -1662,6 +1731,9 @@ class TestAlchemicalState(object):
         # The serialized system is standard.
         serialization = utils.serialize(compound_state)
         serialized_standard_system = serialization['thermodynamic_state']['standard_system']
+        # Decompress the serialized_system
+        serialized_standard_system = zlib.decompress(serialized_standard_system).decode(
+            states.ThermodynamicState._ENCODING)
         assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
 
         # The object is deserialized correctly.

@@ -14,7 +14,7 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.10.1"
+VERSION = "0.12.2"
 ISRELEASED = False
 __version__ = VERSION
 ########################
@@ -22,7 +22,7 @@ CLASSIFIERS = """\
 Development Status :: 3 - Alpha
 Intended Audience :: Science/Research
 Intended Audience :: Developers
-License :: OSI Approved :: Lesser GNU Public License (LGPL)
+License :: OSI Approved :: MIT License
 Programming Language :: Python
 Programming Language :: Python :: 3
 Topic :: Scientific/Engineering :: Bio-Informatics
@@ -164,14 +164,14 @@ setup(
     description=DOCLINES[0],
     long_description="\n".join(DOCLINES[2:]),
     version=__version__,
-    license='LGPL',
+    license='MIT',
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
     packages=find_packages(),
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
-    install_requires=['numpy', 'scipy', 'openmm', 'parmed'],
+    install_requires=['numpy', 'scipy', 'openmm', 'parmed', 'mdtraj'],
     tests_requires=['nose', 'pymbar'],
     zip_safe=False,
     scripts=[],

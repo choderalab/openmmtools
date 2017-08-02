@@ -1,5 +1,25 @@
 #!/usr/bin/env python
 
+"""
+
+COPYRIGHT AND LICENSE
+
+@author John D. Chodera <jchodera@gmail.com>
+
+All code in this repository is released under the MIT License.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the MIT License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the MIT License for more details.
+
+You should have received a copy of the MIT License along with this program.
+
+"""
+
+
 # =============================================================================
 # MODULE DOCSTRING
 # =============================================================================
@@ -82,27 +102,6 @@ the DummyCache.
 
 >>> dummy_cache = cache.DummyContextCache(platform=reference_platform)
 >>> ghmc_move = GHMCMove(context_cache=dummy_cache)
-
-
-
-
-COPYRIGHT AND LICENSE
-
-@author John D. Chodera <jchodera@gmail.com>
-
-All code in this repository is released under the GNU General Public License.
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
@@ -360,7 +359,7 @@ class MCMCSampler(object):
         # Retrieve data.
         self.sampler_state.update_from_context(context)
 
-        timer.report_timing()
+        #timer.report_timing()
 
 # =============================================================================
 # MCMC MOVE CONTAINERS
@@ -727,8 +726,8 @@ class BaseIntegratorMove(object):
         timer.start("{}: Context request".format(move_name))
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
-        logger.debug("{}: Context obtained, platform is {}".format(
-            move_name, context.getPlatform().getName()))
+        #logger.debug("{}: Context obtained, platform is {}".format(
+        #    move_name, context.getPlatform().getName()))
 
         # Perform the integration.
         for attempt_counter in range(self.n_restart_attempts + 1):
@@ -785,7 +784,7 @@ class BaseIntegratorMove(object):
         sampler_state.update_from_context(context_state)
         timer.stop("{}: update sampler state".format(move_name))
 
-        timer.report_timing()
+        #timer.report_timing()
 
     @abc.abstractmethod
     def _get_integrator(self, thermodynamic_state):
@@ -962,7 +961,7 @@ class MetropolizedMove(object):
 
         # Print timing information.
         timer.stop(benchmark_id)
-        timer.report_timing()
+        #timer.report_timing()
 
     def __getstate__(self):
         if self.context_cache is None:

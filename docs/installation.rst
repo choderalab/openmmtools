@@ -43,7 +43,7 @@ You can install the latest stable release build of openmmtools via the ``conda``
 
 .. code-block:: none
 
-   $ conda config --add channels omnia
+   $ conda config --add channels omnia --add channels conda-forge
    $ conda install openmmtools
 
 This version is recommended for all users not actively developing new algorithms for alchemical free energy calculations.
@@ -59,7 +59,7 @@ The bleeding-edge, absolute latest, very likely unstable development build of op
 
 .. code-block:: bash
 
-   $ conda config --add channels omnia
+   $ conda config --add channels omnia --add channels conda-forge
    $ conda install openmmtools-dev
 
 .. warning:: Development builds may be unstable and are generally subjected to less testing than releases.  Use at your own risk!
