@@ -2,64 +2,27 @@
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/70knpvcgvmah2qin?svg=true)](https://ci.appveyor.com/project/jchodera/openmmtools)
 [![Anaconda Badge](https://anaconda.org/omnia/openmmtools/badges/version.svg)](https://anaconda.org/omnia/openmmtools)
 [![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
+[![ReadTheDocs Badge](https://readthedocs.org/projects/openmmtools/badge/?version=latest)](http://openmmtools.readthedocs.io/en/latest/?badge=latest)
+[![Zenodo DOI Badge](https://zenodo.org/badge/25416166.svg)](https://zenodo.org/badge/latestdoi/25416166)
 
-# Various Python tools for OpenMM
+## OpenMMTools
 
-## Integrators
+A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation engine.
 
-This repository contains a number of additional integrators for OpenMM in `openmmtools.integrators`, including
-* `MTSIntegrator` - a multiple timestep integrator
-* `DummyIntegrator` - a "dummy" integrator that does not update positions
-* `GradientDescentMinimizationIntegrator` - a simple gradient descent minimizer (without line search)
-* `VelocityVerletIntegrator` - a velocity Verlet integrator
-* `AndersenVelocityVerletIntegrator` - a velocity Verlet integrator with Andersen thermostat using per-particle collisions
-* `MetropolisMonteCarloIntegrator` - a Metropolis Monte Carlo integrator that uses Gaussian displacement trials
-* `HMCIntegrator` - a hybrid Monte Carlo (HMC) integrator
-* `GHMCIntegrator` - a generalized hybrid Monte Carlo (GHMC) integrator
-* `VVVRIntegrator` - a velocity Verlet with velocity randomization (VVVR) integrator
+`openmmtools` is a Python library layer that sits on top of [OpenMM](http://openmm.org) to provide access to a variety of useful tools for building full-featured molecular simulation packages.
 
-## Test system suite
+Features include:
 
-The `openmmtools.testsystems` module contains a large suite of test systems---including many with simple exactly-computable properties---that can be used to test molecular simulation algorithms
+ - high-quality Langevin integrators, including [g-BAOAB](http://rspa.royalsocietypublishing.org/content/472/2189/20160138), [VVVR](http://pubs.acs.org/doi/abs/10.1021/jp411770f), and other splittings
+ - nonequilibrium integrators for free energy calculations or [nonequilibrium candidate Monte Carlo (NCMC)](http://dx.doi.org/10.1073/pnas.1106094108)
+ - an extensible Markov chain Monte Carlo (MCMC) framework for molecular simulations
+ - enhanced sampling methods, including replica-exchange (REMD) and self-adjusted mixture sampling (SAMS)
+ - factories for generating [alchemically-modified](http://alchemistry.org) systems for absolute and relative free energy calculations
+ - a suite of test systems for benchmarking, validation, and debugging
+ - user-friendly storage interface layer to remove requirement that user know how to store all their data-types on disk 
 
-## Markov chain Monte Carlo proposal schemes and move compositions
-An implementation of an `MCMCMove` encodes how to propagate an OpenMM `System` to generate a new sample. Different `MCMCMove`s can be combined for more advanced schemes.
-- `LangevinDynamicsMove`: Langevin dynamics segment as a (pseudo) Monte Carlo move (WARNING: Does not preserve the true target distribution.).
-- `HMCMove`: Assigns velocities from the Maxwell-Boltzmann distribution and propagate through velocity Verlet steps.
-- `GHMCMove`: Generalized hybrid Monte Carlo Markov chain Monte Carlo.
-- `MonteCarloBarostatMove`: Attempts to update the box volume using Metropolis-Hastings Monte Carlo updates.
-- `SequenceMove`: Combine multiple `MCMCMove`s to apply in sequence at each iteration.
-- `WeightedMove`: At each iteration, select one `MCMCMove`s to apply from a set with given probability.
+See the [documentation](http://openmmtools.readthedocs.io) at [ReadTheDocs](http://openmmtools.readthedocs.io).
 
-## States
+#### License
 
-The module `openmmtools.states` contains classes to maintain a consistent state of the simulation.
-- `ThermodynamicState`: Represent and manipulate the thermodynamic state of OpenMM `System`s and `Context`s.
-- `SamplerState`: Represent and cache the state of the simulation that changes when the `System` is integrated.
-- `CompoundThermodynamicState`: Extend the `ThermodynamicState` to handle parameters other than temperature and pressure through the implementations of the `IComposableState` abstract class.
-
-## Cache
-
-The module `openmmtools.cache` implements a shared LRU cache for `Context` objects that tries to minimize the number of `Context` in memory at the same time.
-- `LRUCache`: A simple LRU cache with a dictionary-like interface. It supports a maximum capacity and expiration.
-- `ContextCache`: A LRU cache for OpenMM `Context` objects.
-- `global_context_cache`: A shared `ContextCache` that minimizes the number of `Context` creations when employing `MCMCMove`s.
-
-## OpenMM testing scripts
-
-`scripts/` contains a script that may be useful in testing your OpenMM installation is installed:
-
-* `test-openmm-platforms` will test the various platforms available to OpenMM to ensure that all systems in `openmmtools.testsystems` give consistent potential energies.
-If differences in energies in excess of `ENERGY_TOLERANCE` (default: 0.06 kcal/mol) are detected, these systems will be serialized to XML for further debugging.
-
-This is installed onto the command line when the repository is installed.
-
-## Storage
-
-This module `openmmtools.storage` provides a user-friendly storage IO interface to store data to disk. The primary 
-function of this module is to remove the need for the user to define how to format and configure Python variables and 
-OpenMM Quantities to and from the disk. The module is extensible to any type of data a user wants. Currently supports 
-NetCDF storage types for now.
-- `StorageIODriver`: Abstract extendable class to write format-specific IO drivers such as the `NetCDFIODriver`
-- `NetCDFIODriver`: User-configurable IO driver for NetCDF files. Handles built in Python types and `simtk.unit.Quantity`'s
-- `StorageInterface`: A layer which runs on top of a provided `StorageIODriver` to create an way for users to interface with the disk with as minimal effort as possible. 
+OpenMMTools is distributed under the MIT License.

@@ -1,0 +1,6 @@
+source leaprc.water.tip3p
+source leaprc.DNA.OL15
+dna = loadpdb 4c64_no_mg.pdb
+solvateBox dna TIP3PBOX 9
+saveAmberParm dna prmtop inpcrd
+quit

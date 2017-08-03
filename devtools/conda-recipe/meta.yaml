@@ -18,7 +18,7 @@ requirements:
     - setuptools
     - openmm
     - parmed
-    - tqdm
+    - mdtraj
     - netcdf4
     - pyyaml
 
@@ -31,7 +31,7 @@ requirements:
     - six
     - openmm
     - parmed
-    - tqdm
+    - mdtraj
     - netcdf4
     - pyyaml
 
@@ -40,10 +40,9 @@ test:
   requires:
     - nose
     - pymbar
-    - tqdm
   imports:
     - openmmtools
 
 about:
   home: https://github.com/choderalab/openmmtools
-  license: GNU Lesser General Public License v2 or later (LGPLv2+)
+  license: MIT License

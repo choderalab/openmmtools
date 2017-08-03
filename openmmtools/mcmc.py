@@ -1,5 +1,25 @@
 #!/usr/bin/env python
 
+"""
+
+COPYRIGHT AND LICENSE
+
+@author John D. Chodera <jchodera@gmail.com>
+
+All code in this repository is released under the MIT License.
+
+This program is free software: you can redistribute it and/or modify it under
+the terms of the MIT License.
+
+This program is distributed in the hope that it will be useful, but WITHOUT ANY
+WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
+PARTICULAR PURPOSE.  See the MIT License for more details.
+
+You should have received a copy of the MIT License along with this program.
+
+"""
+
+
 # =============================================================================
 # MODULE DOCSTRING
 # =============================================================================
@@ -82,27 +102,6 @@ the DummyCache.
 
 >>> dummy_cache = cache.DummyContextCache(platform=reference_platform)
 >>> ghmc_move = GHMCMove(context_cache=dummy_cache)
-
-
-
-
-COPYRIGHT AND LICENSE
-
-@author John D. Chodera <jchodera@gmail.com>
-
-All code in this repository is released under the GNU General Public License.
-
-This program is free software: you can redistribute it and/or modify it under
-the terms of the GNU General Public License as published by the Free Software
-Foundation, either version 3 of the License, or (at your option) any later
-version.
-
-This program is distributed in the hope that it will be useful, but WITHOUT ANY
-WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A
-PARTICULAR PURPOSE.  See the GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License along with
-this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
@@ -289,7 +288,7 @@ class MCMCSampler(object):
         # Retrieve data.
         self.sampler_state.update_from_context(context)
 
-        timer.report_timing()
+        #timer.report_timing()
 
 
 # =============================================================================
@@ -534,9 +533,16 @@ class IntegratorMoveError(Exception):
 
         # Serialize MCMCMove.
         import json
+
+        # Create class to encode quantities
+        class quantity_encoder(json.JSONEncoder):
+            def default(self, o):
+                if type(o) in [unit.quantity.Quantity, unit.unit.Unit]:
+                    return str(o)
+                super(quantity_encoder, self).default(o)
         serialized_move = utils.serialize(self.move)
         with open(os.path.join(path_files_prefix + '-move.json'), 'w') as f:
-            json.dump(serialized_move, f)
+            json.dump(serialized_move, f, cls=quantity_encoder)
 
         # Serialize Context.
         openmm_state = self.context.getState(getPositions=True, getVelocities=True,
@@ -565,6 +571,9 @@ class BaseIntegratorMove(object):
     context_cache : openmmtools.cache.ContextCache, optional
         The ContextCache to use for Context creation. If None, the global cache
         openmmtools.cache.global_context_cache is used (default is None).
+    reassign_velocities : bool, optional
+        If True, the velocities will be reassigned from the Maxwell-Boltzmann
+        distribution at the beginning of the move (default is False).
     restart_attempts : int, optional
         When greater than 0, if after the integration there are NaNs in energies,
         the move will restart. When the integrator has a random component, this
@@ -575,6 +584,7 @@ class BaseIntegratorMove(object):
     ----------
     n_steps : int
     context_cache : openmmtools.cache.ContextCache
+    reassign_velocities : bool
     restart_attempts : int or None
 
     Examples
@@ -592,7 +602,7 @@ class BaseIntegratorMove(object):
     ...     def _before_integration(self, context, thermodynamic_state):
     ...         print('Setting velocities')
     ...         context.setVelocitiesToTemperature(thermodynamic_state.temperature)
-    ...     def _after_integration(self, context):
+    ...     def _after_integration(self, context, thermodynamic_state):
     ...         print('Reading statistics')
     ...
     >>> alanine = testsystems.AlanineDipeptideVacuum()
@@ -605,9 +615,11 @@ class BaseIntegratorMove(object):
 
     """
 
-    def __init__(self, n_steps, context_cache=None, n_restart_attempts=0):
+    def __init__(self, n_steps, context_cache=None,
+                 reassign_velocities=False, n_restart_attempts=0):
         self.n_steps = n_steps
         self.context_cache = context_cache
+        self.reassign_velocities = reassign_velocities
         self.n_restart_attempts = n_restart_attempts
 
     def apply(self, thermodynamic_state, sampler_state):
@@ -644,29 +656,42 @@ class BaseIntegratorMove(object):
         timer.start("{}: Context request".format(move_name))
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
-        logger.debug("{}: Context obtained, platform is {}".format(
-            move_name, context.getPlatform().getName()))
+        #logger.debug("{}: Context obtained, platform is {}".format(
+        #    move_name, context.getPlatform().getName()))
 
         # Perform the integration.
         for attempt_counter in range(self.n_restart_attempts + 1):
-            sampler_state.apply_to_context(context)
 
+            # If we reassign velocities, we can ignore the ones in sampler_state.
+            sampler_state.apply_to_context(context, ignore_velocities=self.reassign_velocities)
+            if self.reassign_velocities:
+                context.setVelocitiesToTemperature(thermodynamic_state.temperature)
+
+            # Subclasses may implement _before_integration().
             self._before_integration(context, thermodynamic_state)
 
-            # Run dynamics.
-            timer.start("{}: step({})".format(move_name, self.n_steps))
-            integrator.step(self.n_steps)
-            timer.stop("{}: step({})".format(move_name, self.n_steps))
+            try:
+                # Run dynamics.
+                timer.start("{}: step({})".format(move_name, self.n_steps))
+                integrator.step(self.n_steps)
+            except Exception:
+                # Catches particle positions becoming nan during integration.
+                restart = True
+            else:
+                timer.stop("{}: step({})".format(move_name, self.n_steps))
 
-            # We get also velocities here even if we don't need them because we
-            # will recycle this State to update the sampler state object. This
-            # way we won't need a second call to Context.getState().
-            context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
-                                             enforcePeriodicBox=thermodynamic_state.is_periodic)
+                # We get also velocities here even if we don't need them because we
+                # will recycle this State to update the sampler state object. This
+                # way we won't need a second call to Context.getState().
+                context_state = context.getState(getPositions=True, getVelocities=True, getEnergy=True,
+                                                 enforcePeriodicBox=thermodynamic_state.is_periodic)
 
-            # Check for NaNs in energies.
-            potential_energy = context_state.getPotentialEnergy()
-            if np.isnan(potential_energy.value_in_unit(potential_energy.unit)):
+                # Check for NaNs in energies.
+                potential_energy = context_state.getPotentialEnergy()
+                restart = np.isnan(potential_energy.value_in_unit(potential_energy.unit))
+
+            # Restart the move if we found NaNs.
+            if restart:
                 err_msg = ('Potential energy is NaN after {} attempts of integration '
                            'with move {}'.format(attempt_counter, self.__class__.__name__))
 
@@ -682,14 +707,14 @@ class BaseIntegratorMove(object):
                 break
 
         # Subclasses can read here info from the context to update internal statistics.
-        self._after_integration(context)
+        self._after_integration(context, thermodynamic_state)
 
         # Updated sampler state.
         timer.start("{}: update sampler state".format(move_name))
         sampler_state.update_from_context(context_state)
         timer.stop("{}: update sampler state".format(move_name))
 
-        timer.report_timing()
+        #timer.report_timing()
 
     @abc.abstractmethod
     def _get_integrator(self, thermodynamic_state):
@@ -700,7 +725,7 @@ class BaseIntegratorMove(object):
         """Execute code after Context creation and before integration."""
         pass
 
-    def _after_integration(self, context):
+    def _after_integration(self, context, thermodynamic_state):
         """Execute code after integration.
 
         After this point there are no guarantees that the Context will still
@@ -714,10 +739,12 @@ class BaseIntegratorMove(object):
         else:
             context_cache_serialized = utils.serialize(self.context_cache)
         return dict(n_steps=self.n_steps, context_cache=context_cache_serialized,
+                    reassign_velocities=self.reassign_velocities,
                     n_restart_attempts=self.n_restart_attempts)
 
     def __setstate__(self, serialization):
         self.n_steps = serialization['n_steps']
+        self.reassign_velocities = serialization['reassign_velocities']
         self.n_restart_attempts = serialization['n_restart_attempts']
         if serialization['context_cache'] is None:
             self.context_cache = None
@@ -849,7 +876,7 @@ class MetropolizedMove(object):
 
         # Compute the energy of the proposed positions.
         sampler_state.positions[atom_subset] = proposed_positions
-        sampler_state.apply_to_context(context)
+        sampler_state.apply_to_context(context, ignore_velocities=True)
         proposed_energy = thermodynamic_state.reduced_potential(context)
 
         # Accept or reject with Metropolis criteria.
@@ -864,7 +891,7 @@ class MetropolizedMove(object):
 
         # Print timing information.
         timer.stop(benchmark_id)
-        timer.report_timing()
+        #timer.report_timing()
 
     def __getstate__(self):
         if self.context_cache is None:
@@ -1052,10 +1079,11 @@ class LangevinDynamicsMove(BaseIntegratorMove):
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
                  n_steps=1000, reassign_velocities=False, **kwargs):
-        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps, **kwargs)
+        super(LangevinDynamicsMove, self).__init__(n_steps=n_steps,
+                                                   reassign_velocities=reassign_velocities,
+                                                   **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
-        self.reassign_velocities = reassign_velocities
 
     def apply(self, thermodynamic_state, sampler_state):
         """Apply the Langevin dynamics MCMC move.
@@ -1078,25 +1106,17 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
-        serialization['reassign_velocities'] = self.reassign_velocities
         return serialization
 
     def __setstate__(self, serialization):
         super(LangevinDynamicsMove, self).__setstate__(serialization)
         self.timestep = serialization['timestep']
         self.collision_rate = serialization['collision_rate']
-        self.reassign_velocities = serialization['reassign_velocities']
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
         return openmm.LangevinIntegrator(thermodynamic_state.temperature,
                                          self.collision_rate, self.timestep)
-
-    def _before_integration(self, context, thermodynamic_state):
-        """Override BaseIntegratorMove._before_integration()."""
-        if self.reassign_velocities:
-            # Assign Maxwell-Boltzmann velocities.
-            context.setVelocitiesToTemperature(thermodynamic_state.temperature)
 
 
 # =============================================================================
@@ -1260,7 +1280,7 @@ class GHMCMove(BaseIntegratorMove):
                                           collision_rate=self.collision_rate,
                                           timestep=self.timestep)
 
-    def _after_integration(self, context):
+    def _after_integration(self, context, thermodynamic_state):
         """Implement BaseIntegratorMove._after_integration()."""
         integrator = context.getIntegrator()
 

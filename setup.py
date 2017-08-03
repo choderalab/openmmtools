@@ -14,7 +14,7 @@ import subprocess
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.9.4"
+VERSION = "0.13.0"
 ISRELEASED = False
 __version__ = VERSION
 ########################
@@ -22,7 +22,7 @@ CLASSIFIERS = """\
 Development Status :: 3 - Alpha
 Intended Audience :: Science/Research
 Intended Audience :: Developers
-License :: OSI Approved :: Lesser GNU Public License (LGPL)
+License :: OSI Approved :: MIT License
 Programming Language :: Python
 Programming Language :: Python :: 3
 Topic :: Scientific/Engineering :: Bio-Informatics
@@ -164,18 +164,21 @@ setup(
     description=DOCLINES[0],
     long_description="\n".join(DOCLINES[2:]),
     version=__version__,
-    license='LGPL',
+    license='MIT',
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
     packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts', 'openmmtools.storage'],
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
-    install_requires=['numpy', 'scipy', 'openmm', 'parmed', 'netCDF4', 'pyyaml'],
+    install_requires=['numpy', 'scipy', 'openmm', 'parmed', 'mdtraj', 'netCDF4', 'pyyaml'],
     tests_requires=['nose', 'pymbar', 'netCDF4', 'pyyaml'],
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,
-    entry_points={'console_scripts': ['test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main']},
+    entry_points={'console_scripts': [
+        'test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main',
+        'benchmark-alchemy = openmmtools.tests.test_alchemy:benchmark_alchemy_from_pdb',
+        ]},
     )
 check_dependencies()
