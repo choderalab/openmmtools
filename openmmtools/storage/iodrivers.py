@@ -1534,10 +1534,10 @@ class NCQuantity(NCVariableCodec):
 # NETCDF DICT YAML HANDLERS
 # =============================================================================
 
-class DictYamlLoader(yaml.CLoader):
+class _DictYamlLoader(yaml.CLoader):
     """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
     def __init__(self, *args, **kwargs):
-        super(DictYamlLoader, self).__init__(*args, **kwargs)
+        super(_DictYamlLoader, self).__init__(*args, **kwargs)
         self.add_constructor(u'!Quantity', self.quantity_constructor)
 
     @staticmethod
@@ -1548,10 +1548,10 @@ class DictYamlLoader(yaml.CLoader):
         return data_value * data_unit
 
 
-class DictYamlDumper(yaml.CDumper):
+class _DictYamlDumper(yaml.CDumper):
     """PyYAML Dumper that convert from Python -> YAML output"""
     def __init__(self, *args, **kwargs):
-        super(DictYamlDumper, self).__init__(*args, **kwargs)
+        super(_DictYamlDumper, self).__init__(*args, **kwargs)
         self.add_representer(unit.Quantity, self.quantity_representer)
 
     @staticmethod
@@ -1561,7 +1561,7 @@ class DictYamlDumper(yaml.CDumper):
         data_value = data / data_unit
         data_dump = {'QuantityUnit': str(data_unit), 'QuantityValue': data_value}
         # Uses "self (DictYamlDumper)" as the dumper to allow nested !Quantity types
-        return yaml.Dumper.represent_mapping(dumper, u'!Quantity', data_dump)
+        return dumper.represent_mapping(u'!Quantity', data_dump)
 
 
 class NCDict(NCScalar):
@@ -1574,17 +1574,17 @@ class NCDict(NCScalar):
         decoded_string = nc_string_decoder(nc_variable)
         # Handle array type
         try:
-            output = yaml.load(decoded_string, Loader=DictYamlLoader)
-        except AttributeError:  # Appended data
+            output = yaml.load(decoded_string, Loader=_DictYamlLoader)
+        except (AttributeError, TypeError):  # Appended data
             n_entries = decoded_string.shape[0]
             output = np.empty(n_entries, dtype=dict)
             for n in range(n_entries):
-                output[n] = yaml.load(decoded_string[n, 0], Loader=DictYamlLoader)
+                output[n] = yaml.load(str(decoded_string[n, 0]), Loader=_DictYamlLoader)
         return output
 
     @staticmethod
     def _nc_dict_encoder(data):
-        dump_options = {'Dumper': DictYamlDumper, 'line_break': '\n', 'indent': 4}
+        dump_options = {'Dumper': _DictYamlDumper, 'line_break': '\n', 'indent': 4}
         data_as_string = yaml.dump(data, **dump_options)
         packaged_string = nc_string_encoder(data_as_string)
         return packaged_string
