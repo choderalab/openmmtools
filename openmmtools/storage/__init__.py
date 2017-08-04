@@ -10,17 +10,17 @@ StorageIODriver
 ---------------
 
 The StorageIODriver is the abstract base class which handles IO operations on disk with the real data. Derived classes
- from this handle the specific storage medium, like NetCDF. This class tracks all the known variables, and where they
- are on the disk. However, because the abstract class cannot know how the derived class actually interacts with the
- disk, it is up to the derived class to know how each variable writes to disk.
+from this handle the specific storage medium, like NetCDF. This class tracks all the known variables, and where they
+are on the disk. However, because the abstract class cannot know how the derived class actually interacts with the
+disk, it is up to the derived class to know how each variable writes to disk.
 
 The NetCDFIODriver is the derived StorageIODriver for NetCDF storage. The NetCDFIODriver handles the top level file
- operations and keeps track of where each variable and group (equivalent to a directory) is on the disk. Read/Write
- operations are handed off to the individual NCVariableTypeHandler classes which interpret and write to file.
+operations and keeps track of where each variable and group (equivalent to a directory) is on the disk. Read/Write
+operations are handed off to the individual NCVariableCodec classes which interpret and write to file.
 
-The NCVariableTypeHandler is an abstract base class which defines how data is passed to and from the disk. Its derived
+The NCVariableCodec is an abstract base class which defines how data is passed to and from the disk. Its derived
 classes handled interpreting the specific types of data we want to store and read from disk, e.g. ints, lists np.array,
-etc. Each derived NCVariableTypeHandler enacts is own codec to know how to format the data type for storage on disk,
+etc. Each derived NCVariableCodec enacts is own codec to know how to format the data type for storage on disk,
 and how to read that data back from disk, converting it to the correct type.
 
 The StorageIODriver's and the StorageInterface work on the principal of not knowing or caring what is on the disk

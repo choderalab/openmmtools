@@ -139,7 +139,7 @@ class StorageInterfaceDirVar(object):
 
         Parameters
         ----------
-        data
+        data : any data type
             This is what will be written to disk, the data will be processed by the STORAGESYSTEM as to how to actually
             handle the data once the units have been stripped out and assigned to this instance of SIDV.
 
@@ -231,7 +231,7 @@ class StorageInterfaceDirVar(object):
         -------
         variable_pointer : None or storage_driver specific unit of storage
             Returns None if this instance is a directory, or if its functionality has not been determined yet (this
-                includes the variable not being assigned yet)
+            includes the variable not being assigned yet).
             Returns the storage_driver specific variable that this instance is bound to once assigned
 
         """
@@ -241,14 +241,14 @@ class StorageInterfaceDirVar(object):
     def directory(self):
         """
         Checks if the object can be used as a directory for accepting other SIDV objects. Once this is True or bound,
-        the .write, .append, and .read functions are locked out.
+        the ``.write``, ``.append``, and ``.read`` functions are locked out.
 
         Returns
         -------
         directory_pointer : None, True, or storage_driver specific directory of storage
             Returns None if this instance is a variable, or if its functionality has not been determined yet.
-            Returns True if this SIDV will be a directory, but is not yet bound.
-                i.e. has additional SIDV children spawned by __getattr__ method.
+            Returns True if this SIDV will be a directory, but is not yet bound. i.e. has additional SIDV children
+            spawned by ``__getattr__`` method.
             Returns the storage_driver specific directory that this instance is bound to once assigned
 
         """

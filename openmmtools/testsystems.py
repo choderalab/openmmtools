@@ -1183,7 +1183,7 @@ class DiatomicFluid(TestSystem):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
         Parameters
-        ---------
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 
@@ -1480,7 +1480,7 @@ class HarmonicOscillatorArray(TestSystem):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
         Parameters
-        ---------
+        ----------
         state : ThermodynamicState with temperature defined
             The thermodynamic state at which the property is to be computed.
 

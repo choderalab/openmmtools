@@ -16,12 +16,12 @@ with the disk, it is up to the derived class to know how each variable writes to
 
 The :class:`NetCDFIODriver` is the derived :class:`StorageIODriver` for NetCDF storage. The NetCDFIODriver handles the
 top level file operations and keeps track of where each variable and group (equivalent to a directory) is on the disk.
-Read/Write operations are handed off to the individual :class:`NCVariableTypeHandler` classes which interpret and write
+Read/Write operations are handed off to the individual :class:`NCVariableCodec` classes which interpret and write
 to file.
 
-The :class:`NCVariableTypeHandler` is an abstract base class which defines how data is passed to and from the disk. Its
+The :class:`NCVariableCodec` is an abstract base class which defines how data is passed to and from the disk. Its
 derived classes handled interpreting the specific types of data we want to store and read from disk, e.g. ``ints``,
-``lists``, ``np.arrays`` etc. Each derived :class:`NCVariableTypeHandler` enacts is own codec to know how to format the
+``lists``, ``np.arrays`` etc. Each derived :class:`NCVariableCodec` enacts is own codec to know how to format the
 data type for storage on disk,
 and how to read that data back from disk, converting it to the correct type.
 
@@ -38,7 +38,7 @@ process relative to the main code.
 
     StorageIODriver
     NetCDFIODriver
-    NCVariableTypeHandler
+    NCVariableCodec
 
 .. _binding:
 

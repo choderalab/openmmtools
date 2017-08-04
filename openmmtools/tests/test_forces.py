@@ -78,7 +78,7 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
     """Check that the forces of reference and modified systems are close.
 
     Parameters
-    ---------
+    ----------
     reference_system : simtk.openmm.System
         Reference System
     alchemical_system : simtk.openmm.System

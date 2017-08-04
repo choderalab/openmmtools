@@ -600,21 +600,22 @@ class Codec(ABC):
 class NCVariableCodec(Codec):
     """
     Pointer class which provides instructions on how to handle a given nc_variable
-    """
-    def __init__(self, parent_driver, target, storage_object=None):
-        """
-        Bind to a given nc_storage_object on ncfile with given final_target_name,
-        If no nc_storage_object is None, it defaults to the top level ncfile
-        Parameters
-        ----------
-        parent_driver : Parent NetCDF driver
-            Class which can manipulate the NetCDF file at the top level for dimension creation and meta handling
-        target : string
-            String of the name of the object. Not explicitly a variable nor a group since the object could be either
-        storage_object : NetCDF file or NetCDF group, optional, Default to ncfile on parent_driver
-            Object the variable/object will be written onto
 
-        """
+    Bind to a given nc_storage_object on ncfile with given final_target_name,
+    If no nc_storage_object is None, it defaults to the top level ncfile
+
+    Parameters
+    ----------
+    parent_driver : Parent NetCDF driver
+        Class which can manipulate the NetCDF file at the top level for dimension creation and meta handling
+    target : string
+        String of the name of the object. Not explicitly a variable nor a group since the object could be either
+    storage_object : NetCDF file or NetCDF group, optional, Default to ncfile on parent_driver
+        Object the variable/object will be written onto
+
+    """
+
+    def __init__(self, parent_driver, target, storage_object=None):
         super(NCVariableCodec, self).__init__(parent_driver, target)
         # Eventual NetCDF object this class will be bound to
         self._bound_target = None
