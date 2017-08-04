@@ -19,7 +19,9 @@ requirements:
     - openmm
     - parmed
     - mdtraj
-    
+    - netcdf4
+    - pyyaml
+
   run:
     - python
     - cython
@@ -30,6 +32,9 @@ requirements:
     - openmm
     - parmed
     - mdtraj
+    - netcdf4
+    - pyyaml
+
 
 test:
   requires:

@@ -19,6 +19,7 @@ Features include:
  - enhanced sampling methods, including replica-exchange (REMD) and self-adjusted mixture sampling (SAMS)
  - factories for generating [alchemically-modified](http://alchemistry.org) systems for absolute and relative free energy calculations
  - a suite of test systems for benchmarking, validation, and debugging
+ - user-friendly storage interface layer to remove requirement that user know how to store all their data-types on disk 
 
 See the [documentation](http://openmmtools.readthedocs.io) at [ReadTheDocs](http://openmmtools.readthedocs.io).
 

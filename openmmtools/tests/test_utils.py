@@ -83,6 +83,23 @@ def test_is_quantity_close():
         is_quantity_close(300*unit.kelvin, 1*unit.atmosphere)
 
 
+def test_quantity_from_string():
+    """Test that quantities can be derived from strings"""
+    test_strings = [
+        ('3', 3.0),  # Handle basic float
+        ('meter', unit.meter),  # Handle basic unit object
+        ('300 * kelvin', 300 * unit.kelvin),  # Handle standard Quantity
+        ('" 0.3 * kilojoules_per_mole / watt**3"', 0.3 * unit.kilojoules_per_mole / unit.watt ** 3), # Handle division, exponent, nested string
+        ('1*meter / (4*second)', 0.25 * unit.meter / unit.second),  # Handle compound math and parenthesis
+        ('1 * watt**2 /((1* kelvin)**3 / gram)', 1 * (unit.watt ** 2) * (unit.gram) / (unit.kelvin ** 3)), # Handle everything
+        ('/watt', unit.watt ** -1)  # Handle special "inverse unit" case
+    ]
+
+    for test_string in test_strings:
+        input_string, expected_result = test_string
+        assert quantity_from_string(input_string) == expected_result
+
+
 # =============================================================================
 # TEST SERIALIZATION UTILITIES
 # =============================================================================
