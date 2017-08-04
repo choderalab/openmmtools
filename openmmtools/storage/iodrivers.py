@@ -93,19 +93,21 @@ class StorageIODriver(ABC):
     Abstract class to define the basic functions any storage driver needs to read/write to the disk.
     The specific driver for a type of storage should be a subclass of this with its own
     encoders and decoders for specific file types.
+
+    Each type of variable codec should subclass :class:`Codec` which has the minimum ``write``, ``read``, and ``append``
+    methods
+
+    Parameters
+    ----------
+    file_name : string
+        Name of the file to read/write to of a given storage type
+    access_mode : string or None, Default None, accepts 'w', 'r', 'a'
+        Define how to access the file in either write, read, or append mode
+        None should behave like Python "a+" in which a file is created if not present, or opened in append if it is.
+        How this is implemented is up to the subclass
+
     """
     def __init__(self, file_name, access_mode=None):
-        """
-
-        Parameters
-        ----------
-        file_name : string
-            Name of the file to read/write to of a given storage type
-        access_mode : string or None, Default None, accepts 'w', 'r', 'a'
-            Define how to access the file in either write, read, or append mode
-            None should behave like Python "a+" in which a file is created if not present, or opened in append if it is.
-            How this is implemented is up to the subclass
-        """
         # Internal map from Python Type <-> De/Encoder which handles the actual encoding and decoding of the data
         self._codec_type_maps = {}
         self._variables = {}
@@ -190,12 +192,12 @@ class StorageIODriver(ABC):
         raise NotImplementedError("get_directory method has not been implemented!")
 
     @abc.abstractmethod
-    def close_down(self):
+    def close(self):
         """
         Instruct how to safely close down the file.
 
         """
-        raise NotImplementedError("close_down method has not been implemented!")
+        raise NotImplementedError("close method has not been implemented!")
 
     @abc.abstractmethod
     def add_metadata(self, name, value, path=''):
@@ -470,7 +472,7 @@ class NetCDFIODriver(StorageIODriver):
         if self.ncfile is not None:
             self.ncfile.sync()
 
-    def close_down(self):
+    def close(self):
         if self.ncfile is not None:
             # Ensure the netcdf file closes down
             self.sync()
@@ -520,12 +522,82 @@ class NetCDFIODriver(StorageIODriver):
         # Counter for auto-creating infinite iterable dimensions
         self._auto_iterable_count = 0
 
+
 # =============================================================================
 # ABSTRACT TYPE Codecs
 # =============================================================================
 
+class Codec(ABC):
+    """
+    Basic abstract codec class laying out all the methods which must be implemented in every Codec.
+    All codec need a ``write``, ``read``, and ``append`` method.
 
-class NCVariableCodec(ABC):
+    Parameters
+    ----------
+    parent_driver : Parent StorageIODriver driver
+        Driver this instance of the codec is bound to which can manipulate the top level file and possible meta
+        data handling
+    target : string
+        String of the name of the object. Not explicitly a variable nor a group since the object could be either
+    """
+
+    def __init__(self, parent_driver, target):
+        self._target = target
+        # Target of the top level driver which houses all the variables
+        self._parent_driver = parent_driver
+        # Buffer to store metadata if assigned before binding
+        self._metadata_buffer = {}
+
+    @abc.abstractmethod
+    def read(self):
+        """
+        Return the property read from the file
+
+        Returns
+        -------
+        Given property read from the file and cast into the correct Python data type
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def write(self, data, at_index=None):
+        """
+        Tell this writer how to write to the file given the final object that it is bound to
+
+        Alternately, tell a variable which is normally appended to to write a specific entry on the index at_index
+
+        Parameters
+        ----------
+        data : any data you wish to write
+        at_index : None or Int, optional, default=None
+            Specify the index of a variable created by append to write specific data at the index entry.
+            When None, this option is ignored
+            The integer of at_index must be <= to the size of the appended data
+        """
+        raise NotImplementedError()
+
+    @abc.abstractmethod
+    def append(self, data):
+        """
+        Tell this codec how to append to the file given the final object that it is bound to. This should allways write
+        to the end of the currently existing data.
+
+        Some :class:`StorageIODriver``'s may not be able to append due to the type of storage medium. In this case, this
+        method should be implemented and raise a ``NotImplementedError`` or ``RuntimeError`` with an appropriate
+        message
+
+        To overwrite data at a specific index of the already appended data, use the :func:`write`` method with the
+        ``at_index`` keyword.
+
+        Parameters
+        ----------
+        data : any data you wish to append
+
+        """
+        raise NotImplementedError
+
+
+class NCVariableCodec(Codec):
     """
     Pointer class which provides instructions on how to handle a given nc_variable
     """
@@ -543,18 +615,14 @@ class NCVariableCodec(ABC):
             Object the variable/object will be written onto
 
         """
-        self._target = target
+        super(NCVariableCodec, self).__init__(parent_driver, target)
         # Eventual NetCDF object this class will be bound to
         self._bound_target = None
-        # Target of the top level driver which houses all the variables
-        self._parent_driver = parent_driver
         # Target object where the data read/written to this instance resides
         # Similar to the "directory" in a file system
         if storage_object is None:
             storage_object = self._parent_driver.ncfile
         self._storage_object = storage_object
-        # Buffer to store metadata if assigned before binding
-        self._metadata_buffer = {}
 
     @abc.abstractproperty  # TODO: Depreciate when we move to Python 3 fully with @abc.abstractmethod + @property
     def dtype(self):
@@ -730,9 +798,6 @@ class NCVariableCodec(ABC):
             When None, this option is ignored
             The integer of at_index must be <= to the size of the appended data
 
-        Returns
-        -------
-
         """
         # Check type
         if not isinstance(data, self.dtype):
@@ -758,10 +823,7 @@ class NCVariableCodec(ABC):
 
         Parameters
         ----------
-        data
-
-        Returns
-        -------
+        data :
 
         """
         # Check type
@@ -1472,7 +1534,7 @@ class NCQuantity(NCVariableCodec):
 # NETCDF DICT YAML HANDLERS
 # =============================================================================
 
-class DictYamlLoader(yaml.Loader):
+class DictYamlLoader(yaml.CLoader):
     """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
     def __init__(self, *args, **kwargs):
         super(DictYamlLoader, self).__init__(*args, **kwargs)
@@ -1486,7 +1548,7 @@ class DictYamlLoader(yaml.Loader):
         return data_value * data_unit
 
 
-class DictYamlDumper(yaml.Dumper):
+class DictYamlDumper(yaml.CDumper):
     """PyYAML Dumper that convert from Python -> YAML output"""
     def __init__(self, *args, **kwargs):
         super(DictYamlDumper, self).__init__(*args, **kwargs)

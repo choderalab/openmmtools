@@ -122,7 +122,7 @@ def generic_type_codec_check(input_data, with_append=True):
                 assert np.all(data_append_out[0] == input_data)
                 assert np.all(data_append_out[1] == input_data)
         # Delete the IO driver (and close the ncfile in the process)
-        nc_io_driver.close_down()
+        nc_io_driver.close()
         del data_write, data_write_out
         if with_append:
             del data_append, data_append_out

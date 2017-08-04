@@ -117,7 +117,7 @@ def test_unbound_read():
         si = StorageInterface(driver)
         input_data = 4*unit.kelvin
         si.four.write(input_data)
-        si.storage_driver.close_down()
+        si.storage_driver.close()
         del si
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
@@ -139,7 +139,7 @@ def test_directory_creation():
             my_dir = 'dir{}'.format(i)
             assert my_dir in target.groups
             target = target.groups[my_dir]
-        si.storage_driver.close_down()
+        si.storage_driver.close()
         del si
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
@@ -160,7 +160,7 @@ def test_multi_variable_creation():
         si.dir0.var0.write(input_data)
         si.dir0.var1.append(input_data)
         si.dir0.var1.append(input_data)
-        si.storage_driver.close_down()
+        si.storage_driver.close()
         del si, driver
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
