@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 # ============================================================================================
 # MODULE DOCSTRING
 # ============================================================================================
@@ -669,6 +670,205 @@ class AndersenVelocityVerletIntegrator(ThermostatedIntegrator):
         self.addConstrainPositions()
         self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
         self.addConstrainVelocities()
+
+
+class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
+
+    """Nosé-Hoover chain thermostat, using the reversible multi time step velocity Verlet algorithm
+       detailed in the papers below.
+
+    References
+    ----------
+
+    G. J. Martyna, M. E. Tuckerman, D. J. Tobias, and Michael L. Klein  "Explicit reversible
+    integrators for extended systems dynamics", Molecular Physics, 87 1117-1157 (1996)
+    http://dx.doi.org/10.1080/00268979600100761
+
+    G. J. Martyna, M. L. Klein, and M. Tuckerman "Nosé–Hoover chains: The canonical
+    ensemble via continuous dynamics",
+    Journal of Chemical Physics 97, 2635-2643 (1992)
+    http://dx.doi.org/10.1063/1.463940
+
+    Examples
+    --------
+
+    Create a velocity Verlet integrator with Nosé-Hoover chain thermostat.
+
+    >>> timestep = 1.0 * simtk.unit.femtoseconds
+    >>> temperature = 300 * simtk.unit.kelvin
+    >>> chain_length = 10
+    >>> collision_frequency = 50 / simtk.unit.picoseconds
+    >>> num_mts = 5
+    >>> num_yoshidasuzuki = 5
+
+    >>> integrator = NoseHooverVelocityVerletIntegrator(temperature, collision_frequency, timestep, chain_length, num_mts, num_yoshidasuzuki)
+
+    Notes
+    ------
+
+    The velocity Verlet integrator is taken verbatim from Peter Eastman's example in the CustomIntegrator header file documentation.
+
+    Useful tests of the NHC integrator can be performed by monitoring the instantaneous temperature during the simulation and confirming that conserved energy is constant to about 1 part in 10^5.  The instantanous temperature and particle kinetic and potential energies can already be extracted from a snapshot, for example see the OpenMM StateDataReporter implementation for more details.  This integrator also provides heat bath energies (kJ/mol) through the following mechanism:
+
+    >>> heat_bath_kinetic_energy = integrator.getGlobalVariableByName('bathKE')
+    >>> heat_bath_potential_energy = integrator.getGlobalVariableByName('bathPE')
+
+    From here, the conserved energy is the sum of the potential and kinetic energies for both the system and the heat bath.
+
+    """
+
+
+    YSWeights = {
+        1 : [ 1.0000000000000000 ],
+        3 : [ 0.8289815435887510, -0.6579630871775020,  0.8289815435887510 ],
+        5 : [ 0.2967324292201065,  0.2967324292201065, -0.1869297168804260, 0.2967324292201065, 0.2967324292201065 ]
+    }
+
+    def __init__(self, temperature=298*simtk.unit.kelvin, collision_frequency=50/simtk.unit.picoseconds,
+                 timestep=0.001*simtk.unit.picoseconds, chain_length=5, num_mts=5, num_yoshidasuzuki=5):
+        """ Construct a velocity Verlet integrator with Nosé-Hoover chain thermostat implemented with massive collisions.
+
+        Parameters:
+        -----------
+
+        temperature: simtk.unit.Quantity compatible with kelvin, default=298*simtk.unit.kelvin
+            The target temperature for the thermostat.
+
+        collision_freqency: simtk.unit.Quantity compatible with picoseconds**-1, default=50/simtk.unit.picoseconds
+            The frequency of collisions with the heat bath.  A very small value will result
+            in a distribution approaching the microcanonical ensemble, while a large value will
+            cause rapid fluctuations in the temperature before convergence.
+
+        timestep: simtk.unit.Quantity compatible with femtoseconds, default=1*simtk.unit.femtoseconds
+            The integration timestep for particles.
+
+        chain_length: integer, default=5
+            The number of thermostat particles in the Nosé-Hoover chain.  Increasing
+            this parameter will affect computational cost, but will make the simulation
+            less sensitive to thermostat parameters, particularly in stiff systems; see
+            the 1992 paper referenced above for more details.
+
+        num_mts: integer, default=5
+            The number of timesteps used in the multi-timestep procedure to update the thermostat
+            positions.  A higher value will increase the stability of the dynamics, but will also
+            increase the compuational cost of the integration.
+
+        num_yoshidasuzuki: integer, default=5
+            The number of Yoshida-Suzuki steps used to subdivide each of the multi-timesteps used
+            to update the thermostat positions.  A higher value will increase the stability of the
+            dynamics, but will also increase the computational cost of the integration; only certain
+            values (currently 1,3, or 5) are supported, because weights must be defined.
+
+        """
+        super(NoseHooverChainVelocityVerletIntegrator, self).__init__(temperature, timestep)
+        #
+        # Integrator initialization.
+        #
+        self.n_c         = num_mts
+        self.n_ys        = num_yoshidasuzuki
+        try:
+            self.weights     = self.YSWeights[self.n_ys]
+        except KeyError:
+            raise Exception("Invalid Yoshida-Suzuki value. Allowed values are: %s"%
+                             ",".join(map(str,self.YSWeights.keys())))
+        if chain_length < 0:
+            raise Exception("Nosé-Hoover chain length must be at least 0")
+        if chain_length == 0:
+            print("WARNING: Nosé-Hoover chain length is 0; falling back to regular velocity verlet algorithm.")
+        self.M           = chain_length
+
+        # Define the "mass" of the thermostat particles (multiply by ndf for particle 0)
+        kT = self.getGlobalVariableByName('kT')
+        frequency = collision_frequency.value_in_unit(simtk.unit.picoseconds**-1)
+        Q = kT/frequency**2
+
+        #
+        # Define global variables
+        #
+        self.addGlobalVariable("ndf", 0)      # number of degrees of freedom
+        self.addGlobalVariable("bathKE", 0.0) # Thermostat bath kinetic energy
+        self.addGlobalVariable("bathPE", 0.0) # Thermostat bath potential energy
+        self.addGlobalVariable("KE2", 0.0)    # Twice the kinetic energy
+        self.addGlobalVariable("Q", Q)        # Thermostat particle "mass"
+        self.addGlobalVariable("scale", 1.0)
+        self.addGlobalVariable("aa", 0.0)
+        self.addGlobalVariable("wdt", 0.0)
+        for w in range(self.n_ys):
+            self.addGlobalVariable("w%d"%w, self.weights[w])
+
+        #
+        # Initialize thermostat parameters
+        #
+        for i in range(self.M):
+            self.addGlobalVariable("xi%d"%i, 0)            # Thermostat particle
+            self.addGlobalVariable("vxi%d"%i, 0)           # Thermostat particle velocities in ps^-1
+            self.addGlobalVariable("G%d"%i, -frequency**2) # Forces on thermostat particles in ps^-2
+            self.addGlobalVariable("Q%d"%i, 0)             # Thermostat "masses" in ps^2 kJ/mol
+        # The masses need the number of degrees of freedom, which is approximated here.  Need a
+        # better solution eventually, to properly account for constraints, translations, etc.
+        self.addPerDofVariable("ones", 1.0)
+        self.addPerDofVariable("x1", 0);
+        self.addComputeSum("ndf", "ones")
+        if self.M:
+            self.addComputeGlobal("Q0", "ndf*Q")
+            for i in range(1, self.M):
+                self.addComputeGlobal("Q%d"%i, "Q")
+
+        #
+        # Take a velocity verlet step, with propagation of thermostat before and after
+        #
+        if self.M: self.propagateNHC()
+        self.addUpdateContextState()
+        self.addComputePerDof("v", "v+0.5*dt*f/m")
+        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+        self.addConstrainVelocities()
+        if self.M: self.propagateNHC()
+        # Compute heat bath energies
+        self.computeEnergies()
+
+    def propagateNHC(self):
+        """ Propagate the Nosé-Hoover chain """
+        self.addComputeGlobal("scale", "1.0")
+        self.addComputeSum("KE2", "m*v^2")
+        self.addComputeGlobal("G0", "(KE2 - ndf*kT)/Q0")
+        for ncval in range(self.n_c):
+            for nysval in range(self.n_ys):
+                self.addComputeGlobal("wdt", "w%d*dt/%d"%(nysval, self.n_c))
+                self.addComputeGlobal("vxi%d"%(self.M-1), "vxi%d + 0.25*wdt*G%d"%(self.M-1, self.M-1))
+                for j in range(self.M-2, -1, -1):
+                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi%d)"%(j+1))
+                    self.addComputeGlobal("vxi%d"%j, "aa*(aa*vxi%d + 0.25*wdt*G%d)"%(j,j))
+                # update particle velocities
+                self.addComputeGlobal("aa", "exp(-0.5*wdt*vxi0)")
+                self.addComputeGlobal("scale", "scale*aa")
+                # update the thermostat positions
+                for j in range(self.M):
+                    self.addComputeGlobal("xi%d"%j, "xi%d + 0.5*wdt*vxi%d"%(j,j))
+                # update the forces
+                self.addComputeGlobal("G0", "(scale*scale*KE2 - ndf*kT)/Q0")
+                # update thermostat velocities
+                for j in range(self.M-1):
+                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi%d)"%(j+1))
+                    self.addComputeGlobal("vxi%d"%j, "aa*(aa*vxi%d + 0.25*wdt*G%d)"%(j,j))
+                    self.addComputeGlobal("G%d"%(j+1), "(Q%d*vxi%d*vxi%d - kT)/Q%d"%(j,j,j,j+1))
+                self.addComputeGlobal("vxi%d"%(self.M-1), "vxi%d + 0.25*wdt*G%d"%(self.M-1, self.M-1))
+        # update particle velocities
+        self.addComputePerDof("v", "scale*v")
+
+    def computeEnergies(self):
+        """ Computes kinetic and potential energies for the heat bath """
+        # Bath kinetic energy
+        self.addComputeGlobal("bathKE", "0.0")
+        for i in range(self.M):
+            self.addComputeGlobal("bathKE", "bathKE + 0.5*Q%d*vxi%d^2"%(i,i))
+        # Bath potential energy
+        self.addComputeGlobal("bathPE", "ndf*xi0")
+        for i in range(1,self.M):
+            self.addComputeGlobal("bathPE", "bathPE + xi%d"%i)
+        self.addComputeGlobal("bathPE", "kT*bathPE")
 
 
 class MetropolisMonteCarloIntegrator(ThermostatedIntegrator):
