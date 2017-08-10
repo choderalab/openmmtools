@@ -701,7 +701,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
     >>> num_mts = 5
     >>> num_yoshidasuzuki = 5
 
-    >>> integrator = NoseHooverVelocityVerletIntegrator(temperature, collision_frequency, timestep, chain_length, num_mts, num_yoshidasuzuki)
+    >>> integrator = NoseHooverChainVelocityVerletIntegrator(temperature, collision_frequency, timestep, chain_length, num_mts, num_yoshidasuzuki)
 
     Notes
     ------
@@ -710,6 +710,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Useful tests of the NHC integrator can be performed by monitoring the instantaneous temperature during the simulation and confirming that conserved energy is constant to about 1 part in 10^5.  The instantanous temperature and particle kinetic and potential energies can already be extracted from a snapshot, for example see the OpenMM StateDataReporter implementation for more details.  This integrator also provides heat bath energies (kJ/mol) through the following mechanism:
 
+    >>> integrator = NoseHooverChainVelocityVerletIntegrator()
     >>> heat_bath_kinetic_energy = integrator.getGlobalVariableByName('bathKE')
     >>> heat_bath_potential_energy = integrator.getGlobalVariableByName('bathPE')
 
