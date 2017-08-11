@@ -261,6 +261,7 @@ def test_moves_serialization():
     test_cases = [
         IntegratorMove(openmm.VerletIntegrator(1.0*unit.femtosecond), n_steps=10),
         LangevinDynamicsMove(),
+        LangevinSplittingDynamicsMove(),
         GHMCMove(),
         HMCMove(context_cache=context_cache),
         MonteCarloBarostatMove(context_cache=dummy_cache),
@@ -363,6 +364,20 @@ def test_metropolized_moves():
         # Check that we were able to generate both an accepted and a rejected move.
         assert len(move.atom_subset) != 0, ('Could not generate an accepted and rejected '
                                             'move for class {}'.format(move_class.__name__))
+
+
+def test_langevin_splitting_move():
+    """Test that the langevin splitting mcmc move works with different splittings"""
+    splittings = ["V R O R V", "V R R R O R R R V", "V { R O R } V"]
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    sampler_state = SamplerState(testsystem.positions)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+    for splitting in splittings:
+        move = LangevinSplittingDynamicsMove(splitting=splitting)
+        # Create MCMC sampler
+        sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
+        sampler.run(1)
+
 
 
 # =============================================================================
