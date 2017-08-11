@@ -368,7 +368,7 @@ def test_metropolized_moves():
 
 def test_langevin_splitting_move():
     """Test that the langevin splitting mcmc move works with different splittings"""
-    splittings = ["V R O R V", "V R R R O R R R V", "V { R O R } V"]
+    splittings = ["V R O R V", "V R R R O R R R V", "O { V R V } O"]
     testsystem = testsystems.AlanineDipeptideVacuum()
     sampler_state = SamplerState(testsystem.positions)
     thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
