@@ -9,8 +9,8 @@ The module :mod:`openmmtools.forces` implements custom forces that are not nativ
  - :func:`find_nonbonded_force`: Find the first ``NonbondedForce`` in an OpenMM ``System``.
  - :func:`iterate_nonbonded_forces`: Iterate over all the ``NonbondedForce``s in an OpenMM ``System``.
 
-Cache objects
--------------
+Useful Custom Forces
+--------------------
 
 .. currentmodule:: openmmtools.forces
 .. autosummary::
@@ -18,5 +18,14 @@ Cache objects
     :toctree: api/generated/
 
     UnshiftedReactionFieldForce
+
+Utility functions
+--------------------
+
+.. currentmodule:: openmmtools.forces
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     find_nonbonded_force
     iterate_nonbonded_forces
