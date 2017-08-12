@@ -52,7 +52,7 @@ def find_nonbonded_force(system):
 
 
 def iterate_nonbonded_forces(system):
-    """Iterate over all OpenMM `NonbondedForce`s in `system`.
+    """Iterate over all OpenMM ``NonbondedForce``s in an OpenMM system.
 
     Parameters
     ----------

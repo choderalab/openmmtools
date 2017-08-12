@@ -29,7 +29,7 @@ from openmmtools import forces
 
 def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
                            return_copy=True, shifted=False):
-    """Return a system converted to use a switched reaction-field electrostatics.
+    """Return a system converted to use a switched reaction-field electrostatics using :class:`openmmtools.forces.UnshiftedReactionField`.
 
     This will add an `UnshiftedReactionFieldForce` or `SwitchedReactionFieldForce`
     for each `NonbondedForce` that utilizes `CutoffPeriodic`.
