@@ -549,7 +549,9 @@ class TestThermodynamicState(object):
         test_platforms = [test_platforms[i % len(test_platforms)]
                           for i in range(len(test_integrators))]
 
-        for (is_thermostated, integrator), platform in zip(test_integrators, test_platforms):
+        for platform in test_platforms:
+            # Pop the integrator to allow proper garbage collection so its not referenced anymore when we del it.
+            (is_thermostated, integrator) = test_integrators.pop()
             context = state.create_context(integrator, platform)
             assert platform is None or platform.getName() == context.getPlatform().getName()
             assert isinstance(integrator, context.getIntegrator().__class__)
