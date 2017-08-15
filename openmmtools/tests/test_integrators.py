@@ -686,40 +686,6 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
-    """Perform a nonequilibrium switching protocol
-
-    Parameters
-    ----------
-    init_x : simtk.openmm.Quantity of size [natoms,3] with units compatible with angstroms
-        Initial positions
-    alchemical_integrator : AlchemicalNonequilibriumLangevinIntegrator
-        Integrator to use for switching
-    alchemical_ctx : simtk.openmm.Context
-        Context to use for alchemical switching.
-    temperature : simtk.unit.Quantity, optional, default=298*kelvin
-        Temperature to initialize simulation with
-
-    Returns
-    -------
-    protocol_work : float
-        Work performed by protocol
-    """
-    # Get number of NCMC steps
-    nsteps = alchemical_integrator.getGlobalVariableByName("nsteps")
-    # Set positions and velocities
-    alchemical_ctx.setPositions(init_x)
-    alchemical_ctx.setVelocitiesToTemperature(temperature)
-    # Reset the integrator
-    alchemical_integrator.reset_integrator()
-    if (nsteps == 0):
-        # We still need to take one step if nsteps == 0
-        alchemical_integrator.step(1)
-    else:
-        alchemical_integrator.step(nsteps)
-    # Get the protocol work in dimensionless units (kT)
-    return alchemical_integrator.getGlobalVariableByName("protocol_work") # in kT
-
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
         for nsteps in [0, 1, 10]:
