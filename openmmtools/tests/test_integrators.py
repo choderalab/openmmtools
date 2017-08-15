@@ -629,8 +629,10 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     parameters = dict()
     parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, 2 * sigma)
     parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 1 * kT)
-    forward_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
-    reverse_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
+    alchemical_functions = {
+        'forward' : { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
+        'reverse' : { name : '(1-lambda)*%f + lambda*%f' % (value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
+        }
 
     # Create harmonic oscillator testsystem
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
@@ -642,45 +644,47 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     thinning = 5 * 20 # 5 periods
 
     # Collect forward and reverse work values
-    w_f = np.zeros([n_iterations], np.float64)
-    w_r = np.zeros([n_iterations], np.float64)
+    directions = ['forward', 'reverse']
+    work = { direction : np.zeros([n_iterations], np.float64) for direction in directions }
     platform = openmm.Platform.getPlatformByName("Reference")
-    for direction in ['forward', 'reverse']:
+    for direction in directions:
         positions = testsystem.positions
+
+        # Create equilibrium and nonequilibrium integrators
+        equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
+        nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
+                                                                       alchemical_functions=alchemical_functions[direction], splitting=splitting, nsteps_neq=nsteps,
+                                                                       measure_shadow_work=True)
+
+        # Create compound integrator
+        compound_integrator = openmm.CompoundIntegrator()
+        compound_integrator.addIntegrator(equilibrium_integrator)
+        compound_integrator.addIntegrator(nonequilibrium_integrator)
+
+        # Create Context
+        context = openmm.Context(system, compound_integrator, platform)
+        context.setPositions(positions)
+
+        # Collect work samples
         for iteration in range(n_iterations):
             # Generate equilibrium sample
-            equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
-            equilibrium_context = openmm.Context(system, equilibrium_integrator, platform)
+            compound_integrator.setCurrentIntegrator(0)
             for (name, value) in parameters.items():
-                if direction == 'forward':
-                    equilibrium_context.setParameter(name, value[0].value_in_unit_system(unit.md_unit_system))
-                else:
-                    equilibrium_context.setParameter(name, value[1].value_in_unit_system(unit.md_unit_system))
-            equilibrium_context.setPositions(positions)
+                initial_value = value[0] if (direction == 'forward') else value[1]
+                context.setParameter(name, initial_value)
             equilibrium_integrator.step(thinning)
-            positions = equilibrium_context.getState(getPositions=True).getPositions(asNumpy=True)
-            del equilibrium_context, equilibrium_integrator
-            # Generate nonequilibrium work sample
-            if direction == 'forward':
-                alchemical_functions = forward_functions
-            else:
-                alchemical_functions = reverse_functions
-            nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
-                                                                                   alchemical_functions=alchemical_functions, splitting=splitting, nsteps_neq=nsteps,
-                                                                                   measure_shadow_work=True)
-            nonequilibrium_context = openmm.Context(system, nonequilibrium_integrator, platform)
-            nonequilibrium_context.setPositions(positions)
-            if nsteps == 0:
-                nonequilibrium_integrator.step(1) # need to execute at least one step
-            else:
-                nonequilibrium_integrator.step(nsteps)
-            if direction == 'forward':
-                w_f[iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
-            else:
-                w_r[iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
-            del nonequilibrium_context, nonequilibrium_integrator
 
-    dF, ddF = pymbar.BAR(w_f, w_r)
+            # Generate nonequilibrium work sample
+            compound_integrator.setCurrentIntegrator(1)
+            nonequilibrium_integrator.reset()
+            nonequilibrium_integrator.step(min(1, nsteps)) # need to execute at least one step
+            work[direction][iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
+            nonequilibrium_integrator.reset()
+
+        # Clean up
+        del context
+
+    dF, ddF = pymbar.BAR(work['forward'], work['reverse'])
     nsigma = np.abs(dF - dF_analytical) / ddF
     print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
     if nsigma > NSIGMA_MAX:
