@@ -673,7 +673,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
 
             compound_integrator.setCurrentIntegrator(0)
             equilibrium_integrator.reset()
-            equilibrium_integrator.step(thinning)
+            compound_integrator.step(thinning)
 
             #
             # Generate nonequilibrium work sample
@@ -688,7 +688,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
             assert current_step == 0.0, 'initial step should be 0 (was %f)' % current_step
 
-            nonequilibrium_integrator.step(max(1, nsteps)) # need to execute at least one step
+            compound_integrator.step(max(1, nsteps)) # need to execute at least one step
             work[direction][iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
 
             # Check final conditions before reset
