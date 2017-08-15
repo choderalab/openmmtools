@@ -613,7 +613,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
 
     #max deviation from the calculated free energy
     NSIGMA_MAX = 6
-    n_iterations = 100  # number of forward and reverse protocols
+    n_iterations = 200  # number of forward and reverse protocols
 
     # These are the alchemical functions that will be used to control the system
     temperature = 298.0 * unit.kelvin
@@ -667,18 +667,34 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
 
         # Collect work samples
         for iteration in range(n_iterations):
+            #
             # Generate equilibrium sample
+            #
+
             compound_integrator.setCurrentIntegrator(0)
-            for (name, value) in parameters.items():
-                initial_value = value[0] if (direction == 'forward') else value[1]
-                context.setParameter(name, initial_value)
             equilibrium_integrator.step(thinning)
 
+            #
             # Generate nonequilibrium work sample
+            #
+
             compound_integrator.setCurrentIntegrator(1)
             nonequilibrium_integrator.reset()
-            nonequilibrium_integrator.step(min(1, nsteps)) # need to execute at least one step
+
+            # Check initial conditions after reset
+            current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
+            assert current_lambda == 0.0, 'initial lambda should be 0.0 (was %f)' % current_lambda
+            current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
+            assert current_step == 0.0, 'initial step should be 0 (was %f)' % current_step
+
+            nonequilibrium_integrator.step(max(1, nsteps)) # need to execute at least one step
             work[direction][iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
+
+            # Check final conditions before reset
+            current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
+            assert current_lambda == 1.0, 'final lambda should be 1.0 (was %f)' % current_lambda
+            current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
+            assert int(current_step) == max(1,nsteps), 'final step should be %d (was %f)' % (max(1,nsteps), current_step)
             nonequilibrium_integrator.reset()
 
         # Clean up

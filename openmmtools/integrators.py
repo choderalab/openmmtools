@@ -1661,6 +1661,15 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         kwargs['splitting'] = splitting
         super(AlchemicalNonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
 
+    def reset(self):
+        """Reset all statistics, alchemical parameters, and work.
+        """
+        # Reset statistics
+        super(AlchemicalNonequilibriumLangevinIntegrator, self).reset()
+        # Trigger update of all context parameters only by running one integrator cycle with step = -1
+        self.setGlobalVariableByName('step', -1)
+        self.step(1)
+
     def _register_step_types(self):
         super(AlchemicalNonequilibriumLangevinIntegrator, self)._register_step_types()
         self._register_step_type('H', self._add_alchemical_perturbation_step)
@@ -1722,7 +1731,6 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         """
         Override the base class to insert reset steps around the integrator.
         """
-
         # First step: Constrain positions and velocities and reset work accumulators and alchemical integrators
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
@@ -1740,10 +1748,18 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
             self.endBlock()
         else:
             #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
+            self.beginIfBlock("step >= 0")
             self.beginIfBlock("step < nsteps")
             super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
+            self.endBlock()
+
+        # Reset step
+        self.beginIfBlock('step = -1')
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step() # sets step to 0
+        self.endBlock()
 
     def _add_alchemical_reset_step(self):
         """
@@ -1776,6 +1792,8 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
         super(ExternalPerturbationLangevinIntegrator, self).__init__(*args, **kwargs)
 
     def reset(self):
+        """Reset all statistics.
+        """
         super(ExternalPerturbationLangevinIntegrator, self).reset()
         self.setGlobalVariableByName('first_step', 0)
 
