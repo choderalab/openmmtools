@@ -23,7 +23,7 @@ from simtk import unit
 from simtk import openmm
 
 from openmmtools import integrators, testsystems, alchemy
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator, GHMCIntegrator
+from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator, GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator
 
 #=============================================================================================
 # CONSTANTS
@@ -179,6 +179,39 @@ def test_integrator_decorators():
     assert integrator.n_accept == nsteps
     assert integrator.n_trials == nsteps
     assert integrator.acceptance_rate == 1.0
+
+
+def test_nose_hoover_integrator():
+    """
+    Test Nose-Hoover thermostat by ensuring that a short run
+    conserves the system and bath energy to a reasonable tolerance.
+    The temperature could, in principle, be tested also but that would
+    require longer runs to guarantee stabilization.
+
+    """
+    temperature = 298*unit.kelvin
+    testsystem = testsystems.WaterBox()
+    integrator = NoseHooverChainVelocityVerletIntegrator(temperature)
+    # Create Context and initialize positions.
+    context = openmm.Context(testsystem.system, integrator)
+    context.setPositions(testsystem.positions)
+    context.setVelocitiesToTemperature(temperature)
+    integrator.step(150) # Short equilibration
+    energies = []
+    for n in range(100):
+        integrator.step(1)
+        state = context.getState(getEnergy=True)
+        KE = state.getKineticEnergy().value_in_unit(unit.kilojoules_per_mole)
+        PE = state.getPotentialEnergy().value_in_unit(unit.kilojoules_per_mole)
+        bathKE = integrator.getGlobalVariableByName('bathKE')
+        bathPE = integrator.getGlobalVariableByName('bathPE')
+        conserved = KE + PE + bathKE + bathPE
+        energies.append(conserved)
+    # Compute maximum deviation from the mean for conserved energies
+    meanenergies = np.mean(energies)
+    maxdeviation = np.amax(np.abs(energies - meanenergies)/meanenergies)
+    assert maxdeviation < 1e-3
+
 
 def test_pretty_formatting():
     """
