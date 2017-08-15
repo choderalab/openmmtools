@@ -1102,18 +1102,12 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.setGlobalVariableByName('naccept', 0)
             self.setGlobalVariableByName('nreject', 0)
 
-    def reset_steps(self):
-        """Reset step counter.
-        """
-        self.setGlobalVariableByName('step', 0)
-
     def reset(self):
         """Reset all statistics (heat, shadow work, acceptance rates, step).
         """
         self.reset_heat()
         self.reset_shadow_work()
         self.reset_ghmc_statistics()
-        self.reset_steps()
 
     def _get_energy_with_units(self, variable_name, dimensionless=False):
         """Retrive an energy/work quantity and return as unit-bearing or dimensionless quantity.

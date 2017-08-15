@@ -672,6 +672,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             #
 
             compound_integrator.setCurrentIntegrator(0)
+            equilibrium_integrator.reset()
             equilibrium_integrator.step(thinning)
 
             #
