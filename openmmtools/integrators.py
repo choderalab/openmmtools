@@ -793,16 +793,16 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         self.addGlobalVariable("aa", 0.0)
         self.addGlobalVariable("wdt", 0.0)
         for w in range(self.n_ys):
-            self.addGlobalVariable("w%d"%w, self.weights[w])
+            self.addGlobalVariable("w{}".format(w), self.weights[w])
 
         #
         # Initialize thermostat parameters
         #
         for i in range(self.M):
-            self.addGlobalVariable("xi%d"%i, 0)            # Thermostat particle
-            self.addGlobalVariable("vxi%d"%i, 0)           # Thermostat particle velocities in ps^-1
-            self.addGlobalVariable("G%d"%i, -frequency**2) # Forces on thermostat particles in ps^-2
-            self.addGlobalVariable("Q%d"%i, 0)             # Thermostat "masses" in ps^2 kJ/mol
+            self.addGlobalVariable("xi{}".format(i), 0)            # Thermostat particle
+            self.addGlobalVariable("vxi{}".format(i), 0)           # Thermostat particle velocities in ps^-1
+            self.addGlobalVariable("G{}".format(i), -frequency**2) # Forces on thermostat particles in ps^-2
+            self.addGlobalVariable("Q{}".format(i), 0)             # Thermostat "masses" in ps^2 kJ/mol
         # The masses need the number of degrees of freedom, which is approximated here.  Need a
         # better solution eventually, to properly account for constraints, translations, etc.
         self.addPerDofVariable("ones", 1.0)
@@ -811,7 +811,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         if self.M:
             self.addComputeGlobal("Q0", "ndf*Q")
             for i in range(1, self.M):
-                self.addComputeGlobal("Q%d"%i, "Q")
+                self.addComputeGlobal("Q{}".format(i), "Q")
 
         #
         # Take a velocity verlet step, with propagation of thermostat before and after
@@ -835,25 +835,25 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("G0", "(KE2 - ndf*kT)/Q0")
         for ncval in range(self.n_c):
             for nysval in range(self.n_ys):
-                self.addComputeGlobal("wdt", "w%d*dt/%d"%(nysval, self.n_c))
-                self.addComputeGlobal("vxi%d"%(self.M-1), "vxi%d + 0.25*wdt*G%d"%(self.M-1, self.M-1))
+                self.addComputeGlobal("wdt", "w{}*dt/{}".format(nysval, self.n_c))
+                self.addComputeGlobal("vxi{}".format(self.M-1), "vxi{} + 0.25*wdt*G{}".format(self.M-1, self.M-1))
                 for j in range(self.M-2, -1, -1):
-                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi%d)"%(j+1))
-                    self.addComputeGlobal("vxi%d"%j, "aa*(aa*vxi%d + 0.25*wdt*G%d)"%(j,j))
+                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi{})".format(j+1))
+                    self.addComputeGlobal("vxi{}".format(j), "aa*(aa*vxi{} + 0.25*wdt*G{})".format(j,j))
                 # update particle velocities
                 self.addComputeGlobal("aa", "exp(-0.5*wdt*vxi0)")
                 self.addComputeGlobal("scale", "scale*aa")
                 # update the thermostat positions
                 for j in range(self.M):
-                    self.addComputeGlobal("xi%d"%j, "xi%d + 0.5*wdt*vxi%d"%(j,j))
+                    self.addComputeGlobal("xi{}".format(j), "xi{} + 0.5*wdt*vxi{}".format(j,j))
                 # update the forces
                 self.addComputeGlobal("G0", "(scale*scale*KE2 - ndf*kT)/Q0")
                 # update thermostat velocities
                 for j in range(self.M-1):
-                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi%d)"%(j+1))
-                    self.addComputeGlobal("vxi%d"%j, "aa*(aa*vxi%d + 0.25*wdt*G%d)"%(j,j))
-                    self.addComputeGlobal("G%d"%(j+1), "(Q%d*vxi%d*vxi%d - kT)/Q%d"%(j,j,j,j+1))
-                self.addComputeGlobal("vxi%d"%(self.M-1), "vxi%d + 0.25*wdt*G%d"%(self.M-1, self.M-1))
+                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi{})".format(j+1))
+                    self.addComputeGlobal("vxi{}".format(j), "aa*(aa*vxi{} + 0.25*wdt*G{})".format(j,j))
+                    self.addComputeGlobal("G{}".format(j+1), "(Q{}*vxi{}*vxi{} - kT)/Q{}".format(j,j,j,j+1))
+                self.addComputeGlobal("vxi{}".format(self.M-1), "vxi{} + 0.25*wdt*G{}".format(self.M-1, self.M-1))
         # update particle velocities
         self.addComputePerDof("v", "scale*v")
 
@@ -862,11 +862,11 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         # Bath kinetic energy
         self.addComputeGlobal("bathKE", "0.0")
         for i in range(self.M):
-            self.addComputeGlobal("bathKE", "bathKE + 0.5*Q%d*vxi%d^2"%(i,i))
+            self.addComputeGlobal("bathKE", "bathKE + 0.5*Q{}*vxi{}^2".format(i,i))
         # Bath potential energy
         self.addComputeGlobal("bathPE", "ndf*xi0")
         for i in range(1,self.M):
-            self.addComputeGlobal("bathPE", "bathPE + xi%d"%i)
+            self.addComputeGlobal("bathPE", "bathPE + xi{}".format(i))
         self.addComputeGlobal("bathPE", "kT*bathPE")
 
 
