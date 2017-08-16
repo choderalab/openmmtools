@@ -1204,14 +1204,12 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
 
     or create a Langevin move with specified splitting.
 
-    >>> move = LangevinSplittingDynamicsMove(splitting="V { R O R } V")
+    >>> move = LangevinSplittingDynamicsMove(splitting="O { V R V } O")
 
     Where this splitting is a 5 step symplectic integrator:
 
-        1. Half-step velocity updates (V),
-        2. Hybrid Metropolized step around the half position updates (R) with Ornstein-Uhlenbeck (O) interactions with
-            the stochastic heat bath interactions.
-        3. A final half-step in velocity
+        *. Ornstein-Uhlenbeck (O) interactions with the stochastic heat bath interactions
+        *. Hybrid Metropolized step around the half-step velocity updates (V) with full position updates (R).
 
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
