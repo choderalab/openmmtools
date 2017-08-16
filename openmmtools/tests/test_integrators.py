@@ -306,6 +306,7 @@ def test_external_protocol_work_accumulation():
     integrator.step(25)
     del context, integrator
 
+
 class TestExternalPerturbationLangevinIntegrator(TestCase):
 
     def create_system(self, testsystem, parameter_name, parameter_initial, temperature = 298.0 * unit.kelvin, platform_name='Reference'):
@@ -318,7 +319,14 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         # Create the context
         platform = openmm.Platform.getPlatformByName(platform_name)
         if platform_name in ['CPU', 'CUDA']:
-            platform.setPropertyDefaultValue('DeterministicForces', 'true')
+            try:
+                platform.setPropertyDefaultValue('DeterministicForces', 'true')
+            except Exception as e:
+                mm_min_version = '7.2.0'
+                if platform_name == 'CPU' and openmm.version.short_version < mm_min_version:
+                    print("Deterministic CPU forces not present in versions of OpenMM prior to {}".format(mm_min_version))
+                else:
+                    raise e
         context = openmm.Context(system, integrator, platform)
         context.setParameter(parameter_name, parameter_initial)
         context.setPositions(testsystem.positions)
