@@ -18,7 +18,7 @@ script:
   # Add org channel
   - conda config --add channels ${ORGNAME}
   # Add omnia dev channels
-  - conda config --add channels https://conda.anaconda.org/omnia/label/dev
+  #- conda config --add channels https://conda.anaconda.org/omnia/label/dev
   # Add conda-forge channel back to top priority
   - conda config --add channels conda-forge
   # Build the recipe
