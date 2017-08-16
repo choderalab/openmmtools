@@ -5,12 +5,6 @@ addons:
     sources:
     - ubuntu-toolchain-r-test
 
-python:
-  - '2.7'
-  - '3.5'
-  - '3.5dev'
-  - '3.6'
-
 install:
   - bash -x devtools/travis-ci/install.sh
   - export PYTHONUNBUFFERED=true
@@ -41,16 +35,17 @@ script:
 env:
   matrix:
     include:
-     - python: '2.7'
-       env: python=2.7 CONDA_PY=27
-     - python: '3.5'
-       env: python=3.5 CONDA_PY=35
-     - python: '3.5dev'
-       env: python=3.5 CONDA_PY=35 DEVOMNIA=true
-     - python: '3.6'
-       env: python=3.6 CONDA_PY=36
+    - python: '2.7'
+      env: python=2.7 CONDA_PY=27
+    - python: '3.5'
+      env: python=3.5 CONDA_PY=35
+    - python: '3.5'
+      env: python=3.5 CONDA_PY=35 DEVOMNIA=true
+    - python: '3.6'
+      env: python=3.6 CONDA_PY=36
     allow_failures:
-      - python: '3.5dev'
+    - python: '3.5'
+      env: python=3.5 CONDA_PY=35 DEVOMNIA=true
 
   global:
     - ORGNAME="omnia" # the name of the organization
