@@ -18,7 +18,7 @@ script:
   # Add org channel
   - conda config --add channels ${ORGNAME}
   # Add omnia dev channels
-  - conda config --add channels https://conda.anaconda.org/omnia/label/dev
+  - if [ ! $NODEVOMNIA ]; then conda config --add channels https://conda.anaconda.org/omnia/label/dev; fi
   # Add conda-forge channel back to top priority
   - conda config --add channels conda-forge
   # Build the recipe
@@ -36,6 +36,7 @@ env:
   matrix:
     - python=2.7  CONDA_PY=27
     - python=3.5  CONDA_PY=35
+    - python=3.5  CONDA_PY=35 NODEVOMNIA=true
     - python=3.6  CONDA_PY=36
   global:
     - ORGNAME="omnia" # the name of the organization
