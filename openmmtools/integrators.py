@@ -1196,7 +1196,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
     @property
     def is_metropolized(self):
         """Return True if this integrator is Metropolized, False otherwise."""
-        return self._is_metropolized
+        return self._metropolized_integrator
 
     def _add_integrator_steps(self):
         """Add the steps to the integrator--this can be overridden to place steps around the integration.
