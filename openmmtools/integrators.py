@@ -1917,10 +1917,11 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         super(GeodesicBAOABIntegrator, self).__init__(*args, **kwargs)
 
 class GHMCIntegrator(LangevinIntegrator):
+    """Create a generalized hybrid Monte Carlo (GHMC) integrator."""
 
     def __init__(self, *args, **kwargs):
         """
-        Create a generalized hybrid Monte Carlo (GHMC) integrator.
+
 
         Parameters
         ----------
