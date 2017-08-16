@@ -27,7 +27,7 @@ from openmmtools import integrators
 # =============================================================================
 
 class LRUCache(object):
-    """A simple LRU cache.
+    """A simple LRU cache with a dictionary-like interface that supports maximum capacity and expiration.
 
     It can be configured to have a maximum number of elements (capacity)
     and an element expiration (time_to_live) measured in number of accesses
@@ -570,7 +570,7 @@ class DummyContextCache(object):
 # =============================================================================
 
 global_context_cache = ContextCache(capacity=None, time_to_live=None)
-
+"""A shared ContextCache that minimizes Context object creating when using MCMCMove."""
 
 # =============================================================================
 # CACHE ENTRY (MODULE INTERNAL USAGE)
