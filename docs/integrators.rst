@@ -65,6 +65,7 @@ Other miscellaneous integrators are available.
     GradientDescentMinimizationIntegrator
     VelocityVerletIntegrator
     AndersenVelocityVerletIntegrator
+    NoseHooverChainVelocityVerletIntegrator
     MetropolisMonteCarloIntegrator
     HMCIntegrator
 
