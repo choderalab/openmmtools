@@ -1104,8 +1104,7 @@ class ThermodynamicState(object):
         elif self.pressure is not None:
             raise TE(TE.NO_BAROSTAT)
 
-    @classmethod
-    def _standardize_system(cls, system):
+    def _standardize_system(self, system):
         """Return a copy of the system in a standard representation.
 
         This effectively defines which ThermodynamicStates are compatible
@@ -1138,20 +1137,19 @@ class ThermodynamicState(object):
         # This adds a thermostat if it doesn't exist already. This way
         # the comparison between system using thermostat with different
         # parameters (e.g. collision frequency) will fail as expected.
-        cls._set_system_temperature(system, cls._STANDARD_TEMPERATURE)
+        self._set_system_temperature(system, self._STANDARD_TEMPERATURE)
 
         # We need to be sure that thermostat and barostat always are
         # in the same order, as the hash depends on the Forces order.
         # Here we push the barostat at the end.
-        barostat = cls._pop_barostat(system)
+        barostat = self._pop_barostat(system)
         if barostat is not None:
-            barostat.setDefaultPressure(cls._STANDARD_PRESSURE)
+            barostat.setDefaultPressure(self._STANDARD_PRESSURE)
             system.addForce(barostat)
 
-    @classmethod
-    def _standardize_and_hash(cls, system):
+    def _standardize_and_hash(self, system):
         """Standardize the system and return its hash."""
-        cls._standardize_system(system)
+        self._standardize_system(system)
         system_serialization = openmm.XmlSerializer.serialize(system)
         return system_serialization.__hash__()
 
@@ -2144,7 +2142,7 @@ class CompoundThermodynamicState(ThermodynamicState):
     def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         # Create original ThermodynamicState to serialize.
-        thermodynamic_state = object.__new__(self.__class__.__bases__[1])
+        thermodynamic_state = object.__new__(self.__class__.__bases__[0])
         thermodynamic_state.__dict__ = self.__dict__
         # Set the instance _standardize_system method to CompoundState._standardize_system
         # so that the composable states standardization will be called during serialization.
@@ -2177,13 +2175,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         for composable_state in composable_states:
             assert isinstance(composable_state, IComposableState)
 
-        # Dynamically inherit from thermodynamic_state class and
-        # store the types of composable_states to be able to call
-        # class methods.
-        composable_bases = [s.__class__ for s in composable_states]
-        self.__class__ = type(self.__class__.__name__,
-                              (self.__class__, thermodynamic_state.__class__),
-                              {'_composable_bases': composable_bases})
+        # Copy internal attributes of thermodynamic state.
         self.__dict__ = thermodynamic_state.__dict__
 
         # Setting self._composable_states signals __setattr__ to start
@@ -2195,8 +2187,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # to be standardized also w.r.t. all the composable states.
         self.set_system(self._standard_system, fix_state=True)
 
-    @classmethod
-    def _standardize_system(cls, system):
+    def _standardize_system(self, system):
         """Standardize the system.
 
         Override ThermodynamicState._standardize_system to standardize
@@ -2212,8 +2203,8 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState._standardize_system
 
         """
-        super(CompoundThermodynamicState, cls)._standardize_system(system)
-        for composable_cls in cls._composable_bases:
+        super(CompoundThermodynamicState, self)._standardize_system(system)
+        for composable_cls in self._composable_states:
             composable_cls._standardize_system(system)
 
 

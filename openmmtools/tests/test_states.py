@@ -533,7 +533,7 @@ class TestThermodynamicState(object):
         check_barostat_thermostat(npt_system, operator.ne)
 
         # Standardize system sets pressure and temperature to standard.
-        ThermodynamicState._standardize_system(npt_system)
+        npt_state._standardize_system(npt_system)
         check_barostat_thermostat(npt_system, operator.eq)
 
     def test_method_create_context(self):
