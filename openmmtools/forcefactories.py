@@ -141,7 +141,8 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
         restrained_molecule_atoms = None
         for molecule_atoms in molecules_atoms:
             if restrained_atoms_set.issubset(molecule_atoms):
-                restrained_molecule_atoms = molecule_atoms
+                # Convert set to list to use it as numpy array indices.
+                restrained_molecule_atoms = list(molecule_atoms)
                 break
         if restrained_molecule_atoms is None:
             raise ValueError('Cannot match the restrained atoms to any molecule. Restraining '
@@ -150,8 +151,8 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
         # Translate system so that the center of geometry is in
         # the origin to reduce the barostat rejections.
         distance_unit = sampler_state.positions.unit
-        centroid = np.mean(sampler_state.positions[restrained_molecule_atoms,:] / distance_unit, 0) * distance_unit
-        sampler_state.positions -= centroid
+        centroid = np.mean(sampler_state.positions[restrained_molecule_atoms,:] / distance_unit, axis=0)
+        sampler_state.positions -= centroid * distance_unit
 
     # Create a CustomExternalForce to restrain all atoms.
     restraint_force = openmm.CustomExternalForce('(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)')
