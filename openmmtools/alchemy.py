@@ -1793,7 +1793,7 @@ class AbsoluteAlchemicalFactory(object):
 
         custom_force.addComputedValue("I",  "(lambda_electrostatics*alchemical2 + (1-alchemical2))*step(r+sr2-or1)*0.5*(1/L-1/U+0.25*(r-sr2^2/r)*(1/(U^2)-1/(L^2))+0.5*log(L/U)/r+C);"
                                 "U=r+sr2;"
-                                "C=2*(1/or1-1/L)*step(sr2-r-or1)"
+                                "C=2*(1/or1-1/L)*step(sr2-r-or1);"
                                 "L=max(or1, D);"
                                 "D=abs(r-sr2);"
                                 "sr2 = scale2*or2;"
