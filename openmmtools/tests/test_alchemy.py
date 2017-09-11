@@ -1738,13 +1738,7 @@ class TestAlchemicalState(object):
 
         # The object is deserialized correctly.
         deserialized_state = utils.deserialize(serialization)
-        original_system_pickle = pickle.dumps(compound_state.system)
-        original_alchemical_state_pickle = pickle.dumps(compound_state._composable_states[0])
-        deserialized_system_pickle = pickle.dumps(deserialized_state.system)
-        deserialized_alchemical_state_pickle = pickle.dumps(deserialized_state._composable_states[0])
-        assert original_system_pickle == deserialized_system_pickle
-        assert original_alchemical_state_pickle == deserialized_alchemical_state_pickle
-
+        assert pickle.dumps(compound_state) == pickle.dumps(deserialized_state)
 
 
 # =============================================================================
