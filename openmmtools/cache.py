@@ -435,7 +435,7 @@ class ContextCache(object):
 
     # Each element is the name of the integrator attribute used before
     # get/set, and its standard value used to check for compatibility.
-    _COMPATIBLE_INTEGRATOR_ATTRIBUTES = {
+    COMPATIBLE_INTEGRATOR_ATTRIBUTES = {
         'StepSize': 0.001,
         'ConstraintTolerance': 1e-05,
         'Temperature': 273,
@@ -465,7 +465,7 @@ class ContextCache(object):
         integrators.ThermostatedIntegrator.restore_interface(integrator)
         integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
 
-        for attribute in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES:
+        for attribute in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES:
             try:  # getter/setter
                 value = getattr(copied_integrator, 'get' + attribute)()
             except AttributeError:
@@ -490,7 +490,7 @@ class ContextCache(object):
         """
         standard_integrator = copy.deepcopy(integrator)
         integrators.RestorableIntegrator.restore_interface(standard_integrator)
-        for attribute, std_value in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
+        for attribute, std_value in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
             try:  # setter
                 getattr(standard_integrator, 'set' + attribute)(std_value)
             except AttributeError:
