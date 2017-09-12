@@ -14,6 +14,7 @@ Provide cache classes to handle creation of OpenMM Context objects.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import re
 import copy
 import collections
 
@@ -439,7 +440,17 @@ class ContextCache(object):
         'ConstraintTolerance': 1e-05,
         'Temperature': 273,
         'Friction': 5,
-        'RandomNumberSeed': 0
+        'RandomNumberSeed': 0,
+        'heat': 0,
+        'old_ke': 0,
+        'new_ke': 0,
+        'old_pe': 0,
+        'new_pe': 0,
+        'shadow_work': 0,
+        'accept': 0,
+        'ntrials': 0,
+        'nreject': 0,
+        'naccept': 0,
     }
 
     @classmethod
@@ -455,11 +466,18 @@ class ContextCache(object):
         integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
 
         for attribute in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES:
-            try:
+            try:  # getter/setter
                 value = getattr(copied_integrator, 'get' + attribute)()
             except AttributeError:
-                pass
-            else:
+                # Try a CustomIntegrator global variable.
+                if isinstance(copied_integrator, openmm.CustomIntegrator):
+                    try:
+                        value = copied_integrator.getGlobalVariableByName(attribute)
+                    except Exception:
+                        pass
+                    else:
+                        integrator.setGlobalVariableByName(attribute, value)
+            else:  # getter/setter
                 getattr(integrator, 'set' + attribute)(value)
 
     @classmethod
@@ -473,10 +491,15 @@ class ContextCache(object):
         standard_integrator = copy.deepcopy(integrator)
         integrators.RestorableIntegrator.restore_interface(standard_integrator)
         for attribute, std_value in cls._COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
-            try:
+            try:  # setter
                 getattr(standard_integrator, 'set' + attribute)(std_value)
             except AttributeError:
-                pass
+                # Try to set CustomIntegrator global variable
+                if isinstance(standard_integrator, openmm.CustomIntegrator):
+                    try:
+                        standard_integrator.setGlobalVariableByName(attribute, std_value)
+                    except Exception:
+                        pass
         return standard_integrator
 
     @staticmethod
@@ -490,7 +513,18 @@ class ContextCache(object):
     def _generate_integrator_id(cls, integrator):
         """Return a unique key for the given Integrator."""
         standard_integrator = cls._standardize_integrator(integrator)
-        return openmm.XmlSerializer.serialize(standard_integrator).__hash__()
+        xml_serialization = openmm.XmlSerializer.serialize(standard_integrator)
+        # Ignore per-DOF variables for the purpose of hashing.
+        if isinstance(integrator, openmm.CustomIntegrator):
+            tag_iter = re.finditer(r'PerDofVariables>', xml_serialization)
+            try:
+                open_tag_index = next(tag_iter).start() - 1
+            except StopIteration:  # No DOF variables.
+                pass
+            else:
+                close_tag_index = next(tag_iter).end() + 1
+                xml_serialization = xml_serialization[:open_tag_index] + xml_serialization[close_tag_index:]
+        return xml_serialization.__hash__()
 
     @classmethod
     def _generate_context_id(cls, thermodynamic_state, integrator):
