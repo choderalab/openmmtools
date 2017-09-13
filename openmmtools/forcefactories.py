@@ -86,8 +86,19 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
 # RESTRAIN ATOMS
 # =============================================================================
 
-def restrain_atoms(thermodynamic_state, sampler_state, topology,
-                   atoms_dsl, sigma=3.0*unit.angstroms):
+def restrain_atoms_by_dsl(thermodynamic_state, sampler_state, topology, atoms_dsl, **kwargs):
+    # Make sure the topology is an MDTraj topology.
+    if isinstance(topology, mdtraj.Topology):
+        mdtraj_topology = topology
+    else:
+        mdtraj_topology = mdtraj.Topology.from_openmm(topology)
+
+    # Determine indices of the atoms to restrain.
+    restrained_atoms = mdtraj_topology.select(atoms_dsl).tolist()
+    restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, **kwargs)
+
+
+def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3.0*unit.angstroms):
     """Apply a soft harmonic restraint to the given atoms.
 
     This modifies the ``ThermodynamicState`` object.
@@ -110,22 +121,41 @@ def restrain_atoms(thermodynamic_state, sampler_state, topology,
     K = thermodynamic_state.kT / sigma**2  # Spring constant.
     system = thermodynamic_state.system  # This is a copy.
 
-    # Make sure the topology is an MDTraj topology.
-    if isinstance(topology, mdtraj.Topology):
-        mdtraj_topology = topology
-    else:
-        mdtraj_topology = mdtraj.Topology.from_openmm(topology)
+    # Check that there are atoms to restrain.
+    if len(restrained_atoms) == 0:
+        raise ValueError('No atoms to restrain.')
 
-    # Translate the system to the origin to avoid
-    # MonteCarloBarostat rejections (see openmm#1854).
-    protein_atoms = mdtraj_topology.select('protein')
-    distance_unit = sampler_state.positions.unit
-    centroid = np.mean(sampler_state.positions[protein_atoms,:] / distance_unit, 0) * distance_unit
-    sampler_state.positions -= centroid
+    # We need to translate the restrained molecule to the origin
+    # to avoid MonteCarloBarostat rejections (see openmm#1854).
+    if thermodynamic_state.pressure is not None:
+        # First, determine all the molecule atoms. Reference platform is the cheapest to allocate?
+        reference_platform = openmm.Platform.getPlatformByName('Reference')
+        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        context = openmm.Context(system, integrator, reference_platform)
+        molecules_atoms = context.getMolecules()
+        del context, integrator
+
+        # Make sure the atoms to restrain belong only to a single molecule.
+        molecules_atoms = [set(molecule_atoms) for molecule_atoms in molecules_atoms]
+        restrained_atoms_set = set(restrained_atoms)
+        restrained_molecule_atoms = None
+        for molecule_atoms in molecules_atoms:
+            if restrained_atoms_set.issubset(molecule_atoms):
+                # Convert set to list to use it as numpy array indices.
+                restrained_molecule_atoms = list(molecule_atoms)
+                break
+        if restrained_molecule_atoms is None:
+            raise ValueError('Cannot match the restrained atoms to any molecule. Restraining '
+                             'two molecules is not supported when using a MonteCarloBarostat.')
+
+        # Translate system so that the center of geometry is in
+        # the origin to reduce the barostat rejections.
+        distance_unit = sampler_state.positions.unit
+        centroid = np.mean(sampler_state.positions[restrained_molecule_atoms,:] / distance_unit, axis=0)
+        sampler_state.positions -= centroid * distance_unit
 
     # Create a CustomExternalForce to restrain all atoms.
     restraint_force = openmm.CustomExternalForce('(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)')
-    restrained_atoms = mdtraj_topology.select(atoms_dsl).tolist()
     # Adding the spring constant as a global parameter allows us to turn it off if desired
     restraint_force.addGlobalParameter('K', K)
     restraint_force.addPerParticleParameter('x0')

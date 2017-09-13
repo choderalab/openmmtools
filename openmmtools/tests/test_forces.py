@@ -18,7 +18,7 @@ from functools import partial
 import numpy as np
 
 from openmmtools.forcefactories import *
-from openmmtools import testsystems
+from openmmtools import testsystems, states
 
 
 # =============================================================================
@@ -136,8 +136,25 @@ def generate_new_positions(system, positions, platform=None, nsteps=50):
 
 
 # =============================================================================
-# TEST LRU CACHE
+# TEST FORCE FACTORIES FUNCTIONS
 # =============================================================================
+
+def test_restrain_atoms():
+    """Check that the restrained molecule's centroid is in the origin."""
+    host_guest = testsystems.HostGuestExplicit()
+    topology = mdtraj.Topology.from_openmm(host_guest.topology)
+    sampler_state = states.SamplerState(positions=host_guest.positions)
+    thermodynamic_state = states.ThermodynamicState(host_guest.system, temperature=300*unit.kelvin,
+                                                    pressure=1.0*unit.atmosphere)
+
+    # Restrain all the host carbon atoms.
+    restrained_atoms = [atom.index for atom in topology.atoms
+                        if atom.element.symbol is 'C' and atom.index <= 125]
+    restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms)
+
+    # Compute host center_of_geometry.
+    centroid = np.mean(sampler_state.positions[:126], axis=0)
+    assert np.allclose(centroid, np.zeros(3))
 
 def test_replace_reaction_field():
     """Check that replacing reaction-field electrostatics with Custom*Force
