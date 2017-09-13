@@ -201,7 +201,7 @@ class TestContextCache(object):
         assert langevin1.__getstate__() == langevin2.__getstate__()
 
     def test_generate_compatible_context_key(self):
-        """Context._generate_context_id creates same id for compatible contexts."""
+        """ContextCache._generate_context_id creates same id for compatible contexts."""
         all_ids = set()
         for state, integrator in itertools.product(self.compatible_states,
                                                    self.compatible_integrators):
@@ -209,12 +209,34 @@ class TestContextCache(object):
         assert len(all_ids) == 1
 
     def test_generate_incompatible_context_key(self):
-        """Context._generate_context_id creates different ids for incompatible contexts."""
+        """ContextCache._generate_context_id creates different ids for incompatible contexts."""
         all_ids = set()
         for state, integrator in itertools.product(self.incompatible_states,
                                                    self.incompatible_integrators):
             all_ids.add(ContextCache._generate_context_id(state, integrator))
         assert len(all_ids) == 4
+
+    def test_integrator_global_variable_standardization(self):
+        """Compatible integrator global variables are handled correctly.
+
+        The global variables in COMPATIBLE_INTEGRATOR_ATTRIBUTES should not count
+        to determine the integrator hash, and should be set to the input integrator.
+        """
+        cache = ContextCache()
+        thermodynamic_state = copy.deepcopy(self.water_300k)
+        integrator = integrators.LangevinIntegrator(temperature=300*unit.kelvin, measure_heat=True,
+                                                    measure_shadow_work=True)
+        cache.get_context(thermodynamic_state, integrator)
+
+        # If we modify a compatible global variable, we retrieve the
+        # same context with the correct value for the variable.
+        variable_name = "shadow_work"
+        variable_new_value = integrator.getGlobalVariableByName(variable_name) + 1.0
+        integrator.setGlobalVariableByName(variable_name, variable_new_value)
+
+        context, context_integrator = cache.get_context(thermodynamic_state, integrator)
+        assert len(cache) == 1
+        assert context_integrator.getGlobalVariableByName(variable_name) == variable_new_value
 
     def test_get_compatible_context(self):
         """ContextCache.get_context method do not recreate a compatible context."""
