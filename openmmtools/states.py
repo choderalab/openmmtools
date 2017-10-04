@@ -1738,12 +1738,9 @@ class SamplerState(object):
 
     def __getitem__(self, item):
         sampler_state = self.__class__([])
-        if isinstance(item, slice):
-            # Copy original values to avoid side effects.
-            sampler_state._positions = copy.deepcopy(self._positions[item])
-            if self._velocities is not None:
-                sampler_state._velocities = copy.deepcopy(self._velocities[item].copy())
-        else:  # Single index.
+
+        # Handle single index.
+        if np.issubdtype(type(item), np.integer):
             # Here we don't need to copy since we instantiate a new array.
             pos_value = self._positions[item].value_in_unit(self._positions.unit)
             sampler_state._positions = unit.Quantity(np.array([pos_value]),
@@ -1752,6 +1749,13 @@ class SamplerState(object):
                 vel_value = self._velocities[item].value_in_unit(self._velocities.unit)
                 sampler_state._velocities = unit.Quantity(np.array([vel_value]),
                                                           self._velocities.unit)
+        else:  # Assume slice or sequence.
+            # Copy original values to avoid side effects.
+            sampler_state._positions = copy.deepcopy(self._positions[item])
+            if self._velocities is not None:
+                sampler_state._velocities = copy.deepcopy(self._velocities[item].copy())
+
+        # Copy box vectors.
         sampler_state.box_vectors = copy.deepcopy(self.box_vectors)
 
         # Energies for only a subset of atoms is undefined.
