@@ -857,11 +857,13 @@ class TestSamplerState(object):
         sliced_sampler_state.positions[0][0] += 1 * unit.angstrom
         assert sliced_sampler_state.positions[0][0] == sampler_state.positions[0][0] + 1 * unit.angstrom
 
-        sliced_sampler_state = sampler_state[2:10]
-        assert sliced_sampler_state.n_particles == 8
-        assert len(sliced_sampler_state.velocities) == 8
-        assert np.allclose(sliced_sampler_state.positions,
-                           self.alanine_explicit_positions[2:10])
+        # SamplerState.__getitem__ should work for both slices and lists.
+        for sliced_sampler_state in [sampler_state[2:10],
+                                     sampler_state[list(range(2, 10))]]:
+            assert sliced_sampler_state.n_particles == 8
+            assert len(sliced_sampler_state.velocities) == 8
+            assert np.allclose(sliced_sampler_state.positions,
+                               self.alanine_explicit_positions[2:10])
 
         sliced_sampler_state = sampler_state[2:10:2]
         assert sliced_sampler_state.n_particles == 4
