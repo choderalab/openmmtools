@@ -259,7 +259,10 @@ def math_eval(expression, variables=None, functions=None):
     # Supported operators.
     operators = {ast.Add: operator.add, ast.Sub: operator.sub,
                  ast.Mult: operator.mul, ast.Div: operator.truediv,
-                 ast.Pow: operator.pow, ast.USub: operator.neg}
+                 ast.Pow: operator.pow, ast.USub: operator.neg,
+                 ast.BitAnd: operator.and_, ast.And: operator.and_,
+                 ast.BitOr: operator.or_, ast.Or: operator.or_
+                 }
 
     # Supported functions, not defined in math.
     stock_functions = {'step': lambda x: 1 * (x >= 0),
@@ -278,6 +281,19 @@ def math_eval(expression, variables=None, functions=None):
         elif isinstance(node, ast.BinOp):
             return operators[type(node.op)](_math_eval(node.left),
                                             _math_eval(node.right))
+        elif isinstance(node, ast.BoolOp):
+            # Handle Ternary Boolean Operator which has no operator equivalent
+            def common_operator(values):
+                return operators[type(node.op)](*values)
+            # Pre-processes all nodes,
+            # This does remove the small "A and B" operation which skips evaluating B if A is False
+            processed_values = [*map(_math_eval, node.values)]
+            # Run through each value and apply the pairwise operations
+            while len(processed_values) > 1:
+                replacement_value = common_operator(processed_values[:2])
+                processed_values.pop(0)
+                processed_values[0] = replacement_value
+            return processed_values[0]
         elif isinstance(node, ast.Name):
             try:
                 return variables[node.id]
