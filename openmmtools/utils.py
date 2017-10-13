@@ -288,18 +288,14 @@ def math_eval(expression, variables=None, functions=None):
             return operators[type(node.op)](_math_eval(node.left),
                                             _math_eval(node.right))
         elif isinstance(node, ast.BoolOp):
-            # Handle Ternary Boolean Operator which has no operator equivalent
-            def common_operator(values):
-                return operators[type(node.op)](*values)
-            # Pre-processes all nodes,
-            # This does remove the small "A and B" operation which skips evaluating B if A is False
-            processed_values = list(map(_math_eval, node.values))
-            # Run through each value and apply the pairwise operations
-            while len(processed_values) > 1:
-                replacement_value = common_operator(processed_values[:2])
-                processed_values.pop(0)
-                processed_values[0] = replacement_value
-            return processed_values[0]
+            # Parse ternary operator
+            if len(node.values) > 2:
+                # Left-to-right precedence.
+                left_value = copy.deepcopy(node)
+                left_value.values.pop(-1)
+            else:
+                left_value = node.values[0]
+            return operators[type(node.op)](_math_eval(left_value), _math_eval(node.values[-1]))
         elif isinstance(node, ast.Name):
             try:
                 return variables[node.id]
