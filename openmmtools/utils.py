@@ -233,6 +233,9 @@ def math_eval(expression, variables=None, functions=None):
     - step_hm(x) : Heaviside step function with half-maximum convention.
     - sign(x) : sign function (0.0 for x=0.0)
 
+    Available operators are `+`, `-`, `*`, `/`, `**`, `-x` (negative),
+    `&`, `and`, `|`, and `or`
+
     Parameters
     ----------
     expression : str
@@ -287,7 +290,7 @@ def math_eval(expression, variables=None, functions=None):
                 return operators[type(node.op)](*values)
             # Pre-processes all nodes,
             # This does remove the small "A and B" operation which skips evaluating B if A is False
-            processed_values = [*map(_math_eval, node.values)]
+            processed_values = list(map(_math_eval, node.values))
             # Run through each value and apply the pairwise operations
             while len(processed_values) > 1:
                 replacement_value = common_operator(processed_values[:2])
