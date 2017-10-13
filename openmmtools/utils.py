@@ -233,8 +233,11 @@ def math_eval(expression, variables=None, functions=None):
     - step_hm(x) : Heaviside step function with half-maximum convention.
     - sign(x) : sign function (0.0 for x=0.0)
 
-    Available operators are `+`, `-`, `*`, `/`, `**`, `-x` (negative),
-    `&`, `and`, `|`, and `or`
+    Available operators are ``+``, ``-``, ``*``, ``/``, ``**``, ``-x`` (negative),
+    ``&``, ``and``, ``|``, and ``or``
+
+    **The operators ``and`` and ``or`` operate BITWISE and behave the same as ``&`` and ``|`` respectively as this
+    function is not designed to handle logical operations.**
 
     Parameters
     ----------
@@ -248,7 +251,7 @@ def math_eval(expression, variables=None, functions=None):
 
     Returns
     -------
-    float
+    result
         The result of the evaluated expression.
 
     Examples

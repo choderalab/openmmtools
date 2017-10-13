@@ -57,7 +57,10 @@ def test_math_eval():
                   ('(x + lambda) / z * 4', {'x': 1, 'lambda': 2, 'z': 3}, 4.0),
                   ('-((x + y) / z * 4)**2', {'x': 1, 'y': 2, 'z': 3}, -16.0),
                   ('ceil(0.8) + acos(x) + step(0.5 - x) + step(0.5)', {'x': 1}, 2),
-                  ('step_hm(x)', {'x': 0}, 0.5)]
+                  ('step_hm(x)', {'x': 0}, 0.5),
+                  ('{1,2,3} & {2,3,4}', None, {2, 3}),
+                  ('myset or {2,3,4}', {'myset': {1, 2, 3}}, {1, 2, 3, 4}),
+                  ('(myset or my2set) & {2, 3}', {'myset': {1, 2}, 'my2set': {3, 4}}, {2, 3})]
     for expression, variables, result in test_cases:
         evaluated_expression = math_eval(expression, variables)
         assert evaluated_expression == result, '{}, {}, {}'.format(
