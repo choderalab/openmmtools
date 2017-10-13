@@ -237,7 +237,7 @@ def math_eval(expression, variables=None, functions=None):
     ``&``, ``and``, ``|``, and ``or``
 
     **The operators ``and`` and ``or`` operate BITWISE and behave the same as ``&`` and ``|`` respectively as this
-    function is not designed to handle logical operations.**
+    function is not designed to handle logical operations.** If you provide sets, they must be as variables.
 
     Parameters
     ----------
