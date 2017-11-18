@@ -1714,11 +1714,12 @@ class SamplerState(object):
             Context only to compute energies.
 
         """
+        # NOTE: Box vectors MUST be updated before positions are set.
+        if self.box_vectors is not None:
+            context.setPeriodicBoxVectors(*self.box_vectors)
         context.setPositions(self._positions)
         if self._velocities is not None and not ignore_velocities:
             context.setVelocities(self._velocities)
-        if self.box_vectors is not None:
-            context.setPeriodicBoxVectors(*self.box_vectors)
 
     def has_nan(self):
         """Check that energies and positions are finite.
