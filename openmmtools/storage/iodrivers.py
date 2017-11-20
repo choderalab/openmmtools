@@ -26,6 +26,11 @@ import numpy as np
 import netCDF4 as nc
 from sys import getsizeof
 
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
 from simtk import unit
 
 from ..utils import typename, quantity_from_string
@@ -1535,7 +1540,7 @@ class NCQuantity(NCVariableCodec):
 # NETCDF DICT YAML HANDLERS
 # =============================================================================
 
-class _DictYamlLoader(yaml.CLoader):
+class _DictYamlLoader(Loader):
     """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
     def __init__(self, *args, **kwargs):
         super(_DictYamlLoader, self).__init__(*args, **kwargs)
@@ -1549,7 +1554,7 @@ class _DictYamlLoader(yaml.CLoader):
         return data_value * data_unit
 
 
-class _DictYamlDumper(yaml.CDumper):
+class _DictYamlDumper(Dumper):
     """PyYAML Dumper that convert from Python -> YAML output"""
     def __init__(self, *args, **kwargs):
         super(_DictYamlDumper, self).__init__(*args, **kwargs)
