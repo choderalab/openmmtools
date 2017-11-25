@@ -155,7 +155,11 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
         sampler_state.positions -= centroid * distance_unit
 
     # Create a CustomExternalForce to restrain all atoms.
-    restraint_force = openmm.CustomExternalForce('(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)')
+    if thermodynamic_state.system.usesPeriodicBoundaryConditions():
+        energy_expression = '(K/2)*periodicdistance(x, y, z, x0, y0, z0)^2' # periodic distance
+    else:
+        energy_expression = '(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)' # non-periodic distance
+    restraint_force = openmm.CustomExternalForce(energy_expression)
     # Adding the spring constant as a global parameter allows us to turn it off if desired
     restraint_force.addGlobalParameter('K', K)
     restraint_force.addPerParticleParameter('x0')
