@@ -155,7 +155,7 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
         sampler_state.positions -= centroid * distance_unit
 
     # Create a CustomExternalForce to restrain all atoms.
-    if system.is_periodic:
+    if thermodynamic_state.is_periodic:
         energy_expression = '(K/2)*periodicdistance(x, y, z, x0, y0, z0)^2' # periodic distance
     else:
         energy_expression = '(K/2)*((x-x0)^2 + (y-y0)^2 + (z-z0)^2)' # non-periodic distance
