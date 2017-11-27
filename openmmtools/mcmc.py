@@ -577,8 +577,10 @@ class BaseIntegratorMove(object):
     restart_attempts : int, optional
         When greater than 0, if after the integration there are NaNs in energies,
         the move will restart. When the integrator has a random component, this
-        may help recovering. An IntegratorMoveError is raised after the given
-        number of attempts if there are still NaNs.
+        may help recovering. On the last attempt, the ``Context`` is
+        re-initialized in a slower process, but better than the simulation
+        crashing. An IntegratorMoveError is raised after the given number of
+        attempts if there are still NaNs.
 
     Attributes
     ----------
@@ -695,8 +697,14 @@ class BaseIntegratorMove(object):
                 err_msg = ('Potential energy is NaN after {} attempts of integration '
                            'with move {}'.format(attempt_counter, self.__class__.__name__))
 
+                # If we are on our last chance before crash, try to re-initialize context
+                if attempt_counter == self.n_restart_attempts - 1:
+                    logger.error(err_msg + ' Trying to reinitialize Context as a last-resort restart attempt...')
+                    context.reinitialize()
+                    sampler_state.apply_to_context(context)
+                    thermodynamic_state.apply_to_context(context)
                 # If we have hit the number of restart attempts, raise an exception.
-                if attempt_counter == self.n_restart_attempts:
+                elif attempt_counter == self.n_restart_attempts:
                     # Restore the context to the state right before the integration.
                     sampler_state.apply_to_context(context)
                     logger.error(err_msg)

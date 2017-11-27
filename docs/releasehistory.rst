@@ -1,6 +1,21 @@
 Release History
 ===============
 
+0.13.4 - Barostat/External Force Bugfix, Restart Robustness
+===========================================================
+
+Bug fixes
+---------
+- Fixed implementation bug where ``CustomExternalForce`` restraining atoms to absolute coordinates caused an issue
+  when a Barostat was used (`#310 <https://github.com/choderalab/openmmtools/issues/310>`_)
+
+Enhancements
+------------
+- MCMC Integrators now attempt to re-initialize the ``Context`` object on the last restart attempt when NaN's are
+  encountered. This has internally been shown to correct some instances where normally resetting positions does
+  not work around the NaN's. This is a slow step relative to just resetting positions, but better than simulation
+  crashing.
+
 0.13.3 - Critical Bugfix to SamplerState Context Manipulation
 =============================================================
 
@@ -86,8 +101,8 @@ New features
 - Add ``restrain_atoms`` to restrain molecule conformation through an harmonic restrain
   (`#255 <https://github.com/choderalab/openmmtools/issues/255>`_)
 
-Bugfixes
---------
+Bug fixes
+---------
 
 - Bugfix for ``testsystems`` that use implicit solvent (`#250 <https://github.com/choderalab/openmmtools/issues/250>`_)
 - Bugfix for ``ContextCache``: two consecutive calls retrieve the same ``Context`` with same thermodynamic state and no
