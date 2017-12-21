@@ -12,7 +12,7 @@ install:
 
 script:
   # Create a test environment
-  - conda create --yes -n test python=$python
+  - conda create --quiet --yes -n test python=$python
   # Activate the test environment
   - source activate test
   # Add org channel
