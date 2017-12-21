@@ -24,7 +24,7 @@ script:
   # Build the recipe
   - conda build devtools/conda-recipe
   # Install the package
-  - conda install --yes --use-local ${PACKAGENAME}-dev
+  - conda install --yes --quiet --use-local ${PACKAGENAME}-dev
   # Install testing dependencies. Without specifying the numpy version, numpy
   # is downgraded to 1.9 and we get a "libgfortran not found" issue.
   - conda install --yes --quiet nose nose-timer pymbar "numpy>=1.11"
