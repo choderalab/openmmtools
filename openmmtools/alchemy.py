@@ -1289,6 +1289,147 @@ class AbsoluteAlchemicalFactory(object):
 
         return [force, custom_force]
 
+    def _get_nonbonded_energy_expressions(self, reference_force):
+        """Return the energy expressions for alchemically modified nonbonded forces."""
+
+        # Energy expression for sterics.
+        # --------------------------------------------------
+
+        # Soft-core Lennard-Jones.
+        exceptions_sterics_energy_expression = ('U_sterics;'
+                                                'U_sterics = (lambda_sterics^softcore_a)*4*epsilon*x*(x-1.0);'
+                                                'x = (sigma/reff_sterics)^6;'
+                                                # Effective softcore distance for sterics.
+                                                'reff_sterics = sigma*((softcore_alpha*(1.0-lambda_sterics)^softcore_b + (r/sigma)^softcore_c))^(1/softcore_c);')
+
+        # Define mixing rules.
+        sterics_mixing_rules = ('epsilon = sqrt(epsilon1*epsilon2);'  # Mixing rule for epsilon.
+                                'sigma = 0.5*(sigma1 + sigma2);')  # Mixing rule for sigma.
+        # Define energy expression for electrostatics.
+        sterics_energy_expression = exceptions_sterics_energy_expression + sterics_mixing_rules
+
+        # Energy expression for electrostatics
+        # --------------------------------------------------
+        # The final expression will be prefix + method + suffix.
+        electrostatics_prefix = ('U_electrostatics;'
+                                 'U_electrostatics=(lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod')
+
+        # Effective softcore distance for electrostatics (common to all methods).
+        electrostatics_suffix = ('reff_electrostatics = sigma*((softcore_beta*(1.0-lambda_electrostatics)^softcore_e + (r/sigma)^softcore_f))^(1/softcore_f);'
+                                 'ONE_4PI_EPS0 = {};').format(ONE_4PI_EPS0)  # Already in OpenMM units.
+
+        # Standard Coulomb expression with softened core. This is used
+        #   - When the nonbonded method of the reference force is NoCutoff.
+        #   - When alchemical_pme_treatment is set to 'coulomb'.
+        #   - With 1-4 exceptions, unless self.consistent_exceptions is True.
+        coulomb_expression = '/reff_electrostatics;'
+
+        # Select electrostatics functional form based on nonbonded method.
+        nonbonded_method = reference_force.getNonbondedMethod()
+        # Soft-core Coulomb.
+        if nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
+            electrostatics_method_expression = coulomb_expression
+        # Reaction-field electrostatics.
+        elif nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
+            electrostatics_method_expression = self._get_reaction_field_unique_expression(reference_force)
+        # PME electrostatics.
+        elif nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+            # Ewald direct-space electrostatics.
+            if self.alchemical_pme_treatment == 'direct-space':
+                electrostatics_method_expression = self._get_pme_direct_space_unique_expression(reference_force)
+            # Use switched standard Coulomb potential, following MTS scheme described in
+            # http://dx.doi.org/10.1063/1.1385159
+            elif self.alchemical_pme_treatment == 'coulomb':
+                electrostatics_method_expression = coulomb_expression
+            else:
+                raise ValueError("Unknown alchemical_pme_treatment scheme '{}'".format(self.alchemical_pme_treatment))
+        else:
+            raise ValueError("Nonbonded method {} not supported yet.".format(nonbonded_method))
+
+        # Define energy expression for 1,4 electrostatic exceptions.
+        exceptions_electrostatics_energy_expression = electrostatics_prefix
+        if self.consistent_exceptions:
+            exceptions_electrostatics_energy_expression += electrostatics_method_expression
+        else:
+            exceptions_electrostatics_energy_expression += coulomb_expression
+        exceptions_electrostatics_energy_expression += electrostatics_suffix
+
+        # Define mixing rules.
+        electrostatics_mixing_rules = ('chargeprod = charge1*charge2;'  # Mixing rule for charges.
+                                       'sigma = 0.5*(sigma1 + sigma2);')  # Mixing rule for sigma.
+        # Define energy expression for electrostatics.
+        electrostatics_energy_expression = (electrostatics_prefix + electrostatics_method_expression +
+                                            electrostatics_suffix + electrostatics_mixing_rules)
+
+        return (sterics_energy_expression, exceptions_sterics_energy_expression,
+                electrostatics_energy_expression, exceptions_electrostatics_energy_expression)
+
+    def _get_reaction_field_unique_expression(self, reference_force):
+        """Unique part of the expression for reaction-field electrostatics.
+
+        Parameters
+        ----------
+        reference_force : openmm.NonbondedForce
+            The reference force including the reaction-field parameters.
+
+        Returns
+        -------
+        rf_expression : str
+            The unique expression for reaction-field electrostatics.
+
+        See Also
+        --------
+        _get_nonbonded_energy_expressions
+        """
+        epsilon_solvent = reference_force.getReactionFieldDielectric()
+        r_cutoff = reference_force.getCutoffDistance()
+
+        # Determine reaction fields parameters.
+        k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
+        if self.alchemical_rf_treatment == 'switched':
+            c_rf = 0.0 / unit.nanometers
+        elif self.alchemical_rf_treatment == 'shifted':
+            # WARNING: Setting c_rf != 0 can cause large errors in DeltaG for hydration free energies
+            c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
+        else:
+            raise ValueError("Unknown alchemical_rf_treatment scheme '{}'".format(self.alchemical_rf_treatment))
+
+        k_rf = k_rf.value_in_unit_system(unit.md_unit_system)
+        c_rf = c_rf.value_in_unit_system(unit.md_unit_system)
+        rf_expression = ('*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);'
+                         'k_rf = {k_rf};'
+                         'c_rf = {c_rf};').format(k_rf=k_rf, c_rf=c_rf)
+        return rf_expression
+
+    def _get_pme_direct_space_unique_expression(self, reference_force):
+        """Unique part of the expression for Ewald direct-space electrostatics.
+
+        Parameters
+        ----------
+        reference_force : openmm.NonbondedForce
+            The reference force including the Ewald parameters.
+
+        Returns
+        -------
+        rf_expression : str
+            The unique expression for Ewald direct-space electrostatics.
+
+        See Also
+        --------
+        _get_nonbonded_energy_expressions
+        """
+        # Determine PME parameters.
+        [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
+        if (alpha_ewald/alpha_ewald.unit) == 0.0:
+            # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
+            tol = reference_force.getEwaldErrorTolerance()
+            alpha_ewald = (1.0/reference_force.getCutoffDistance()) * np.sqrt(-np.log(2.0*tol))
+
+        alpha_ewald = alpha_ewald.value_in_unit_system(unit.md_unit_system)
+        pme_expression = ("*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
+                          "alpha_ewald = {};").format(alpha_ewald)
+        return pme_expression
+
     def _alchemically_modify_NonbondedForce(self, reference_force, alchemical_region):
         """Create alchemically-modified version of NonbondedForce.
 
@@ -1346,84 +1487,6 @@ class AbsoluteAlchemicalFactory(object):
             logger.warning('Reaction field support is still experimental. For free energy '
                            'calculations in explicit solvent, we suggest using PME for now.')
 
-        # --------------------------------------------------
-        # Determine energy expression for all custom forces
-        # --------------------------------------------------
-
-        # Soft-core Lennard-Jones
-        sterics_energy_expression = "U_sterics = (lambda_sterics^softcore_a)*4*epsilon*x*(x-1.0); x = (sigma/reff_sterics)^6;"
-
-        # Electrostatics energy expression for NoCutoff nonbonded method
-        nocutoff_electrostatics_energy_expression = "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod/reff_electrostatics;"
-
-        # Electrostatics energy expression will change according to the nonbonded method.
-        electrostatics_energy_expression = ""
-
-        # Energy expression for 1,4 electrostatics exceptions can be either electrostatics_energy_expression
-        # or nocutoff_electrostatics_energy_expression if self.consistent_exceptions is True or False respectively
-        exceptions_electrostatics_energy_expression = ""
-
-        # Select electrostatics functional form based on nonbonded method.
-        if nonbonded_method in [openmm.NonbondedForce.NoCutoff]:
-            # soft-core Coulomb
-            electrostatics_energy_expression += nocutoff_electrostatics_energy_expression
-        elif nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic]:
-            # reaction-field electrostatics
-            epsilon_solvent = reference_force.getReactionFieldDielectric()
-            r_cutoff = reference_force.getCutoffDistance()
-            electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*(reff_electrostatics^(-1) + k_rf*reff_electrostatics^2 - c_rf);"
-            k_rf = r_cutoff**(-3) * ((epsilon_solvent - 1) / (2*epsilon_solvent + 1))
-            if self.alchemical_rf_treatment == 'switched':
-                c_rf = 0.0 / unit.nanometers
-            elif self.alchemical_rf_treatment == 'shifted':
-                # WARNING: Setting c_rf != 0 can cause large errors in DeltaG for hydration free energies
-                c_rf = r_cutoff**(-1) * ((3*epsilon_solvent) / (2*epsilon_solvent + 1))
-            else:
-                raise Exception("Unknown alchemical_rf_treatment scheme '%s'" % self.alchemical_rf_treatment)
-            electrostatics_energy_expression += "k_rf = %f;" % (k_rf.value_in_unit_system(unit.md_unit_system))
-            electrostatics_energy_expression += "c_rf = %f;" % (c_rf.value_in_unit_system(unit.md_unit_system))
-        elif nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
-            if self.alchemical_pme_treatment == 'direct-space':
-                # Ewald direct-space electrostatics
-                [alpha_ewald, nx, ny, nz] = reference_force.getPMEParameters()
-                if (alpha_ewald/alpha_ewald.unit) == 0.0:
-                    # If alpha is 0.0, alpha_ewald is computed by OpenMM from from the error tolerance.
-                    tol = reference_force.getEwaldErrorTolerance()
-                    alpha_ewald = (1.0/reference_force.getCutoffDistance()) * np.sqrt(-np.log(2.0*tol))
-                electrostatics_energy_expression += "U_electrostatics = (lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod*erfc(alpha_ewald*reff_electrostatics)/reff_electrostatics;"
-                electrostatics_energy_expression += "alpha_ewald = %f;" % (alpha_ewald.value_in_unit_system(unit.md_unit_system))
-                # TODO: Handle reciprocal-space electrostatics for alchemically-modified particles.  These are otherwise neglected.
-                # NOTE: There is currently no way to do this in OpenMM.
-            elif self.alchemical_pme_treatment == 'coulomb':
-                # Use switched standard Coulomb potential, following MTS scheme described in
-                # http://dx.doi.org/10.1063/1.1385159
-                electrostatics_energy_expression += nocutoff_electrostatics_energy_expression
-            else:
-                raise Exception("Unknown alchemical_pme_treatment scheme '%s'" % self.alchemical_pme_treatment)
-        else:
-            raise Exception("Nonbonded method %s not supported yet." % str(nonbonded_method))
-
-        # Add additional definitions common to all methods.
-        sterics_energy_expression += "reff_sterics = sigma*((softcore_alpha*(1.0-lambda_sterics)^softcore_b + (r/sigma)^softcore_c))^(1/softcore_c);" # effective softcore distance for sterics
-        reff_electrostatics_expression = "reff_electrostatics = sigma*((softcore_beta*(1.0-lambda_electrostatics)^softcore_e + (r/sigma)^softcore_f))^(1/softcore_f);" # effective softcore distance for electrostatics
-        reff_electrostatics_expression += "ONE_4PI_EPS0 = %f;" % ONE_4PI_EPS0 # already in OpenMM units
-        electrostatics_energy_expression += reff_electrostatics_expression
-
-        # Define functional form of 1,4 electrostatic exceptions
-        if self.consistent_exceptions:
-            exceptions_electrostatics_energy_expression += electrostatics_energy_expression
-        else:
-            exceptions_electrostatics_energy_expression += nocutoff_electrostatics_energy_expression
-            exceptions_electrostatics_energy_expression += reff_electrostatics_expression
-
-        # Define mixing rules.
-        sterics_mixing_rules = ""
-        sterics_mixing_rules += "epsilon = sqrt(epsilon1*epsilon2);" # mixing rule for epsilon
-        sterics_mixing_rules += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-        electrostatics_mixing_rules = ""
-        electrostatics_mixing_rules += "chargeprod = charge1*charge2;" # mixing rule for charges
-        electrostatics_mixing_rules += "sigma = 0.5*(sigma1 + sigma2);" # mixing rule for sigma
-
         # ------------------------------------------------------------
         # Create and configure all forces to add to alchemical system
         # ------------------------------------------------------------
@@ -1453,23 +1516,34 @@ class AbsoluteAlchemicalFactory(object):
         # na_electrostatics_custom_bond_force      | electrostatics exceptions non-alchemical/alchemical   |
         # --------------------------------------------------------------------------------------------------
 
+        # Determine energy expression for all custom forces
+        energy_expressions = self._get_nonbonded_energy_expressions(reference_force)
+        (sterics_energy_expression,
+         exceptions_sterics_energy_expression,
+         electrostatics_energy_expression,
+         exceptions_electrostatics_energy_expression) = energy_expressions  # Unpack.
+
         # Create a copy of the NonbondedForce to handle particle interactions and
         # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
         nonbonded_force = copy.deepcopy(reference_force)
 
+        def create_force(force_cls, energy_expression, lambda_variable_name, is_lambda_controlled):
+            """Shortcut to create a lambda-controlled custom forces."""
+            if is_lambda_controlled:
+                force = force_cls(energy_expression)
+                force.addGlobalParameter(lambda_variable_name, 1.0)
+            else:  # fix lambda variable to 1.0
+                energy_expression = energy_expression + lambda_variable_name + '=1.0;'
+                force = force_cls(energy_expression)
+            return force
+
         # Create CustomNonbondedForces to handle sterics particle interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
-        # to 1.0 for decoupled interactions
-        basic_sterics_expression = "U_sterics;" + sterics_energy_expression + sterics_mixing_rules
-
-        na_sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_sterics_expression)
-        na_sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 1.0)
-        if alchemical_region.annihilate_sterics:
-            aa_sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_sterics_expression)
-            aa_sterics_custom_nonbonded_force.addGlobalParameter("lambda_sterics", 1.0)
-        else:  # for decoupling fix lambda_sterics to 1.0
-            aa_sterics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_sterics_expression +
-                                                                            'lambda_sterics=1.0;')
+        # to 1.0 for decoupled interactions in alchemical/alchemical force.
+        na_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
+                                                         'lambda_sterics', is_lambda_controlled=True)
+        aa_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
+                                                         'lambda_sterics', alchemical_region.annihilate_sterics)
 
         # Add parameters and configure CustomNonbondedForces to match reference force
         is_method_periodic = nonbonded_method in [openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME,
@@ -1493,24 +1567,18 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create CustomNonbondedForces to handle electrostatics particle interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
-        # to 1.0 for decoupled interactions
-        basic_electrostatics_expression = "U_electrostatics;" + electrostatics_energy_expression +\
-                                          electrostatics_mixing_rules
-
-        na_electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_electrostatics_expression)
-        na_electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 1.0)
-        if alchemical_region.annihilate_electrostatics:
-            aa_electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_electrostatics_expression)
-            aa_electrostatics_custom_nonbonded_force.addGlobalParameter("lambda_electrostatics", 1.0)
-        else:  # for decoupling fix lambda_electrostatics to 1.0
-            aa_electrostatics_custom_nonbonded_force = openmm.CustomNonbondedForce(basic_electrostatics_expression +
-                                                                                   'lambda_electrostatics=1.0;')
+        # to 1.0 for decoupled interactions in alchemical/alchemical force.
+        na_electrostatics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression,
+                                                                'lambda_electrostatics', is_lambda_controlled=True)
+        aa_electrostatics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression,
+                                                                'lambda_electrostatics', alchemical_region.annihilate_electrostatics)
 
         # Add parameters and configure CustomNonbondedForces to match reference force
         for force in [na_electrostatics_custom_nonbonded_force, aa_electrostatics_custom_nonbonded_force]:
             force.addPerParticleParameter("charge")  # partial charge
             force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
-            if (nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald] and self.alchemical_pme_treatment == 'coulomb') or (nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic] and self.alchemical_rf_treatment == 'switched'):
+            if ((nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald] and self.alchemical_pme_treatment == 'coulomb') or
+                    (nonbonded_method in [openmm.NonbondedForce.CutoffPeriodic] and self.alchemical_rf_treatment == 'switched')):
                 force.setUseSwitchingFunction(True)  # use switching function for alchemical electrostatics to ensure force continuity at cutoff
             else:
                 force.setUseSwitchingFunction(False)
@@ -1525,16 +1593,11 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create CustomBondForces to handle sterics 1,4 exceptions interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
-        # to 1.0 for decoupled interactions
-        basic_sterics_expression = "U_sterics;" + sterics_energy_expression
-
-        na_sterics_custom_bond_force = openmm.CustomBondForce(basic_sterics_expression)
-        na_sterics_custom_bond_force.addGlobalParameter("lambda_sterics", 1.0)
-        if alchemical_region.annihilate_sterics:
-            aa_sterics_custom_bond_force = openmm.CustomBondForce(basic_sterics_expression)
-            aa_sterics_custom_bond_force.addGlobalParameter("lambda_sterics", 1.0)
-        else:  # for decoupling fix lambda_sterics to 1.0
-            aa_sterics_custom_bond_force = openmm.CustomBondForce(basic_sterics_expression + 'lambda_sterics=1.0;')
+        # to 1.0 for decoupled interactions in alchemical/alchemical force.
+        na_sterics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_sterics_energy_expression,
+                                                    'lambda_sterics', is_lambda_controlled=True)
+        aa_sterics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_sterics_energy_expression,
+                                                    'lambda_sterics', alchemical_region.annihilate_sterics)
 
         for force in [na_sterics_custom_bond_force, aa_sterics_custom_bond_force]:
             force.addPerBondParameter("sigma")  # Lennard-Jones effective sigma
@@ -1542,20 +1605,11 @@ class AbsoluteAlchemicalFactory(object):
 
         # Create CustomBondForces to handle electrostatics 1,4 exceptions interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
-        # to 1.0 for decoupled interactions
-        if self.consistent_exceptions:
-            basic_electrostatics_expression = "U_electrostatics;" + electrostatics_energy_expression
-        else:
-            basic_electrostatics_expression = "U_electrostatics;" + exceptions_electrostatics_energy_expression
-
-        na_electrostatics_custom_bond_force = openmm.CustomBondForce(basic_electrostatics_expression)
-        na_electrostatics_custom_bond_force.addGlobalParameter("lambda_electrostatics", 1.0)
-        if alchemical_region.annihilate_electrostatics:
-            aa_electrostatics_custom_bond_force = openmm.CustomBondForce(basic_electrostatics_expression)
-            aa_electrostatics_custom_bond_force.addGlobalParameter("lambda_electrostatics", 1.0)
-        else:  # for decoupling fix lambda_electrostatics to 1.0
-            aa_electrostatics_custom_bond_force = openmm.CustomBondForce(basic_electrostatics_expression +
-                                                                         'lambda_electrostatics=1.0;')
+        # to 1.0 for decoupled interactions in alchemical/alchemical force.
+        na_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
+                                                           'lambda_electrostatics', is_lambda_controlled=True)
+        aa_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
+                                                           'lambda_electrostatics', alchemical_region.annihilate_electrostatics)
 
         # Create CustomBondForce to handle exceptions for electrostatics
         for force in [na_electrostatics_custom_bond_force, aa_electrostatics_custom_bond_force]:
