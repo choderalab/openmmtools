@@ -419,6 +419,9 @@ class AlchemicalState(object):
                 err_msg = 'Could not find parameter {} in the system'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
 
+        # Write NonbondedForce charges if PME is treated exactly.
+        self._set_exact_pme_charges(system)
+
     def check_system_consistency(self, system):
         """Check if the system is consistent with the alchemical state.
 
@@ -475,6 +478,11 @@ class AlchemicalState(object):
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
+
+        # Write NonbondedForce charges if PME is treated exactly.
+        updated_nonbonded_force = self._set_exact_pme_charges(context.getSystem())
+        if updated_nonbonded_force is not None:
+            updated_nonbonded_force.updateParametersInContext(context)
 
     @classmethod
     def _standardize_system(cls, system):
@@ -559,6 +567,43 @@ class AlchemicalState(object):
                 parameter_name = force.getGlobalParameterName(parameter_id)
                 if parameter_name in supported_parameters:
                     yield force, parameter_name, parameter_id
+
+    @staticmethod
+    def _find_exact_pme_forces(system):
+        """Return the NonbondedForce and the CustomNonbondedForce with the original charges."""
+        original_charges_force = None
+        nonbonded_force = None
+        for force in system.getForces():
+            if (isinstance(force, openmm.CustomNonbondedForce) and
+                        force.getEnergyFunction() == '0.0;'):
+                original_charges_force = force
+            elif isinstance(force, openmm.NonbondedForce):
+                nonbonded_force = force
+        return original_charges_force, nonbonded_force
+
+    def _set_exact_pme_charges(self, system):
+        """Write NonbondedForce charges if PME is treated exactly.
+
+        Return the updated NonbondedForce if the charges were set,
+        or None otherwise.
+        """
+        # Find CustomNonbondedForce storing the original charges
+        # and the NonbondedForce with the charges to set.
+        original_charges_force, nonbonded_force = self._find_exact_pme_forces(system)
+
+        # If we don't treat PME exactly, we don't need to set the charges.
+        if original_charges_force is None:
+            return None
+
+        # Set alchemical atoms charges.
+        lambda_electrostatics = self.lambda_electrostatics
+        _, alchemical_atoms = original_charges_force.getInteractionGroupParameters(0)
+        for atom_idx in alchemical_atoms:
+            charge, sigma, epsilon = nonbonded_force.getParticleParameters(atom_idx)
+            original_charge = original_charges_force.getParticleParameters(atom_idx)[0]
+            charge = lambda_electrostatics * original_charge
+            nonbonded_force.setParticleParameters(atom_idx, charge, sigma, epsilon)
+        return nonbonded_force
 
 
 # =============================================================================
@@ -668,9 +713,15 @@ class AbsoluteAlchemicalFactory(object):
         used in alchemical interactions only.
     alchemical_pme_treatment : str, optional, default = 'direct-space'
         Controls how alchemical region electrostatics are treated when PME is used.
-        Options are ['direct-space', 'coulomb'].
-        'direct-space' only models the direct space contribution
-        'coulomb' includes switched Coulomb interaction
+        Options are ['direct-space', 'coulomb', 'exact'].
+        - 'direct-space' only models the direct space contribution
+        - 'coulomb' includes switched Coulomb interaction
+        - 'exact' includes also the reciprocal space contribution, but it's
+           only possible to annihilate the charges and the softcore parameters
+           controlling the electrostatics are deactivated. Also, with this
+           method, modifying the global variable `lambda_electrostatics` is
+           not sufficient to control the charges. The recommended way to change
+           them is through the `AlchemicalState` class.
     alchemical_rf_treatment : str, optional, default = 'switched'
         Controls how alchemical region electrostatics are treated when RF is used
         Options are ['switched', 'shifted']
@@ -1522,7 +1573,7 @@ class AbsoluteAlchemicalFactory(object):
         # Create and configure all forces to add to alchemical system
         # ------------------------------------------------------------
 
-        # Interactions and exceptions will be distributed according to the following table
+        # Interactions and exceptions will be distributed according to the following table.
 
         # --------------------------------------------------------------------------------------------------
         # FORCE                                    | INTERACTION GROUP                                     |
@@ -1533,10 +1584,12 @@ class AbsoluteAlchemicalFactory(object):
         # aa_sterics_custom_nonbonded_force        | sterics interactions alchemical/alchemical            |
         # --------------------------------------------------------------------------------------------------
         # aa_electrostatics_custom_nonbonded_force | electrostatics interactions alchemical/alchemical     |
+        #                                          | (only without exact PME treatment)                    |
         # --------------------------------------------------------------------------------------------------
         # na_sterics_custom_nonbonded_force        | sterics interactions non-alchemical/alchemical        |
         # --------------------------------------------------------------------------------------------------
         # na_electrostatics_custom_nonbonded_force | electrostatics interactions non-alchemical/alchemical |
+        #                                          | (only without exact PME treatment)                    |
         # --------------------------------------------------------------------------------------------------
         # aa_sterics_custom_bond_force             | sterics exceptions alchemical/alchemical              |
         # --------------------------------------------------------------------------------------------------
@@ -2094,7 +2147,7 @@ class AbsoluteAlchemicalFactory(object):
                     sterics_bond_forces.append([force_index, force])
                 else:
                     electro_bond_forces.append([force_index, force])
-            elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, '0.0'):
+            elif isinstance(force, openmm.CustomNonbondedForce) and force.getEnergyFunction() == '0.0;':
                 add_label('CustomNonbondedForce holding alchemical atoms unmodified charges', force_index)
             elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, 'lambda'):
                 if check_energy_expression(force, 'lambda_sterics'):
