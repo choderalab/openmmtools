@@ -462,6 +462,7 @@ class AlchemicalState(object):
             If the context does not have the required lambda global variables.
 
         """
+        has_lambda_electrostatics_changed = False
         context_parameters = context.getParameters()
 
         # Set parameters in Context.
@@ -474,15 +475,21 @@ class AlchemicalState(object):
                     raise AlchemicalStateError(err_msg.format(parameter_name))
                 continue
             try:
+                # If lambda_electrostatics, first check if we're changing it for later.
+                if parameter_name == 'lambda_electrostatics':
+                    old_parameter_value = context.getParameter(parameter_name)
+                    has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
+                                                         parameter_value != old_parameter_value)
                 context.setParameter(parameter_name, parameter_value)
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
 
         # Write NonbondedForce charges if PME is treated exactly.
-        updated_nonbonded_force = self._set_exact_pme_charges(context.getSystem())
-        if updated_nonbonded_force is not None:
-            updated_nonbonded_force.updateParametersInContext(context)
+        if has_lambda_electrostatics_changed:
+            updated_nonbonded_force = self._set_exact_pme_charges(context.getSystem())
+            if updated_nonbonded_force is not None:
+                updated_nonbonded_force.updateParametersInContext(context)
 
     @classmethod
     def _standardize_system(cls, system):
