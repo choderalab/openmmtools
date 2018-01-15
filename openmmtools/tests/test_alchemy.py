@@ -404,7 +404,9 @@ def is_alchemical_pme_treatment_exact(alchemical_system):
     # If exact PME is here, there is a CustomNonbondedForce storing
     # the original charges that does not contribute to the energy.
     for force in alchemical_system.getForces():
-        if isinstance(force, openmm.CustomNonbondedForce) and force.getEnergyFunction() == '0.0;':
+        if (isinstance(force, openmm.CustomNonbondedForce) and
+                    force.getEnergyFunction() == '0.0;' and
+                    force.getGlobalParameterName(0) == 'lambda_electrostatics'):
             return True
     return False
 

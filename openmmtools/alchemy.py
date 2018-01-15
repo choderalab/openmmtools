@@ -575,7 +575,8 @@ class AlchemicalState(object):
         nonbonded_force = None
         for force in system.getForces():
             if (isinstance(force, openmm.CustomNonbondedForce) and
-                        force.getEnergyFunction() == '0.0;'):
+                        force.getEnergyFunction() == '0.0;' and
+                        force.getGlobalParameterName(0) == 'lambda_electrostatics'):
                 original_charges_force = force
             elif isinstance(force, openmm.NonbondedForce):
                 nonbonded_force = force
@@ -1643,7 +1644,11 @@ class AbsoluteAlchemicalFactory(object):
         # With exact PME treatment, we create a single CustomNonbondedForce
         # to store the original alchemically-modified charges.
         if use_exact_pme_treatment:
-            original_charges_custom_nonbonded_force = openmm.CustomNonbondedForce(electrostatics_energy_expression)
+            # We add the lambda_electrostatics global variable even
+            # if it doesn't affect the force to make sure we have
+            # a very quick way to check the status of the charges.
+            original_charges_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression,
+                                                                   'lambda_electrostatics', is_lambda_controlled=True)
             all_electrostatics_custom_nonbonded_forces = [original_charges_custom_nonbonded_force]
         else:
             # Create CustomNonbondedForces to handle electrostatics particle interactions between
@@ -2147,7 +2152,8 @@ class AbsoluteAlchemicalFactory(object):
                     sterics_bond_forces.append([force_index, force])
                 else:
                     electro_bond_forces.append([force_index, force])
-            elif isinstance(force, openmm.CustomNonbondedForce) and force.getEnergyFunction() == '0.0;':
+            elif (isinstance(force, openmm.CustomNonbondedForce) and force.getEnergyFunction() == '0.0;' and
+                          force.getGlobalParameterName(0) == 'lambda_electrostatics'):
                 add_label('CustomNonbondedForce holding alchemical atoms unmodified charges', force_index)
             elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, 'lambda'):
                 if check_energy_expression(force, 'lambda_sterics'):
