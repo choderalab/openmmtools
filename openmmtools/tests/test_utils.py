@@ -82,7 +82,7 @@ def test_is_quantity_close():
     err_msg = 'obtained: {}, expected: {} (quantity1: {}, quantity2: {})'
     for quantity1, quantity2, test_result in test_cases:
         result = is_quantity_close(quantity1, quantity2)
-        assert result is test_result, err_msg.format(result, test_result, quantity1, quantity2)
+        assert result == test_result, err_msg.format(result, test_result, quantity1, quantity2)
 
     # Passing quantities with different units raise an exception.
     with nose.tools.assert_raises(TypeError):

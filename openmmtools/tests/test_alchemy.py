@@ -1667,8 +1667,8 @@ class TestAlchemicalState(object):
         positions = self.alanine_test_system.positions
         reference_system = copy.deepcopy(self.alanine_test_system.system)
         context.setPositions(positions)
-        alchemical_energy_1 = compute_electrostatic_energy(1.0)
-        alchemical_energy_0 = compute_electrostatic_energy(0.0)
+        alchemical_energy_1 = compute_electrostatic_energy(1.0, context)
+        alchemical_energy_0 = compute_electrostatic_energy(0.0, context)
         del context
 
         reference_energy_1 = compute_energy(reference_system, positions)
