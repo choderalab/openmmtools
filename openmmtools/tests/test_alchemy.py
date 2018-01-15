@@ -1649,7 +1649,7 @@ class TestAlchemicalState(object):
                 assert parameter_value == 0.5
         del context
 
-        def compute_electrostatic_energy(lambda_electrostatics):
+        def compute_electrostatic_energy(lambda_electrostatics, context):
             alchemical_state.lambda_electrostatics = lambda_electrostatics
             alchemical_state.apply_to_context(context)
             return context.getState(getEnergy=True).getPotentialEnergy()
