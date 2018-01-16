@@ -30,6 +30,34 @@ from openmmtools import utils, integrators, constants
 # MODULE FUNCTIONS
 # =============================================================================
 
+def group_by_compatibility(thermodynamic_states):
+    """Utility function to split the thermodynamic states by compatibility.
+
+    Parameters
+    ----------
+    thermodynamic_states : list of ThermodynamicState
+        The thermodynamic state to group by compatibility.
+
+    Returns
+    -------
+    compatible_groups : list of list of ThermodynamicState
+       The states grouped by compatibility.
+
+    """
+    compatible_groups = []
+    for state in thermodynamic_states:
+        # Search for compatible group.
+        found_compatible = False
+        for group in compatible_groups:
+            if state.is_state_compatible(group[0]):
+                found_compatible = True
+                group.append(state)
+        # Create new one.
+        if not found_compatible:
+            compatible_groups.append([state])
+    return compatible_groups
+
+
 def _box_vectors_volume(box_vectors):
     """Return the volume of the box vectors.
 
@@ -632,13 +660,82 @@ class ThermodynamicState(object):
         if n_particles != self.n_particles:
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE)
 
-        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
-        reduced_potential = potential_energy
-        reduced_potential = reduced_potential / unit.AVOGADRO_CONSTANT_NA
-        pressure = self.pressure
-        if pressure is not None:
-            reduced_potential += pressure * volume
-        return beta * reduced_potential
+        return self._compute_reduced_potential(potential_energy, self.temperature,
+                                               volume, self.pressure)
+
+    @classmethod
+    def reduced_potential_at_states(cls, context, thermodynamic_states):
+        """Efficiently compute the reduced potential for a list of compatible states.
+
+        The user is responsible to ensure that the given context is compatible
+        with the thermodynamic states.
+
+        Parameters
+        ----------
+        context : openmm.Context
+            The OpenMM `Context` object with box vectors and positions set.
+        thermodynamic_states : list of ThermodynamicState
+            The list of thermodynamic states at which to compute the reduced
+            potential.
+
+        Returns
+        -------
+        reduced_potentials : list of float
+            The unit-less reduced potentials, which can be considered
+            to have units of kT.
+
+        Raises
+        ------
+        ValueError
+            If the thermodynamic states are not compatible to each other.
+
+        """
+        # Isolate first thermodynamic state.
+        if len(thermodynamic_states) == 1:
+            thermodynamic_states[0].apply_to_context(context)
+            return [thermodynamic_states[0].reduced_potential(context)]
+
+        # Check that the states are compatible.
+        for state_idx, state in enumerate(thermodynamic_states[:-1]):
+            if not state.is_state_compatible(thermodynamic_states[state_idx + 1]):
+                raise ValueError('State {} is not compatible.')
+
+        # In NPT, we'll need also the volume.
+        is_npt = thermodynamic_states[0].pressure is not None
+        volume = None
+
+        energy_by_force_group = {force.getForceGroup(): 0.0*unit.kilocalories_per_mole
+                                 for force in context.getSystem().getForces()}
+
+        # Go through thermodynamic states and compute only the energy of the
+        # force groups that changed. Compute all the groups the first pass.
+        force_groups_to_compute = set(energy_by_force_group)
+        reduced_potentials = []
+        for state_idx, state in enumerate(thermodynamic_states):
+            state.apply_to_context(context)
+
+            # Compute the energy of all the groups to update.
+            for force_group_idx in force_groups_to_compute:
+                openmm_state = context.getState(getEnergy=True, groups=2**force_group_idx)
+                energy_by_force_group[force_group_idx] = openmm_state.getPotentialEnergy()
+
+            # Compute volume if this is the first time we obtain a state.
+            if is_npt and volume is None:
+                volume = openmm_state.getPeriodicBoxVolume()
+
+            # Compute the new total reduced potential.
+            potential_energy = unit.sum(list(energy_by_force_group.values()))
+            reduced_potential = cls._compute_reduced_potential(potential_energy, state.temperature,
+                                                               volume, state.pressure)
+            reduced_potentials.append(reduced_potential)
+
+            # Update groups to compute for next states.
+            if state_idx < len(thermodynamic_states) - 1:
+                next_state = thermodynamic_states[state_idx + 1]
+                force_groups_to_compute = next_state._find_force_groups_to_update(context, state)
+
+        return reduced_potentials
+
 
     def is_state_compatible(self, thermodynamic_state):
         """Check compatibility between ThermodynamicStates.
@@ -1447,6 +1544,28 @@ class ThermodynamicState(object):
         if barostat is not None:
             cls._set_barostat_temperature(barostat, temperature)
 
+    # -------------------------------------------------------------------------
+    # Internal-usage: initialization
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_reduced_potential(potential_energy, temperature, volume, pressure):
+        """Convert potential energy into reduced potential."""
+        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * temperature)
+        reduced_potential = potential_energy / unit.AVOGADRO_CONSTANT_NA
+        if pressure is not None:
+            reduced_potential += pressure * volume
+        return beta * reduced_potential
+
+    def _find_force_groups_to_update(self, context, thermodynamic_state):
+        """Find the force groups to be recomputed when moving to the given state.
+
+        With the current implementation of ThermodynamicState, no force group has
+        to be recomputed as only temperature and pressure change between compatible
+        states, but this method becomes essential in CompoundThermodynamicState.
+        """
+        return set()
+
 
 # =============================================================================
 # SAMPLER STATE
@@ -1941,6 +2060,31 @@ class IComposableState(utils.SubhookedABCMeta):
         """
         pass
 
+    @abc.abstractmethod
+    def _find_force_groups_to_update(self, context, current_context_state):
+        """Find the force groups whose energy must be recomputed after applying self.
+
+        This is used to compute efficiently the potential energy of the
+        same configuration in multiple thermodynamic states.
+
+        Parameters
+        ----------
+        context : Context
+            The context, currently in `current_context_state`, that will
+            be moved to this state.
+        current_context_state : ThermodynamicState
+            The full thermodynamic state of the given context. This is
+            guaranteed to be compatible with self.
+
+        Returns
+        -------
+        force_groups_to_update : set of int
+            The indices of the force groups whose energy must be computed
+            again after applying this state, assuming the context to be in
+            `current_context_state`.
+        """
+        pass
+
 
 class CompoundThermodynamicState(ThermodynamicState):
     """Thermodynamic state composed by multiple states.
@@ -2211,6 +2355,21 @@ class CompoundThermodynamicState(ThermodynamicState):
         super(CompoundThermodynamicState, self)._standardize_system(system)
         for composable_cls in self._composable_states:
             composable_cls._standardize_system(system)
+
+    def _find_force_groups_to_update(self, context, current_context_state):
+        """Find the force groups to be recomputed when moving to the given state.
+
+        Override ThermodynamicState._find_force_groups_to_update to find
+        groups to update for changes of composable states.
+        """
+        # Find force group to update for parent class.
+        force_groups = super(CompoundThermodynamicState, self)._find_force_groups_to_update(
+            context, current_context_state)
+        # Find force group to update for composable states.
+        for composable_state in self._composable_states:
+            force_groups.update(composable_state._find_force_groups_to_update(
+                context, current_context_state))
+        return force_groups
 
 
 if __name__ == '__main__':
