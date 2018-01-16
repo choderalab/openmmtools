@@ -1303,7 +1303,7 @@ class TestAbsoluteAlchemicalFactory(object):
                 forcefactories.replace_reaction_field(test_system.system, return_copy=False,
                                                       switch_width=factory.switch_width)
 
-    def filter_test_cases(self, condition_func, max_number=None):
+    def filter_cases(self, condition_func, max_number=None):
         """Return the list of test cases that satisfy condition_func(test_case_name)."""
         if max_number is None:
             max_number = len(self.test_cases)
@@ -1319,9 +1319,9 @@ class TestAbsoluteAlchemicalFactory(object):
     def test_split_force_groups(self):
         """Forces having different lambda variables should have a different force group."""
         # Select 1 implicit, 1 explicit, and 1 exact PME explicit test case randomly.
-        test_cases = self.filter_test_cases(lambda x: 'Implicit' in x, max_number=1)
-        test_cases.update(self.filter_test_cases(lambda x: 'Explicit ' in x and 'exact PME' in x, max_number=1))
-        test_cases.update(self.filter_test_cases(lambda x: 'Explicit ' in x and 'exact PME' not in x, max_number=1))
+        test_cases = self.filter_cases(lambda x: 'Implicit' in x, max_number=1)
+        test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' in x, max_number=1))
+        test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' not in x, max_number=1))
         for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
             f = partial(check_split_force_groups, alchemical_system)
             f.description = "Testing force splitting among groups of {}".format(test_name)
@@ -1348,7 +1348,7 @@ class TestAbsoluteAlchemicalFactory(object):
         """Test interacting state energy by force component."""
         # This is a very expensive but very informative test. We can
         # run this locally when test_fully_interacting_energies() fails.
-        test_cases = self.filter_test_cases(lambda x: 'Explicit' in x)
+        test_cases = self.filter_cases(lambda x: 'Explicit' in x)
         for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
             f = partial(check_interacting_energy_components, test_system.system, alchemical_system,
                         alchemical_region, test_system.positions)
@@ -1970,7 +1970,7 @@ class TestAlchemicalState(object):
                 compound_states.append(states.CompoundThermodynamicState(thermo_state, [alchemical_state]))
 
         # Group thermodynamic states by compatibility.
-        compatible_groups = states.group_by_compatibility(compound_states)
+        compatible_groups, _ = states.group_by_compatibility(compound_states)
         assert len(compatible_groups) == 2
 
         # Compute the reduced potentials.
