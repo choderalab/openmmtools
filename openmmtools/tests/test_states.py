@@ -725,14 +725,15 @@ class TestThermodynamicState(object):
         thermodynamic_states = [
             ThermodynamicState(self.alanine_explicit, temperature=300*unit.kelvin,
                                pressure=1.0*unit.atmosphere),
+            ThermodynamicState(self.toluene_implicit, temperature=200*unit.kelvin),
             ThermodynamicState(self.alanine_explicit, temperature=250*unit.kelvin,
-                               pressure=1.2*unit.atmosphere),
-            ThermodynamicState(self.toluene_implicit, temperature=200*unit.kelvin)
+                               pressure=1.2*unit.atmosphere)
         ]
 
         # Group thermodynamic states by compatibility.
-        compatible_groups = group_by_compatibility(thermodynamic_states)
+        compatible_groups, original_indices = group_by_compatibility(thermodynamic_states)
         assert len(compatible_groups) == 2
+        assert original_indices == [[0, 2], [1]]
 
         # Compute the reduced potentials.
         expected_energies = []

@@ -41,21 +41,27 @@ def group_by_compatibility(thermodynamic_states):
     Returns
     -------
     compatible_groups : list of list of ThermodynamicState
-       The states grouped by compatibility.
+        The states grouped by compatibility.
+    original_indices: list of list of int
+        The indices of the ThermodynamicStates in theoriginal list.
 
     """
     compatible_groups = []
-    for state in thermodynamic_states:
+    original_indices = []
+    for state_idx, state in enumerate(thermodynamic_states):
         # Search for compatible group.
         found_compatible = False
-        for group in compatible_groups:
+        for group, indices in zip(compatible_groups, original_indices):
             if state.is_state_compatible(group[0]):
                 found_compatible = True
                 group.append(state)
+                indices.append(state_idx)
+
         # Create new one.
         if not found_compatible:
             compatible_groups.append([state])
-    return compatible_groups
+            original_indices.append([state_idx])
+    return compatible_groups, original_indices
 
 
 def _box_vectors_volume(box_vectors):
