@@ -477,7 +477,7 @@ class AlchemicalState(object):
             try:
                 # If lambda_electrostatics, first check if we're changing it for later.
                 if parameter_name == 'lambda_electrostatics':
-                    old_parameter_value = context.getParameter(parameter_name)
+                    old_parameter_value = context_parameters[parameter_name]
                     has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
                                                          parameter_value != old_parameter_value)
                 context.setParameter(parameter_name, parameter_value)
@@ -511,6 +511,41 @@ class AlchemicalState(object):
         alchemical_state = AlchemicalState.from_system(system)
         alchemical_state.set_alchemical_parameters(1.0)
         alchemical_state.apply_to_system(system)
+
+    def _find_force_groups_to_update(self, context, current_context_state):
+        """Find the force groups whose energy must be recomputed after applying self.
+
+        Parameters
+        ----------
+        context : Context
+            The context, currently in `current_context_state`, that will
+            be moved to this state.
+        current_context_state : ThermodynamicState
+            The full thermodynamic state of the given context. This is
+            guaranteed to be compatible with self.
+
+        Returns
+        -------
+        force_groups_to_update : set of int
+            The indices of the force groups whose energy must be computed
+            again after applying this state, assuming the context to be in
+            `current_context_state`.
+        """
+        # Find lambda parameters that will change.
+        parameters_to_update = set()
+        for parameter_name in self._get_supported_parameters():
+            self_lambda_value = getattr(self, parameter_name)
+            context_lambda_value = getattr(current_context_state, parameter_name)
+            if self_lambda_value != context_lambda_value:
+                parameters_to_update.add(parameter_name)
+
+        # Find all the force groups that need to be updated.
+        force_groups_to_update = set()
+        system = context.getSystem()
+        for force, parameter_name, _ in self._get_system_lambda_parameters(system):
+            if parameter_name in parameters_to_update:
+                force_groups_to_update.add(force.getForceGroup())
+        return force_groups_to_update
 
     # -------------------------------------------------------------------------
     # Internal-usage

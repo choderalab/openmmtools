@@ -1536,7 +1536,8 @@ class TestAlchemicalState(object):
         alchemical_alanine_system_exact_pme = factory_exact_pme.create_alchemical_system(alanine_explicit.system,
                                                                                          alchemical_region)
         cls.alanine_state_exact_pme = states.ThermodynamicState(alchemical_alanine_system_exact_pme,
-                                                                temperature=300*unit.kelvin)
+                                                                temperature=300*unit.kelvin,
+                                                                pressure=1.0*unit.atmosphere)
 
         # System with all lambdas.
         alchemical_region = AlchemicalRegion(alchemical_atoms=cls.alanine_alchemical_atoms,
@@ -1769,6 +1770,40 @@ class TestAlchemicalState(object):
                 standard_value = getattr(standard_alchemical_state, parameter_name)
                 assert (value is None and standard_value is None) or (standard_value == 1.0)
 
+    def test_find_force_groups_to_update(self):
+        """Test method AlchemicalState._find_force_groups_to_update."""
+        test_cases = [self.full_alanine_state, self.alanine_state_exact_pme]
+
+        for thermodynamic_state in test_cases:
+            system = copy.deepcopy(thermodynamic_state.system)
+            alchemical_state = AlchemicalState.from_system(system)
+            alchemical_state2 = copy.deepcopy(alchemical_state)
+
+            # Each lambda should be separated in its own force group.
+            expected_force_groups = {}
+            for force, lambda_name, _ in AlchemicalState._get_system_lambda_parameters(system):
+                expected_force_groups[lambda_name] = force.getForceGroup()
+
+            integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+            context = create_context(system, integrator)
+
+            # No force group should be updated if we don't move.
+            assert alchemical_state._find_force_groups_to_update(context, alchemical_state2) == set()
+
+            # Change the lambdas one by one and check that the method
+            # recognize that the force group energy must be updated.
+            for lambda_name in AlchemicalState._get_supported_parameters():
+                # Check that the system defines the global variable.
+                if getattr(alchemical_state, lambda_name) is None:
+                    continue
+
+                # Change the current state.
+                setattr(alchemical_state2, lambda_name, 0.0)
+                force_group = expected_force_groups[lambda_name]
+                assert alchemical_state._find_force_groups_to_update(context, alchemical_state2) == {force_group}
+                setattr(alchemical_state2, lambda_name, 1.0)  # Reset current state.
+            del context
+
     def test_alchemical_functions(self):
         """Test alchemical variables and functions work correctly."""
         system = copy.deepcopy(self.full_alanine_state.system)
@@ -1793,6 +1828,10 @@ class TestAlchemicalState(object):
         # Setting alchemical variables updates alchemical parameter as well.
         alchemical_state.set_alchemical_variable('lambda2', 0)
         assert alchemical_state.lambda_electrostatics == 0.5
+
+    # ---------------------------------------------------
+    # Integration tests with CompoundThermodynamicStates
+    # ---------------------------------------------------
 
     def test_constructor_compound_state(self):
         """The AlchemicalState is set on construction of the CompoundState."""
@@ -1905,6 +1944,57 @@ class TestAlchemicalState(object):
 
             context = compound_state_incompatible.create_context(copy.deepcopy(integrator))
             assert not compound_state.is_context_compatible(context)
+
+    def test_method_reduced_potential_compound_state(self):
+        """Test CompoundThermodynamicState.reduced_potential_at_states() method.
+
+        Computing the reduced potential singularly and with the class
+        method should give the same result.
+        """
+        # Build a mixed collection of compatible and incompatible thermodynamic states.
+        thermodynamic_states = [
+            copy.deepcopy(self.alanine_state),
+            copy.deepcopy(self.alanine_state_exact_pme)
+        ]
+
+        alchemical_states = [
+            AlchemicalState(lambda_electrostatics=1.0, lambda_sterics=1.0),
+            AlchemicalState(lambda_electrostatics=0.5, lambda_sterics=1.0),
+            AlchemicalState(lambda_electrostatics=0.5, lambda_sterics=0.0),
+            AlchemicalState(lambda_electrostatics=1.0, lambda_sterics=1.0)
+        ]
+
+        compound_states = []
+        for thermo_state in thermodynamic_states:
+            for alchemical_state in alchemical_states:
+                compound_states.append(states.CompoundThermodynamicState(thermo_state, [alchemical_state]))
+
+        # Group thermodynamic states by compatibility.
+        compatible_groups = states.group_by_compatibility(compound_states)
+        assert len(compatible_groups) == 2
+
+        # Compute the reduced potentials.
+        expected_energies = []
+        obtained_energies = []
+        for compatible_group in compatible_groups:
+            # Create context.
+            integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+            context = compatible_group[0].create_context(integrator)
+            context.setPositions(self.alanine_test_system.positions[:compatible_group[0].n_particles])
+
+            # Compute with single-state method.
+            for state in compatible_group:
+                state.apply_to_context(context)
+                expected_energies.append(state.reduced_potential(context))
+
+            # Compute with multi-state method.
+            compatible_energies = states.ThermodynamicState.reduced_potential_at_states(context, compatible_group)
+
+            # The first and the last state must be equal.
+            assert np.isclose(compatible_energies[0], compatible_energies[-1])
+            obtained_energies.extend(compatible_energies)
+
+        assert np.allclose(np.array(expected_energies), np.array(obtained_energies))
 
     def test_serialization(self):
         """Test AlchemicalState serialization alone and in a compound state."""
