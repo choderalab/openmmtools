@@ -740,7 +740,12 @@ class AbsoluteAlchemicalFactory(object):
         region to avoid the need to recompute the correction (a CPU operation that takes ~ 0.5 s)
         every time 'lambda_sterics' is changed. If using nonequilibrium protocols, it is recommended
         that this be set to True since this can lead to enormous (100x) slowdowns if the correction
-        must be recomputed every timestep.
+        must be recomputed every time step.
+    split_forces : bool, optional, default=True
+        If True, forces that are altered to different alchemical variables
+        will be split in different force groups. All non-alchemical forces
+        will maintain their original force group. If more than 32 force
+        groups are required, an error is thrown.
 
     Examples
     --------
@@ -822,13 +827,14 @@ class AbsoluteAlchemicalFactory(object):
 
     def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms,
                  alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched',
-                 disable_alchemical_dispersion_correction=False):
+                 disable_alchemical_dispersion_correction=False, split_forces=True):
 
         self.consistent_exceptions = consistent_exceptions
         self.switch_width = switch_width
         self.alchemical_pme_treatment = alchemical_pme_treatment
         self.alchemical_rf_treatment = alchemical_rf_treatment
         self.disable_alchemical_dispersion_correction = disable_alchemical_dispersion_correction
+        self.split_forces = split_forces
 
     def create_alchemical_system(self, reference_system, alchemical_regions):
         """Create an alchemically modified version of the reference system.
@@ -875,6 +881,7 @@ class AbsoluteAlchemicalFactory(object):
         # Modify forces as appropriate. We delete the forces that
         # have been processed modified at the end of the for loop.
         forces_to_remove = []
+        alchemical_forces_by_lambda = {}
         for force_index, reference_force in enumerate(reference_system.getForces()):
             # TODO switch to functools.singledispatch when we drop Python2 support
             reference_force_name = reference_force.__class__.__name__
@@ -884,14 +891,22 @@ class AbsoluteAlchemicalFactory(object):
             except AttributeError:
                 pass
             else:
+                # The reference system force will be deleted.
                 forces_to_remove.append(force_index)
+                # Collect all the Force objects modeling the reference force.
                 alchemical_forces = alchemical_force_creator_func(reference_force, alchemical_region)
-                for alchemical_force in alchemical_forces:
-                    alchemical_system.addForce(alchemical_force)
+                for lambda_variable_name, lambda_forces in alchemical_forces.items():
+                    try:
+                        alchemical_forces_by_lambda[lambda_variable_name].extend(lambda_forces)
+                    except KeyError:
+                        alchemical_forces_by_lambda[lambda_variable_name] = lambda_forces
 
         # Remove original forces that have been alchemically modified.
         for force_index in reversed(forces_to_remove):
             alchemical_system.removeForce(force_index)
+
+        # Add forces and split groups if necessary.
+        self._add_alchemical_forces(alchemical_system, alchemical_forces_by_lambda)
 
         # Record timing statistics.
         timer.stop('Create alchemically modified system')
@@ -1202,6 +1217,32 @@ class AbsoluteAlchemicalFactory(object):
     # Internal usage: Alchemical forces
     # -------------------------------------------------------------------------
 
+    def _add_alchemical_forces(self, alchemical_system, alchemical_forces_by_lambda):
+        """Add the forces to the alchemical system and eventually split the force groups."""
+        # OpenMM can have a maximum of 32 groups.
+        available_force_groups = set(range(32))
+
+        # Add non-alchemical groups. New forces will have force group 0, and we don't
+        # want to modify the force group of forces that have been copied from the reference.
+        non_alchemical_forces = alchemical_forces_by_lambda.pop('', [])
+        for non_alchemical_force in non_alchemical_forces:
+            alchemical_system.addForce(non_alchemical_force)
+
+        # Find which force groups are still available for alchemical forces.
+        for force in alchemical_system.getForces():
+            available_force_groups.discard(force.getForceGroup())
+
+        # Add the alchemical forces in a deterministic way (just to be safe).
+        for lambda_variable in sorted(alchemical_forces_by_lambda):
+            if self.split_forces:
+                # Assign to these forces the smallest force group index available.
+                force_group = min(available_force_groups)
+                available_force_groups.remove(force_group)
+            for force in alchemical_forces_by_lambda[lambda_variable]:
+                if self.split_forces:
+                    force.setForceGroup(force_group)
+                alchemical_system.addForce(force)
+
     @staticmethod
     def _alchemically_modify_PeriodicTorsionForce(reference_force, alchemical_region):
         """Create alchemically-modified version of PeriodicTorsionForce.
@@ -1226,10 +1267,11 @@ class AbsoluteAlchemicalFactory(object):
         """
         # Don't create a force if there are no alchemical torsions.
         if len(alchemical_region.alchemical_torsions) == 0:
-            return [copy.deepcopy(reference_force)]
+            return {'': [copy.deepcopy(reference_force)]}
 
         # Create PeriodicTorsionForce to handle unmodified torsions.
         force = openmm.PeriodicTorsionForce()
+        force.setForceGroup(reference_force.getForceGroup())
 
         # Create CustomTorsionForce to handle alchemically modified torsions.
         energy_function = "lambda_torsions*k*(1+cos(periodicity*theta-phase))"
@@ -1250,7 +1292,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Standard torsion.
                 force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
 
-        return [force, custom_force]
+        return {'': [force], 'lambda_torsions': [custom_force]}
 
     @staticmethod
     def _alchemically_modify_HarmonicAngleForce(reference_force, alchemical_region):
@@ -1276,10 +1318,11 @@ class AbsoluteAlchemicalFactory(object):
         """
         # Don't create a force if there are no alchemical angles.
         if len(alchemical_region.alchemical_angles) == 0:
-            return [copy.deepcopy(reference_force)]
+            return {'': [copy.deepcopy(reference_force)]}
 
         # Create standard HarmonicAngleForce to handle unmodified angles.
         force = openmm.HarmonicAngleForce()
+        force.setForceGroup(reference_force.getForceGroup())
 
         # Create CustomAngleForce to handle alchemically modified angles.
         energy_function = "lambda_angles*(K/2)*(theta-theta0)^2;"
@@ -1298,7 +1341,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Standard angle.
                 force.addAngle(particle1, particle2, particle3, theta0, K)
 
-        return [force, custom_force]
+        return {'': [force], 'lambda_angles': [custom_force]}
 
     @staticmethod
     def _alchemically_modify_HarmonicBondForce(reference_force, alchemical_region):
@@ -1324,10 +1367,11 @@ class AbsoluteAlchemicalFactory(object):
         """
         # Don't create a force if there are no alchemical bonds.
         if len(alchemical_region.alchemical_bonds) == 0:
-            return [copy.deepcopy(reference_force)]
+            return {'': [copy.deepcopy(reference_force)]}
 
         # Create standard HarmonicBondForce to handle unmodified bonds.
         force = openmm.HarmonicBondForce()
+        force.setForceGroup(reference_force.getForceGroup())
 
         # Create CustomBondForce to handle alchemically modified bonds.
         energy_function = "lambda_bonds*(K/2)*(r-r0)^2;"
@@ -1346,7 +1390,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Standard bond.
                 force.addBond(particle1, particle2, theta0, K)
 
-        return [force, custom_force]
+        return {'': [force], 'lambda_bonds': [custom_force]}
 
     def _get_electrostatics_energy_expressions(self, reference_force):
         """Return the energy expressions for electrostatics."""
@@ -1529,7 +1573,7 @@ class AbsoluteAlchemicalFactory(object):
 
         # Don't create a force if there are no alchemical atoms.
         if len(alchemical_region.alchemical_atoms) == 0:
-            return [copy.deepcopy(reference_force)]
+            return {'': [copy.deepcopy(reference_force)]}
 
         # --------------------------------------------------
         # Determine energy expression for all custom forces
@@ -1850,7 +1894,17 @@ class AbsoluteAlchemicalFactory(object):
         for force in all_custom_forces:
             add_global_parameters(force)
 
-        return [nonbonded_force] + all_custom_forces
+        # With exact treatment of PME electrostatics, the NonbondedForce
+        # is affected by lambda electrostatics as well.
+        forces_by_lambda = {
+            'lambda_electrostatics': all_electrostatics_custom_nonbonded_forces + all_electrostatics_custom_bond_forces,
+            'lambda_sterics': all_sterics_custom_nonbonded_forces + all_sterics_custom_bond_forces,
+        }
+        if use_exact_pme_treatment:
+            forces_by_lambda['lambda_electrostatics'].append(nonbonded_force)
+        else:
+            forces_by_lambda[''] = [nonbonded_force]
+        return forces_by_lambda
 
     def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region):
         raise Exception("Not implemented; needs CustomMultipleForce")
@@ -1989,7 +2043,7 @@ class AbsoluteAlchemicalFactory(object):
                 parameters = [charge, radius, scaling_factor, 0.0]
             custom_force.addParticle(parameters)
 
-        return [custom_force]
+        return {'lambda_electrostatics': [custom_force]}
 
     def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region):
         """Create alchemically-modified version of CustomGBForce.
@@ -2103,7 +2157,7 @@ class AbsoluteAlchemicalFactory(object):
             [particle1, particle2] = reference_force.getExclusionParticles(exclusion_index)
             custom_force.addExclusion(particle1, particle2)
 
-        return [custom_force]
+        return {'lambda_electrostatics': [custom_force]}
 
     # -------------------------------------------------------------------------
     # Internal usage: Infer force labels

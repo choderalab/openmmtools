@@ -770,6 +770,45 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
                             'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
 
+def check_split_force_groups(system):
+    """Check that force groups are split correctly."""
+    force_groups_by_lambda = {}
+    lambdas_by_force_group = {}
+
+    # Separate forces groups by lambda parameters that AlchemicalState supports.
+    for force, lambda_name, _ in AlchemicalState._get_system_lambda_parameters(system):
+        force_group = force.getForceGroup()
+        try:
+            force_groups_by_lambda[lambda_name].add(force_group)
+        except KeyError:
+            force_groups_by_lambda[lambda_name] = {force_group}
+        try:
+            lambdas_by_force_group[force_group].add(lambda_name)
+        except KeyError:
+            lambdas_by_force_group[force_group] = {lambda_name}
+
+    # Check that force group 0 doesn't hold alchemical forces.
+    assert 0 not in force_groups_by_lambda
+
+    # There are as many alchemical force groups as not-None lambda variables.
+    alchemical_state = AlchemicalState.from_system(system)
+    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_supported_parameters()
+                     if getattr(alchemical_state, lambda_name) is not None}
+    assert valid_lambdas == set(force_groups_by_lambda.keys())
+
+    # Check that force groups and lambda variables are in 1-to-1 correspondence.
+    assert len(force_groups_by_lambda) == len(lambdas_by_force_group)
+    for d in [force_groups_by_lambda, lambdas_by_force_group]:
+        for value in d.values():
+            assert len(value) == 1
+
+    # With exact treatment of PME, the NonbondedForce must
+    # be in the lambda_electrostatics force group.
+    if is_alchemical_pme_treatment_exact(system):
+        nonbonded_force = forces.find_nonbonded_force(system)
+        assert force_groups_by_lambda['lambda_electrostatics'] == {nonbonded_force.getForceGroup()}
+
+
 # =============================================================================
 # BENCHMARKING AND DEBUG FUNCTIONS
 # =============================================================================
@@ -1264,6 +1303,30 @@ class TestAbsoluteAlchemicalFactory(object):
                 forcefactories.replace_reaction_field(test_system.system, return_copy=False,
                                                       switch_width=factory.switch_width)
 
+    def filter_test_cases(self, condition_func, max_number=None):
+        """Return the list of test cases that satisfy condition_func(test_case_name)."""
+        if max_number is None:
+            max_number = len(self.test_cases)
+
+        test_cases = {}
+        for test_name, test_case in self.test_cases.items():
+            if condition_func(test_name):
+                test_cases[test_name] = test_case
+            if len(test_cases) >= max_number:
+                break
+        return test_cases
+
+    def test_split_force_groups(self):
+        """Forces having different lambda variables should have a different force group."""
+        # Select 1 implicit, 1 explicit, and 1 exact PME explicit test case randomly.
+        test_cases = self.filter_test_cases(lambda x: 'Implicit' in x, max_number=1)
+        test_cases.update(self.filter_test_cases(lambda x: 'Explicit ' in x and 'exact PME' in x, max_number=1))
+        test_cases.update(self.filter_test_cases(lambda x: 'Explicit ' in x and 'exact PME' not in x, max_number=1))
+        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
+            f = partial(check_split_force_groups, alchemical_system)
+            f.description = "Testing force splitting among groups of {}".format(test_name)
+            yield f
+
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
@@ -1285,10 +1348,8 @@ class TestAbsoluteAlchemicalFactory(object):
         """Test interacting state energy by force component."""
         # This is a very expensive but very informative test. We can
         # run this locally when test_fully_interacting_energies() fails.
-        test_cases_names = [test_name for test_name in self.test_cases
-                            if 'Explicit' in test_name]
-        for test_name in test_cases_names:
-            test_system, alchemical_system, alchemical_region = self.test_cases[test_name]
+        test_cases = self.filter_test_cases(lambda x: 'Explicit' in x)
+        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
             f = partial(check_interacting_energy_components, test_system.system, alchemical_system,
                         alchemical_region, test_system.positions)
             f.description = "Testing energy components of %s..." % test_name
