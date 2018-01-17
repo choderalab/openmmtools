@@ -787,7 +787,7 @@ class AbsoluteAlchemicalFactory(object):
         every time 'lambda_sterics' is changed. If using nonequilibrium protocols, it is recommended
         that this be set to True since this can lead to enormous (100x) slowdowns if the correction
         must be recomputed every time step.
-    split_forces : bool, optional, default=True
+    split_alchemical_forces : bool, optional, default=True
         If True, forces that are altered to different alchemical variables
         will be split in different force groups. All non-alchemical forces
         will maintain their original force group. If more than 32 force
@@ -873,14 +873,14 @@ class AbsoluteAlchemicalFactory(object):
 
     def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms,
                  alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched',
-                 disable_alchemical_dispersion_correction=False, split_forces=True):
+                 disable_alchemical_dispersion_correction=False, split_alchemical_forces=True):
 
         self.consistent_exceptions = consistent_exceptions
         self.switch_width = switch_width
         self.alchemical_pme_treatment = alchemical_pme_treatment
         self.alchemical_rf_treatment = alchemical_rf_treatment
         self.disable_alchemical_dispersion_correction = disable_alchemical_dispersion_correction
-        self.split_forces = split_forces
+        self.split_alchemical_forces = split_alchemical_forces
 
     def create_alchemical_system(self, reference_system, alchemical_regions):
         """Create an alchemically modified version of the reference system.
@@ -1278,14 +1278,21 @@ class AbsoluteAlchemicalFactory(object):
         for force in alchemical_system.getForces():
             available_force_groups.discard(force.getForceGroup())
 
+        # Check if there are enough force groups to split alchemical forces.
+        if (self.split_alchemical_forces and
+                    len(available_force_groups) < len(alchemical_forces_by_lambda)):
+            raise RuntimeError('There are not enough force groups to split alchemical forces.\n'
+                               'Consider merging some non-alchemical forces in a single group '
+                               'or set split_alchemical_forces to False.')
+
         # Add the alchemical forces in a deterministic way (just to be safe).
         for lambda_variable in sorted(alchemical_forces_by_lambda):
-            if self.split_forces:
+            if self.split_alchemical_forces:
                 # Assign to these forces the smallest force group index available.
                 force_group = min(available_force_groups)
                 available_force_groups.remove(force_group)
             for force in alchemical_forces_by_lambda[lambda_variable]:
-                if self.split_forces:
+                if self.split_alchemical_forces:
                     force.setForceGroup(force_group)
                 alchemical_system.addForce(force)
 
