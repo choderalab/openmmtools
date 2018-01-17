@@ -189,15 +189,6 @@ class TestThermodynamicState(object):
         barostat = openmm.MonteCarloBarostat(pressure, temperature + 10*unit.kelvin)
         assert not state._is_barostat_consistent(barostat)
 
-    def test_method_set_barostat_temperature(self):
-        """ThermodynamicState._set_barostat_temperature() method."""
-        barostat = openmm.MonteCarloBarostat(self.std_pressure, self.std_temperature)
-        new_temperature = self.std_temperature + 10*unit.kelvin
-
-        assert ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
-        assert get_barostat_temperature(barostat) == new_temperature
-        assert not ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
-
     def test_method_set_system_temperature(self):
         """ThermodynamicState._set_system_temperature() method."""
         system = copy.deepcopy(self.alanine_no_thermostat)
@@ -507,7 +498,7 @@ class TestThermodynamicState(object):
 
         for thermostated, integrator in test_cases:
             if thermostated:
-                state._set_integrator_temperature(integrator)
+                assert state._set_integrator_temperature(integrator)
                 for _integrator in ThermodynamicState._loop_over_integrators(integrator):
                     try:
                         assert _integrator.getTemperature() == new_temperature
@@ -515,7 +506,7 @@ class TestThermodynamicState(object):
                         pass
             else:
                 # It doesn't explode with integrators not coupled to a heat bath
-                state._set_integrator_temperature(integrator)
+                assert not state._set_integrator_temperature(integrator)
 
     def test_method_standardize_system(self):
         """ThermodynamicState._standardize_system() class method."""
@@ -975,7 +966,7 @@ class TestCompoundThermodynamicState(object):
         def apply_to_context(self, context):
             context.setParameter('dummy_parameter', self.dummy_parameter)
 
-        def _find_force_groups_to_update(self, context, current_context_state):
+        def _find_force_groups_to_update(self, context, current_context_state, memo):
             if current_context_state.dummy_parameter == self.dummy_parameter:
                 return {}
             force, _ = self._find_dummy_force(context.getSystem())
@@ -1156,13 +1147,13 @@ class TestCompoundThermodynamicState(object):
         context = compound_state.create_context(openmm.VerletIntegrator(2.0*unit.femtoseconds))
 
         # No force group should be updated if the two states are identical.
-        assert compound_state._find_force_groups_to_update(context, compound_state) == set()
+        assert compound_state._find_force_groups_to_update(context, compound_state, memo={}) == set()
 
         # If the dummy parameter changes, there should be 1 force group to update.
         compound_state2 = copy.deepcopy(compound_state)
         compound_state2.dummy_parameter -= 0.5
         group = self.DummyState._find_max_force_group(context.getSystem())
-        assert compound_state._find_force_groups_to_update(context, compound_state2) == {group}
+        assert compound_state._find_force_groups_to_update(context, compound_state2, memo={}) == {group}
 
 
 # =============================================================================

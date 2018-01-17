@@ -713,12 +713,18 @@ class ThermodynamicState(object):
         energy_by_force_group = {force.getForceGroup(): 0.0*unit.kilocalories_per_mole
                                  for force in context.getSystem().getForces()}
 
+        # Create new cache for memoization.
+        memo = {}
+
         # Go through thermodynamic states and compute only the energy of the
         # force groups that changed. Compute all the groups the first pass.
         force_groups_to_compute = set(energy_by_force_group)
-        reduced_potentials = []
+        reduced_potentials = [0.0 for _ in range(len(thermodynamic_states))]
         for state_idx, state in enumerate(thermodynamic_states):
-            state.apply_to_context(context)
+            if state_idx == 0:
+                state.apply_to_context(context)
+            else:
+                state._apply_to_context_in_state(context, thermodynamic_states[state_idx - 1])
 
             # Compute the energy of all the groups to update.
             for force_group_idx in force_groups_to_compute:
@@ -733,15 +739,14 @@ class ThermodynamicState(object):
             potential_energy = unit.sum(list(energy_by_force_group.values()))
             reduced_potential = cls._compute_reduced_potential(potential_energy, state.temperature,
                                                                volume, state.pressure)
-            reduced_potentials.append(reduced_potential)
+            reduced_potentials[state_idx] = reduced_potential
 
             # Update groups to compute for next states.
             if state_idx < len(thermodynamic_states) - 1:
                 next_state = thermodynamic_states[state_idx + 1]
-                force_groups_to_compute = next_state._find_force_groups_to_update(context, state)
+                force_groups_to_compute = next_state._find_force_groups_to_update(context, state, memo)
 
         return reduced_potentials
-
 
     def is_state_compatible(self, thermodynamic_state):
         """Check compatibility between ThermodynamicStates.
@@ -965,42 +970,8 @@ class ThermodynamicState(object):
         310.0
 
         """
-        system = context.getSystem()
-
-        # Apply pressure and temperature to barostat.
-        barostat = self._find_barostat(system)
-        if barostat is not None:
-            if self._pressure is None:
-                # The context is NPT but this is NVT.
-                raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
-
-            has_changed = self._set_barostat_pressure(barostat, self.pressure)
-            if has_changed:
-                context.setParameter(barostat.Pressure(), self.pressure)
-            has_changed = self._set_barostat_temperature(barostat, self.temperature)
-            if has_changed:
-                # TODO remove try except when drop openmm7.0 support
-                try:
-                    context.setParameter(barostat.Temperature(), self.temperature)
-                except AttributeError:  # OpenMM < 7.1
-                    openmm_state = context.getState(getPositions=True, getVelocities=True,
-                                                    getParameters=True)
-                    context.reinitialize()
-                    context.setState(openmm_state)
-        elif self._pressure is not None:
-            # The context is NVT but this is NPT.
-            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
-
-        # Apply temperature to thermostat or integrator.
-        thermostat = self._find_thermostat(system)
-        if thermostat is not None:
-            if not utils.is_quantity_close(thermostat.getDefaultTemperature(),
-                                           self.temperature):
-                thermostat.setDefaultTemperature(self.temperature)
-                context.setParameter(thermostat.Temperature(), self.temperature)
-        else:
-            integrator = context.getIntegrator()
-            self._set_integrator_temperature(integrator)
+        self._set_context_barostat(context, update_pressure=True, update_temperature=True)
+        self._set_context_thermostat(context)
 
     # -------------------------------------------------------------------------
     # Magic methods
@@ -1257,6 +1228,70 @@ class ThermodynamicState(object):
         return system_serialization.__hash__()
 
     # -------------------------------------------------------------------------
+    # Internal-usage: context handling
+    # -------------------------------------------------------------------------
+
+    def _set_context_barostat(self, context, update_pressure, update_temperature):
+        """Set the barostat parameters in the Context."""
+        barostat = self._find_barostat(context.getSystem())
+
+        # Check if we are in the same ensemble.
+        if (barostat is None) != (self._pressure is None):
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+
+        # No need to set the barostat if we are in NVT.
+        if self._pressure is None:
+            return
+
+        # Apply pressure and temperature to barostat.
+        if update_pressure:
+            self._set_barostat_pressure(barostat, self.pressure)
+            context.setParameter(barostat.Pressure(), self.pressure)
+        if update_temperature:
+            self._set_barostat_temperature(barostat, self.temperature)
+            # TODO remove try except when drop openmm7.0 support
+            try:
+                context.setParameter(barostat.Temperature(), self.temperature)
+            except AttributeError:  # OpenMM < 7.1
+                openmm_state = context.getState(getPositions=True, getVelocities=True,
+                                                getParameters=True)
+                context.reinitialize()
+                context.setState(openmm_state)
+
+    def _set_context_thermostat(self, context):
+        """Set the thermostat parameters in the Context."""
+        # First try to set the integrator (most common case).
+        # If this fails retrieve the Andersen thermostat.
+        is_thermostated = self._set_integrator_temperature(context.getIntegrator())
+        if not is_thermostated:
+            thermostat = self._find_thermostat(context.getSystem())
+            thermostat.setDefaultTemperature(self.temperature)
+            context.setParameter(thermostat.Temperature(), self.temperature)
+
+    def _apply_to_context_in_state(self, context, thermodynamic_state):
+        """Apply this ThermodynamicState to the context.
+
+        When we know the thermodynamic state of the context, this is much faster
+        then apply_to_context(). The given thermodynamic state is assumed to be
+        compatible.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The OpenMM Context to be set to this ThermodynamicState.
+        thermodynamic_state : ThermodynamicState
+            The ThermodynamicState of this context.
+
+        """
+        update_pressure = self.pressure != thermodynamic_state.pressure
+        update_temperature = self.temperature != thermodynamic_state.temperature
+
+        if update_pressure or update_temperature:
+            self._set_context_barostat(context, update_pressure, update_temperature)
+        if update_temperature:
+            self._set_context_thermostat(context)
+
+    # -------------------------------------------------------------------------
     # Internal-usage: integrator handling
     # -------------------------------------------------------------------------
 
@@ -1310,18 +1345,24 @@ class ThermodynamicState(object):
         If integrator is a CompoundIntegrator, it sets the temperature
         of every sub-integrator.
 
+        Returns
+        -------
+        is_thermostated : bool
+            True if the integrator is thermostated.
+
         """
         def set_temp(_integrator):
             try:
-                if not utils.is_quantity_close(_integrator.getTemperature(),
-                                               self.temperature):
-                    _integrator.setTemperature(self.temperature)
+                _integrator.setTemperature(self.temperature)
+                return True
             except AttributeError:
-                pass
+                return False
 
         # Loop over integrators to handle CompoundIntegrators.
+        is_thermostated = False
         for _integrator in self._loop_over_integrators(integrator):
-            set_temp(_integrator)
+            is_thermostated = is_thermostated or set_temp(_integrator)
+        return is_thermostated
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -1443,43 +1484,13 @@ class ThermodynamicState(object):
 
     @staticmethod
     def _set_barostat_pressure(barostat, pressure):
-        """Set barostat pressure.
-
-        Returns
-        -------
-        has_changed : bool
-            True if the barostat has changed, False if it was already
-            configured with the correct pressure.
-
-        """
-        if not utils.is_quantity_close(barostat.getDefaultPressure(), pressure):
-            barostat.setDefaultPressure(pressure)
-            return True
-        return False
+        """Set barostat pressure."""
+        barostat.setDefaultPressure(pressure)
 
     @staticmethod
     def _set_barostat_temperature(barostat, temperature):
-        """Set barostat temperature.
-
-        Returns
-        -------
-        has_changed : bool
-            True if the barostat has changed, False if it was already
-            configured with the correct temperature.
-
-        """
-        has_changed = False
-        # TODO remove this when we OpenMM 7.0 drop support
-        try:
-            if not utils.is_quantity_close(barostat.getDefaultTemperature(),
-                                           temperature):
-                barostat.setDefaultTemperature(temperature)
-                has_changed = True
-        except AttributeError:  # versions previous to OpenMM 7.1
-            if not utils.is_quantity_close(barostat.getTemperature(), temperature):
-                barostat.setTemperature(temperature)
-                has_changed = True
-        return has_changed
+        """Set barostat temperature."""
+        barostat.setDefaultTemperature(temperature)
 
     # -------------------------------------------------------------------------
     # Internal-usage: thermostat handling
@@ -1563,7 +1574,7 @@ class ThermodynamicState(object):
             reduced_potential += pressure * volume
         return beta * reduced_potential
 
-    def _find_force_groups_to_update(self, context, thermodynamic_state):
+    def _find_force_groups_to_update(self, context, thermodynamic_state, memo):
         """Find the force groups to be recomputed when moving to the given state.
 
         With the current implementation of ThermodynamicState, no force group has
@@ -2067,7 +2078,7 @@ class IComposableState(utils.SubhookedABCMeta):
         pass
 
     @abc.abstractmethod
-    def _find_force_groups_to_update(self, context, current_context_state):
+    def _find_force_groups_to_update(self, context, current_context_state, memo):
         """Find the force groups whose energy must be recomputed after applying self.
 
         This is used to compute efficiently the potential energy of the
@@ -2081,6 +2092,9 @@ class IComposableState(utils.SubhookedABCMeta):
         current_context_state : ThermodynamicState
             The full thermodynamic state of the given context. This is
             guaranteed to be compatible with self.
+        memo : dict
+            A dictionary that can be used by the state for memoization
+            to speed up consecutive calls on the same context.
 
         Returns
         -------
@@ -2362,19 +2376,27 @@ class CompoundThermodynamicState(ThermodynamicState):
         for composable_cls in self._composable_states:
             composable_cls._standardize_system(system)
 
-    def _find_force_groups_to_update(self, context, current_context_state):
+    def _apply_to_context_in_state(self, context, thermodynamic_state):
+        super(CompoundThermodynamicState, self)._apply_to_context_in_state(context, thermodynamic_state)
+        for s in self._composable_states:
+            s.apply_to_context(context)
+
+    def _find_force_groups_to_update(self, context, current_context_state, memo):
         """Find the force groups to be recomputed when moving to the given state.
 
         Override ThermodynamicState._find_force_groups_to_update to find
         groups to update for changes of composable states.
         """
+        # Initialize memo: create new cache for each composable state.
+        if len(memo) == 0:
+            memo.update({i: {} for i in range(len(self._composable_states))})
         # Find force group to update for parent class.
         force_groups = super(CompoundThermodynamicState, self)._find_force_groups_to_update(
-            context, current_context_state)
+            context, current_context_state, memo)
         # Find force group to update for composable states.
-        for composable_state in self._composable_states:
+        for composable_state_idx, composable_state in enumerate(self._composable_states):
             force_groups.update(composable_state._find_force_groups_to_update(
-                context, current_context_state))
+                context, current_context_state, memo[composable_state_idx]))
         return force_groups
 
 
