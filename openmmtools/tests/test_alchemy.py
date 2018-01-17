@@ -1788,7 +1788,7 @@ class TestAlchemicalState(object):
             context = create_context(system, integrator)
 
             # No force group should be updated if we don't move.
-            assert alchemical_state._find_force_groups_to_update(context, alchemical_state2) == set()
+            assert alchemical_state._find_force_groups_to_update(context, alchemical_state2, memo={}) == set()
 
             # Change the lambdas one by one and check that the method
             # recognize that the force group energy must be updated.
@@ -1800,7 +1800,7 @@ class TestAlchemicalState(object):
                 # Change the current state.
                 setattr(alchemical_state2, lambda_name, 0.0)
                 force_group = expected_force_groups[lambda_name]
-                assert alchemical_state._find_force_groups_to_update(context, alchemical_state2) == {force_group}
+                assert alchemical_state._find_force_groups_to_update(context, alchemical_state2, memo={}) == {force_group}
                 setattr(alchemical_state2, lambda_name, 1.0)  # Reset current state.
             del context
 
@@ -1967,7 +1967,8 @@ class TestAlchemicalState(object):
         compound_states = []
         for thermo_state in thermodynamic_states:
             for alchemical_state in alchemical_states:
-                compound_states.append(states.CompoundThermodynamicState(thermo_state, [alchemical_state]))
+                compound_states.append(states.CompoundThermodynamicState(
+                    copy.deepcopy(thermo_state), [copy.deepcopy(alchemical_state)]))
 
         # Group thermodynamic states by compatibility.
         compatible_groups, _ = states.group_by_compatibility(compound_states)

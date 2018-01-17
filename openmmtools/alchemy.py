@@ -512,7 +512,7 @@ class AlchemicalState(object):
         alchemical_state.set_alchemical_parameters(1.0)
         alchemical_state.apply_to_system(system)
 
-    def _find_force_groups_to_update(self, context, current_context_state):
+    def _find_force_groups_to_update(self, context, current_context_state, memo):
         """Find the force groups whose energy must be recomputed after applying self.
 
         Parameters
@@ -523,6 +523,9 @@ class AlchemicalState(object):
         current_context_state : ThermodynamicState
             The full thermodynamic state of the given context. This is
             guaranteed to be compatible with self.
+        memo : dict
+            A dictionary that can be used by the state for memoization
+            to speed up consecutive calls on the same context.
 
         Returns
         -------
@@ -531,20 +534,27 @@ class AlchemicalState(object):
             again after applying this state, assuming the context to be in
             `current_context_state`.
         """
-        # Find lambda parameters that will change.
-        parameters_to_update = set()
-        for parameter_name in self._get_supported_parameters():
-            self_lambda_value = getattr(self, parameter_name)
-            context_lambda_value = getattr(current_context_state, parameter_name)
-            if self_lambda_value != context_lambda_value:
-                parameters_to_update.add(parameter_name)
+        # Cache information about system force groups.
+        if len(memo) == 0:
+            parameters_found = set()
+            system = context.getSystem()
+            for force, parameter_name, _ in self._get_system_lambda_parameters(system):
+                if parameter_name not in parameters_found:
+                    parameters_found.add(parameter_name)
+                    # Keep track of valid lambdas only.
+                    if self._parameters[parameter_name] is not None:
+                        memo[parameter_name] = force.getForceGroup()
+                    # Break the loop if we have found all the parameters.
+                    if len(parameters_found) == len(self._parameters):
+                        break
 
-        # Find all the force groups that need to be updated.
+        # Find lambda parameters that will change.
         force_groups_to_update = set()
-        system = context.getSystem()
-        for force, parameter_name, _ in self._get_system_lambda_parameters(system):
-            if parameter_name in parameters_to_update:
-                force_groups_to_update.add(force.getForceGroup())
+        for parameter_name, force_group in memo.items():
+            self_parameter_value = getattr(self, parameter_name)
+            current_parameter_value = getattr(current_context_state, parameter_name)
+            if self_parameter_value != current_parameter_value:
+                force_groups_to_update.add(force_group)
         return force_groups_to_update
 
     # -------------------------------------------------------------------------
@@ -609,6 +619,7 @@ class AlchemicalState(object):
                 parameter_name = force.getGlobalParameterName(parameter_id)
                 if parameter_name in supported_parameters:
                     yield force, parameter_name, parameter_id
+                    break
 
     @staticmethod
     def _find_exact_pme_forces(system):
