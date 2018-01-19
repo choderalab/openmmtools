@@ -1618,10 +1618,8 @@ class SamplerState(object):
     velocities
     box_vectors : 3x3 simtk.unit.Quantity.
         Current box vectors (length units).
-    potential_energy : simtk.unit.Quantity or None
-        Potential energy of this configuration.
-    kinetic_energy : simtk.unit.Quantity
-        Kinetic energy of this configuration.
+    potential_energy
+    kinetic_energy
     total_energy
     volume
     n_particles
@@ -1683,7 +1681,7 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, positions, velocities=None, box_vectors=None):
-        self._initialize(positions, velocities, box_vectors)
+        self._initialize(copy.deepcopy(positions), copy.deepcopy(velocities), copy.deepcopy(box_vectors))
 
     @classmethod
     def from_context(cls, context_state):
@@ -1728,12 +1726,7 @@ class SamplerState(object):
 
     @positions.setter
     def positions(self, value):
-        if value is None or len(value) != self.n_particles:
-            raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
-        self._positions = value
-
-        # Potential energy changes with different positions.
-        self.potential_energy = None
+        self._set_positions(value, from_context=False, check_consistency=True)
 
     @property
     def velocities(self):
@@ -1753,12 +1746,7 @@ class SamplerState(object):
 
     @velocities.setter
     def velocities(self, value):
-        if value is not None and self.n_particles != len(value):
-            raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
-        self._velocities = value
-
-        # Kinetic energy changes with different velocities.
-        self.kinetic_energy = None
+        self._set_velocities(value, from_context=False)
 
     @property
     def box_vectors(self):
@@ -1776,6 +1764,28 @@ class SamplerState(object):
         if value is not None and not isinstance(value, unit.Quantity):
             value = unit.Quantity(value)
         self._box_vectors = value
+
+    @property
+    def potential_energy(self):
+        """simtk.unit.Quantity or None: Potential energy of this configuration."""
+        if self.positions is None or self.positions.has_changed:
+            return None
+        return self._potential_energy
+
+    @potential_energy.setter
+    def potential_energy(self, new_value):
+        self._potential_energy = new_value
+
+    @property
+    def kinetic_energy(self):
+        """simtk.unit.Quantity or None: Kinetic energy of this configuration."""
+        if self.velocities is None or self.velocities.has_changed:
+            return None
+        return self._kinetic_energy
+
+    @kinetic_energy.setter
+    def kinetic_energy(self, new_value):
+        self._kinetic_energy = new_value
 
     @property
     def total_energy(self):
@@ -1857,9 +1867,9 @@ class SamplerState(object):
         # NOTE: Box vectors MUST be updated before positions are set.
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
-        context.setPositions(self._positions)
+        context.setPositions(self._unitless_positions)
         if self._velocities is not None and not ignore_velocities:
-            context.setVelocities(self._velocities)
+            context.setVelocities(self._unitless_velocities)
 
     def has_nan(self):
         """Check that energies and positions are finite.
@@ -1884,17 +1894,19 @@ class SamplerState(object):
         if np.issubdtype(type(item), np.integer):
             # Here we don't need to copy since we instantiate a new array.
             pos_value = self._positions[item].value_in_unit(self._positions.unit)
-            sampler_state._positions = unit.Quantity(np.array([pos_value]),
-                                                     self._positions.unit)
+            new_positions = unit.Quantity(np.array([pos_value]), self._positions.unit)
+            sampler_state._set_positions(new_positions, from_context=False, check_consistency=False)
             if self._velocities is not None:
                 vel_value = self._velocities[item].value_in_unit(self._velocities.unit)
-                sampler_state._velocities = unit.Quantity(np.array([vel_value]),
-                                                          self._velocities.unit)
+                new_velocities = unit.Quantity(np.array([vel_value]), self._velocities.unit)
+                sampler_state._set_velocities(new_velocities, from_context=False)
         else:  # Assume slice or sequence.
             # Copy original values to avoid side effects.
-            sampler_state._positions = copy.deepcopy(self._positions[item])
+            sampler_state._set_positions(copy.deepcopy(self._positions[item]),
+                                         from_context=False, check_consistency=False)
             if self._velocities is not None:
-                sampler_state._velocities = copy.deepcopy(self._velocities[item].copy())
+                sampler_state._set_velocities(copy.deepcopy(self._velocities[item].copy()),
+                                              from_context=False)
 
         # Copy box vectors.
         sampler_state.box_vectors = copy.deepcopy(self.box_vectors)
@@ -1924,13 +1936,66 @@ class SamplerState(object):
     def _initialize(self, positions, velocities, box_vectors,
                     potential_energy=None, kinetic_energy=None):
         """Initialize the sampler state."""
-        self._positions = positions
-        self._velocities = None
+        self._set_positions(positions, from_context=False, check_consistency=False)
         self.velocities = velocities  # Checks consistency and units.
-        self._box_vectors = None
         self.box_vectors = box_vectors  # Make sure box vectors is Quantity.
         self.potential_energy = potential_energy
         self.kinetic_energy = kinetic_energy
+
+    def _set_positions(self, new_positions, from_context, check_consistency):
+        """Set the positions without checking for consistency."""
+        if check_consistency and (new_positions is None or len(new_positions) != self.n_particles):
+            raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
+
+        if from_context:
+            self._unitless_positions_cache = new_positions._value
+            assert new_positions.unit == unit.nanometer
+        else:
+            self._unitless_positions_cache = None
+
+        self._positions = utils.TrackedQuantity(new_positions)
+
+        # The potential energy changes with different positions.
+        self.potential_energy = None
+
+    def _set_velocities(self, new_velocities, from_context):
+        """Set the velocities."""
+        if from_context:
+            self._unitless_velocities_cache = new_velocities._value
+            assert new_velocities.unit == unit.nanometer/unit.picoseconds
+        else:
+            if new_velocities is not None and self.n_particles != len(new_velocities):
+                raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
+            self._unitless_velocities_cache = None
+
+        if new_velocities is not None:
+            new_velocities = utils.TrackedQuantity(new_velocities)
+        self._velocities = new_velocities
+
+        # The kinetic energy changes with different positions.
+        self.kinetic_energy = None
+
+    @property
+    def _unitless_positions(self):
+        """Keeps a cache of unitless positions."""
+        if self._unitless_positions_cache is None or self._positions.has_changed:
+            self._unitless_positions_cache = self.positions.value_in_unit_system(unit.md_unit_system)
+        if self._positions.has_changed:
+            self._positions.has_changed = False
+            self.potential_energy = None
+        return self._unitless_positions_cache
+
+    @property
+    def _unitless_velocities(self):
+        """Keeps a cache of unitless velocities."""
+        if self._velocities is None:
+            return None
+        if self._unitless_velocities_cache is None or self._velocities.has_changed:
+            self._unitless_velocities_cache = self._velocities.value_in_unit_system(unit.md_unit_system)
+        if self._velocities.has_changed:
+            self._velocities.has_changed = False
+            self.kinetic_energy = None
+        return self._unitless_velocities_cache
 
     def _read_context_state(self, context_state, check_consistency):
         """Read the Context state.
@@ -1957,16 +2022,16 @@ class SamplerState(object):
         else:
             openmm_state = context_state
 
+        positions = openmm_state.getPositions(asNumpy=True)
+        velocities = openmm_state.getVelocities(asNumpy=True)
+
         # We assign positions first, since the velocities
         # property will check its length for consistency.
-        if check_consistency:
-            self.positions = openmm_state.getPositions(asNumpy=True)
-        else:
-            # The positions in md units cache is updated below.
-            self._positions = openmm_state.getPositions(asNumpy=True)
-
-        self.velocities = openmm_state.getVelocities(asNumpy=True)
+        self._set_positions(positions, from_context=True, check_consistency=check_consistency)
+        self._set_velocities(velocities, from_context=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
+        # Potential energy and kinetic energy must be updated
+        # after positions and velocities or they'll be reset.
         self.potential_energy = openmm_state.getPotentialEnergy()
         self.kinetic_energy = openmm_state.getKineticEnergy()
 

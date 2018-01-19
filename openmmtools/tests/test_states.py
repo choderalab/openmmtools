@@ -829,6 +829,53 @@ class TestSamplerState(object):
         sampler_state = SamplerState.from_context(alanine_vacuum_context)
         assert self.is_sampler_state_equal_context(sampler_state, alanine_vacuum_context)
 
+    def test_unitless_cache(self):
+        """Test that the unitless cache for positions and velocities is invalidated."""
+        positions = copy.deepcopy(self.alanine_vacuum_positions)
+
+        alanine_vacuum_context = self.create_context(self.alanine_vacuum_state)
+        alanine_vacuum_context.setPositions(copy.deepcopy(positions))
+
+        test_cases = [
+            SamplerState(positions),
+            SamplerState.from_context(alanine_vacuum_context)
+        ]
+
+        pos_unit = unit.micrometer
+        vel_unit = unit.micrometer / unit.nanosecond
+
+        # Assigning an item invalidates the cache.
+        for sampler_state in test_cases:
+            old_unitless_positions = copy.deepcopy(sampler_state._unitless_positions)
+            sampler_state.positions[5] = [1.0, 1.0, 1.0] * pos_unit
+            assert sampler_state.positions.has_changed
+            assert np.all(old_unitless_positions[5] != sampler_state._unitless_positions[5])
+            sampler_state.positions = copy.deepcopy(positions)
+            assert sampler_state._unitless_positions_cache is None
+
+            if isinstance(sampler_state._positions._value, np.ndarray):
+                old_unitless_positions = copy.deepcopy(sampler_state._unitless_positions)
+                sampler_state.positions[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * pos_unit
+                assert sampler_state.positions.has_changed
+                assert np.all(old_unitless_positions[5:8] != sampler_state._unitless_positions[5:8])
+
+            if sampler_state.velocities is not None:
+                old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
+                sampler_state.velocities[5] = [1.0, 1.0, 1.0] * vel_unit
+                assert sampler_state.velocities.has_changed
+                assert np.all(old_unitless_velocities[5] != sampler_state._unitless_velocities[5])
+                sampler_state.velocities = copy.deepcopy(sampler_state.velocities)
+                assert sampler_state._unitless_velocities_cache is None
+
+                if isinstance(sampler_state._velocities._value, np.ndarray):
+                    old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
+                    sampler_state.velocities[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * vel_unit
+                    assert sampler_state.velocities.has_changed
+                    assert np.all(old_unitless_velocities[5:8] != sampler_state._unitless_velocities[5:8])
+            else:
+                assert sampler_state._unitless_velocities is None
+
+
     def test_method_is_context_compatible(self):
         """SamplerState.is_context_compatible() method."""
         # Vacuum.
