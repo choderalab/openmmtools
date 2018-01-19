@@ -1763,7 +1763,7 @@ class TestAlchemicalState(object):
                 self._check_exact_pme_charges(system, lambda_electrostatics=0.5)
 
             # Check that _standardize_system() sets all parameters back to 1.0.
-            AlchemicalState._standardize_system(system)
+            alchemical_state._standardize_system(system)
             standard_alchemical_state = AlchemicalState.from_system(system)
             assert alchemical_state != standard_alchemical_state
             for parameter_name, value in alchemical_state._parameters.items():
@@ -1945,6 +1945,73 @@ class TestAlchemicalState(object):
             context = compound_state_incompatible.create_context(copy.deepcopy(integrator))
             assert not compound_state.is_context_compatible(context)
 
+    @staticmethod
+    def _check_compatibility(state1, state2, context_state1, is_compatible):
+        """Check the compatibility of states and contexts between 2 states."""
+        # Compatibility should be commutative
+        assert state1.is_state_compatible(state2) is is_compatible
+        assert state2.is_state_compatible(state1) is is_compatible
+
+        # Test context incompatibility is commutative.
+        context_state2 = state2.create_context(openmm.VerletIntegrator(1.0*unit.femtosecond))
+        assert state2.is_context_compatible(context_state1) is is_compatible
+        assert state1.is_context_compatible(context_state2) is is_compatible
+        del context_state2
+
+    def test_incompatibility_nonbonded_force(self):
+        """Test the optional electrostatics incompatibility with exact PME."""
+        alanine_state = copy.deepcopy(self.alanine_state)
+        alanine_state_exact_pme = copy.deepcopy(self.alanine_state_exact_pme)
+        alchemical_state = AlchemicalState.from_system(alanine_state_exact_pme.system)
+        alchemical_state.update_alchemical_charges = False
+        compound_state = states.CompoundThermodynamicState(copy.deepcopy(alanine_state_exact_pme),
+                                                           [alchemical_state])
+        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        context = compound_state.create_context(copy.deepcopy(integrator))
+
+        # Test incompatibility.
+        # ----------------------
+
+        # Check that changes in lambda_electrostatics are not compatible.
+        alchemical_state_incompatible1 = copy.deepcopy(alchemical_state)
+        alchemical_state_incompatible1.lambda_electrostatics = 0.0
+        compound_state_incompatible1 = states.CompoundThermodynamicState(
+            thermodynamic_state=copy.deepcopy(alanine_state_exact_pme),
+            composable_states=[alchemical_state_incompatible1]
+        )
+        # States with non-exact PME treatment are incompatible
+        # even with same lambda_electrostatics.
+        compound_state_incompatible2 = states.CompoundThermodynamicState(
+            thermodynamic_state=copy.deepcopy(alanine_state),
+            composable_states=[AlchemicalState.from_system(alanine_state.system)]
+        )
+        # States with exact PME treatment but with
+        # update_alchemical_charges=True are incompatible.
+        compound_state_incompatible3 = states.CompoundThermodynamicState(
+            thermodynamic_state=copy.deepcopy(alanine_state_exact_pme),
+            composable_states=[AlchemicalState.from_system(alanine_state_exact_pme.system)]
+        )
+        # Switching update_alchemical_charges in the
+        # compound state works correctly.
+        compound_state_incompatible4 = copy.deepcopy(compound_state)
+        compound_state_incompatible4.update_alchemical_charges = True
+
+        for incompatible_state in [compound_state_incompatible1, compound_state_incompatible2,
+                                   compound_state_incompatible3, compound_state_incompatible4]:
+            self._check_compatibility(compound_state, incompatible_state, context, is_compatible=False)
+
+        # Test compatibility.
+        # ----------------------
+
+        # Check that states with lambda_electrostatics are
+        # compatible even if other lambda variables change.
+        alchemical_state_compatible = copy.deepcopy(alchemical_state)
+        alchemical_state_compatible.lambda_sterics = 0.0
+        compound_state_compatible = states.CompoundThermodynamicState(copy.deepcopy(alanine_state_exact_pme),
+                                                                      [alchemical_state_compatible])
+        self._check_compatibility(compound_state, compound_state_compatible, context, is_compatible=True)
+
+
     def test_method_reduced_potential_compound_state(self):
         """Test CompoundThermodynamicState.reduced_potential_at_states() method.
 
@@ -2002,6 +2069,7 @@ class TestAlchemicalState(object):
         alchemical_state = AlchemicalState(lambda_electrostatics=0.5, lambda_angles=None)
         alchemical_state.set_alchemical_variable('lambda', 0.0)
         alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
+        alchemical_state.update_alchemical_charges = not AlchemicalState._UPDATE_ALCHEMICAL_CHARGES_DEFAULT
 
         # Test serialization/deserialization of AlchemicalState.
         serialization = utils.serialize(alchemical_state)
@@ -2011,20 +2079,21 @@ class TestAlchemicalState(object):
         assert original_pickle == deserialized_pickle
 
         # Test serialization/deserialization of AlchemicalState in CompoundState.
-        alanine_state = copy.deepcopy(self.alanine_state)
-        compound_state = states.CompoundThermodynamicState(alanine_state, [alchemical_state])
+        test_cases = [copy.deepcopy(self.alanine_state), copy.deepcopy(self.alanine_state_exact_pme)]
+        for thermodynamic_state in test_cases:
+            compound_state = states.CompoundThermodynamicState(thermodynamic_state, [alchemical_state])
 
-        # The serialized system is standard.
-        serialization = utils.serialize(compound_state)
-        serialized_standard_system = serialization['thermodynamic_state']['standard_system']
-        # Decompress the serialized_system
-        serialized_standard_system = zlib.decompress(serialized_standard_system).decode(
-            states.ThermodynamicState._ENCODING)
-        assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
+            # The serialized system is standard.
+            serialization = utils.serialize(compound_state)
+            serialized_standard_system = serialization['thermodynamic_state']['standard_system']
+            # Decompress the serialized_system
+            serialized_standard_system = zlib.decompress(serialized_standard_system).decode(
+                states.ThermodynamicState._ENCODING)
+            assert serialized_standard_system.__hash__() == compound_state._standard_system_hash
 
-        # The object is deserialized correctly.
-        deserialized_state = utils.deserialize(serialization)
-        assert pickle.dumps(compound_state) == pickle.dumps(deserialized_state)
+            # The object is deserialized correctly.
+            deserialized_state = utils.deserialize(serialization)
+            assert pickle.dumps(compound_state) == pickle.dumps(deserialized_state)
 
 
 # =============================================================================
