@@ -79,7 +79,7 @@ def test_is_quantity_close():
                   (1.01325*unit.bar, 1.01325000006*unit.bar, True),
                   (1.01325*unit.bar, 1.0132500006*unit.bar, False)]
     for quantity1, quantity2, test_result in test_cases:
-        msg = "Test failed: ({}, {}, {})".format(quantity, quantity2, test_result)
+        msg = "Test failed: ({}, {}, {})".format(quantity1, quantity2, test_result)
         assert is_quantity_close(quantity1, quantity2) is test_result, msg
 
     # Passing quantities with different units raise an exception.
