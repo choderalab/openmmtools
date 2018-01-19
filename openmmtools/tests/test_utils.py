@@ -74,7 +74,7 @@ def test_math_eval():
 def test_is_quantity_close():
     """Test is_quantity_close method."""
     # (quantity1, quantity2, test_result)
-    test_cases = [(300.0*unit.kelvin, 300.000000004*unit.kelvin, True),
+    test_cases = [(300.0*unit.kelvin, 300.0000000004*unit.kelvin, True),
                   (300.0*unit.kelvin, 300.00000004*unit.kelvin, False),
                   (1.01325*unit.bar, 1.01325000006*unit.bar, True),
                   (1.01325*unit.bar, 1.0132500006*unit.bar, False)]
