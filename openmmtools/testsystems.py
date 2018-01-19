@@ -331,6 +331,17 @@ def generate_dummy_trajectory(xyz, box):
 
     return traj
 
+def construct_restraining_potential(n_particles, K):
+    """Make a CustomExternalForce that puts a spring on particles 0 through n_particles"""
+
+    # Add a restraining potential centered at the origin.
+    energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
+    energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers ** 2))  # in OpenMM units
+    force = openmm.CustomExternalForce(energy_expression)
+    for particle_index in range(n_particles):
+        force.addParticle(particle_index, [])
+    return force
+
 
 #=============================================================================================
 # Thermodynamic state description
@@ -1711,13 +1722,8 @@ class LennardJonesCluster(TestSystem):
             topology.addAtom('Ar', element, residue)
         self.topology = topology
 
-        # Add a restrining potential centered at the origin.
-        energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
-        energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers**2))  # in OpenMM units
-        force = openmm.CustomExternalForce(energy_expression)
-        for particle_index in range(natoms):
-            force.addParticle(particle_index, [])
-        system.addForce(force)
+        # Add a restraining potential centered at the origin.
+        system.addForce(construct_restraining_potential(natoms, K))
 
         self.system, self.positions = system, positions
 
@@ -1791,12 +1797,7 @@ class WaterCluster(TestSystem):
         self.ndof = 3 * n_atoms - 3 * constrained
 
         # Add a restraining potential centered at the origin.
-        energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
-        energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers ** 2))  # in OpenMM units
-        force = openmm.CustomExternalForce(energy_expression)
-        for particle_index in range(n_atoms):
-            force.addParticle(particle_index, [])
-        system.addForce(force)
+        system.addForce(construct_restraining_potential(n_atoms, K))
 
         self.topology = modeller.getTopology()
         self.system = system
