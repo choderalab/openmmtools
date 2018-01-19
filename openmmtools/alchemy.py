@@ -768,8 +768,8 @@ class AlchemicalState(object):
             if (isinstance(force, openmm.CustomNonbondedForce) and
                         force.getEnergyFunction() == '0.0;' and
                         force.getGlobalParameterName(0) == 'lambda_electrostatics'):
+                original_charges_force = force
                 if original_charges_only:
-                    original_charges_force = force
                     break
                 n_found += 1
             elif isinstance(force, openmm.NonbondedForce):
