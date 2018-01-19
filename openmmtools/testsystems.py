@@ -1775,7 +1775,7 @@ class WaterCluster(TestSystem):
 
         # Get new topology and coordinates.
         new_top = modeller.getTopology()
-        new_pos = m.getPositions()
+        new_pos = modeller.getPositions()
 
         # Convert positions to numpy.
         positions = unit.Quantity(numpy.array(new_pos / new_pos.unit), new_pos.unit)
