@@ -843,7 +843,8 @@ class ThermodynamicState(object):
             context_system.addForce(copy.deepcopy(thermostat))
 
         # Compute and compare standard system hash.
-        context_system_hash = self._standardize_and_hash(context_system)
+        self._standardize_system(context_system)
+        context_system_hash = self._compute_standard_system_hash(context_system)
         is_compatible = self._standard_system_hash == context_system_hash
         return is_compatible
 
@@ -1117,15 +1118,9 @@ class ThermodynamicState(object):
             # and pressure of the system are correct.
             self._check_system_consistency(system)
 
-        # Standardize system and compute hash.
-        self._standard_system_hash = self._standardize_and_hash(system)
-
-        # Check if the standard system is already in the weakref cache.
-        try:
-            self._standard_system = self._standard_system_cache[self._standard_system_hash]
-        except KeyError:
-            self._standard_system_cache[self._standard_system_hash] = system
-            self._standard_system = system
+        # Update standard system.
+        self._standardize_system(system)
+        self._update_standard_system(system)
 
     def _check_system_consistency(self, system):
         """Check system consistency with this ThermodynamicState.
@@ -1226,10 +1221,14 @@ class ThermodynamicState(object):
         system_serialization = openmm.XmlSerializer.serialize(standard_system)
         return system_serialization.__hash__()
 
-    def _standardize_and_hash(self, system):
-        """Standardize the system and return its hash."""
-        self._standardize_system(system)
-        return self._compute_standard_system_hash(system)
+    def _update_standard_system(self, standard_system):
+        """Update the standard system, its hash and the standard system cache."""
+        self._standard_system_hash = self._compute_standard_system_hash(standard_system)
+        try:
+            self._standard_system = self._standard_system_cache[self._standard_system_hash]
+        except KeyError:
+            self._standard_system_cache[self._standard_system_hash] = standard_system
+            self._standard_system = standard_system
 
     # -------------------------------------------------------------------------
     # Internal-usage: context handling
@@ -2378,7 +2377,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         def setter_decorator(func, composable_state):
             def _setter_decorator(*args, **kwargs):
                 func(*args, **kwargs)
-                self._update_standard_system(composable_state, name)
+                self._on_setattr_callback(composable_state, name)
             return _setter_decorator
 
         # Called only if the attribute couldn't be found in __dict__.
@@ -2417,7 +2416,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             for s in self._composable_states:
                 if hasattr(s, name):
                     s.__setattr__(name, value)
-                    self._update_standard_system(s, name)
+                    self._on_setattr_callback(s, name)
                     return
 
             # No attribute found. This is monkey patching.
@@ -2491,10 +2490,10 @@ class CompoundThermodynamicState(ThermodynamicState):
         for composable_state in self._composable_states:
             composable_state._standardize_system(system)
 
-    def _update_standard_system(self, composable_state, attribute_name):
+    def _on_setattr_callback(self, composable_state, attribute_name):
         """Updates the standard system (and hash) after __setattr__."""
         if composable_state._on_setattr(self._standard_system, attribute_name):
-            self._standard_system_hash = self._compute_standard_system_hash(self._standard_system)
+            self._update_standard_system(self._standard_system)
 
     def _apply_to_context_in_state(self, context, thermodynamic_state):
         super(CompoundThermodynamicState, self)._apply_to_context_in_state(context, thermodynamic_state)
