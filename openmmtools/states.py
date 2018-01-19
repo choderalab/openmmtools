@@ -2146,7 +2146,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def _on_setattr(self, standard_system, attribute_name):
-        """Update the standard system after a state attribute is set.
+        """Check if standard system needs to be updated after a state attribute is set.
 
         This callback function is called after an attribute is set (i.e.
         after __setattr__ is called on this state) or if an attribute whose
@@ -2162,8 +2162,8 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Returns
         -------
-        updated : bool
-            True if the standard system has been updated, False if no change
+        need_changes : bool
+            True if the standard system has to be updated, False if no change
             occurred.
 
         """
@@ -2493,7 +2493,10 @@ class CompoundThermodynamicState(ThermodynamicState):
     def _on_setattr_callback(self, composable_state, attribute_name):
         """Updates the standard system (and hash) after __setattr__."""
         if composable_state._on_setattr(self._standard_system, attribute_name):
-            self._update_standard_system(self._standard_system)
+            new_standard_system = copy.deepcopy(self._standard_system)
+            composable_state.apply_to_system(new_standard_system)
+            composable_state._standardize_system(new_standard_system)
+            self._update_standard_system(new_standard_system)
 
     def _apply_to_context_in_state(self, context, thermodynamic_state):
         super(CompoundThermodynamicState, self)._apply_to_context_in_state(context, thermodynamic_state)
