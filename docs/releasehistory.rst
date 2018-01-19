@@ -1,6 +1,13 @@
 Release History
 ===============
 
+Development snapshot
+====================
+New features
+------------
+- Add a ``WaterCluster`` testsystem (`#322 <https://github.com/choderalab/openmmtools/pull/322>`_)
+
+
 0.13.4 - Barostat/External Force Bugfix, Restart Robustness
 ===========================================================
 
