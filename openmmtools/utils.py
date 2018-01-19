@@ -335,7 +335,7 @@ _VALID_UNIT_FUNCTIONS = {method: getattr(unit, method) for method in dir(unit)
                          if callable(getattr(unit, method)) and type(getattr(unit, method)) is not type}
 
 
-    def is_quantity_close(quantity1, quantity2):
+def is_quantity_close(quantity1, quantity2):
     """Check if the quantities are equal up to floating-point precision errors.
 
     Parameters
