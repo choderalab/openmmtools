@@ -940,10 +940,9 @@ class TestCompoundThermodynamicState(object):
         def dummy_parameter(self, value):
             self._dummy_parameter = value
 
-        @classmethod
-        def _standardize_system(cls, system):
+        def _standardize_system(self, system):
             try:
-                cls.set_dummy_parameter(system, cls.standard_dummy_parameter)
+                self.set_dummy_parameter(system, self.standard_dummy_parameter)
             except TypeError:  # No parameter to set.
                 raise ComposableStateError()
 
@@ -965,6 +964,9 @@ class TestCompoundThermodynamicState(object):
 
         def apply_to_context(self, context):
             context.setParameter('dummy_parameter', self.dummy_parameter)
+
+        def _on_setattr(self, standard_system, attribute_name):
+            return False
 
         def _find_force_groups_to_update(self, context, current_context_state, memo):
             if current_context_state.dummy_parameter == self.dummy_parameter:

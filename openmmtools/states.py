@@ -1221,11 +1221,15 @@ class ThermodynamicState(object):
             barostat.setDefaultPressure(self._STANDARD_PRESSURE)
             system.addForce(barostat)
 
+    def _compute_standard_system_hash(self, standard_system):
+        """Compute the standard system hash."""
+        system_serialization = openmm.XmlSerializer.serialize(standard_system)
+        return system_serialization.__hash__()
+
     def _standardize_and_hash(self, system):
         """Standardize the system and return its hash."""
         self._standardize_system(system)
-        system_serialization = openmm.XmlSerializer.serialize(system)
-        return system_serialization.__hash__()
+        return self._compute_standard_system_hash(system)
 
     # -------------------------------------------------------------------------
     # Internal-usage: context handling
@@ -1990,15 +1994,15 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def apply_to_system(self, system):
-        """Change the system properties to be consistent with this state.
+        """Set the system to be in this state.
 
-        This method is called on CompoundThermodynamicState init to update
-        the system stored in the main ThermodynamicState, and every time
-        an attribute/property of the composable state is set or a setter
-        method (i.e. a method that starts with 'set_') is called.
-
-        This is the system that will be used during context creation, so
-        it is important that it is up-to-date.
+        This method is called in three situations:
+        1) On initialization, before standardizing the system.
+        2) When a new system is set and the argument ``fix_state`` is
+           set to ``True``.
+        3) When the system is retrieved to convert the standard system
+           into a system in the correct thermodynamic state for the
+           simulation.
 
         Parameters
         ----------
@@ -2015,11 +2019,11 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def check_system_consistency(self, system):
-        """Check if the system is consistent with the state.
+        """Check if the system is in this state.
 
-        It raises a ComposableStateError if the system is not consistent
-        with the state. This is called when the ThermodynamicState's
-        system is set.
+        It raises a ComposableStateError if the system is not in
+        this state. This is called when the ThermodynamicState's
+        system is set with the ``fix_state`` argument set to False.
 
         Parameters
         ----------
@@ -2036,7 +2040,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def apply_to_context(self, context):
-        """Apply changes to the context to be consistent with the state.
+        """Set the context to be in this state.
 
         Parameters
         ----------
@@ -2051,9 +2055,8 @@ class IComposableState(utils.SubhookedABCMeta):
         """
         pass
 
-    @classmethod
     @abc.abstractmethod
-    def _standardize_system(cls, system):
+    def _standardize_system(self, system):
         """Standardize the given system.
 
         ThermodynamicState relies on this method to create a standard
@@ -2078,11 +2081,37 @@ class IComposableState(utils.SubhookedABCMeta):
         pass
 
     @abc.abstractmethod
+    def _on_setattr(self, standard_system, attribute_name):
+        """Update the standard system after a state attribute is set.
+
+        This callback function is called after an attribute is set (i.e.
+        after __setattr__ is called on this state) or if an attribute whose
+        name starts with "set_" is requested (i.e. if a setter is retrieved
+        from this state through __getattr__).
+
+        Parameters
+        ----------
+        standard_system : simtk.openmm.System
+            The standard system before setting the attribute.
+        attribute_name : str
+            The name of the attribute that has just been set or retrieved.
+
+        Returns
+        -------
+        updated : bool
+            True if the standard system has been updated, False if no change
+            occurred.
+
+        """
+        pass
+
+    @abc.abstractmethod
     def _find_force_groups_to_update(self, context, current_context_state, memo):
         """Find the force groups whose energy must be recomputed after applying self.
 
         This is used to compute efficiently the potential energy of the
-        same configuration in multiple thermodynamic states.
+        same configuration in multiple thermodynamic states to minimize
+        the number of force evaluations.
 
         Parameters
         ----------
@@ -2234,10 +2263,13 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState.set_system
 
         """
-        if fix_state is False:
-            for s in self._composable_states:
+        system = copy.deepcopy(system)
+        for s in self._composable_states:
+            if fix_state:
+                s.apply_to_system(system)
+            else:
                 s.check_system_consistency(system)
-        super(CompoundThermodynamicState, self).set_system(system, fix_state)
+        super(CompoundThermodynamicState, self)._unsafe_set_system(system, fix_state)
 
     def is_context_compatible(self, context):
         """Check compatibility of the given context.
@@ -2278,13 +2310,25 @@ class CompoundThermodynamicState(ThermodynamicState):
             s.apply_to_context(context)
 
     def __getattr__(self, name):
+        def setter_decorator(func, composable_state):
+            def _setter_decorator(*args, **kwargs):
+                func(*args, **kwargs)
+                self._update_standard_system(composable_state, name)
+            return _setter_decorator
+
         # Called only if the attribute couldn't be found in __dict__.
         # In this case we fall back to composable state, in the given order.
         for s in self._composable_states:
             try:
-                return getattr(s, name)
+                attr = getattr(s, name)
             except AttributeError:
                 pass
+            else:
+                if name.startswith('set_'):
+                    # Decorate the setter so that _on_setattr is called
+                    # after the attribute is modified.
+                    attr = setter_decorator(attr, s)
+                return attr
 
         # Attribute not found, fall back to normal behavior.
         return super(CompoundThermodynamicState, self).__getattribute__(name)
@@ -2295,14 +2339,20 @@ class CompoundThermodynamicState(ThermodynamicState):
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
         # Update existing ThermodynamicState attribute (check ancestors).
+        # We can't use hasattr here because it calls __getattr__, which
+        # search in all composable states as well. This means that this
+        # will catch only properties and methods.
         elif any(name in C.__dict__ for C in self.__class__.__mro__):
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
         # Update composable states attributes (check ancestors).
+        # We can't use hasattr here because it calls __getattr__,
+        # which search in all composable states as well.
         else:
             for s in self._composable_states:
-                if any(name in C.__dict__ for C in s.__class__.__mro__):
+                if hasattr(s, name):
                     s.__setattr__(name, value)
+                    self._update_standard_system(s, name)
                     return
 
             # No attribute found. This is monkey patching.
@@ -2373,8 +2423,13 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         """
         super(CompoundThermodynamicState, self)._standardize_system(system)
-        for composable_cls in self._composable_states:
-            composable_cls._standardize_system(system)
+        for composable_state in self._composable_states:
+            composable_state._standardize_system(system)
+
+    def _update_standard_system(self, composable_state, attribute_name):
+        """Updates the standard system (and hash) after __setattr__."""
+        if composable_state._on_setattr(self._standard_system, attribute_name):
+            self._standard_system_hash = self._compute_standard_system_hash(self._standard_system)
 
     def _apply_to_context_in_state(self, context, thermodynamic_state):
         super(CompoundThermodynamicState, self)._apply_to_context_in_state(context, thermodynamic_state)
