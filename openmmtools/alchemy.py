@@ -571,15 +571,15 @@ class AlchemicalState(object):
 
         """
         need_changes = False
-        standardize_system = False
 
         # The standard_system changes with update_alchemical_charges
         # if the system uses exact PME treatment.
         if attribute_name == 'update_alchemical_charges':
             original_charges_force = self._find_exact_pme_forces(standard_system, original_charges_only=True)
-            old_update_charge_parameter = bool(original_charges_force.getGlobalParameterDefaultValue(
-                _UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX))
-            need_changes = old_update_charge_parameter != self.update_alchemical_charges
+            if original_charges_force is not None:
+                old_update_charge_parameter = bool(original_charges_force.getGlobalParameterDefaultValue(
+                    _UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX))
+                need_changes = old_update_charge_parameter != self.update_alchemical_charges
 
         # If we are not allowed to update_alchemical_charges is off and
         # we change lambda_electrostatics we also change the compatibility.
