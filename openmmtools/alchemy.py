@@ -515,7 +515,7 @@ class AlchemicalState(object):
         self._set_exact_pme_charges(original_charges_force, nonbonded_force)
         nonbonded_force.updateParametersInContext(context)
 
-    def _standardize_system(self, system):
+    def _standardize_system(self, system, set_lambda_electrostatics=False):
         """Standardize the given system.
 
         Set all global lambda parameters of the system to 1.0.
@@ -524,6 +524,8 @@ class AlchemicalState(object):
         ----------
         system : simtk.openmm.System
             The system to standardize.
+        set_lambda_electrostatics : bool, optional
+            Whether to set the lambda electrostatics of this system or not.
 
         Raises
         ------
@@ -543,6 +545,9 @@ class AlchemicalState(object):
             else:
                 exclusions = frozenset()
         alchemical_state._set_alchemical_parameters(1.0, exclusions=exclusions)
+
+        if set_lambda_electrostatics:
+            alchemical_state.lambda_electrostatics = self.lambda_electrostatics
 
         # We don't want to overwrite the update_alchemical_charges flag as
         # states with different settings must be incompatible.
@@ -565,13 +570,27 @@ class AlchemicalState(object):
             occurred.
 
         """
-        # The only way the standard_system can change is if
-        # update_alchemical_charges has changed and the system
-        # uses exact PME treatment.
+        has_changed = False
+        standardize_system = False
+
+        # The standard_system changes with update_alchemical_charges
+        # if the system uses exact PME treatment.
         if attribute_name == 'update_alchemical_charges':
             original_charges_force = self._find_exact_pme_forces(standard_system, original_charges_only=True)
-            return self._set_force_update_charge_parameter(original_charges_force)
-        return False
+            has_changed = self._set_force_update_charge_parameter(original_charges_force)
+            # When update_alchemical_charges is off, lambda_electrostatics is not set to 1.0.
+            standardize_system = has_changed
+
+        # If we are not allowed to update_alchemical_charges is off and
+        # we change lambda_electrostatics we also change the compatibility.
+        elif self.update_alchemical_charges is False and attribute_name == 'lambda_electrostatics':
+            has_changed = True
+            standardize_system = True
+
+        if standardize_system:
+            self._standardize_system(standard_system, set_lambda_electrostatics=True)
+
+        return has_changed
 
     def _find_force_groups_to_update(self, context, current_context_state, memo):
         """Find the force groups whose energy must be recomputed after applying self.

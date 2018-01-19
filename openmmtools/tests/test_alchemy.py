@@ -1973,12 +1973,9 @@ class TestAlchemicalState(object):
         # ----------------------
 
         # Check that changes in lambda_electrostatics are not compatible.
-        alchemical_state_incompatible1 = copy.deepcopy(alchemical_state)
-        alchemical_state_incompatible1.lambda_electrostatics = 0.0
-        compound_state_incompatible1 = states.CompoundThermodynamicState(
-            thermodynamic_state=copy.deepcopy(alanine_state_exact_pme),
-            composable_states=[alchemical_state_incompatible1]
-        )
+        compound_state_incompatible1 = copy.deepcopy(compound_state)
+        compound_state_incompatible1.lambda_electrostatics = 0.0
+
         # States with non-exact PME treatment are incompatible
         # even with same lambda_electrostatics.
         compound_state_incompatible2 = states.CompoundThermodynamicState(
@@ -1996,8 +1993,14 @@ class TestAlchemicalState(object):
         compound_state_incompatible4 = copy.deepcopy(compound_state)
         compound_state_incompatible4.update_alchemical_charges = True
 
+        compound_state_incompatible5 = copy.deepcopy(compound_state)
+        compound_state_incompatible5.update_alchemical_charges = True
+        compound_state_incompatible5.lambda_electrostatics = 0.5
+        compound_state_incompatible5.update_alchemical_charges = False
+
         for incompatible_state in [compound_state_incompatible1, compound_state_incompatible2,
-                                   compound_state_incompatible3, compound_state_incompatible4]:
+                                   compound_state_incompatible3, compound_state_incompatible4,
+                                   compound_state_incompatible5]:
             self._check_compatibility(compound_state, incompatible_state, context, is_compatible=False)
 
         # Test compatibility.
