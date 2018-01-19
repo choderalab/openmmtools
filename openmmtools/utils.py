@@ -414,7 +414,7 @@ def is_quantity_close(quantity1, quantity2):
     value2 = quantity2.value_in_unit_system(unit.md_unit_system)
 
     # np.isclose is not symmetric, so we make it so.
-    if value2 >= value1:
+    if abs(value2) >= abs(value1):
         return np.isclose(value1, value2, rtol=1e-10, atol=0.0)
     else:
         return np.isclose(value2, value1, rtol=1e-10, atol=0.0)
