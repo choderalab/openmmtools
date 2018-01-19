@@ -59,6 +59,7 @@ Clusters and simple fluids
     TolueneImplicitGBn
     TolueneImplicitGBn2
     MethanolBox
+    WaterCluster
 
 Solids
 ------
@@ -91,6 +92,7 @@ Water boxes
     GiantFlexibleDischargedWaterBox
     DischargedWaterBoxHsites
     AlchemicalWaterBox
+    WaterCluster
 
 Peptide and protein systems
 ---------------------------
