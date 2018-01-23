@@ -2459,11 +2459,13 @@ class CompoundThermodynamicState(ThermodynamicState):
             assert isinstance(composable_state, IComposableState)
 
         # Copy internal attributes of thermodynamic state.
+        thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.__dict__ = thermodynamic_state.__dict__
 
         # Setting self._composable_states signals __setattr__ to start
         # searching in composable states as well, so this must be the
         # last new attribute set in the constructor.
+        composable_states = copy.deepcopy(composable_states)
         self._composable_states = composable_states
 
         # This call causes the thermodynamic state standard system
