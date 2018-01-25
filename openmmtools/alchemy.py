@@ -391,7 +391,7 @@ class AlchemicalState(object):
         """Set the state from a dictionary representation."""
         parameters = serialization['parameters']
         alchemical_variables = serialization['alchemical_variables']
-        update_alchemical_charges = serialization['update_alchemical_charges']
+        update_alchemical_charges = serialization.get('update_alchemical_charges', True)
         alchemical_functions = dict()
 
         # Temporarily store alchemical functions.
