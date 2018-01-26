@@ -3,12 +3,24 @@ Release History
 
 Development snapshot
 ====================
+
+
+0.14.0 - Exact treatment of alchemical PME electrostatics, water cluster test system, optimizations
+===================================================================================================
+
 New features
 ------------
 - Add a ``WaterCluster`` testsystem (`#322 <https://github.com/choderalab/openmmtools/pull/322>`_)
 - Add exact treatment of PME electrostatics in `alchemy.AbsoluteAlchemicalFactory`. (`#320 <https://github.com/choderalab/openmmtools/pull/320>`_)
 - Add method in ``ThermodynamicState`` for the efficient computation of the reduced potential at a list of states. (`#320 <https://github.com/choderalab/openmmtools/pull/320>`_)
+
+Enhancements
+------------
 - When a ``SamplerState`` is applied to many ``Context``s, the units are stripped only once for optimization. (`#320 <https://github.com/choderalab/openmmtools/pull/320>`_)
+
+Bug fixes
+---------
+- Copy thermodynamic state on compound state initialization. (`#320 <https://github.com/choderalab/openmmtools/pull/320>`_)
 
 
 0.13.4 - Barostat/External Force Bugfix, Restart Robustness
