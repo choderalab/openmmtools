@@ -326,6 +326,57 @@ def math_eval(expression, variables=None, functions=None):
 # QUANTITY UTILITIES
 # =============================================================================
 
+def _changes_state(func):
+    """Decorator to signal changes in TrackedQuantity."""
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self.has_changed = True
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
+class TrackedQuantity(unit.Quantity):
+    """A quantity that keeps track of whether it has been changed."""
+
+    def __init__(self, *args, **kwargs):
+        super(TrackedQuantity, self).__init__(*args, **kwargs)
+        self.has_changed = False
+
+    def __getitem__(self, item):
+        if isinstance(item, slice) and isinstance(self._value, np.ndarray):
+            return TrackedQuantityView(self, super(TrackedQuantity, self).__getitem__(item))
+        # No need to track a copy.
+        return super(TrackedQuantity, self).__getitem__(item)
+
+    __setitem__ = _changes_state(unit.Quantity.__setitem__)
+    __delitem__ = _changes_state(unit.Quantity.__delitem__)
+    append = _changes_state(unit.Quantity.append)
+    extend = _changes_state(unit.Quantity.extend)
+    insert = _changes_state(unit.Quantity.insert)
+    remove = _changes_state(unit.Quantity.remove)
+    pop = _changes_state(unit.Quantity.pop)
+
+
+class TrackedQuantityView(unit.Quantity):
+    """Keeps truck of a numpy view for TrackedQuantity."""
+
+    def __init__(self, tracked_quantity, *args, **kwargs):
+        super(TrackedQuantityView, self).__init__(*args, **kwargs)
+        self._tracked_quantity = tracked_quantity  # Parent.
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return TrackedQuantityView(self._tracked_quantity,
+                                       super(TrackedQuantityView, self).__getitem__(item))
+        # No need to track a copy.
+        return super(TrackedQuantityView, self).__getitem__(item)
+
+    def __setitem__(self, key, value):
+        super(TrackedQuantityView, self).__setitem__(key, value)
+        self._tracked_quantity.has_changed = True
+
+
+
 # List of simtk.unit methods that are actually units and functions instead of base classes
 # Pre-computed to reduce run-time cost
 # Get the built-in units

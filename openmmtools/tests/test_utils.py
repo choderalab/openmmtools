@@ -71,6 +71,67 @@ def test_math_eval():
 # TEST QUANTITY UTILITIES
 # =============================================================================
 
+def test_tracked_quantity():
+    """Test TrackedQuantity objects."""
+    def reset(q):
+        assert tracked_quantity.has_changed is True
+        tracked_quantity.has_changed = False
+
+    test_cases = [
+        np.array([10.0, 20.0, 30.0]) * unit.kelvin,
+        [1.0, 2.0, 3.0] * unit.nanometers,
+    ]
+    for quantity in test_cases:
+        tracked_quantity = TrackedQuantity(quantity)
+        u = tracked_quantity.unit
+        assert tracked_quantity.has_changed is False
+
+        tracked_quantity[0] = 5.0 * u
+        assert tracked_quantity[0] == 5.0 * u
+        reset(tracked_quantity)
+
+        tracked_quantity[0:2] = [5.0, 6.0] * u
+        assert np.all(tracked_quantity[0:2] == [5.0, 6.0] * u)
+        reset(tracked_quantity)
+
+        if isinstance(tracked_quantity._value, list):
+            del tracked_quantity[0]
+            assert len(tracked_quantity) == 2
+            reset(tracked_quantity)
+
+            tracked_quantity.append(10.0*u)
+            assert len(tracked_quantity) == 3
+            reset(tracked_quantity)
+
+            tracked_quantity.extend([11.0, 12.0]*u)
+            assert len(tracked_quantity) == 5
+            reset(tracked_quantity)
+
+            element = 15.0*u
+            tracked_quantity.insert(1, element)
+            assert len(tracked_quantity) == 6
+            reset(tracked_quantity)
+
+            tracked_quantity.remove(element.value_in_unit(u))
+            assert len(tracked_quantity) == 5
+            reset(tracked_quantity)
+
+            assert tracked_quantity.pop().unit == u
+            assert len(tracked_quantity) == 4
+            reset(tracked_quantity)
+        else:
+            # Check that numpy views are handled correctly.
+            view = tracked_quantity[:3]
+            view[0] = 20.0*u
+            assert tracked_quantity[0] == 20.0*u
+            reset(tracked_quantity)
+
+            view2 = view[1:]
+            view2[0] = 30.0*u
+            assert tracked_quantity[1] == 30.0*u
+            reset(tracked_quantity)
+
+
 def test_is_quantity_close():
     """Test is_quantity_close method."""
     # (quantity1, quantity2, test_result)
@@ -78,6 +139,8 @@ def test_is_quantity_close():
                   (300.0*unit.kelvin, 300.00000004*unit.kelvin, False),
                   (1.01325*unit.bar, 1.01325000006*unit.bar, True),
                   (1.01325*unit.bar, 1.0132500006*unit.bar, False)]
+
+    err_msg = 'obtained: {}, expected: {} (quantity1: {}, quantity2: {})'
     for quantity1, quantity2, test_result in test_cases:
         msg = "Test failed: ({}, {}, {})".format(quantity1, quantity2, test_result)
         assert is_quantity_close(quantity1, quantity2) == test_result, msg
