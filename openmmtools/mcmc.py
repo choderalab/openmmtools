@@ -1782,14 +1782,14 @@ class MCRotationMove(MetropolizedMove):
         super(MCRotationMove, self).__init__(**kwargs)
 
     @classmethod
-    def rotate_positions(cls, positions, indices=None):
+    def rotate_positions(cls, positions, rotation_center_indices=None):
         """Return the positions after applying a random rotation to them.
 
         Parameters
         ----------
         positions : nx3 numpy.ndarray simtk.unit.Quantity
             The positions to rotate.
-        indices : list
+        rotation_center_indices : list
             Indices of a subset of atoms to center the rotation around, None by default.
 
         Returns
@@ -1805,10 +1805,10 @@ class MCRotationMove(MetropolizedMove):
         x_rot_centers = x_initial
 
         # Update coordinates for the center of rotation from the subset defined by indices
-        if indices is not None:
-            if len(indices) < 1 or len(indices) > x_initial.shape[0]:
-                raise IndexError("The length of indicies must be >= % d and <= %d" % (1, x_initial.shape[0]))
-            x_rot_centers = positions[indices, :]
+        if rotation_center_indices is not None:
+            if len(rotation_center_indices) < 1 or len(rotation_center_indices) > x_initial.shape[0]:
+                raise IndexError("Length of rotation center indices must be >= % d and <= %d" % (1, x_initial.shape[0]))
+            x_rot_centers = positions[rotation_center_indices, :]
 
         x_initial_mean = x_rot_centers.mean(0)
 
