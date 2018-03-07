@@ -331,14 +331,14 @@ def generate_dummy_trajectory(xyz, box):
 
     return traj
 
-def construct_restraining_potential(n_particles, K):
-    """Make a CustomExternalForce that puts a spring on particles 0 through n_particles"""
+def construct_restraining_potential(particle_indices, K):
+    """Make a CustomExternalForce that puts an origin-centered spring on the chosen particles"""
 
     # Add a restraining potential centered at the origin.
     energy_expression = '(K/2.0) * (x^2 + y^2 + z^2);'
     energy_expression += 'K = %f;' % (K / (unit.kilojoules_per_mole / unit.nanometers ** 2))  # in OpenMM units
     force = openmm.CustomExternalForce(energy_expression)
-    for particle_index in range(n_particles):
+    for particle_index in particle_indices:
         force.addParticle(particle_index, [])
     return force
 
@@ -1723,7 +1723,7 @@ class LennardJonesCluster(TestSystem):
         self.topology = topology
 
         # Add a restraining potential centered at the origin.
-        system.addForce(construct_restraining_potential(natoms, K))
+        system.addForce(construct_restraining_potential(particle_indices=range(natoms), K=K))
 
         self.system, self.positions = system, positions
 
@@ -1736,6 +1736,7 @@ class WaterCluster(TestSystem):
                  K=1.0 * unit.kilojoules_per_mole / unit.nanometer ** 2,
                  model='tip3p',
                  constrained=True,
+                 restrain_only_oxygen=False,
                  **kwargs):
         """
 
@@ -1749,6 +1750,9 @@ class WaterCluster(TestSystem):
             Must be one of ['tip3p', 'tip4pew', 'tip5p', 'spce']
         constrained: bool
             Whether to use rigid water or not
+        restrain_only_oxygen: bool
+            Whether to apply the restraining potential to oxygens only (True)
+            or to all atoms (False)
 
         Examples
         --------
@@ -1796,10 +1800,18 @@ class WaterCluster(TestSystem):
         n_atoms = system.getNumParticles()
         self.ndof = 3 * n_atoms - (constrained * n_atoms)
 
-        # Add a restraining potential centered at the origin.
-        system.addForce(construct_restraining_potential(n_atoms, K))
-
         self.topology = modeller.getTopology()
+
+        # Add a restraining potential centered at the origin.
+        if restrain_only_oxygen:
+            atom_symbols = [a.name for a in self.topology.atoms()]
+            oxygen_indices = [i for i in range(len(atom_symbols)) if atom_symbols[i] == 'O']
+            assert(len(oxygen_indices) == int(n_atoms / 3)) # double-check that we got one atom per water
+            particle_indices = oxygen_indices
+        else:
+            particle_indices = list(range(n_atoms))
+        system.addForce(construct_restraining_potential(particle_indices=particle_indices, K=K))
+
         self.system = system
         self.positions = positions
 
