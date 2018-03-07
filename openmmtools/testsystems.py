@@ -1794,7 +1794,7 @@ class WaterCluster(TestSystem):
                                  removeCMMotion=False)
 
         n_atoms = system.getNumParticles()
-        self.ndof = 3 * n_atoms - 3 * constrained
+        self.ndof = 3 * n_atoms - (constrained * n_atoms)
 
         # Add a restraining potential centered at the origin.
         system.addForce(construct_restraining_potential(n_atoms, K))
@@ -2669,7 +2669,8 @@ class WaterBox(TestSystem):
         forces['NonbondedForce'].setUseDispersionCorrection(dispersion_correction)
         forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
 
-        self.ndof = 3 * system.getNumParticles() - 3 * constrained
+        n_atoms = system.getNumParticles()
+        self.ndof = 3 * n_atoms - (constrained * n_atoms)
 
         self.topology = m.getTopology()
         self.system = system
