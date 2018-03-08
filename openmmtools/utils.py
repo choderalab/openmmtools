@@ -21,6 +21,7 @@ import time
 import math
 import copy
 import shutil
+import inspect
 import logging
 import operator
 import tempfile
@@ -649,6 +650,72 @@ class SubhookedABCMeta(with_metaclass(abc.ABCMeta)):
             if not any(abstract_method in C.__dict__ for C in subclass.__mro__):
                 return False
         return True
+
+
+def find_all_subclasses(parent_cls, discard_abstract=False, include_parent=True):
+    """Return a set of all the classes inheriting from ``parent_cls``.
+
+    The functions handle multiple inheritance and discard the same classes.
+
+    Parameters
+    ----------
+    parent_cls : type
+        The parent class.
+    discard_abstract : bool, optional
+        If True, abstract classes are not returned (default is False).
+    include_parent : bool, optional
+        If True, the parent class will be included, unless it is abstract
+        and ``discard_abstract`` is ``True``.
+
+    Returns
+    -------
+    subclasses : set of type
+        The set of all the classes inheriting from ``parent_cls``.
+
+    """
+    subclasses = set()
+    for subcls in parent_cls.__subclasses__():
+        if not (discard_abstract and inspect.isabstract(subcls)):
+            subclasses.add(subcls)
+        subclasses.update(find_all_subclasses(subcls, discard_abstract))
+
+    if include_parent and not inspect.isabstract(parent_cls):
+        subclasses.add(parent_cls)
+    return subclasses
+
+
+def find_subclass(parent_cls, subcls_name):
+    """Return the class called ``subcls_name`` inheriting from ``parent_cls``.
+
+    Parameters
+    ----------
+    parent_cls : type
+        The parent class.
+    subcls_name : str
+        The name of the class inheriting from ``parent_cls``.
+
+    Returns
+    -------
+    subcls : type
+        The class inheriting from ``parent_cls`` called ``subcls_name``.
+
+    Raises
+    ------
+    ValueError
+        If there is no class or there are multiple classes called ``subcls_name``
+        that inherit from ``parent_cls``.
+    """
+    subclasses = []
+    for subcls in find_all_subclasses(parent_cls):
+        if subcls.__name__ == subcls_name:
+            subclasses.append(subcls)
+    if len(subclasses) == 0:
+        raise ValueError('Could not found class {} inheriting from {}'
+                         ''.format(subcls_name, parent_cls))
+    if len(subclasses) > 1:
+        raise ValueError('Found multiple classes inheriting from {}: {}'
+                         ''.format(parent_cls, subclasses))
+    return subclasses[0]
 
 
 if __name__ == '__main__':

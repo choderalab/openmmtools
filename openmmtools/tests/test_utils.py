@@ -248,3 +248,32 @@ def test_subhooked_abcmeta():
 
     implementation_instance = WrongInterfaceImplementation()
     assert not isinstance(implementation_instance, IInterface)
+
+
+def test_find_all_subclasses():
+    """Test find_all_subclasses() function."""
+    # Diamond inheritance.
+    class A:
+        pass
+
+    class B(A):
+        pass
+
+    class C(A, abc.ABC):
+        @abc.abstractmethod
+        def m(self):
+            pass
+
+    class D(B, C, abc.ABC):
+        @abc.abstractmethod
+        def m(self):
+            pass
+
+    class E(D):
+        def m(self):
+            pass
+
+    assert find_all_subclasses(B) == {B, D, E}
+    assert find_all_subclasses(B, discard_abstract=True, include_parent=False) == {E}
+    assert find_all_subclasses(A) == {A, B, D, E, C}
+    assert find_all_subclasses(A, discard_abstract=True, include_parent=False) == {B, E}
