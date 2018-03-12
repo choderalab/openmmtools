@@ -5,7 +5,7 @@
 # =============================================================================
 
 """
-Test Force classes in forces.py.
+Test force factories in forcefactories.py.
 
 """
 
@@ -14,8 +14,6 @@ Test Force classes in forces.py.
 # =============================================================================
 
 from functools import partial
-
-import numpy as np
 
 from openmmtools.forcefactories import *
 from openmmtools import testsystems, states

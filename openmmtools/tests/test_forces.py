@@ -1,0 +1,219 @@
+#!/usr/bin/env python
+
+# =============================================================================
+# MODULE DOCSTRING
+# =============================================================================
+
+"""
+Test Force classes in forces.py.
+
+"""
+
+# =============================================================================
+# GLOBAL IMPORTS
+# =============================================================================
+
+import pickle
+
+import nose.tools
+
+from openmmtools import utils, testsystems, states
+from openmmtools.forces import *
+from openmmtools.forces import _compute_sphere_volume, _compute_harmonic_radius
+
+
+# =============================================================================
+# CONSTANTS
+# =============================================================================
+
+GLOBAL_FORCES_PLATFORM = None  # This is used in every calculation.
+
+
+# =============================================================================
+# TESTING UTILITIES
+# =============================================================================
+
+def create_context(system, integrator, platform=None):
+    """Create a Context.
+
+    If platform is None, GLOBAL_ALCHEMY_PLATFORM is used.
+
+    """
+    if platform is None:
+        platform = GLOBAL_FORCES_PLATFORM
+    if platform is not None:
+        context = openmm.Context(system, integrator, platform)
+    else:
+        context = openmm.Context(system, integrator)
+    return context
+
+
+def assert_pickles_equal(object1, object2):
+    assert pickle.dumps(object1) == pickle.dumps(object2)
+
+
+def assert_quantity_almost_equal(object1, object2):
+    assert utils.is_quantity_close(object1, object2), '{} != {}'.format(object1, object2)
+
+
+# =============================================================================
+# UTILITY FUNCTIONS
+# =============================================================================
+
+class TestRadiallySymmetricRestraints(object):
+    """Test radially symmetric receptor-ligand restraint classes."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.well_radius = 12.0 * unit.angstroms
+        cls.spring_constant = 15000.0 * unit.joule/unit.mole/unit.nanometers**2
+        cls.restrained_atom_indices1 = [2, 3, 4]
+        cls.restrained_atom_indices2 = [10, 11]
+        cls.restrained_atom_index1=12
+        cls.restrained_atom_index2=2
+
+        cls.restraints = [
+            HarmonicRestraintForce(spring_constant=cls.spring_constant,
+                                   restrained_atom_indices1=cls.restrained_atom_indices1,
+                                   restrained_atom_indices2=cls.restrained_atom_indices2),
+            HarmonicRestraintBondForce(spring_constant=cls.spring_constant,
+                                       restrained_atom_index1=cls.restrained_atom_index1,
+                                       restrained_atom_index2=cls.restrained_atom_index2),
+            FlatBottomRestraintForce(spring_constant=cls.spring_constant, well_radius=cls.well_radius,
+                                     restrained_atom_indices1=cls.restrained_atom_indices1,
+                                     restrained_atom_indices2=cls.restrained_atom_indices2),
+            FlatBottomRestraintBondForce(spring_constant=cls.spring_constant, well_radius=cls.well_radius,
+                                         restrained_atom_index1=cls.restrained_atom_index1,
+                                         restrained_atom_index2=cls.restrained_atom_index2)
+        ]
+
+    def test_restorable_forces(self):
+        """Test that the restraint interface can be restored after serialization."""
+        for restorable_force in self.restraints:
+            force_serialization = openmm.XmlSerializer.serialize(restorable_force)
+            deserialized_force = RestorableOpenMMObject.deserialize_xml(force_serialization)
+            yield assert_pickles_equal, restorable_force, deserialized_force
+
+    def test_restraint_properties(self):
+        """Test that properties work as expected."""
+        for restraint in self.restraints:
+            yield assert_quantity_almost_equal, restraint.spring_constant, self.spring_constant
+            if isinstance(restraint, FlatBottomRestraintForceMixIn):
+                yield assert_quantity_almost_equal, restraint.well_radius, self.well_radius
+
+            if isinstance(restraint, RadiallySymmetricCentroidRestraintForce):
+                yield nose.tools.assert_equal, restraint.restrained_atom_indices1, self.restrained_atom_indices1
+                yield nose.tools.assert_equal, restraint.restrained_atom_indices2, self.restrained_atom_indices2
+            else:
+                assert isinstance(restraint, RadiallySymmetricBondRestraintForce)
+                yield nose.tools.assert_equal, restraint.restrained_atom_indices1, [self.restrained_atom_index1]
+                yield nose.tools.assert_equal, restraint.restrained_atom_indices2, [self.restrained_atom_index2]
+
+    def test_compute_restraint_volume(self):
+        """Test the calculation of the restraint volume."""
+        testsystem = testsystems.TolueneImplicit()
+        thermodynamic_state = states.ThermodynamicState(testsystem.system, 300*unit.kelvin)
+
+        energy_cutoffs = np.linspace(0.0, 10.0, num=3)
+        radius_cutoffs = np.linspace(0.0, 5.0, num=3) * unit.nanometers
+
+        def assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, energy_cutoff):
+            args = [thermodynamic_state, square_well, radius_cutoff, energy_cutoff]
+
+            # For flat-bottom, the calculation is only partially analytical.
+            analytical_volume = restraint._compute_restraint_volume(*args)
+
+            # Make sure there's no analytical component (from _determine_integral_limits)
+            # in the numerical integration calculation.
+            copied_restraint = copy.deepcopy(restraint)
+            for parent_cls in [RadiallySymmetricCentroidRestraintForce, RadiallySymmetricBondRestraintForce]:
+                if isinstance(copied_restraint, parent_cls):
+                    copied_restraint.__class__ = parent_cls
+            integrated_volume = copied_restraint._integrate_restraint_volume(*args)
+
+            err_msg = '{}: square_well={}, radius_cutoff={}, energy_cutoff={}\n'.format(
+                restraint.__class__.__name__, square_well, radius_cutoff, energy_cutoff)
+            err_msg += 'integrated_volume={}, analytical_volume={}'.format(integrated_volume,
+                                                                           analytical_volume)
+            assert utils.is_quantity_close(integrated_volume, analytical_volume, rtol=1e-2), err_msg
+
+        for restraint in self.restraints:
+            # Test integrated and analytical agree with no cutoffs.
+            assert_integrated_analytical_equal(restraint, False, None, None)
+
+            for square_well in [True, False]:
+                # Try energies and distances singly and together.
+                for energy_cutoff in energy_cutoffs:
+                    assert_integrated_analytical_equal(restraint, square_well, None, energy_cutoff)
+
+                for radius_cutoff in radius_cutoffs:
+                    assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, None)
+
+                for energy_cutoff, radius_cutoff in zip(energy_cutoffs, radius_cutoffs):
+                    assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, energy_cutoff)
+                for energy_cutoff, radius_cutoff in zip(energy_cutoffs, reversed(radius_cutoffs)):
+                    assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, energy_cutoff)
+
+    def test_compute_standard_state_correction(self):
+        """Test standard state correction works correctly in all ensembles."""
+        toluene = testsystems.TolueneImplicit()
+        alanine = testsystems.AlanineDipeptideExplicit()
+        big_radius = 200.0 * unit.nanometers
+        temperature = 300.0 * unit.kelvin
+
+        # Limit the maximum volume to 1nm^3.
+        distance_unit = unit.nanometers
+        state_volume = 1.0 * distance_unit**3
+        box_vectors = np.identity(3) * np.cbrt(state_volume / distance_unit**3) * distance_unit
+        alanine.system.setDefaultPeriodicBoxVectors(*box_vectors)
+        toluene.system.setDefaultPeriodicBoxVectors(*box_vectors)
+
+        # Create systems in various ensembles (NVT, NPT and non-periodic).
+        nvt_state = states.ThermodynamicState(alanine.system, temperature)
+        npt_state = states.ThermodynamicState(alanine.system, temperature, 1.0*unit.atmosphere)
+        nonperiodic_state = states.ThermodynamicState(toluene.system, temperature)
+
+        def assert_equal_ssc(expected_restraint_volume, restraint, thermodynamic_state, square_well=False,
+                             radius_cutoff=None, energy_cutoff=None, max_volume=None):
+            expected_ssc = -math.log(STANDARD_STATE_VOLUME/expected_restraint_volume)
+            ssc = restraint.compute_standard_state_correction(thermodynamic_state, square_well,
+                                                              radius_cutoff, energy_cutoff, max_volume)
+            err_msg = '{} computed SSC != expected SSC'.format(restraint.__class__.__name__)
+            nose.tools.assert_equal(ssc, expected_ssc, msg=err_msg)
+
+        for restraint in self.restraints:
+            # In NPT ensemble, an exception is thrown if max_volume is not provided.
+            with nose.tools.assert_raises_regexp(TypeError, "max_volume must be provided"):
+                restraint.compute_standard_state_correction(npt_state)
+
+            # With non-periodic systems and reweighting to square-well
+            # potential, a cutoff must be given.
+            with nose.tools.assert_raises_regexp(TypeError, "One between radius_cutoff"):
+                restraint.compute_standard_state_correction(nonperiodic_state, square_well=True)
+
+            # SSC is limited by max_volume (in NVT and NPT).
+            assert_equal_ssc(state_volume, restraint, nvt_state, radius_cutoff=big_radius)
+            assert_equal_ssc(state_volume, restraint, npt_state, radius_cutoff=big_radius,
+                             max_volume='system')
+
+            # SSC is not limited by max_volume with non periodic systems.
+            expected_ssc = -math.log(STANDARD_STATE_VOLUME/state_volume)
+            ssc = restraint.compute_standard_state_correction(nonperiodic_state, radius_cutoff=big_radius)
+            assert expected_ssc < ssc, (restraint, expected_ssc, ssc)
+
+            # Check reweighting to square-well potential.
+            expected_volume = _compute_sphere_volume(big_radius)
+            assert_equal_ssc(expected_volume, restraint, nonperiodic_state,
+                             square_well=True, radius_cutoff=big_radius)
+
+            energy_cutoff = 10  # kT
+            radius_cutoff = _compute_harmonic_radius(self.spring_constant, energy_cutoff, nonperiodic_state.beta)
+            if isinstance(restraint, FlatBottomRestraintForceMixIn):
+                radius_cutoff += self.well_radius
+            expected_volume = _compute_sphere_volume(radius_cutoff)
+            assert_equal_ssc(expected_volume, restraint, nonperiodic_state,
+                             square_well=True, radius_cutoff=radius_cutoff)
+
+            max_volume = 3.0 * unit.nanometers**3
+            assert_equal_ssc(max_volume, restraint, nonperiodic_state,
+                             square_well=True, max_volume=max_volume)
