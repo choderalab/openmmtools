@@ -169,13 +169,11 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
     >>> integrator.getGlobalVariableByName('kT')
     3.1594995390636815
 
-    Notice that a CustomIntegrator bound to a context loses any extra method.
+    Notice that a CustomIntegrator loses any extra method after a serialization cycle.
 
-    >>> from openmmtools import testsystems
-    >>> test = testsystems.HarmonicOscillator()
-    >>> context = openmm.Context(test.system, integrator)
-    >>> integrator = context.getIntegrator()
-    >>> integrator.getTemperature()
+    >>> integrator_serialization = openmm.XmlSerializer.serialize(integrator)
+    >>> deserialized_integrator = openmm.XmlSerializer.deserialize(integrator_serialization)
+    >>> deserialized_integrator.getTemperature()
     Traceback (most recent call last):
     ...
     AttributeError: type object 'object' has no attribute '__getattr__'
