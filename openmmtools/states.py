@@ -556,6 +556,11 @@ class ThermodynamicState(object):
             raise
 
     @property
+    def default_box_vectors(self):
+        """The default box vectors of the System (read-only)."""
+        return self._standard_system.getDefaultPeriodicBoxVectors()
+
+    @property
     def volume(self):
         """Constant volume of the thermodynamic state (read-only).
 
@@ -563,12 +568,30 @@ class ThermodynamicState(object):
         not in a periodic box this is None.
 
         """
-        if self.pressure is not None:  # Volume fluctuates.
+        return self.get_volume()
+
+    def get_volume(self, ignore_ensemble=False):
+        """Volume of the periodic box (read-only).
+
+        Parameters
+        ----------
+        ignore_ensemble : bool, optional
+            If True, the volume of the periodic box vectors is returned
+            even if the volume fluctuates.
+
+        Returns
+        -------
+        volume : simtk.unit.Quantity
+            The volume of the periodic box (units of length^3) or
+            None if the system is not periodic or allowed to fluctuate.
+
+        """
+        # Check if volume fluctuates
+        if self.pressure is not None and not ignore_ensemble:
             return None
         if not self._standard_system.usesPeriodicBoundaryConditions():
             return None
-        box_vectors = self._standard_system.getDefaultPeriodicBoxVectors()
-        return _box_vectors_volume(box_vectors)
+        return _box_vectors_volume(self.default_box_vectors)
 
     @property
     def n_particles(self):
