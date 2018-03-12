@@ -33,16 +33,15 @@ You should have received a copy of the MIT License along with this program.
 # GLOBAL IMPORTS
 # ============================================================================================
 
-import numpy as np
 import logging
 import re
-import zlib
 
+import numpy as np
 import simtk.unit as unit
 import simtk.openmm as mm
 
 from openmmtools.constants import kB
-from openmmtools import respa
+from openmmtools import respa, utils
 
 logger = logging.getLogger(__name__)
 
@@ -118,113 +117,9 @@ class PrettyPrintableIntegrator(object):
         """Pretty-print the computation steps of this integrator."""
         print(self.pretty_format())
 
-class RestorableIntegrator(mm.CustomIntegrator,PrettyPrintableIntegrator):
-    """A CustomIntegrator that can be restored after being copied.
 
-    Normally, a CustomIntegrator loses its specific class (and all its
-    methods) when it is copied. This happens for example when obtaining
-    the integrator from a Context with getIntegrator(). This class
-    offers a method restore_interface() that restore the original class.
-
-    Parameters
-    ----------
-    temperature : unit.Quantity
-        The temperature of the integrator heat bath (temperature units).
-    timestep : unit.Quantity
-        The timestep to pass to the CustomIntegrator constructor (time
-        units)
-
-    """
-
-    def __init__(self, *args, **kwargs):
-        super(RestorableIntegrator, self).__init__(*args, **kwargs)
-        self.addGlobalVariable('_restorable__class_hash',
-                               self._compute_class_hash(self.__class__))
-
-    @staticmethod
-    def is_restorable(integrator):
-        """Check if the integrator has a restorable interface.
-
-        Parameters
-        ----------
-        integrator : simtk.openmm.CustomIntegrator
-            The custom integrator to check.
-
-        Returns
-        -------
-        True if the integrator has a restorable interface, False otherwise.
-
-        """
-        try:
-            integrator.getGlobalVariableByName('_restorable__class_hash')
-        except Exception:
-            return False
-        return True
-
-    @classmethod
-    def restore_interface(cls, integrator):
-        """Restore the original interface of a CustomIntegrator.
-
-        The function restore the methods of the original class that
-        inherited from RestorableIntegrator. Return False if the interface
-        could not be restored.
-
-        Parameters
-        ----------
-        integrator : simtk.openmm.CustomIntegrator
-            The integrator to which add methods.
-
-        Returns
-        -------
-        True if the original class interface could be restored, False otherwise.
-
-        """
-        try:
-            integrator_hash = integrator.getGlobalVariableByName('_restorable__class_hash')
-        except Exception:
-            return False
-
-        # Compute the hash table for all subclasses.
-        if cls._cached_hash_subclasses is None:
-            # Recursive function to find all subclasses.
-            def all_subclasses(c):
-                return c.__subclasses__() + [subsubcls for subcls in c.__subclasses__()
-                                             for subsubcls in all_subclasses(subcls)]
-            cls._cached_hash_subclasses = {cls._compute_class_hash(sc): sc
-                                           for sc in all_subclasses(cls)}
-        # Retrieve integrator class.
-        try:
-            integrator_class = cls._cached_hash_subclasses[integrator_hash]
-        except KeyError:
-            return False
-
-        # Restore class interface.
-        integrator.__class__ = integrator_class
-        return True
-
-    # -------------------------------------------------------------------------
-    # Internal-usage
-    # -------------------------------------------------------------------------
-
-    _cached_hash_subclasses = None
-
-    @staticmethod
-    def _compute_class_hash(integrator_class):
-        """Return a numeric hash for the integrator class.
-
-        The hash will become part of the Integrator serialization,
-        so it is important for it consistent across processes in case
-        the integrator is sent to a remote worker. The hash() built-in
-        function is seeded by the PYTHONHASHSEED environmental variable,
-        so we can't use it here.
-
-        We also need to convert to float because some digits may be
-        lost in the conversion.
-        """
-        return float(zlib.adler32(integrator_class.__name__.encode()))
-
-
-class ThermostatedIntegrator(RestorableIntegrator):
+class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegrator,
+                             mm.CustomIntegrator):
     """Add temperature functions to a CustomIntegrator.
 
     This class is intended to be inherited by integrators that maintain the
@@ -1198,9 +1093,6 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._measure_heat = measure_heat
         self._measure_shadow_work = measure_shadow_work
 
-        # Register step types
-        self._register_step_types()
-
         ORV_counts, mts, force_group_nV = self._parse_splitting_string(splitting)
 
         # Record splitting.
@@ -1234,32 +1126,18 @@ class LangevinIntegrator(ThermostatedIntegrator):
         # Add integrator steps
         self._add_integrator_steps()
 
-    def _register_step_types(self):
-        """Register step type symbols."""
-        self._clear_registered_step_types()
-        self._register_step_type('O', self._add_O_step)
-        self._register_step_type('R', self._add_R_step)
-        self._register_step_type('{', self._add_metropolize_start)
-        self._register_step_type('}', self._add_metropolize_finish)
-        self._register_step_type('V', self._add_V_step, can_accept_force_groups=True)
-
-    def _clear_registered_step_types(self):
-        """Clear the list of registered step types."""
-        self._registered_step_types = dict()
-
-    def _register_step_type(self, step_string, function, can_accept_force_groups=False):
-        """Register a function that adds a new step type.
-
-        Parameters
-        ----------
-        step_string : str
-           The step string, such as 'V', 'R', 'O'
-        function : function
-           The function callback
-        can_accept_force_groups : bool, optional, default=False
-           If True, the function can accept a force group
-        """
-        self._registered_step_types[step_string] = (function, can_accept_force_groups)
+    @property
+    def _step_dispatch_table(self):
+        """dict: The dispatch table step_name -> add_step_function."""
+        # TODO use methoddispatch (see yank.utils) when dropping Python 2 support.
+        dispatch_table = {
+            'O': (self._add_O_step, False),
+            'R': (self._add_R_step, False),
+            '{': (self._add_metropolize_start, False),
+            '}': (self._add_metropolize_finish, False),
+            'V': (self._add_V_step, True)
+        }
+        return dispatch_table
 
     def _add_global_variables(self):
         """Add global bookkeeping variables."""
@@ -1431,7 +1309,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         splitting_no_space = splitting.replace(" ", "")
 
         allowed_characters = "0123456789"
-        for key in self._registered_step_types:
+        for key in self._step_dispatch_table:
             allowed_characters += key
 
         # sanity check to make sure only allowed combinations are present in string:
@@ -1561,7 +1439,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
         The step string input here is a single character (or character + number, for MTS)
         """
-        (function, can_accept_force_groups) = self._registered_step_types[step_string[0]]
+        function, can_accept_force_groups = self._step_dispatch_table[step_string[0]]
         if can_accept_force_groups:
             force_group = step_string[1:]
             function(force_group)
@@ -1594,7 +1472,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         ORV_counts = dict()
 
         # count number of R, V, O steps:
-        for step_symbol in self._registered_step_types.keys():
+        for step_symbol in self._step_dispatch_table:
             ORV_counts[step_symbol] = splitting_string.count(step_symbol)
 
         # split by delimiter (space)
@@ -1860,9 +1738,13 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         kwargs['splitting'] = splitting
         super(AlchemicalNonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
 
-    def _register_step_types(self):
-        super(AlchemicalNonequilibriumLangevinIntegrator, self)._register_step_types()
-        self._register_step_type('H', self._add_alchemical_perturbation_step)
+    @property
+    def _step_dispatch_table(self):
+        """dict: The dispatch table step_name -> add_step_function."""
+        # TODO use methoddispatch (see yank.utils) when dropping Python 2 support.
+        dispatch_table = super(AlchemicalNonequilibriumLangevinIntegrator, self)._step_dispatch_table
+        dispatch_table['H'] = (self._add_alchemical_perturbation_step, False)
+        return dispatch_table
 
     def _add_global_variables(self):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
