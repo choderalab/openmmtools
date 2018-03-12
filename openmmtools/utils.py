@@ -28,6 +28,7 @@ import tempfile
 import functools
 import importlib
 import contextlib
+import zlib
 
 import numpy as np
 from simtk import openmm, unit
@@ -716,6 +717,209 @@ def find_subclass(parent_cls, subcls_name):
         raise ValueError('Found multiple classes inheriting from {}: {}'
                          ''.format(parent_cls, subclasses))
     return subclasses[0]
+
+
+# =============================================================================
+# RESTORABLE OPENMM OBJECT
+# =============================================================================
+
+class RestorableOpenMMObject(object):
+    """Base class for restorable custom integrators and forces.
+
+    Normally, a custom OpenMM object loses its specific class (and all its
+    methods) when it is copied or deserialized from its XML representation.
+    Class interfaces inheriting from this can be restored through the method
+    ``restore_interface()``. Also, this class extend the copying functions
+    to copy also Python attributes.
+
+    The class automatically adds a global parameter or variable in custom
+    forces and integrators respectively on __init__ to keep track of the
+    original class.
+
+    """
+
+    def __init__(self, *args, **kwargs):
+        super(RestorableOpenMMObject, self).__init__(*args, **kwargs)
+        self._add_global_parameter(self, '_restorable__class_hash',
+                                   self._compute_class_hash(self.__class__))
+
+    @classmethod
+    def is_restorable(cls, openmm_object):
+        """Check if the custom integrator or force has a restorable interface.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The custom integrator or force to check.
+
+        Returns
+        -------
+        True if the object has a restorable interface, False otherwise.
+
+        """
+        try:
+            cls._get_global_parameter(openmm_object, '_restorable__class_hash')
+        except Exception:
+            return False
+        return True
+
+    @classmethod
+    def restore_interface(cls, openmm_object):
+        """Restore the original interface of an OpenMM custom force or integrator.
+
+        The function restore the methods of the original class that
+        inherited from ``RestorableOpenMMObject``. Return False if the
+        interface could not be restored.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The object to restore.
+
+        Returns
+        -------
+        True if the original class interface could be restored, False otherwise.
+
+        """
+        try:
+            object_hash = cls._get_global_parameter(openmm_object, '_restorable__class_hash')
+        except Exception:
+            return False
+
+        # Compute the hash table for all subclasses if we haven't previously cached it. We check
+        # directly the class dictionary to avoid catching parent classes as well with hasattr().
+        if not '_cached_hash_subclasses' in cls.__dict__:
+            all_subclasses = find_all_subclasses(parent_cls=cls, discard_abstract=True,
+                                                 include_parent=True)
+            cls._cached_hash_subclasses = {cls._compute_class_hash(subcls): subcls
+                                           for subcls in all_subclasses}
+        # Retrieve integrator class.
+        try:
+            object_class = cls._cached_hash_subclasses[object_hash]
+        except KeyError:
+            return False
+
+        # Restore class interface.
+        openmm_object.__class__ = object_class
+        return True
+
+    # -------------------------------------------------------------------------
+    # Abstract class methods
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def _add_global_parameter(cls, openmm_object, parameter_name, parameter_value):
+        """Add a new global parameter/variable to the OpenMM custom force/integrator.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The OpenMM custom integrator/force to which add the parameter.
+        parameter_name : str
+            The name of the global parameter.
+        parameter_value : float
+            The value of the global parameter.
+
+        """
+        if isinstance(openmm_object, openmm.Force):
+            openmm_object.addGlobalParameter(parameter_name, parameter_value)
+        elif isinstance(openmm_object, openmm.CustomIntegrator):
+            openmm_object.addGlobalVariable(parameter_name, parameter_value)
+        else:
+            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+
+    @classmethod
+    def _get_global_parameter(cls, openmm_object, parameter_name):
+        """Get a global parameter/variable from the OpenMM custom force/integrator.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The OpenMM integrator/force to which add the parameter.
+        parameter_name : str
+            The name of the global parameter.
+
+        Returns
+        -------
+        parameter_value : float
+            The value of the global parameter.
+
+        """
+        if isinstance(openmm_object, openmm.Force):
+            return cls._get_force_parameter_by_name(openmm_object, parameter_name)
+        elif isinstance(openmm_object, openmm.CustomIntegrator):
+            return openmm_object.getGlobalVariableByName(parameter_name)
+        else:
+            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+
+    # -------------------------------------------------------------------------
+    # Copy and serialization utilities
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def deserialize_xml(cls, xml_serialization):
+        """Shortcut to deserialize the XML representation and the restore interface.
+
+        Parameters
+        ----------
+        xml_serialization : str
+            The XML representation of the OpenMM custom force/integrator.
+
+        Returns
+        -------
+        openmm_object
+            The deserialized OpenMM force/integrator with the original interface
+            restored (if restorable).
+
+        """
+        openmm_object = openmm.XmlSerializer.deserialize(xml_serialization)
+        cls.restore_interface(openmm_object)
+        return openmm_object
+
+    def __deepcopy__(self, memo):
+        """Overwrite implementation to copy class and attributes."""
+        return self.__copy__()
+
+    def __copy__(self):
+        """Overwrite implementation to copy class and attributes."""
+        copied_self = super(RestorableOpenMMObject, self).__copy__()
+
+        # Assign correct class instead of OpenMM class.
+        copied_self.__class__ = self.__class__
+
+        # Copy attributes. SWIG objects have only 1 attribute (this),
+        # everything else is part of the implementation.
+        attributes_self = {k: v for k, v in self.__dict__.items() if k != 'this'}
+        copied_self.__dict__.update(copy.deepcopy(attributes_self))
+
+        return copied_self
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_class_hash(openmm_class):
+        """Return a numeric hash for the OpenMM class.
+
+        The hash will become part of the OpenMM object serialization,
+        so it is important for it consistent across processes in case
+        the integrator is sent to a remote worker. The hash() built-in
+        function is seeded by the PYTHONHASHSEED environmental variable,
+        so we can't use it here.
+
+        We also need to convert to float because some digits may be
+        lost in the conversion.
+        """
+        return float(zlib.adler32(openmm_class.__name__.encode()))
+
+    @classmethod
+    def _get_force_parameter_by_name(cls, force, parameter_name):
+        """Get a force global parameter default value from its name."""
+        for parameter_idx in range(force.getNumGlobalParameters()):
+            if force.getGlobalParameterName(parameter_idx) == parameter_name:
+                return force.getGlobalParameterDefaultValue(parameter_idx)
+        raise KeyError('No parameter called {} in force {}'.format(parameter_name, force))
 
 
 if __name__ == '__main__':
