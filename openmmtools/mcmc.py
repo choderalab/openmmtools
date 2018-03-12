@@ -469,10 +469,6 @@ class WeightedMove(object):
         return dict(moves=serialized_moves, weights=weights)
 
     def __setstate__(self, serialization):
-        serialized_moves = serialization['move_list']
-        self.move_list = [utils.deserialize(move) for move in serialized_moves]
-
-    def __setstate__(self, serialization):
         serialized_moves = serialization['moves']
         weights = serialization['weights']
         self.move_set = [(utils.deserialize(move), weight)
@@ -865,7 +861,7 @@ class MetropolizedMove(object):
         if self.atom_subset is None:
             atom_subset = slice(None)
         elif not isinstance(self.atom_subset, slice) and len(self.atom_subset) == 1:
-            # Slice to maintain the 2D shape.
+            # Slice so that initial_positions (below) will have a 2D shape.
             atom_subset = slice(self.atom_subset[0], self.atom_subset[0]+1)
         else:
             atom_subset = self.atom_subset
