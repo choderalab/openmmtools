@@ -91,6 +91,36 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
         If ``only_one`` is True and multiple forces matching the criteria
         are found
 
+    Examples
+    --------
+    The ``only_one`` flag can be used to retrieve a single force.
+
+    >>> from openmmtools import testsystems
+    >>> system = testsystems.TolueneVacuum().system
+    >>> force_index, force = find_forces(system, openmm.NonbondedForce, only_one=True)
+    >>> force.__class__.__name__
+    'NonbondedForce'
+
+    It is possible to search for force subclasses.
+
+    >>> class MyHarmonicForce(utils.RestorableOpenMMObject, openmm.CustomBondForce):
+    ...     pass
+    >>> force_idx = system.addForce(openmm.CustomBondForce('0.0'))
+    >>> force_idx = system.addForce(MyHarmonicForce('0.0'))
+    >>> forces = find_forces(system, openmm.CustomBondForce, include_subclasses=True)
+    >>> [(force_idx, force.__class__.__name__) for force_idx, force in forces.items()]
+    [(5, 'CustomBondForce'), (6, 'MyHarmonicForce')]
+
+    A regular expression can be used instead of a class.
+
+    >>> forces = find_forces(system, 'HarmonicAngleForce')
+    >>> [(force_idx, force.__class__.__name__) for force_idx, force in forces.items()]
+    [(1, 'HarmonicAngleForce')]
+
+    >>> forces = find_forces(system, '.*Harmonic.*')
+    >>> [(force_idx, force.__class__.__name__) for force_idx, force in forces.items()]
+    [(0, 'HarmonicBondForce'), (1, 'HarmonicAngleForce'), (6, 'MyHarmonicForce')]
+
     """
     # Handle force_type argument when it's not a class.
     re_pattern = None
