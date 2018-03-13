@@ -56,7 +56,7 @@ def iterate_forces(system):
     return
 
 
-def find_force(system, force_type, only_one=False, include_subclasses=False):
+def find_forces(system, force_type, only_one=False, include_subclasses=False):
     """Iterate over all OpenMM ``Force``s of a given type in an OpenMM system.
 
     Parameters
@@ -129,53 +129,6 @@ def find_force(system, force_type, only_one=False, include_subclasses=False):
         return forces.popitem(last=False)
 
     return forces
-
-
-def find_nonbonded_force(system):
-    """Find the first OpenMM `NonbondedForce` in the system.
-
-    Parameters
-    ----------
-    system : simtk.openmm.System
-        The system to search.
-
-    Returns
-    -------
-    nonbonded_force : simtk.openmm.NonbondedForce
-        The first `NonbondedForce` object in `system`.
-
-    Raises
-    ------
-    ValueError
-        If the system contains multiple `NonbondedForce`s
-
-    """
-    nonbonded_force = None
-    for force in system.getForces():
-        if isinstance(force, openmm.NonbondedForce):
-            if nonbonded_force is not None:
-                raise ValueError('The System has multiple NonbondedForces')
-            nonbonded_force = force
-    return nonbonded_force
-
-
-def iterate_nonbonded_forces(system):
-    """Iterate over all OpenMM ``NonbondedForce``s in an OpenMM system.
-
-    Parameters
-    ----------
-    system : simtk.openmm.System
-        The system to search.
-
-    Yields
-    ------
-    force : simtk.openmm.NonbondedForce
-        A `NonbondedForce` object in `system`.
-
-    """
-    for force in system.getForces():
-        if isinstance(force, openmm.NonbondedForce):
-            yield force
 
 
 def _compute_sphere_volume(radius):
@@ -1128,17 +1081,12 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
         reaction_field_force : UnshiftedReactionFieldForce
             The reaction field force.
 
-        Raises
-        ------
-        ValueError
-            If multiple `NonbondedForce`s are found in the system.
-
         See Also
         --------
         UnshiftedReactionField.from_nonbonded_force
 
         """
-        nonbonded_force = find_nonbonded_force(system)
+        force_idx, nonbonded_force = find_forces(system, openmm.NonbondedForce, only_one=True)
         return cls.from_nonbonded_force(nonbonded_force, switch_width)
 
 
@@ -1252,17 +1200,12 @@ class SwitchedReactionFieldForce(openmm.CustomNonbondedForce):
         reaction_field_force : UnshiftedReactionFieldForce
             The reaction field force.
 
-        Raises
-        ------
-        ValueError
-            If multiple `NonbondedForce`s are found in the system.
-
         See Also
         --------
         UnshiftedReactionField.from_nonbonded_force
 
         """
-        nonbonded_force = find_nonbonded_force(system)
+        force_idx, nonbonded_force = find_forces(system, openmm.NonbondedForce, only_one=True)
         return cls.from_nonbonded_force(nonbonded_force, switch_width)
 
 

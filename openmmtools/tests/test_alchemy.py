@@ -161,7 +161,7 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
     charge_coeff = 0.0 if electrostatics else 1.0
 
     if exceptions:  # Turn off exceptions
-        nonbonded_force = forces.find_nonbonded_force(system)
+        force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
         for exception_index in range(nonbonded_force.getNumExceptions()):
             iatom, jatom, charge, sigma, epsilon = nonbonded_force.getExceptionParameters(exception_index)
             if iatom in only_atoms or jatom in only_atoms:
@@ -427,7 +427,7 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
     # Check nonbonded method. Comparing with PME is more complicated
     # because the alchemical system with direct-space treatment of PME
     # does not take into account the reciprocal space.
-    nonbonded_force = forces.find_nonbonded_force(reference_system)
+    force_idx, nonbonded_force = forces.find_forces(reference_system, openmm.NonbondedForce, only_one=True)
     nonbonded_method = nonbonded_force.getNonbondedMethod()
     is_direct_space_pme = (nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald] and
                            not is_alchemical_pme_treatment_exact(alchemical_system))
@@ -805,7 +805,7 @@ def check_split_force_groups(system):
     # With exact treatment of PME, the NonbondedForce must
     # be in the lambda_electrostatics force group.
     if is_alchemical_pme_treatment_exact(system):
-        nonbonded_force = forces.find_nonbonded_force(system)
+        force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
         assert force_groups_by_lambda['lambda_electrostatics'] == {nonbonded_force.getForceGroup()}
 
 
@@ -1253,7 +1253,7 @@ class TestAbsoluteAlchemicalFactory(object):
             assert region_name in test_system_name
 
             # Find nonbonded method.
-            nonbonded_force = forces.find_nonbonded_force(test_system.system)
+            force_idx, nonbonded_force = forces.find_forces(test_system.system, openmm.NonbondedForce, only_one=True)
             nonbonded_method = nonbonded_force.getNonbondedMethod()
 
             # Create all combinations of annihilate_sterics/electrostatics.

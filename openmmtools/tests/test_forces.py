@@ -43,8 +43,8 @@ def assert_quantity_almost_equal(object1, object2):
 # UTILITY FUNCTIONS TESTS
 # =============================================================================
 
-def test_find_force():
-    """Generator of tests for the find_force() utility function."""
+def test_find_forces():
+    """Generator of tests for the find_forces() utility function."""
     system = testsystems.TolueneVacuum().system
 
     # Add two CustomBondForces, one is restorable.
@@ -60,39 +60,39 @@ def test_find_force():
         nose.tools.assert_equal(found_forces, set(expected_force_classes))
 
     # Test find force without including subclasses.
-    found_forces = find_force(system, openmm.CustomBondForce)
+    found_forces = find_forces(system, openmm.CustomBondForce)
     yield assert_forces_equal, found_forces, [(6, openmm.CustomBondForce)]
 
     # Test find force and include subclasses.
-    found_forces = find_force(system, openmm.CustomBondForce, include_subclasses=True)
+    found_forces = find_forces(system, openmm.CustomBondForce, include_subclasses=True)
     yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
                                               (6, openmm.CustomBondForce)]
 
     # Test exact name matching.
-    found_forces = find_force(system, 'HarmonicBondForce')
+    found_forces = find_forces(system, 'HarmonicBondForce')
     yield assert_forces_equal, found_forces, [(0, openmm.HarmonicBondForce)]
 
     # Find all forces containing the word "Harmonic".
-    found_forces = find_force(system, '.*Harmonic.*')
+    found_forces = find_forces(system, '.*Harmonic.*')
     yield assert_forces_equal, found_forces, [(0, openmm.HarmonicBondForce),
                                               (1, openmm.HarmonicAngleForce),
                                               (5, HarmonicRestraintBondForce)]
 
     # Find all forces from the name including the subclasses.
     # Test find force and include subclasses.
-    found_forces = find_force(system, 'CustomBond.*', include_subclasses=True)
+    found_forces = find_forces(system, 'CustomBond.*', include_subclasses=True)
     yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
                                               (6, openmm.CustomBondForce)]
 
     # With check_multiple=True only one force is returned.
-    force_idx, force = find_force(system, openmm.NonbondedForce, only_one=True)
+    force_idx, force = find_forces(system, openmm.NonbondedForce, only_one=True)
     yield assert_forces_equal, {force_idx: force}, [(3, openmm.NonbondedForce)]
 
     # An exception is raised with "only_one" if multiple forces are found.
-    yield nose.tools.assert_raises, MultipleForcesError, find_force, system, 'CustomBondForce', True, True
+    yield nose.tools.assert_raises, MultipleForcesError, find_forces, system, 'CustomBondForce', True, True
 
     # An exception is raised with "only_one" if the force wasn't found.
-    yield nose.tools.assert_raises, NoForceFoundError, find_force, system, 'NonExistentForce', True
+    yield nose.tools.assert_raises, NoForceFoundError, find_forces, system, 'NonExistentForce', True
 
 
 # =============================================================================
