@@ -284,7 +284,7 @@ def test_find_all_subclasses():
 # =============================================================================
 
 def test_restorable_openmm_object():
-    """Test RestorableOpenMMObject classes don't mix caches."""
+    """Test RestorableOpenMMObject classes can be serialized and copied correctly."""
 
     class RestorableCustomForce(RestorableOpenMMObject, openmm.CustomBondForce):
         def __init__(self, *args, **kwargs):
@@ -302,8 +302,9 @@ def test_restorable_openmm_object():
     ]
 
     for openmm_object, is_restorable in test_cases:
-        assert RestorableOpenMMObject.is_restorable(openmm_object) is is_restorable
-        assert RestorableOpenMMObject.restore_interface(openmm_object) is is_restorable
+        assert RestorableOpenMMObject.is_restorable(openmm_object) == is_restorable
+        err_msg = '{}, {}'.format(RestorableOpenMMObject.restore_interface(openmm_object), is_restorable)
+        assert RestorableOpenMMObject.restore_interface(openmm_object) == is_restorable, err_msg
 
         # Serializing/deserializing restore the class correctly.
         serialization = openmm.XmlSerializer.serialize(openmm_object)
