@@ -69,7 +69,7 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
         force_constructor = getattr(forces, 'UnshiftedReactionFieldForce')
 
     # Add an reaction field for each CutoffPeriodic NonbondedForce.
-    for reference_force in forces.find_forces(system, openmm.NonbondedForce):
+    for force_idx, reference_force in forces.find_forces(system, openmm.NonbondedForce):
         if reference_force.getNonbondedMethod() == openmm.NonbondedForce.CutoffPeriodic:
             reaction_field_force = force_constructor.from_nonbonded_force(reference_force, switch_width=switch_width)
             system.addForce(reaction_field_force)
