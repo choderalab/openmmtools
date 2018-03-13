@@ -17,14 +17,16 @@ Custom OpenMM Forces classes and utilities.
 import abc
 import collections
 import copy
+import inspect
 import logging
 import math
+import re
 
 import scipy
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools.utils import RestorableOpenMMObject
+from openmmtools import utils
 from openmmtools.constants import ONE_4PI_EPS0, STANDARD_STATE_VOLUME
 
 
@@ -34,6 +36,100 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
+class MultipleForcesError(Exception):
+    """Error raised when multiple forces of the same class are found."""
+    pass
+
+
+class NoForceFoundError(Exception):
+    """Error raised when no forces matching the given criteria are found."""
+    pass
+
+
+def iterate_forces(system):
+    """Iterate over the restored forces in the system."""
+    for force in system.getForces():
+        utils.RestorableOpenMMObject.restore_interface(force)
+        yield force
+    # Yield empty generator if the system has no forces.
+    return
+
+
+def find_force(system, force_type, only_one=False, include_subclasses=False):
+    """Iterate over all OpenMM ``Force``s of a given type in an OpenMM system.
+
+    Parameters
+    ----------
+    system : simtk.openmm.System
+        The system to search.
+    force_type : str, or type
+        The class of the force to search, or a regular expression that
+        is used to match its name. Note that ``re.match()`` is used in
+        this case, not ``re.search()``. The ``iter_subclasses`` argument
+        must be False when this is a string.
+    only_one : bool
+        If True, an exception is raised when multiple forces of the same
+        type are found in the system, and only a single force is returned.
+    include_subclasses : bool, optional
+        If True, all forces inheriting from ``force_type`` are returned
+        as well (default is False). This can't be enabled if `force_type``
+        is not a class.
+
+    Returns
+    -------
+    forces : OrderedDict or tuple
+        If ``only_one`` is False, a dictionary force_index: force is returned
+        with all the forces matching the criteria. Otherwise,, a single pair
+        ``(force_idx, force)`` is returned.
+
+    Raises
+    ------
+    NoForceFoundError
+        If ``only_one`` is True and no forces matching the criteria are found.
+    MultipleForcesError
+        If ``only_one`` is True and multiple forces matching the criteria
+        are found
+
+    """
+    # Handle force_type argument when it's not a class.
+    re_pattern = None
+    if not inspect.isclass(force_type):
+        re_pattern = re.compile(force_type)
+
+    # Find all forces matching the force_type.
+    forces = {}
+    for force_idx, force in enumerate(iterate_forces(system)):
+        # Check force name.
+        if re_pattern is not None and re_pattern.match(force.__class__.__name__):
+            forces[force_idx] = force
+        # Check if the force class matches the requirements.
+        if type(force) is force_type:
+            forces[force_idx] = force
+
+    # Second pass to find all subclasses of the matching forces.
+    if include_subclasses:
+        matched_force_classes = [force.__class__ for force in forces.values()]
+        for force_idx, force in enumerate(iterate_forces(system)):
+            if force_idx in forces:
+                continue
+            for matched_force_class in matched_force_classes:
+                if isinstance(force, matched_force_class):
+                    forces[force_idx] = force
+
+    # Reorder forces by index.
+    forces = collections.OrderedDict(sorted(forces.items()))
+
+    # Handle only_one.
+    if only_one is True:
+        if len(forces) == 0:
+            raise NoForceFoundError('No force of type {} could be found.'.format(force_type))
+        if len(forces) > 1:
+            raise MultipleForcesError('Found multiple forces of type {}'.format(force_type))
+        return forces.popitem(last=False)
+
+    return forces
+
 
 def find_nonbonded_force(system):
     """Find the first OpenMM `NonbondedForce` in the system.
@@ -149,7 +245,7 @@ def _compute_harmonic_radius(spring_constant, potential_energy, beta):
 # GENERIC CLASSES FOR RADIALLY SYMMETRIC RECEPTOR-LIGAND RESTRAINTS
 # =============================================================================
 
-class RadiallySymmetricRestraintForce(RestorableOpenMMObject):
+class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
     """Base class for radially-symmetric restraint force.
 
     Provide facility functions to compute the standard state correction

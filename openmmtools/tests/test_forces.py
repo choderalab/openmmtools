@@ -17,7 +17,7 @@ import pickle
 
 import nose.tools
 
-from openmmtools import utils, testsystems, states
+from openmmtools import testsystems, states
 from openmmtools.forces import *
 from openmmtools.forces import _compute_sphere_volume, _compute_harmonic_radius
 
@@ -26,27 +26,10 @@ from openmmtools.forces import _compute_sphere_volume, _compute_harmonic_radius
 # CONSTANTS
 # =============================================================================
 
-GLOBAL_FORCES_PLATFORM = None  # This is used in every calculation.
-
 
 # =============================================================================
 # TESTING UTILITIES
 # =============================================================================
-
-def create_context(system, integrator, platform=None):
-    """Create a Context.
-
-    If platform is None, GLOBAL_ALCHEMY_PLATFORM is used.
-
-    """
-    if platform is None:
-        platform = GLOBAL_FORCES_PLATFORM
-    if platform is not None:
-        context = openmm.Context(system, integrator, platform)
-    else:
-        context = openmm.Context(system, integrator)
-    return context
-
 
 def assert_pickles_equal(object1, object2):
     assert pickle.dumps(object1) == pickle.dumps(object2)
@@ -57,7 +40,63 @@ def assert_quantity_almost_equal(object1, object2):
 
 
 # =============================================================================
-# UTILITY FUNCTIONS
+# UTILITY FUNCTIONS TESTS
+# =============================================================================
+
+def test_find_force():
+    """Generator of tests for the find_force() utility function."""
+    system = testsystems.TolueneVacuum().system
+
+    # Add two CustomBondForces, one is restorable.
+    restraint_force = HarmonicRestraintBondForce(spring_constant=1.0*unit.kilojoule_per_mole/unit.angstroms**2,
+                                                 restrained_atom_index1=2, restrained_atom_index2=5)
+    system.addForce(restraint_force)
+    system.addForce(openmm.CustomBondForce('0.0'))
+
+    def assert_forces_equal(found_forces, expected_force_classes):
+        # Forces should be ordered by their index.
+        assert list(found_forces.keys()) == sorted(found_forces.keys())
+        found_forces = {(i, force.__class__) for i, force in found_forces.items()}
+        nose.tools.assert_equal(found_forces, set(expected_force_classes))
+
+    # Test find force without including subclasses.
+    found_forces = find_force(system, openmm.CustomBondForce)
+    yield assert_forces_equal, found_forces, [(6, openmm.CustomBondForce)]
+
+    # Test find force and include subclasses.
+    found_forces = find_force(system, openmm.CustomBondForce, include_subclasses=True)
+    yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
+                                              (6, openmm.CustomBondForce)]
+
+    # Test exact name matching.
+    found_forces = find_force(system, 'HarmonicBondForce')
+    yield assert_forces_equal, found_forces, [(0, openmm.HarmonicBondForce)]
+
+    # Find all forces containing the word "Harmonic".
+    found_forces = find_force(system, '.*Harmonic.*')
+    yield assert_forces_equal, found_forces, [(0, openmm.HarmonicBondForce),
+                                              (1, openmm.HarmonicAngleForce),
+                                              (5, HarmonicRestraintBondForce)]
+
+    # Find all forces from the name including the subclasses.
+    # Test find force and include subclasses.
+    found_forces = find_force(system, 'CustomBond.*', include_subclasses=True)
+    yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
+                                              (6, openmm.CustomBondForce)]
+
+    # With check_multiple=True only one force is returned.
+    force_idx, force = find_force(system, openmm.NonbondedForce, only_one=True)
+    yield assert_forces_equal, {force_idx: force}, [(3, openmm.NonbondedForce)]
+
+    # An exception is raised with "only_one" if multiple forces are found.
+    yield nose.tools.assert_raises, MultipleForcesError, find_force, system, 'CustomBondForce', True, True
+
+    # An exception is raised with "only_one" if the force wasn't found.
+    yield nose.tools.assert_raises, NoForceFoundError, find_force, system, 'NonExistentForce', True
+
+
+# =============================================================================
+# RESTRAINTS TESTS
 # =============================================================================
 
 class TestRadiallySymmetricRestraints(object):
@@ -111,7 +150,7 @@ class TestRadiallySymmetricRestraints(object):
 
     def test_compute_restraint_volume(self):
         """Test the calculation of the restraint volume."""
-        testsystem = testsystems.TolueneImplicit()
+        testsystem = testsystems.TolueneVacuum()
         thermodynamic_state = states.ThermodynamicState(testsystem.system, 300*unit.kelvin)
 
         energy_cutoffs = np.linspace(0.0, 10.0, num=3)
@@ -139,24 +178,24 @@ class TestRadiallySymmetricRestraints(object):
 
         for restraint in self.restraints:
             # Test integrated and analytical agree with no cutoffs.
-            assert_integrated_analytical_equal(restraint, False, None, None)
+            yield assert_integrated_analytical_equal, restraint, False, None, None
 
             for square_well in [True, False]:
                 # Try energies and distances singly and together.
                 for energy_cutoff in energy_cutoffs:
-                    assert_integrated_analytical_equal(restraint, square_well, None, energy_cutoff)
+                    yield assert_integrated_analytical_equal, restraint, square_well, None, energy_cutoff
 
                 for radius_cutoff in radius_cutoffs:
-                    assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, None)
+                    yield assert_integrated_analytical_equal, restraint, square_well, radius_cutoff, None
 
                 for energy_cutoff, radius_cutoff in zip(energy_cutoffs, radius_cutoffs):
-                    assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, energy_cutoff)
+                    yield assert_integrated_analytical_equal, restraint, square_well, radius_cutoff, energy_cutoff
                 for energy_cutoff, radius_cutoff in zip(energy_cutoffs, reversed(radius_cutoffs)):
-                    assert_integrated_analytical_equal(restraint, square_well, radius_cutoff, energy_cutoff)
+                    yield assert_integrated_analytical_equal, restraint, square_well, radius_cutoff, energy_cutoff
 
     def test_compute_standard_state_correction(self):
         """Test standard state correction works correctly in all ensembles."""
-        toluene = testsystems.TolueneImplicit()
+        toluene = testsystems.TolueneVacuum()
         alanine = testsystems.AlanineDipeptideExplicit()
         big_radius = 200.0 * unit.nanometers
         temperature = 300.0 * unit.kelvin
