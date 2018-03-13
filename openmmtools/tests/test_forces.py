@@ -130,7 +130,7 @@ class TestRadiallySymmetricRestraints(object):
         """Test that the restraint interface can be restored after serialization."""
         for restorable_force in self.restraints:
             force_serialization = openmm.XmlSerializer.serialize(restorable_force)
-            deserialized_force = RestorableOpenMMObject.deserialize_xml(force_serialization)
+            deserialized_force = utils.RestorableOpenMMObject.deserialize_xml(force_serialization)
             yield assert_pickles_equal, restorable_force, deserialized_force
 
     def test_restraint_properties(self):
