@@ -235,6 +235,8 @@ class TestRadiallySymmetricRestraints(object):
             # potential, a cutoff must be given.
             with nose.tools.assert_raises_regexp(TypeError, "One between radius_cutoff"):
                 restraint.compute_standard_state_correction(nonperiodic_state, square_well=True)
+            # While there are no problems if we don't reweight to a square-well potential.
+            restraint.compute_standard_state_correction(nonperiodic_state, square_well=False)
 
             # SSC is limited by max_volume (in NVT and NPT).
             assert_equal_ssc(state_volume, restraint, nvt_state, radius_cutoff=big_radius)
