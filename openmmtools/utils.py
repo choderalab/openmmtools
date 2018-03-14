@@ -787,7 +787,8 @@ class RestorableOpenMMObject(object):
         """
         try:
             object_hash = cls._get_global_parameter(openmm_object, '_restorable__class_hash')
-        except Exception:
+        except Exception as e:
+            print('Could not find hash. Exception ', str(e))
             return False
 
         # Compute the hash table for all subclasses if we haven't previously cached it. We check
@@ -797,10 +798,14 @@ class RestorableOpenMMObject(object):
                                                  include_parent=True)
             cls._cached_hash_subclasses = {cls._compute_class_hash(subcls): subcls
                                            for subcls in all_subclasses}
+            print('Cached hashes of subclasses:', all_subclasses)
+            print('Hashes:', cls._cached_hash_subclasses)
         # Retrieve integrator class.
         try:
             object_class = cls._cached_hash_subclasses[object_hash]
+            print('Resolved subclass', object_class, 'from hash', object_hash)
         except KeyError:
+            print('Could not find class matching the hash', object_hash)
             return False
 
         # Restore class interface.
