@@ -245,8 +245,8 @@ class TestRadiallySymmetricRestraints(object):
             assert_equal_ssc(expected_volume, restraint, nonperiodic_state,
                              square_well=True, radius_cutoff=big_radius)
 
-            energy_cutoff = 10  # kT
-            radius_cutoff = _compute_harmonic_radius(self.spring_constant, energy_cutoff, nonperiodic_state.beta)
+            energy_cutoff = 10 * nonperiodic_state.kT
+            radius_cutoff = _compute_harmonic_radius(self.spring_constant, energy_cutoff)
             if isinstance(restraint, FlatBottomRestraintForceMixIn):
                 radius_cutoff += self.well_radius
             expected_volume = _compute_sphere_volume(radius_cutoff)

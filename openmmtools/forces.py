@@ -200,7 +200,7 @@ def _compute_harmonic_volume(radius, spring_constant, beta):
     return 4 * math.pi * volume * length_unit**3
 
 
-def _compute_harmonic_radius(spring_constant, potential_energy, beta):
+def _compute_harmonic_radius(spring_constant, potential_energy):
     """Find the radius at which the harmonic potential is energy.
 
     Parameters
@@ -208,10 +208,8 @@ def _compute_harmonic_radius(spring_constant, potential_energy, beta):
     spring_constant : simtk.unit.Quantity
         The spring constant of the harmonic potential (units of
         energy/mole/length^2).
-    potential_energy : float
-        The energy of the harmonic restraint in kTs.
-    beta : simtk.unit.Quantity
-        Thermodynamic beta (units of mole/energy).
+    potential_energy : simtk.unit.Quantity
+        The energy of the harmonic restraint (units of energy/mole).
 
     Returns
     -------
@@ -220,7 +218,7 @@ def _compute_harmonic_radius(spring_constant, potential_energy, beta):
 
     """
     length_unit = unit.nanometers
-    spring_constant *= beta * length_unit**2  # Convert to kT/mole/nm**2.
+    spring_constant *= length_unit**2
     return math.sqrt(2 * potential_energy / spring_constant) * length_unit
 
 
@@ -240,6 +238,9 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
     You will also have to implement :func:`_create_bond`, which should add the
     bond using the correct function/signature.
+
+    Optionally, you can implement :func:`distance_at_energy` if an
+    analytical expression for distance(potential_energy) exists.
 
     Parameters
     ----------
@@ -315,6 +316,23 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         restraint_parameters = [(self.getPerBondParameterName(parameter_idx), parameter_value)
                                 for parameter_idx, parameter_value in enumerate(parameter_values)]
         return collections.OrderedDict(restraint_parameters)
+
+    def distance_at_energy(self, potential_energy):
+        """Compute the distance at which the potential energy is ``potential_energy``.
+
+        Parameters
+        ----------
+        potential_energy : simtk.unit.Quantity
+            The potential energy of the restraint (units of energy/mole).
+
+        Returns
+        -------
+        distance : simtk.unit.Quantity
+            The distance at which the potential energy is ``potential_energy``
+            (units of length).
+
+        """
+        raise NotImplementedError()
 
     # -------------------------------------------------------------------------
     # Methods to compute the standard state correction.
@@ -597,12 +615,16 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             r_max = min(r_max, radius_cutoff / distance_unit)
 
         if energy_cutoff is not None:
-            # Find the first distance that exceeds the cutoff.
-            potential = 0.0
-            energy_cutoff_distance = 0.0  # In nanometers.
-            while potential <= energy_cutoff and energy_cutoff_distance < r_max:
-                energy_cutoff_distance += 0.1  # 1 Angstrom.
-                potential = potential_energy_func(energy_cutoff_distance)
+            # First check if an analytical solution is available.
+            try:
+                energy_cutoff_distance = self.distance_at_energy(energy_cutoff*thermodynamic_state.kT)
+            except NotImplementedError:
+                # Find the first distance that exceeds the cutoff.
+                potential = 0.0
+                energy_cutoff_distance = 0.0  # In nanometers.
+                while potential <= energy_cutoff and energy_cutoff_distance < r_max:
+                    energy_cutoff_distance += 0.1  # 1 Angstrom.
+                    potential = potential_energy_func(energy_cutoff_distance)
             r_max = min(r_max, energy_cutoff_distance)
 
         # Handle the case where there are no distance or energy cutoff.
@@ -761,14 +783,30 @@ class HarmonicRestraintForceMixIn(object):
         parameters = self.getBondParameters(0)[-1]
         return parameters[0] * unit.kilojoule_per_mole/unit.nanometers**2
 
+    def distance_at_energy(self, potential_energy):
+        """Compute the distance at which the potential energy is ``potential_energy``.
+
+        Parameters
+        ----------
+        potential_energy : simtk.unit.Quantity
+            The potential energy of the restraint (units of energy/mole).
+
+        Returns
+        -------
+        distance : simtk.unit.Quantity
+            The distance at which the potential energy is ``potential_energy``
+            (units of length).
+
+        """
+        return _compute_harmonic_radius(self.spring_constant, potential_energy)
+
     def _compute_restraint_volume(self, thermodynamic_state, square_well,
                                   radius_cutoff, energy_cutoff):
         """Compute the restraint volume analytically."""
         # If there is not a cutoff, integrate up to 100kT
         if energy_cutoff is None:
             energy_cutoff = 100.0  # kT
-        radius = _compute_harmonic_radius(self.spring_constant, energy_cutoff,
-                                          thermodynamic_state.beta)
+        radius = self.distance_at_energy(energy_cutoff * thermodynamic_state.kT)
         if radius_cutoff is not None:
             radius = min(radius, radius_cutoff)
         if square_well:
@@ -881,6 +919,24 @@ class FlatBottomRestraintForceMixIn(object):
         parameters = self.getBondParameters(0)[-1]
         return parameters[1] * unit.nanometers
 
+    def distance_at_energy(self, potential_energy):
+        """Compute the distance at which the potential energy is ``potential_energy``.
+
+        Parameters
+        ----------
+        potential_energy : simtk.unit.Quantity
+            The potential energy of the restraint (units of energy/mole).
+
+        Returns
+        -------
+        distance : simtk.unit.Quantity
+            The distance at which the potential energy is ``potential_energy``
+            (units of length).
+
+        """
+        harmonic_radius = _compute_harmonic_radius(self.spring_constant, potential_energy)
+        return self.well_radius + harmonic_radius
+
     def _compute_restraint_volume(self, thermodynamic_state, square_well,
                                   radius_cutoff, energy_cutoff):
         """Compute the restraint volume analytically."""
@@ -897,8 +953,8 @@ class FlatBottomRestraintForceMixIn(object):
         # If there is not a cutoff, integrate up to 100kT.
         if energy_cutoff is None:
             energy_cutoff = 100.0  # kT
-        r_max = _compute_harmonic_radius(self.spring_constant, energy_cutoff,
-                                         thermodynamic_state.beta)
+        energy_cutoff = energy_cutoff * thermodynamic_state.kT
+        r_max = _compute_harmonic_radius(self.spring_constant, energy_cutoff)
         r_max += self.well_radius
         if radius_cutoff is not None:
             r_max = min(r_max, radius_cutoff)

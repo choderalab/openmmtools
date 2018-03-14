@@ -302,9 +302,9 @@ def test_restorable_openmm_object():
     ]
 
     for openmm_object, is_restorable in test_cases:
-        assert RestorableOpenMMObject.is_restorable(openmm_object) == is_restorable
-        err_msg = '{}, {}'.format(RestorableOpenMMObject.restore_interface(openmm_object), is_restorable)
-        assert RestorableOpenMMObject.restore_interface(openmm_object) == is_restorable, err_msg
+        assert RestorableOpenMMObject.is_restorable(openmm_object) is is_restorable
+        err_msg = '{}: {}, {}'.format(openmm_object, RestorableOpenMMObject.restore_interface(openmm_object), is_restorable)
+        assert RestorableOpenMMObject.restore_interface(openmm_object) is is_restorable, err_msg
 
         # Serializing/deserializing restore the class correctly.
         serialization = openmm.XmlSerializer.serialize(openmm_object)
