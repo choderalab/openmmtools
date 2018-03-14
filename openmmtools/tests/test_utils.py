@@ -286,18 +286,18 @@ def test_find_all_subclasses():
 def test_restorable_openmm_object():
     """Test RestorableOpenMMObject classes can be serialized and copied correctly."""
 
-    class RestorableCustomForce(RestorableOpenMMObject, openmm.CustomBondForce):
+    class DummyRestorableCustomForce(RestorableOpenMMObject, openmm.CustomBondForce):
         def __init__(self, *args, **kwargs):
-            super(RestorableCustomForce, self).__init__(*args, **kwargs)
+            super(DummyRestorableCustomForce, self).__init__(*args, **kwargs)
 
-    class RestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
+    class DummyRestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
         def __init__(self, *args, **kwargs):
-            super(RestorableCustomIntegrator, self).__init__(*args, **kwargs)
+            super(DummyRestorableCustomIntegrator, self).__init__(*args, **kwargs)
 
     # Each test case is a pair (object, is_restorable).
     test_cases = [
-        (RestorableCustomIntegrator(2.0*unit.femtoseconds), True),
-        (RestorableCustomForce('K'), True),
+        (DummyRestorableCustomIntegrator(2.0*unit.femtoseconds), True),
+        (DummyRestorableCustomForce('K'), True),
         (openmm.CustomBondForce('K'), False)
     ]
 
@@ -318,6 +318,14 @@ def test_restorable_openmm_object():
         if is_restorable:
             assert type(copied_object) is type(openmm_object)
             assert hasattr(copied_object, '_monkey_patching')
+
+
+def test_restorable_openmm_object_failure():
+    """An exception is raised if the class has a restorable hash but the class can't be found."""
+    force = openmm.CustomBondForce('0.0')
+    force.addGlobalParameter('_restorable__class_hash', 15.0)
+    with nose.tools.assert_raises(RestorableOpenMMObjectError):
+        RestorableOpenMMObject.restore_interface(force)
 
 
 def test_restorable_openmm_object_hash_collisions():
