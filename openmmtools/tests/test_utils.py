@@ -252,19 +252,22 @@ def test_subhooked_abcmeta():
 
 def test_find_all_subclasses():
     """Test find_all_subclasses() function."""
+    # Create Python2-3 compatible abstract classes.
+    ABC = abc.ABCMeta('ABC', (), {})
+
     # Diamond inheritance.
-    class A:
+    class A(object):
         pass
 
     class B(A):
         pass
 
-    class C(A, abc.ABC):
+    class C(A, ABC):
         @abc.abstractmethod
         def m(self):
             pass
 
-    class D(B, C, abc.ABC):
+    class D(B, C, ABC):
         @abc.abstractmethod
         def m(self):
             pass
