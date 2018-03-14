@@ -727,6 +727,11 @@ def find_subclass(parent_cls, subcls_name):
 # RESTORABLE OPENMM OBJECT
 # =============================================================================
 
+class RestorableOpenMMObjectError(Exception):
+    """Raised when the object has a restorable hash but no matching class can be found."""
+    pass
+
+
 class RestorableOpenMMObject(object):
     """Base class for restorable custom integrators and forces.
 
@@ -741,6 +746,8 @@ class RestorableOpenMMObject(object):
     original class.
 
     """
+
+    _cached_hash_subclasses = {}
 
     def __init__(self, *args, **kwargs):
         super(RestorableOpenMMObject, self).__init__(*args, **kwargs)
@@ -787,21 +794,26 @@ class RestorableOpenMMObject(object):
         """
         try:
             object_hash = cls._get_global_parameter(openmm_object, '_restorable__class_hash')
-        except Exception:
+        except Exception as e:
+            print('Could not find hash. Exception ', str(e))
             return False
 
-        # Compute the hash table for all subclasses if we haven't previously cached it. We check
-        # directly the class dictionary to avoid catching parent classes as well with hasattr().
-        if not '_cached_hash_subclasses' in cls.__dict__:
+        # Reload the hash table for all subclasses if there's no matching class.
+        if object_hash not in cls._cached_hash_subclasses:
             all_subclasses = find_all_subclasses(parent_cls=cls, discard_abstract=True,
                                                  include_parent=True)
             cls._cached_hash_subclasses = {cls._compute_class_hash(subcls): subcls
                                            for subcls in all_subclasses}
+            print('Cached hashes of subclasses:', all_subclasses)
+            print('Hashes:', cls._cached_hash_subclasses)
+
         # Retrieve integrator class.
         try:
             object_class = cls._cached_hash_subclasses[object_hash]
+            print('Resolved subclass', object_class, 'from hash', object_hash)
         except KeyError:
-            return False
+            raise RestorableOpenMMObjectError('Could not find a class matching '
+                                              'the hash {}'.format(object_hash))
 
         # Restore class interface.
         openmm_object.__class__ = object_class

@@ -15,6 +15,7 @@ Test utility functions in utils.py.
 # =============================================================================
 
 import nose
+from nose.plugins.attrib import attr
 
 from openmmtools.utils import _RESERVED_WORDS_PATTERNS
 from openmmtools.utils import *
@@ -283,6 +284,7 @@ def test_find_all_subclasses():
 # RESTORABLE OPENMM OBJECT
 # =============================================================================
 
+@attr('temp')
 def test_restorable_openmm_object():
     """Test RestorableOpenMMObject classes can be serialized and copied correctly."""
 
