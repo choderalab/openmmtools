@@ -1,3 +1,4 @@
+# -*- coding: UTF-8 -*-
 # ============================================================================================
 # MODULE DOCSTRING
 # ============================================================================================
@@ -36,8 +37,6 @@ import numpy as np
 import logging
 import re
 import zlib
-
-import simtk.unit
 
 import simtk.unit as unit
 import simtk.openmm as mm
@@ -129,9 +128,9 @@ class RestorableIntegrator(mm.CustomIntegrator,PrettyPrintableIntegrator):
 
     Parameters
     ----------
-    temperature : simtk.unit.Quantity
+    temperature : unit.Quantity
         The temperature of the integrator heat bath (temperature units).
-    timestep : simtk.unit.Quantity
+    timestep : unit.Quantity
         The timestep to pass to the CustomIntegrator constructor (time
         units)
 
@@ -244,9 +243,9 @@ class ThermostatedIntegrator(RestorableIntegrator):
 
     Parameters
     ----------
-    temperature : simtk.unit.Quantity
+    temperature : unit.Quantity
         The temperature of the integrator heat bath (temperature units).
-    timestep : simtk.unit.Quantity
+    timestep : unit.Quantity
         The timestep to pass to the CustomIntegrator constructor (time
         units).
 
@@ -306,7 +305,7 @@ class ThermostatedIntegrator(RestorableIntegrator):
 
         Returns
         -------
-        temperature : simtk.unit.Quantity
+        temperature : unit.Quantity
             The temperature of the heat bath in kelvins.
 
         """
@@ -319,7 +318,7 @@ class ThermostatedIntegrator(RestorableIntegrator):
 
         Parameters
         ----------
-        temperature : simtk.unit.Quantity
+        temperature : unit.Quantity
             The new temperature of the heat bath (temperature units).
 
         """
@@ -438,7 +437,7 @@ class MTSIntegrator(respa.MTSIntegrator):
     of the force group and the frequency (as a fraction of the outermost time step) at
     which to evaluate it.  For example:
 
-    >>> integrator = MTSIntegrator(4*simtk.unit.femtoseconds, [(0,1), (1,2), (2,8)])
+    >>> integrator = MTSIntegrator(4*unit.femtoseconds, [(0,1), (1,2), (2,8)])
 
     This specifies that the outermost time step is 4 fs, so each step of the integrator
     will advance time by that much.  It also says that force group 0 should be evaluated
@@ -449,12 +448,12 @@ class MTSIntegrator(respa.MTSIntegrator):
 
     """
 
-    def __init__(self, timestep=1.0 * simtk.unit.femtoseconds, groups=[(0, 1)]):
+    def __init__(self, timestep=1.0 * unit.femtoseconds, groups=[(0, 1)]):
         """Create an MTSIntegrator.
 
         Parameters
         ----------
-        timestep : simtk.unit.Quantity with units compatible with femtoseconds, optional default=1*femtoseconds
+        timestep : unit.Quantity with units compatible with femtoseconds, optional default=1*femtoseconds
            The largest (outermost) integration time step to use.
         groups : list of tuples, optional, default=(0,1)
            A list of tuples defining the force groups.  The first element of each tuple is the force group index, and the second element is the number of times that force group should be evaluated in one time step.
@@ -509,7 +508,7 @@ class GradientDescentMinimizationIntegrator(mm.CustomIntegrator):
 
         Parameters
         ----------
-        initial_step_size : np.unit.Quantity compatible with nanometers, default: 0.01*simtk.unit.angstroms
+        initial_step_size : np.unit.Quantity compatible with nanometers, default: 0.01*unit.angstroms
            The norm of the initial step size guess.
 
         Notes
@@ -575,17 +574,17 @@ class VelocityVerletIntegrator(mm.CustomIntegrator):
 
     Create a velocity Verlet integrator.
 
-    >>> timestep = 1.0 * simtk.unit.femtoseconds
+    >>> timestep = 1.0 * unit.femtoseconds
     >>> integrator = VelocityVerletIntegrator(timestep)
 
     """
 
-    def __init__(self, timestep=1.0 * simtk.unit.femtoseconds):
+    def __init__(self, timestep=1.0 * unit.femtoseconds):
         """Construct a velocity Verlet integrator.
 
         Parameters
         ----------
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1*unit.femtoseconds
            The integration timestep.
 
         """
@@ -617,9 +616,9 @@ class AndersenVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Create a velocity Verlet integrator with Andersen thermostat.
 
-    >>> timestep = 1.0 * simtk.unit.femtoseconds
-    >>> collision_rate = 91.0 / simtk.unit.picoseconds
-    >>> temperature = 298.0 * simtk.unit.kelvin
+    >>> timestep = 1.0 * unit.femtoseconds
+    >>> collision_rate = 91.0 / unit.picoseconds
+    >>> temperature = 298.0 * unit.kelvin
     >>> integrator = AndersenVelocityVerletIntegrator(temperature, collision_rate, timestep)
 
     Notes
@@ -629,16 +628,16 @@ class AndersenVelocityVerletIntegrator(ThermostatedIntegrator):
 
     """
 
-    def __init__(self, temperature=298 * simtk.unit.kelvin, collision_rate=91.0 / simtk.unit.picoseconds, timestep=1.0 * simtk.unit.femtoseconds):
+    def __init__(self, temperature=298 * unit.kelvin, collision_rate=91.0 / unit.picoseconds, timestep=1.0 * unit.femtoseconds):
         """Construct a velocity Verlet integrator with Andersen thermostat, implemented as per-particle collisions (rather than massive collisions).
 
         Parameters
         ----------
-        temperature : np.unit.Quantity compatible with kelvin, default=298*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default=298*unit.kelvin
            The temperature of the fictitious bath.
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default=91/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default=91/unit.picoseconds
            The collision rate with fictitious bath particles.
-        timestep : np.unit.Quantity compatible with femtoseconds, default=1*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default=1*unit.femtoseconds
            The integration timestep.
 
         """
@@ -671,6 +670,206 @@ class AndersenVelocityVerletIntegrator(ThermostatedIntegrator):
         self.addConstrainVelocities()
 
 
+class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
+
+    """Nosé-Hoover chain thermostat, using the reversible multi time step velocity Verlet algorithm
+       detailed in the papers below.
+
+    References
+    ----------
+
+    G. J. Martyna, M. E. Tuckerman, D. J. Tobias, and Michael L. Klein  "Explicit reversible
+    integrators for extended systems dynamics", Molecular Physics, 87 1117-1157 (1996)
+    http://dx.doi.org/10.1080/00268979600100761
+
+    G. J. Martyna, M. L. Klein, and M. Tuckerman "Nosé–Hoover chains: The canonical
+    ensemble via continuous dynamics",
+    Journal of Chemical Physics 97, 2635-2643 (1992)
+    http://dx.doi.org/10.1063/1.463940
+
+    Examples
+    --------
+
+    Create a velocity Verlet integrator with Nosé-Hoover chain thermostat.
+
+    >>> timestep = 1.0 * unit.femtoseconds
+    >>> temperature = 300 * unit.kelvin
+    >>> chain_length = 10
+    >>> collision_frequency = 50 / unit.picoseconds
+    >>> num_mts = 5
+    >>> num_yoshidasuzuki = 5
+
+    >>> integrator = NoseHooverChainVelocityVerletIntegrator(temperature, collision_frequency, timestep, chain_length, num_mts, num_yoshidasuzuki)
+
+    Notes
+    ------
+
+    The velocity Verlet integrator is taken verbatim from Peter Eastman's example in the CustomIntegrator header file documentation.
+
+    Useful tests of the NHC integrator can be performed by monitoring the instantaneous temperature during the simulation and confirming that conserved energy is constant to about 1 part in 10^5.  The instantanous temperature and particle kinetic and potential energies can already be extracted from a snapshot, for example see the OpenMM StateDataReporter implementation for more details.  This integrator also provides heat bath energies (kJ/mol) through the following mechanism:
+
+    >>> integrator = NoseHooverChainVelocityVerletIntegrator()
+    >>> heat_bath_kinetic_energy = integrator.getGlobalVariableByName('bathKE')
+    >>> heat_bath_potential_energy = integrator.getGlobalVariableByName('bathPE')
+
+    From here, the conserved energy is the sum of the potential and kinetic energies for both the system and the heat bath.
+
+    """
+
+
+    YSWeights = {
+        1 : [ 1.0000000000000000 ],
+        3 : [ 0.8289815435887510, -0.6579630871775020,  0.8289815435887510 ],
+        5 : [ 0.2967324292201065,  0.2967324292201065, -0.1869297168804260, 0.2967324292201065, 0.2967324292201065 ]
+    }
+
+    def __init__(self, temperature=298*unit.kelvin, collision_frequency=50/unit.picoseconds,
+                 timestep=0.001*unit.picoseconds, chain_length=5, num_mts=5, num_yoshidasuzuki=5):
+        """ Construct a velocity Verlet integrator with Nosé-Hoover chain thermostat implemented with massive collisions.
+
+        Parameters:
+        -----------
+
+        temperature: unit.Quantity compatible with kelvin, default=298*unit.kelvin
+            The target temperature for the thermostat.
+
+        collision_freqency: unit.Quantity compatible with picoseconds**-1, default=50/unit.picoseconds
+            The frequency of collisions with the heat bath.  A very small value will result
+            in a distribution approaching the microcanonical ensemble, while a large value will
+            cause rapid fluctuations in the temperature before convergence.
+
+        timestep: unit.Quantity compatible with femtoseconds, default=1*unit.femtoseconds
+            The integration timestep for particles.
+
+        chain_length: integer, default=5
+            The number of thermostat particles in the Nosé-Hoover chain.  Increasing
+            this parameter will affect computational cost, but will make the simulation
+            less sensitive to thermostat parameters, particularly in stiff systems; see
+            the 1992 paper referenced above for more details.
+
+        num_mts: integer, default=5
+            The number of timesteps used in the multi-timestep procedure to update the thermostat
+            positions.  A higher value will increase the stability of the dynamics, but will also
+            increase the compuational cost of the integration.
+
+        num_yoshidasuzuki: integer, default=5
+            The number of Yoshida-Suzuki steps used to subdivide each of the multi-timesteps used
+            to update the thermostat positions.  A higher value will increase the stability of the
+            dynamics, but will also increase the computational cost of the integration; only certain
+            values (currently 1,3, or 5) are supported, because weights must be defined.
+
+        """
+        super(NoseHooverChainVelocityVerletIntegrator, self).__init__(temperature, timestep)
+        #
+        # Integrator initialization.
+        #
+        self.n_c         = num_mts
+        self.n_ys        = num_yoshidasuzuki
+        try:
+            self.weights     = self.YSWeights[self.n_ys]
+        except KeyError:
+            raise Exception("Invalid Yoshida-Suzuki value. Allowed values are: %s"%
+                             ",".join(map(str,self.YSWeights.keys())))
+        if chain_length < 0:
+            raise Exception("Nosé-Hoover chain length must be at least 0")
+        if chain_length == 0:
+            print("WARNING: Nosé-Hoover chain length is 0; falling back to regular velocity verlet algorithm.")
+        self.M           = chain_length
+
+        # Define the "mass" of the thermostat particles (multiply by ndf for particle 0)
+        kT = self.getGlobalVariableByName('kT')
+        frequency = collision_frequency.value_in_unit(unit.picoseconds**-1)
+        Q = kT/frequency**2
+
+        #
+        # Define global variables
+        #
+        self.addGlobalVariable("ndf", 0)      # number of degrees of freedom
+        self.addGlobalVariable("bathKE", 0.0) # Thermostat bath kinetic energy
+        self.addGlobalVariable("bathPE", 0.0) # Thermostat bath potential energy
+        self.addGlobalVariable("KE2", 0.0)    # Twice the kinetic energy
+        self.addGlobalVariable("Q", Q)        # Thermostat particle "mass"
+        self.addGlobalVariable("scale", 1.0)
+        self.addGlobalVariable("aa", 0.0)
+        self.addGlobalVariable("wdt", 0.0)
+        for w in range(self.n_ys):
+            self.addGlobalVariable("w{}".format(w), self.weights[w])
+
+        #
+        # Initialize thermostat parameters
+        #
+        for i in range(self.M):
+            self.addGlobalVariable("xi{}".format(i), 0)            # Thermostat particle
+            self.addGlobalVariable("vxi{}".format(i), 0)           # Thermostat particle velocities in ps^-1
+            self.addGlobalVariable("G{}".format(i), -frequency**2) # Forces on thermostat particles in ps^-2
+            self.addGlobalVariable("Q{}".format(i), 0)             # Thermostat "masses" in ps^2 kJ/mol
+        # The masses need the number of degrees of freedom, which is approximated here.  Need a
+        # better solution eventually, to properly account for constraints, translations, etc.
+        self.addPerDofVariable("ones", 1.0)
+        self.addPerDofVariable("x1", 0);
+        self.addComputeSum("ndf", "ones")
+        if self.M:
+            self.addComputeGlobal("Q0", "ndf*Q")
+            for i in range(1, self.M):
+                self.addComputeGlobal("Q{}".format(i), "Q")
+
+        #
+        # Take a velocity verlet step, with propagation of thermostat before and after
+        #
+        if self.M: self.propagateNHC()
+        self.addUpdateContextState()
+        self.addComputePerDof("v", "v+0.5*dt*f/m")
+        self.addComputePerDof("x", "x+dt*v")
+        self.addComputePerDof("x1", "x")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v+0.5*dt*f/m+(x-x1)/dt")
+        self.addConstrainVelocities()
+        if self.M: self.propagateNHC()
+        # Compute heat bath energies
+        self.computeEnergies()
+
+    def propagateNHC(self):
+        """ Propagate the Nosé-Hoover chain """
+        self.addComputeGlobal("scale", "1.0")
+        self.addComputeSum("KE2", "m*v^2")
+        self.addComputeGlobal("G0", "(KE2 - ndf*kT)/Q0")
+        for ncval in range(self.n_c):
+            for nysval in range(self.n_ys):
+                self.addComputeGlobal("wdt", "w{}*dt/{}".format(nysval, self.n_c))
+                self.addComputeGlobal("vxi{}".format(self.M-1), "vxi{} + 0.25*wdt*G{}".format(self.M-1, self.M-1))
+                for j in range(self.M-2, -1, -1):
+                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi{})".format(j+1))
+                    self.addComputeGlobal("vxi{}".format(j), "aa*(aa*vxi{} + 0.25*wdt*G{})".format(j,j))
+                # update particle velocities
+                self.addComputeGlobal("aa", "exp(-0.5*wdt*vxi0)")
+                self.addComputeGlobal("scale", "scale*aa")
+                # update the thermostat positions
+                for j in range(self.M):
+                    self.addComputeGlobal("xi{}".format(j), "xi{} + 0.5*wdt*vxi{}".format(j,j))
+                # update the forces
+                self.addComputeGlobal("G0", "(scale*scale*KE2 - ndf*kT)/Q0")
+                # update thermostat velocities
+                for j in range(self.M-1):
+                    self.addComputeGlobal("aa", "exp(-0.125*wdt*vxi{})".format(j+1))
+                    self.addComputeGlobal("vxi{}".format(j), "aa*(aa*vxi{} + 0.25*wdt*G{})".format(j,j))
+                    self.addComputeGlobal("G{}".format(j+1), "(Q{}*vxi{}*vxi{} - kT)/Q{}".format(j,j,j,j+1))
+                self.addComputeGlobal("vxi{}".format(self.M-1), "vxi{} + 0.25*wdt*G{}".format(self.M-1, self.M-1))
+        # update particle velocities
+        self.addComputePerDof("v", "scale*v")
+
+    def computeEnergies(self):
+        """ Computes kinetic and potential energies for the heat bath """
+        # Bath kinetic energy
+        self.addComputeGlobal("bathKE", "0.0")
+        for i in range(self.M):
+            self.addComputeGlobal("bathKE", "bathKE + 0.5*Q{}*vxi{}^2".format(i,i))
+        # Bath potential energy
+        self.addComputeGlobal("bathPE", "ndf*xi0")
+        for i in range(1,self.M):
+            self.addComputeGlobal("bathPE", "bathPE + xi{}".format(i))
+        self.addComputeGlobal("bathPE", "kT*bathPE")
+
+
 class MetropolisMonteCarloIntegrator(ThermostatedIntegrator):
 
     """
@@ -678,17 +877,17 @@ class MetropolisMonteCarloIntegrator(ThermostatedIntegrator):
 
     """
 
-    def __init__(self, temperature=298.0 * simtk.unit.kelvin, sigma=0.1 * simtk.unit.angstroms, timestep=1 * simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * unit.kelvin, sigma=0.1 * unit.angstroms, timestep=1 * unit.femtoseconds):
         """
         Create a simple Metropolis Monte Carlo integrator that uses Gaussian displacement trials.
 
         Parameters
         ----------
-        temperature : np.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
            The temperature.
-        sigma : np.unit.Quantity compatible with nanometers, default: 0.1*simtk.unit.angstroms
+        sigma : np.unit.Quantity compatible with nanometers, default: 0.1*unit.angstroms
            The displacement standard deviation for each degree of freedom.
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            The integration timestep, which is purely fictitious---it is just used to advance the simulation clock.
 
         Warning
@@ -706,9 +905,9 @@ class MetropolisMonteCarloIntegrator(ThermostatedIntegrator):
 
         Create a Metropolis Monte Carlo integrator with specified random displacement standard deviation.
 
-        >>> timestep = 1.0 * simtk.unit.femtoseconds # fictitious timestep
-        >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> sigma = 1.0 * simtk.unit.angstroms
+        >>> timestep = 1.0 * unit.femtoseconds # fictitious timestep
+        >>> temperature = 298.0 * unit.kelvin
+        >>> sigma = 1.0 * unit.angstroms
         >>> integrator = MetropolisMonteCarloIntegrator(temperature, sigma, timestep)
 
         """
@@ -764,17 +963,17 @@ class HMCIntegrator(ThermostatedIntegrator):
 
     """
 
-    def __init__(self, temperature=298.0 * simtk.unit.kelvin, nsteps=10, timestep=1 * simtk.unit.femtoseconds):
+    def __init__(self, temperature=298.0 * unit.kelvin, nsteps=10, timestep=1 * unit.femtoseconds):
         """
         Create a hybrid Monte Carlo (HMC) integrator.
 
         Parameters
         ----------
-        temperature : np.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
            The temperature.
         nsteps : int, default: 10
            The number of velocity Verlet steps to take per HMC trial.
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1*unit.femtoseconds
            The integration timestep.
 
         Warning
@@ -798,8 +997,8 @@ class HMCIntegrator(ThermostatedIntegrator):
 
         Create an HMC integrator.
 
-        >>> timestep = 1.0 * simtk.unit.femtoseconds # fictitious timestep
-        >>> temperature = 298.0 * simtk.unit.kelvin
+        >>> timestep = 1.0 * unit.femtoseconds # fictitious timestep
+        >>> temperature = 298.0 * unit.kelvin
         >>> nsteps = 10 # number of steps per call
         >>> integrator = HMCIntegrator(temperature, nsteps, timestep)
 
@@ -931,9 +1130,9 @@ class LangevinIntegrator(ThermostatedIntegrator):
     ----------
     _kinetic_energy : str
         This is 0.5*m*v*v by default, and is the expression used for the kinetic energy
-    shadow_work : simtk.unit.Quantity with units of energy
+    shadow_work : unit.Quantity with units of energy
        Shadow work (if integrator was constructed with measure_shadow_work=True)
-    heat : simtk.unit.Quantity with units of energy
+    heat : unit.Quantity with units of energy
        Heat (if integrator was constructed with measure_heat=True)
 
     References
@@ -944,9 +1143,9 @@ class LangevinIntegrator(ThermostatedIntegrator):
     _kinetic_energy = "0.5 * m * v * v"
 
     def __init__(self,
-                 temperature=298.0 * simtk.unit.kelvin,
-                 collision_rate=1.0 / simtk.unit.picoseconds,
-                 timestep=1.0 * simtk.unit.femtoseconds,
+                 temperature=298.0 * unit.kelvin,
+                 collision_rate=1.0 / unit.picoseconds,
+                 timestep=1.0 * unit.femtoseconds,
                  splitting="V R O R V",
                  constraint_tolerance=1e-8,
                  measure_shadow_work=False,
@@ -964,13 +1163,13 @@ class LangevinIntegrator(ThermostatedIntegrator):
             "{" will cause metropolization, and must be followed later by a "}".
 
 
-        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*unit.kelvin
            Fictitious "bath" temperature
 
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 1.0/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 1.0/unit.picoseconds
            Collision rate
 
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            Integration timestep
 
         constraint_tolerance : float, default: 1.0e-8
@@ -1121,7 +1320,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
         Returns
         -------
-        work : simtk.unit.Quantity or float
+        work : unit.Quantity or float
            If dimensionless=True, the work in kT (float).
            Otherwise, the unit-bearing work in units of energy.
         """
@@ -1141,7 +1340,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
         Returns
         -------
-        work : simtk.unit.Quantity or float
+        work : unit.Quantity or float
            If dimensionless=True, the protocol work in kT (float).
            Otherwise, the unit-bearing protocol work in units of energy.
         """
@@ -1163,7 +1362,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
         Returns
         -------
-        work : simtk.unit.Quantity or float
+        work : unit.Quantity or float
            If dimensionless=True, the heat in kT (float).
            Otherwise, the unit-bearing heat in units of energy.
         """
@@ -1453,9 +1652,9 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
     Properties
     ----------
-    protocol_work : simtk.unit.Quantity with units of energy
+    protocol_work : unit.Quantity with units of energy
        Protocol work
-    total_work : simtk.unit.Quantity with units of energy
+    total_work : unit.Quantity with units of energy
        Total work = protocol work + shadow work
 
     Public methods
@@ -1497,7 +1696,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
         Returns
         -------
-        work : simtk.unit.Quantity or float
+        work : unit.Quantity or float
            If dimensionless=True, the protocol work in kT (float).
            Otherwise, the unit-bearing protocol work in units of energy.
         """
@@ -1519,7 +1718,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
         Returns
         -------
-        work : simtk.unit.Quantity or float
+        work : unit.Quantity or float
            If dimensionless=True, the total work in kT (float).
            Otherwise, the unit-bearing total work in units of energy.
         """
@@ -1616,13 +1815,13 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
             ( will cause metropolization, and must be followed later by a ).
 
-        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*unit.kelvin
            Fictitious "bath" temperature
 
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
            Collision rate
 
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            Integration timestep
 
         constraint_tolerance : float, default: 1.0e-8
@@ -1834,9 +2033,9 @@ class VVVRIntegrator(LangevinIntegrator):
         Examples
         --------
         Create a VVVR integrator.
-        >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 1.0 / simtk.unit.picoseconds
-        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> temperature = 298.0 * unit.kelvin
+        >>> collision_rate = 1.0 / unit.picoseconds
+        >>> timestep = 1.0 * unit.femtoseconds
         >>> integrator = VVVRIntegrator(temperature, collision_rate, timestep)
         """
         kwargs['splitting'] = "O V R V O"
@@ -1849,13 +2048,13 @@ class BAOABIntegrator(LangevinIntegrator):
 
         Parameters
         ----------
-        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*unit.kelvin
            Fictitious "bath" temperature
 
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
            Collision rate
 
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            Integration timestep
 
         constraint_tolerance : float, default: 1.0e-8
@@ -1875,9 +2074,9 @@ class BAOABIntegrator(LangevinIntegrator):
         Examples
         --------
         Create a BAOAB integrator.
-        >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 1.0 / simtk.unit.picoseconds
-        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> temperature = 298.0 * unit.kelvin
+        >>> collision_rate = 1.0 / unit.picoseconds
+        >>> timestep = 1.0 * unit.femtoseconds
         >>> integrator = BAOABIntegrator(temperature, collision_rate, timestep)
         """
         kwargs['splitting'] = "V R O R V"
@@ -1894,13 +2093,13 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         K_r : integer, default: 2
             Number of geodesic drift steps.
 
-        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*simtk.unit.kelvin
+        temperature : np.unit.Quantity compatible with kelvin, default: 298.0*unit.kelvin
            Fictitious "bath" temperature
 
-        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 1.0/simtk.unit.picoseconds
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, default: 1.0/unit.picoseconds
            Collision rate
 
-        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*simtk.unit.femtoseconds
+        timestep : np.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            Integration timestep
 
         constraint_tolerance : float, default: 1.0e-8
@@ -1920,27 +2119,28 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         Examples
         --------
         Create a geodesic BAOAB integrator.
-        >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 1.0 / simtk.unit.picoseconds
-        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> temperature = 298.0 * unit.kelvin
+        >>> collision_rate = 1.0 / unit.picoseconds
+        >>> timestep = 1.0 * unit.femtoseconds
         >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         """
         kwargs['splitting'] = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
         super(GeodesicBAOABIntegrator, self).__init__(*args, **kwargs)
 
 class GHMCIntegrator(LangevinIntegrator):
+    """Create a generalized hybrid Monte Carlo (GHMC) integrator."""
 
     def __init__(self, *args, **kwargs):
         """
-        Create a generalized hybrid Monte Carlo (GHMC) integrator.
+
 
         Parameters
         ----------
-        temperature : simtk.unit.Quantity compatible with kelvin, default: 298*unit.kelvin
+        temperature : unit.Quantity compatible with kelvin, default: 298*unit.kelvin
            The temperature.
-        collision_rate : simtk.unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
+        collision_rate : unit.Quantity compatible with 1/picoseconds, default: 91.0/unit.picoseconds
            The collision rate.
-        timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
+        timestep : unit.Quantity compatible with femtoseconds, default: 1.0*unit.femtoseconds
            The integration timestep.
 
         Notes
@@ -1961,9 +2161,9 @@ class GHMCIntegrator(LangevinIntegrator):
 
         Create a GHMC integrator.
 
-        >>> temperature = 298.0 * simtk.unit.kelvin
-        >>> collision_rate = 1.0 / simtk.unit.picoseconds
-        >>> timestep = 1.0 * simtk.unit.femtoseconds
+        >>> temperature = 298.0 * unit.kelvin
+        >>> collision_rate = 1.0 / unit.picoseconds
+        >>> timestep = 1.0 * unit.femtoseconds
         >>> integrator = GHMCIntegrator(temperature, collision_rate, timestep)
 
         References

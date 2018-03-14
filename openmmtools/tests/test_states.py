@@ -50,7 +50,9 @@ class TestThermodynamicState(object):
         cls.alanine_positions = alanine_explicit.positions
         cls.alanine_no_thermostat = alanine_explicit.system
 
-        cls.toluene_implicit = testsystems.TolueneImplicit().system
+        toluene_implicit = testsystems.TolueneImplicit()
+        cls.toluene_positions = toluene_implicit.positions
+        cls.toluene_implicit = toluene_implicit.system
         cls.toluene_vacuum = testsystems.TolueneVacuum().system
         thermostat = openmm.AndersenThermostat(cls.std_temperature,
                                                1.0/unit.picosecond)
@@ -187,15 +189,6 @@ class TestThermodynamicState(object):
         barostat = openmm.MonteCarloBarostat(pressure, temperature + 10*unit.kelvin)
         assert not state._is_barostat_consistent(barostat)
 
-    def test_method_set_barostat_temperature(self):
-        """ThermodynamicState._set_barostat_temperature() method."""
-        barostat = openmm.MonteCarloBarostat(self.std_pressure, self.std_temperature)
-        new_temperature = self.std_temperature + 10*unit.kelvin
-
-        assert ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
-        assert get_barostat_temperature(barostat) == new_temperature
-        assert not ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
-
     def test_method_set_system_temperature(self):
         """ThermodynamicState._set_system_temperature() method."""
         system = copy.deepcopy(self.alanine_no_thermostat)
@@ -260,7 +253,6 @@ class TestThermodynamicState(object):
 
         # Correctly reads and set system pressures
         periodic_testcases = [self.alanine_explicit]
-        print('ON IT!')
         for system in periodic_testcases:
             state = ThermodynamicState(system, self.std_temperature)
             assert state.pressure is None
@@ -506,7 +498,7 @@ class TestThermodynamicState(object):
 
         for thermostated, integrator in test_cases:
             if thermostated:
-                state._set_integrator_temperature(integrator)
+                assert state._set_integrator_temperature(integrator)
                 for _integrator in ThermodynamicState._loop_over_integrators(integrator):
                     try:
                         assert _integrator.getTemperature() == new_temperature
@@ -514,7 +506,7 @@ class TestThermodynamicState(object):
                         pass
             else:
                 # It doesn't explode with integrators not coupled to a heat bath
-                state._set_integrator_temperature(integrator)
+                assert not state._set_integrator_temperature(integrator)
 
     def test_method_standardize_system(self):
         """ThermodynamicState._standardize_system() class method."""
@@ -533,7 +525,7 @@ class TestThermodynamicState(object):
         check_barostat_thermostat(npt_system, operator.ne)
 
         # Standardize system sets pressure and temperature to standard.
-        ThermodynamicState._standardize_system(npt_system)
+        npt_state._standardize_system(npt_system)
         check_barostat_thermostat(npt_system, operator.eq)
 
     def test_method_create_context(self):
@@ -714,6 +706,47 @@ class TestThermodynamicState(object):
             state.reduced_potential(incompatible_sampler_state)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE
 
+    def test_method_reduced_potential_at_states(self):
+        """ThermodynamicState.reduced_potential_at_states() method.
+
+        Computing the reduced potential singularly and with the class
+        method should give the same result.
+        """
+        # Build a mixed collection of compatible and incompatible thermodynamic states.
+        thermodynamic_states = [
+            ThermodynamicState(self.alanine_explicit, temperature=300*unit.kelvin,
+                               pressure=1.0*unit.atmosphere),
+            ThermodynamicState(self.toluene_implicit, temperature=200*unit.kelvin),
+            ThermodynamicState(self.alanine_explicit, temperature=250*unit.kelvin,
+                               pressure=1.2*unit.atmosphere)
+        ]
+
+        # Group thermodynamic states by compatibility.
+        compatible_groups, original_indices = group_by_compatibility(thermodynamic_states)
+        assert len(compatible_groups) == 2
+        assert original_indices == [[0, 2], [1]]
+
+        # Compute the reduced potentials.
+        expected_energies = []
+        obtained_energies = []
+        for compatible_group in compatible_groups:
+            # Create context.
+            integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+            context = compatible_group[0].create_context(integrator)
+            if len(compatible_group) == 2:
+                context.setPositions(self.alanine_positions)
+            else:
+                context.setPositions(self.toluene_positions)
+
+            # Compute with single-state method.
+            for state in compatible_group:
+                state.apply_to_context(context)
+                expected_energies.append(state.reduced_potential(context))
+
+            # Compute with multi-state method.
+            obtained_energies.extend(ThermodynamicState.reduced_potential_at_states(context, compatible_group))
+        assert np.allclose(np.array(expected_energies), np.array(obtained_energies))
+
 
 # =============================================================================
 # TEST SAMPLER STATE
@@ -796,6 +829,55 @@ class TestSamplerState(object):
         sampler_state = SamplerState.from_context(alanine_vacuum_context)
         assert self.is_sampler_state_equal_context(sampler_state, alanine_vacuum_context)
 
+    def test_unitless_cache(self):
+        """Test that the unitless cache for positions and velocities is invalidated."""
+        positions = copy.deepcopy(self.alanine_vacuum_positions)
+
+        alanine_vacuum_context = self.create_context(self.alanine_vacuum_state)
+        alanine_vacuum_context.setPositions(copy.deepcopy(positions))
+
+        test_cases = [
+            SamplerState(positions),
+            SamplerState.from_context(alanine_vacuum_context)
+        ]
+
+        pos_unit = unit.micrometer
+        vel_unit = unit.micrometer / unit.nanosecond
+
+        # Assigning an item invalidates the cache.
+        for sampler_state in test_cases:
+            old_unitless_positions = copy.deepcopy(sampler_state._unitless_positions)
+            sampler_state.positions[5] = [1.0, 1.0, 1.0] * pos_unit
+            assert sampler_state.positions.has_changed
+            assert np.all(old_unitless_positions[5] != sampler_state._unitless_positions[5])
+            sampler_state.positions = copy.deepcopy(positions)
+            assert sampler_state._unitless_positions_cache is None
+
+            # TODO reactivate this test once OpenMM 7.2 is released with bugfix for #1940
+            # if isinstance(sampler_state._positions._value, np.ndarray):
+            #     old_unitless_positions = copy.deepcopy(sampler_state._unitless_positions)
+            #     sampler_state.positions[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * pos_unit
+            #     assert sampler_state.positions.has_changed
+            #     assert np.all(old_unitless_positions[5:8] != sampler_state._unitless_positions[5:8])
+
+            if sampler_state.velocities is not None:
+                old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
+                sampler_state.velocities[5] = [1.0, 1.0, 1.0] * vel_unit
+                assert sampler_state.velocities.has_changed
+                assert np.all(old_unitless_velocities[5] != sampler_state._unitless_velocities[5])
+                sampler_state.velocities = copy.deepcopy(sampler_state.velocities)
+                assert sampler_state._unitless_velocities_cache is None
+
+                # TODO reactivate this test once OpenMM 7.2 is released with bugfix for #1940
+                # if isinstance(sampler_state._velocities._value, np.ndarray):
+                #     old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
+                #     sampler_state.velocities[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * vel_unit
+                #     assert sampler_state.velocities.has_changed
+                #     assert np.all(old_unitless_velocities[5:8] != sampler_state._unitless_velocities[5:8])
+            else:
+                assert sampler_state._unitless_velocities is None
+
+
     def test_method_is_context_compatible(self):
         """SamplerState.is_context_compatible() method."""
         # Vacuum.
@@ -857,11 +939,13 @@ class TestSamplerState(object):
         sliced_sampler_state.positions[0][0] += 1 * unit.angstrom
         assert sliced_sampler_state.positions[0][0] == sampler_state.positions[0][0] + 1 * unit.angstrom
 
-        sliced_sampler_state = sampler_state[2:10]
-        assert sliced_sampler_state.n_particles == 8
-        assert len(sliced_sampler_state.velocities) == 8
-        assert np.allclose(sliced_sampler_state.positions,
-                           self.alanine_explicit_positions[2:10])
+        # SamplerState.__getitem__ should work for both slices and lists.
+        for sliced_sampler_state in [sampler_state[2:10],
+                                     sampler_state[list(range(2, 10))]]:
+            assert sliced_sampler_state.n_particles == 8
+            assert len(sliced_sampler_state.velocities) == 8
+            assert np.allclose(sliced_sampler_state.positions,
+                               self.alanine_explicit_positions[2:10])
 
         sliced_sampler_state = sampler_state[2:10:2]
         assert sliced_sampler_state.n_particles == 4
@@ -905,10 +989,9 @@ class TestCompoundThermodynamicState(object):
         def dummy_parameter(self, value):
             self._dummy_parameter = value
 
-        @classmethod
-        def _standardize_system(cls, system):
+        def _standardize_system(self, system):
             try:
-                cls.set_dummy_parameter(system, cls.standard_dummy_parameter)
+                self.set_dummy_parameter(system, self.standard_dummy_parameter)
             except TypeError:  # No parameter to set.
                 raise ComposableStateError()
 
@@ -931,11 +1014,22 @@ class TestCompoundThermodynamicState(object):
         def apply_to_context(self, context):
             context.setParameter('dummy_parameter', self.dummy_parameter)
 
+        def _on_setattr(self, standard_system, attribute_name):
+            return False
+
+        def _find_force_groups_to_update(self, context, current_context_state, memo):
+            if current_context_state.dummy_parameter == self.dummy_parameter:
+                return {}
+            force, _ = self._find_dummy_force(context.getSystem())
+            return {force.getForceGroup()}
+
         @classmethod
         def add_dummy_parameter(cls, system):
             """Add to system a CustomBondForce with a dummy parameter."""
             force = openmm.CustomBondForce('dummy_parameter')
             force.addGlobalParameter('dummy_parameter', cls.standard_dummy_parameter)
+            max_force_group = cls._find_max_force_group(system)
+            force.setForceGroup(max_force_group + 1)
             system.addForce(force)
 
         @staticmethod
@@ -951,6 +1045,14 @@ class TestCompoundThermodynamicState(object):
         def set_dummy_parameter(cls, system, value):
             force, parameter_id = cls._find_dummy_force(system)
             force.setGlobalParameterDefaultValue(parameter_id, value)
+
+        @staticmethod
+        def _find_max_force_group(system):
+            max_force_group = 0
+            for force in system.getForces():
+                if max_force_group < force.getForceGroup():
+                    max_force_group = force.getForceGroup()
+            return max_force_group
 
     @classmethod
     def get_dummy_parameter(cls, system):
@@ -1069,7 +1171,7 @@ class TestCompoundThermodynamicState(object):
         assert not compound_state.is_context_compatible(context)
 
     def test_method_apply_to_context(self):
-        """CompoundThermodynamicState.apply_to_context() method."""
+        """Test CompoundThermodynamicState.apply_to_context() method."""
         dummy_parameter = self.DummyState.standard_dummy_parameter
         thermodynamic_state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
         thermodynamic_state.pressure = self.std_pressure
@@ -1087,6 +1189,22 @@ class TestCompoundThermodynamicState(object):
         compound_state.apply_to_context(context)
         assert context.getParameter('dummy_parameter') == self.dummy_parameter
         assert context.getParameter(barostat.Pressure()) == new_pressure / unit.bar
+
+    def test_method_find_force_groups_to_update(self):
+        """Test CompoundThermodynamicState._find_force_groups_to_update() method."""
+        alanine_explicit = copy.deepcopy(self.alanine_explicit)
+        thermodynamic_state = ThermodynamicState(alanine_explicit, self.std_temperature)
+        compound_state = CompoundThermodynamicState(thermodynamic_state, [self.dummy_state])
+        context = compound_state.create_context(openmm.VerletIntegrator(2.0*unit.femtoseconds))
+
+        # No force group should be updated if the two states are identical.
+        assert compound_state._find_force_groups_to_update(context, compound_state, memo={}) == set()
+
+        # If the dummy parameter changes, there should be 1 force group to update.
+        compound_state2 = copy.deepcopy(compound_state)
+        compound_state2.dummy_parameter -= 0.5
+        group = self.DummyState._find_max_force_group(context.getSystem())
+        assert compound_state._find_force_groups_to_update(context, compound_state2, memo={}) == {group}
 
 
 # =============================================================================

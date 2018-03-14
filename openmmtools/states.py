@@ -30,6 +30,40 @@ from openmmtools import utils, integrators, constants
 # MODULE FUNCTIONS
 # =============================================================================
 
+def group_by_compatibility(thermodynamic_states):
+    """Utility function to split the thermodynamic states by compatibility.
+
+    Parameters
+    ----------
+    thermodynamic_states : list of ThermodynamicState
+        The thermodynamic state to group by compatibility.
+
+    Returns
+    -------
+    compatible_groups : list of list of ThermodynamicState
+        The states grouped by compatibility.
+    original_indices: list of list of int
+        The indices of the ThermodynamicStates in theoriginal list.
+
+    """
+    compatible_groups = []
+    original_indices = []
+    for state_idx, state in enumerate(thermodynamic_states):
+        # Search for compatible group.
+        found_compatible = False
+        for group, indices in zip(compatible_groups, original_indices):
+            if state.is_state_compatible(group[0]):
+                found_compatible = True
+                group.append(state)
+                indices.append(state_idx)
+
+        # Create new one.
+        if not found_compatible:
+            compatible_groups.append([state])
+            original_indices.append([state_idx])
+    return compatible_groups, original_indices
+
+
 def _box_vectors_volume(box_vectors):
     """Return the volume of the box vectors.
 
@@ -632,13 +666,87 @@ class ThermodynamicState(object):
         if n_particles != self.n_particles:
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE)
 
-        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * self.temperature)
-        reduced_potential = potential_energy
-        reduced_potential = reduced_potential / unit.AVOGADRO_CONSTANT_NA
-        pressure = self.pressure
-        if pressure is not None:
-            reduced_potential += pressure * volume
-        return beta * reduced_potential
+        return self._compute_reduced_potential(potential_energy, self.temperature,
+                                               volume, self.pressure)
+
+    @classmethod
+    def reduced_potential_at_states(cls, context, thermodynamic_states):
+        """Efficiently compute the reduced potential for a list of compatible states.
+
+        The user is responsible to ensure that the given context is compatible
+        with the thermodynamic states.
+
+        Parameters
+        ----------
+        context : openmm.Context
+            The OpenMM `Context` object with box vectors and positions set.
+        thermodynamic_states : list of ThermodynamicState
+            The list of thermodynamic states at which to compute the reduced
+            potential.
+
+        Returns
+        -------
+        reduced_potentials : list of float
+            The unit-less reduced potentials, which can be considered
+            to have units of kT.
+
+        Raises
+        ------
+        ValueError
+            If the thermodynamic states are not compatible to each other.
+
+        """
+        # Isolate first thermodynamic state.
+        if len(thermodynamic_states) == 1:
+            thermodynamic_states[0].apply_to_context(context)
+            return [thermodynamic_states[0].reduced_potential(context)]
+
+        # Check that the states are compatible.
+        for state_idx, state in enumerate(thermodynamic_states[:-1]):
+            if not state.is_state_compatible(thermodynamic_states[state_idx + 1]):
+                raise ValueError('State {} is not compatible.')
+
+        # In NPT, we'll need also the volume.
+        is_npt = thermodynamic_states[0].pressure is not None
+        volume = None
+
+        energy_by_force_group = {force.getForceGroup(): 0.0*unit.kilocalories_per_mole
+                                 for force in context.getSystem().getForces()}
+
+        # Create new cache for memoization.
+        memo = {}
+
+        # Go through thermodynamic states and compute only the energy of the
+        # force groups that changed. Compute all the groups the first pass.
+        force_groups_to_compute = set(energy_by_force_group)
+        reduced_potentials = [0.0 for _ in range(len(thermodynamic_states))]
+        for state_idx, state in enumerate(thermodynamic_states):
+            if state_idx == 0:
+                state.apply_to_context(context)
+            else:
+                state._apply_to_context_in_state(context, thermodynamic_states[state_idx - 1])
+
+            # Compute the energy of all the groups to update.
+            for force_group_idx in force_groups_to_compute:
+                openmm_state = context.getState(getEnergy=True, groups=2**force_group_idx)
+                energy_by_force_group[force_group_idx] = openmm_state.getPotentialEnergy()
+
+            # Compute volume if this is the first time we obtain a state.
+            if is_npt and volume is None:
+                volume = openmm_state.getPeriodicBoxVolume()
+
+            # Compute the new total reduced potential.
+            potential_energy = unit.sum(list(energy_by_force_group.values()))
+            reduced_potential = cls._compute_reduced_potential(potential_energy, state.temperature,
+                                                               volume, state.pressure)
+            reduced_potentials[state_idx] = reduced_potential
+
+            # Update groups to compute for next states.
+            if state_idx < len(thermodynamic_states) - 1:
+                next_state = thermodynamic_states[state_idx + 1]
+                force_groups_to_compute = next_state._find_force_groups_to_update(context, state, memo)
+
+        return reduced_potentials
 
     def is_state_compatible(self, thermodynamic_state):
         """Check compatibility between ThermodynamicStates.
@@ -735,7 +843,8 @@ class ThermodynamicState(object):
             context_system.addForce(copy.deepcopy(thermostat))
 
         # Compute and compare standard system hash.
-        context_system_hash = self._standardize_and_hash(context_system)
+        self._standardize_system(context_system)
+        context_system_hash = self._compute_standard_system_hash(context_system)
         is_compatible = self._standard_system_hash == context_system_hash
         return is_compatible
 
@@ -862,42 +971,8 @@ class ThermodynamicState(object):
         310.0
 
         """
-        system = context.getSystem()
-
-        # Apply pressure and temperature to barostat.
-        barostat = self._find_barostat(system)
-        if barostat is not None:
-            if self._pressure is None:
-                # The context is NPT but this is NVT.
-                raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
-
-            has_changed = self._set_barostat_pressure(barostat, self.pressure)
-            if has_changed:
-                context.setParameter(barostat.Pressure(), self.pressure)
-            has_changed = self._set_barostat_temperature(barostat, self.temperature)
-            if has_changed:
-                # TODO remove try except when drop openmm7.0 support
-                try:
-                    context.setParameter(barostat.Temperature(), self.temperature)
-                except AttributeError:  # OpenMM < 7.1
-                    openmm_state = context.getState(getPositions=True, getVelocities=True,
-                                                    getParameters=True)
-                    context.reinitialize()
-                    context.setState(openmm_state)
-        elif self._pressure is not None:
-            # The context is NVT but this is NPT.
-            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
-
-        # Apply temperature to thermostat or integrator.
-        thermostat = self._find_thermostat(system)
-        if thermostat is not None:
-            if not utils.is_quantity_close(thermostat.getDefaultTemperature(),
-                                           self.temperature):
-                thermostat.setDefaultTemperature(self.temperature)
-                context.setParameter(thermostat.Temperature(), self.temperature)
-        else:
-            integrator = context.getIntegrator()
-            self._set_integrator_temperature(integrator)
+        self._set_context_barostat(context, update_pressure=True, update_temperature=True)
+        self._set_context_thermostat(context)
 
     # -------------------------------------------------------------------------
     # Magic methods
@@ -1043,15 +1118,9 @@ class ThermodynamicState(object):
             # and pressure of the system are correct.
             self._check_system_consistency(system)
 
-        # Standardize system and compute hash.
-        self._standard_system_hash = self._standardize_and_hash(system)
-
-        # Check if the standard system is already in the weakref cache.
-        try:
-            self._standard_system = self._standard_system_cache[self._standard_system_hash]
-        except KeyError:
-            self._standard_system_cache[self._standard_system_hash] = system
-            self._standard_system = system
+        # Update standard system.
+        self._standardize_system(system)
+        self._update_standard_system(system)
 
     def _check_system_consistency(self, system):
         """Check system consistency with this ThermodynamicState.
@@ -1104,8 +1173,7 @@ class ThermodynamicState(object):
         elif self.pressure is not None:
             raise TE(TE.NO_BAROSTAT)
 
-    @classmethod
-    def _standardize_system(cls, system):
+    def _standardize_system(self, system):
         """Return a copy of the system in a standard representation.
 
         This effectively defines which ThermodynamicStates are compatible
@@ -1138,22 +1206,93 @@ class ThermodynamicState(object):
         # This adds a thermostat if it doesn't exist already. This way
         # the comparison between system using thermostat with different
         # parameters (e.g. collision frequency) will fail as expected.
-        cls._set_system_temperature(system, cls._STANDARD_TEMPERATURE)
+        self._set_system_temperature(system, self._STANDARD_TEMPERATURE)
 
         # We need to be sure that thermostat and barostat always are
         # in the same order, as the hash depends on the Forces order.
         # Here we push the barostat at the end.
-        barostat = cls._pop_barostat(system)
+        barostat = self._pop_barostat(system)
         if barostat is not None:
-            barostat.setDefaultPressure(cls._STANDARD_PRESSURE)
+            barostat.setDefaultPressure(self._STANDARD_PRESSURE)
             system.addForce(barostat)
 
-    @classmethod
-    def _standardize_and_hash(cls, system):
-        """Standardize the system and return its hash."""
-        cls._standardize_system(system)
-        system_serialization = openmm.XmlSerializer.serialize(system)
+    def _compute_standard_system_hash(self, standard_system):
+        """Compute the standard system hash."""
+        system_serialization = openmm.XmlSerializer.serialize(standard_system)
         return system_serialization.__hash__()
+
+    def _update_standard_system(self, standard_system):
+        """Update the standard system, its hash and the standard system cache."""
+        self._standard_system_hash = self._compute_standard_system_hash(standard_system)
+        try:
+            self._standard_system = self._standard_system_cache[self._standard_system_hash]
+        except KeyError:
+            self._standard_system_cache[self._standard_system_hash] = standard_system
+            self._standard_system = standard_system
+
+    # -------------------------------------------------------------------------
+    # Internal-usage: context handling
+    # -------------------------------------------------------------------------
+
+    def _set_context_barostat(self, context, update_pressure, update_temperature):
+        """Set the barostat parameters in the Context."""
+        barostat = self._find_barostat(context.getSystem())
+
+        # Check if we are in the same ensemble.
+        if (barostat is None) != (self._pressure is None):
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+
+        # No need to set the barostat if we are in NVT.
+        if self._pressure is None:
+            return
+
+        # Apply pressure and temperature to barostat.
+        if update_pressure:
+            self._set_barostat_pressure(barostat, self.pressure)
+            context.setParameter(barostat.Pressure(), self.pressure)
+        if update_temperature:
+            self._set_barostat_temperature(barostat, self.temperature)
+            # TODO remove try except when drop openmm7.0 support
+            try:
+                context.setParameter(barostat.Temperature(), self.temperature)
+            except AttributeError:  # OpenMM < 7.1
+                openmm_state = context.getState(getPositions=True, getVelocities=True,
+                                                getParameters=True)
+                context.reinitialize()
+                context.setState(openmm_state)
+
+    def _set_context_thermostat(self, context):
+        """Set the thermostat parameters in the Context."""
+        # First try to set the integrator (most common case).
+        # If this fails retrieve the Andersen thermostat.
+        is_thermostated = self._set_integrator_temperature(context.getIntegrator())
+        if not is_thermostated:
+            thermostat = self._find_thermostat(context.getSystem())
+            thermostat.setDefaultTemperature(self.temperature)
+            context.setParameter(thermostat.Temperature(), self.temperature)
+
+    def _apply_to_context_in_state(self, context, thermodynamic_state):
+        """Apply this ThermodynamicState to the context.
+
+        When we know the thermodynamic state of the context, this is much faster
+        then apply_to_context(). The given thermodynamic state is assumed to be
+        compatible.
+
+        Parameters
+        ----------
+        context : simtk.openmm.Context
+            The OpenMM Context to be set to this ThermodynamicState.
+        thermodynamic_state : ThermodynamicState
+            The ThermodynamicState of this context.
+
+        """
+        update_pressure = self.pressure != thermodynamic_state.pressure
+        update_temperature = self.temperature != thermodynamic_state.temperature
+
+        if update_pressure or update_temperature:
+            self._set_context_barostat(context, update_pressure, update_temperature)
+        if update_temperature:
+            self._set_context_thermostat(context)
 
     # -------------------------------------------------------------------------
     # Internal-usage: integrator handling
@@ -1209,18 +1348,24 @@ class ThermodynamicState(object):
         If integrator is a CompoundIntegrator, it sets the temperature
         of every sub-integrator.
 
+        Returns
+        -------
+        is_thermostated : bool
+            True if the integrator is thermostated.
+
         """
         def set_temp(_integrator):
             try:
-                if not utils.is_quantity_close(_integrator.getTemperature(),
-                                               self.temperature):
-                    _integrator.setTemperature(self.temperature)
+                _integrator.setTemperature(self.temperature)
+                return True
             except AttributeError:
-                pass
+                return False
 
         # Loop over integrators to handle CompoundIntegrators.
+        is_thermostated = False
         for _integrator in self._loop_over_integrators(integrator):
-            set_temp(_integrator)
+            is_thermostated = is_thermostated or set_temp(_integrator)
+        return is_thermostated
 
     # -------------------------------------------------------------------------
     # Internal-usage: barostat handling
@@ -1342,43 +1487,13 @@ class ThermodynamicState(object):
 
     @staticmethod
     def _set_barostat_pressure(barostat, pressure):
-        """Set barostat pressure.
-
-        Returns
-        -------
-        has_changed : bool
-            True if the barostat has changed, False if it was already
-            configured with the correct pressure.
-
-        """
-        if not utils.is_quantity_close(barostat.getDefaultPressure(), pressure):
-            barostat.setDefaultPressure(pressure)
-            return True
-        return False
+        """Set barostat pressure."""
+        barostat.setDefaultPressure(pressure)
 
     @staticmethod
     def _set_barostat_temperature(barostat, temperature):
-        """Set barostat temperature.
-
-        Returns
-        -------
-        has_changed : bool
-            True if the barostat has changed, False if it was already
-            configured with the correct temperature.
-
-        """
-        has_changed = False
-        # TODO remove this when we OpenMM 7.0 drop support
-        try:
-            if not utils.is_quantity_close(barostat.getDefaultTemperature(),
-                                           temperature):
-                barostat.setDefaultTemperature(temperature)
-                has_changed = True
-        except AttributeError:  # versions previous to OpenMM 7.1
-            if not utils.is_quantity_close(barostat.getTemperature(), temperature):
-                barostat.setTemperature(temperature)
-                has_changed = True
-        return has_changed
+        """Set barostat temperature."""
+        barostat.setDefaultTemperature(temperature)
 
     # -------------------------------------------------------------------------
     # Internal-usage: thermostat handling
@@ -1449,6 +1564,28 @@ class ThermodynamicState(object):
         if barostat is not None:
             cls._set_barostat_temperature(barostat, temperature)
 
+    # -------------------------------------------------------------------------
+    # Internal-usage: initialization
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _compute_reduced_potential(potential_energy, temperature, volume, pressure):
+        """Convert potential energy into reduced potential."""
+        beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * temperature)
+        reduced_potential = potential_energy / unit.AVOGADRO_CONSTANT_NA
+        if pressure is not None:
+            reduced_potential += pressure * volume
+        return beta * reduced_potential
+
+    def _find_force_groups_to_update(self, context, thermodynamic_state, memo):
+        """Find the force groups to be recomputed when moving to the given state.
+
+        With the current implementation of ThermodynamicState, no force group has
+        to be recomputed as only temperature and pressure change between compatible
+        states, but this method becomes essential in CompoundThermodynamicState.
+        """
+        return set()
+
 
 # =============================================================================
 # SAMPLER STATE
@@ -1480,10 +1617,8 @@ class SamplerState(object):
     velocities
     box_vectors : 3x3 simtk.unit.Quantity.
         Current box vectors (length units).
-    potential_energy : simtk.unit.Quantity or None
-        Potential energy of this configuration.
-    kinetic_energy : simtk.unit.Quantity
-        Kinetic energy of this configuration.
+    potential_energy
+    kinetic_energy
     total_energy
     volume
     n_particles
@@ -1545,7 +1680,7 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, positions, velocities=None, box_vectors=None):
-        self._initialize(positions, velocities, box_vectors)
+        self._initialize(copy.deepcopy(positions), copy.deepcopy(velocities), copy.deepcopy(box_vectors))
 
     @classmethod
     def from_context(cls, context_state):
@@ -1590,12 +1725,7 @@ class SamplerState(object):
 
     @positions.setter
     def positions(self, value):
-        if value is None or len(value) != self.n_particles:
-            raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
-        self._positions = value
-
-        # Potential energy changes with different positions.
-        self.potential_energy = None
+        self._set_positions(value, from_context=False, check_consistency=True)
 
     @property
     def velocities(self):
@@ -1615,12 +1745,7 @@ class SamplerState(object):
 
     @velocities.setter
     def velocities(self, value):
-        if value is not None and self.n_particles != len(value):
-            raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
-        self._velocities = value
-
-        # Kinetic energy changes with different velocities.
-        self.kinetic_energy = None
+        self._set_velocities(value, from_context=False)
 
     @property
     def box_vectors(self):
@@ -1638,6 +1763,28 @@ class SamplerState(object):
         if value is not None and not isinstance(value, unit.Quantity):
             value = unit.Quantity(value)
         self._box_vectors = value
+
+    @property
+    def potential_energy(self):
+        """simtk.unit.Quantity or None: Potential energy of this configuration."""
+        if self.positions is None or self.positions.has_changed:
+            return None
+        return self._potential_energy
+
+    @potential_energy.setter
+    def potential_energy(self, new_value):
+        self._potential_energy = new_value
+
+    @property
+    def kinetic_energy(self):
+        """simtk.unit.Quantity or None: Kinetic energy of this configuration."""
+        if self.velocities is None or self.velocities.has_changed:
+            return None
+        return self._kinetic_energy
+
+    @kinetic_energy.setter
+    def kinetic_energy(self, new_value):
+        self._kinetic_energy = new_value
 
     @property
     def total_energy(self):
@@ -1716,11 +1863,12 @@ class SamplerState(object):
             Context only to compute energies.
 
         """
-        context.setPositions(self._positions)
-        if self._velocities is not None and not ignore_velocities:
-            context.setVelocities(self._velocities)
+        # NOTE: Box vectors MUST be updated before positions are set.
         if self.box_vectors is not None:
             context.setPeriodicBoxVectors(*self.box_vectors)
+        context.setPositions(self._unitless_positions)
+        if self._velocities is not None and not ignore_velocities:
+            context.setVelocities(self._unitless_velocities)
 
     def has_nan(self):
         """Check that energies and positions are finite.
@@ -1740,20 +1888,26 @@ class SamplerState(object):
 
     def __getitem__(self, item):
         sampler_state = self.__class__([])
-        if isinstance(item, slice):
-            # Copy original values to avoid side effects.
-            sampler_state._positions = copy.deepcopy(self._positions[item])
-            if self._velocities is not None:
-                sampler_state._velocities = copy.deepcopy(self._velocities[item].copy())
-        else:  # Single index.
+
+        # Handle single index.
+        if np.issubdtype(type(item), np.integer):
             # Here we don't need to copy since we instantiate a new array.
             pos_value = self._positions[item].value_in_unit(self._positions.unit)
-            sampler_state._positions = unit.Quantity(np.array([pos_value]),
-                                                     self._positions.unit)
+            new_positions = unit.Quantity(np.array([pos_value]), self._positions.unit)
+            sampler_state._set_positions(new_positions, from_context=False, check_consistency=False)
             if self._velocities is not None:
                 vel_value = self._velocities[item].value_in_unit(self._velocities.unit)
-                sampler_state._velocities = unit.Quantity(np.array([vel_value]),
-                                                          self._velocities.unit)
+                new_velocities = unit.Quantity(np.array([vel_value]), self._velocities.unit)
+                sampler_state._set_velocities(new_velocities, from_context=False)
+        else:  # Assume slice or sequence.
+            # Copy original values to avoid side effects.
+            sampler_state._set_positions(copy.deepcopy(self._positions[item]),
+                                         from_context=False, check_consistency=False)
+            if self._velocities is not None:
+                sampler_state._set_velocities(copy.deepcopy(self._velocities[item].copy()),
+                                              from_context=False)
+
+        # Copy box vectors.
         sampler_state.box_vectors = copy.deepcopy(self.box_vectors)
 
         # Energies for only a subset of atoms is undefined.
@@ -1781,13 +1935,66 @@ class SamplerState(object):
     def _initialize(self, positions, velocities, box_vectors,
                     potential_energy=None, kinetic_energy=None):
         """Initialize the sampler state."""
-        self._positions = positions
-        self._velocities = None
+        self._set_positions(positions, from_context=False, check_consistency=False)
         self.velocities = velocities  # Checks consistency and units.
-        self._box_vectors = None
         self.box_vectors = box_vectors  # Make sure box vectors is Quantity.
         self.potential_energy = potential_energy
         self.kinetic_energy = kinetic_energy
+
+    def _set_positions(self, new_positions, from_context, check_consistency):
+        """Set the positions without checking for consistency."""
+        if check_consistency and (new_positions is None or len(new_positions) != self.n_particles):
+            raise SamplerStateError(SamplerStateError.INCONSISTENT_POSITIONS)
+
+        if from_context:
+            self._unitless_positions_cache = new_positions._value
+            assert new_positions.unit == unit.nanometer
+        else:
+            self._unitless_positions_cache = None
+
+        self._positions = utils.TrackedQuantity(new_positions)
+
+        # The potential energy changes with different positions.
+        self.potential_energy = None
+
+    def _set_velocities(self, new_velocities, from_context):
+        """Set the velocities."""
+        if from_context:
+            self._unitless_velocities_cache = new_velocities._value
+            assert new_velocities.unit == unit.nanometer/unit.picoseconds
+        else:
+            if new_velocities is not None and self.n_particles != len(new_velocities):
+                raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
+            self._unitless_velocities_cache = None
+
+        if new_velocities is not None:
+            new_velocities = utils.TrackedQuantity(new_velocities)
+        self._velocities = new_velocities
+
+        # The kinetic energy changes with different positions.
+        self.kinetic_energy = None
+
+    @property
+    def _unitless_positions(self):
+        """Keeps a cache of unitless positions."""
+        if self._unitless_positions_cache is None or self._positions.has_changed:
+            self._unitless_positions_cache = self.positions.value_in_unit_system(unit.md_unit_system)
+        if self._positions.has_changed:
+            self._positions.has_changed = False
+            self.potential_energy = None
+        return self._unitless_positions_cache
+
+    @property
+    def _unitless_velocities(self):
+        """Keeps a cache of unitless velocities."""
+        if self._velocities is None:
+            return None
+        if self._unitless_velocities_cache is None or self._velocities.has_changed:
+            self._unitless_velocities_cache = self._velocities.value_in_unit_system(unit.md_unit_system)
+        if self._velocities.has_changed:
+            self._velocities.has_changed = False
+            self.kinetic_energy = None
+        return self._unitless_velocities_cache
 
     def _read_context_state(self, context_state, check_consistency):
         """Read the Context state.
@@ -1814,16 +2021,16 @@ class SamplerState(object):
         else:
             openmm_state = context_state
 
+        positions = openmm_state.getPositions(asNumpy=True)
+        velocities = openmm_state.getVelocities(asNumpy=True)
+
         # We assign positions first, since the velocities
         # property will check its length for consistency.
-        if check_consistency:
-            self.positions = openmm_state.getPositions(asNumpy=True)
-        else:
-            # The positions in md units cache is updated below.
-            self._positions = openmm_state.getPositions(asNumpy=True)
-
-        self.velocities = openmm_state.getVelocities(asNumpy=True)
+        self._set_positions(positions, from_context=True, check_consistency=check_consistency)
+        self._set_velocities(velocities, from_context=True)
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
+        # Potential energy and kinetic energy must be updated
+        # after positions and velocities or they'll be reset.
         self.potential_energy = openmm_state.getPotentialEnergy()
         self.kinetic_energy = openmm_state.getKineticEnergy()
 
@@ -1851,15 +2058,15 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def apply_to_system(self, system):
-        """Change the system properties to be consistent with this state.
+        """Set the system to be in this state.
 
-        This method is called on CompoundThermodynamicState init to update
-        the system stored in the main ThermodynamicState, and every time
-        an attribute/property of the composable state is set or a setter
-        method (i.e. a method that starts with 'set_') is called.
-
-        This is the system that will be used during context creation, so
-        it is important that it is up-to-date.
+        This method is called in three situations:
+        1) On initialization, before standardizing the system.
+        2) When a new system is set and the argument ``fix_state`` is
+           set to ``True``.
+        3) When the system is retrieved to convert the standard system
+           into a system in the correct thermodynamic state for the
+           simulation.
 
         Parameters
         ----------
@@ -1876,11 +2083,11 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def check_system_consistency(self, system):
-        """Check if the system is consistent with the state.
+        """Check if the system is in this state.
 
-        It raises a ComposableStateError if the system is not consistent
-        with the state. This is called when the ThermodynamicState's
-        system is set.
+        It raises a ComposableStateError if the system is not in
+        this state. This is called when the ThermodynamicState's
+        system is set with the ``fix_state`` argument set to False.
 
         Parameters
         ----------
@@ -1897,7 +2104,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
     @abc.abstractmethod
     def apply_to_context(self, context):
-        """Apply changes to the context to be consistent with the state.
+        """Set the context to be in this state.
 
         Parameters
         ----------
@@ -1912,9 +2119,8 @@ class IComposableState(utils.SubhookedABCMeta):
         """
         pass
 
-    @classmethod
     @abc.abstractmethod
-    def _standardize_system(cls, system):
+    def _standardize_system(self, system):
         """Standardize the given system.
 
         ThermodynamicState relies on this method to create a standard
@@ -1935,6 +2141,60 @@ class IComposableState(utils.SubhookedABCMeta):
         CompatibleStateError
             If the system is not compatible with the state.
 
+        """
+        pass
+
+    @abc.abstractmethod
+    def _on_setattr(self, standard_system, attribute_name):
+        """Check if standard system needs to be updated after a state attribute is set.
+
+        This callback function is called after an attribute is set (i.e.
+        after __setattr__ is called on this state) or if an attribute whose
+        name starts with "set_" is requested (i.e. if a setter is retrieved
+        from this state through __getattr__).
+
+        Parameters
+        ----------
+        standard_system : simtk.openmm.System
+            The standard system before setting the attribute.
+        attribute_name : str
+            The name of the attribute that has just been set or retrieved.
+
+        Returns
+        -------
+        need_changes : bool
+            True if the standard system has to be updated, False if no change
+            occurred.
+
+        """
+        pass
+
+    @abc.abstractmethod
+    def _find_force_groups_to_update(self, context, current_context_state, memo):
+        """Find the force groups whose energy must be recomputed after applying self.
+
+        This is used to compute efficiently the potential energy of the
+        same configuration in multiple thermodynamic states to minimize
+        the number of force evaluations.
+
+        Parameters
+        ----------
+        context : Context
+            The context, currently in `current_context_state`, that will
+            be moved to this state.
+        current_context_state : ThermodynamicState
+            The full thermodynamic state of the given context. This is
+            guaranteed to be compatible with self.
+        memo : dict
+            A dictionary that can be used by the state for memoization
+            to speed up consecutive calls on the same context.
+
+        Returns
+        -------
+        force_groups_to_update : set of int
+            The indices of the force groups whose energy must be computed
+            again after applying this state, assuming the context to be in
+            `current_context_state`.
         """
         pass
 
@@ -2067,10 +2327,13 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState.set_system
 
         """
-        if fix_state is False:
-            for s in self._composable_states:
+        system = copy.deepcopy(system)
+        for s in self._composable_states:
+            if fix_state:
+                s.apply_to_system(system)
+            else:
                 s.check_system_consistency(system)
-        super(CompoundThermodynamicState, self).set_system(system, fix_state)
+        super(CompoundThermodynamicState, self)._unsafe_set_system(system, fix_state)
 
     def is_context_compatible(self, context):
         """Check compatibility of the given context.
@@ -2111,13 +2374,25 @@ class CompoundThermodynamicState(ThermodynamicState):
             s.apply_to_context(context)
 
     def __getattr__(self, name):
+        def setter_decorator(func, composable_state):
+            def _setter_decorator(*args, **kwargs):
+                func(*args, **kwargs)
+                self._on_setattr_callback(composable_state, name)
+            return _setter_decorator
+
         # Called only if the attribute couldn't be found in __dict__.
         # In this case we fall back to composable state, in the given order.
         for s in self._composable_states:
             try:
-                return getattr(s, name)
+                attr = getattr(s, name)
             except AttributeError:
                 pass
+            else:
+                if name.startswith('set_'):
+                    # Decorate the setter so that _on_setattr is called
+                    # after the attribute is modified.
+                    attr = setter_decorator(attr, s)
+                return attr
 
         # Attribute not found, fall back to normal behavior.
         return super(CompoundThermodynamicState, self).__getattribute__(name)
@@ -2128,14 +2403,20 @@ class CompoundThermodynamicState(ThermodynamicState):
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
         # Update existing ThermodynamicState attribute (check ancestors).
+        # We can't use hasattr here because it calls __getattr__, which
+        # search in all composable states as well. This means that this
+        # will catch only properties and methods.
         elif any(name in C.__dict__ for C in self.__class__.__mro__):
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
         # Update composable states attributes (check ancestors).
+        # We can't use hasattr here because it calls __getattr__,
+        # which search in all composable states as well.
         else:
             for s in self._composable_states:
-                if any(name in C.__dict__ for C in s.__class__.__mro__):
+                if hasattr(s, name):
                     s.__setattr__(name, value)
+                    self._on_setattr_callback(s, name)
                     return
 
             # No attribute found. This is monkey patching.
@@ -2144,7 +2425,7 @@ class CompoundThermodynamicState(ThermodynamicState):
     def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
         # Create original ThermodynamicState to serialize.
-        thermodynamic_state = object.__new__(self.__class__.__bases__[1])
+        thermodynamic_state = object.__new__(self.__class__.__bases__[0])
         thermodynamic_state.__dict__ = self.__dict__
         # Set the instance _standardize_system method to CompoundState._standardize_system
         # so that the composable states standardization will be called during serialization.
@@ -2177,26 +2458,21 @@ class CompoundThermodynamicState(ThermodynamicState):
         for composable_state in composable_states:
             assert isinstance(composable_state, IComposableState)
 
-        # Dynamically inherit from thermodynamic_state class and
-        # store the types of composable_states to be able to call
-        # class methods.
-        composable_bases = [s.__class__ for s in composable_states]
-        self.__class__ = type(self.__class__.__name__,
-                              (self.__class__, thermodynamic_state.__class__),
-                              {'_composable_bases': composable_bases})
+        # Copy internal attributes of thermodynamic state.
+        thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.__dict__ = thermodynamic_state.__dict__
 
         # Setting self._composable_states signals __setattr__ to start
         # searching in composable states as well, so this must be the
         # last new attribute set in the constructor.
+        composable_states = copy.deepcopy(composable_states)
         self._composable_states = composable_states
 
         # This call causes the thermodynamic state standard system
         # to be standardized also w.r.t. all the composable states.
         self.set_system(self._standard_system, fix_state=True)
 
-    @classmethod
-    def _standardize_system(cls, system):
+    def _standardize_system(self, system):
         """Standardize the system.
 
         Override ThermodynamicState._standardize_system to standardize
@@ -2212,9 +2488,40 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState._standardize_system
 
         """
-        super(CompoundThermodynamicState, cls)._standardize_system(system)
-        for composable_cls in cls._composable_bases:
-            composable_cls._standardize_system(system)
+        super(CompoundThermodynamicState, self)._standardize_system(system)
+        for composable_state in self._composable_states:
+            composable_state._standardize_system(system)
+
+    def _on_setattr_callback(self, composable_state, attribute_name):
+        """Updates the standard system (and hash) after __setattr__."""
+        if composable_state._on_setattr(self._standard_system, attribute_name):
+            new_standard_system = copy.deepcopy(self._standard_system)
+            composable_state.apply_to_system(new_standard_system)
+            composable_state._standardize_system(new_standard_system)
+            self._update_standard_system(new_standard_system)
+
+    def _apply_to_context_in_state(self, context, thermodynamic_state):
+        super(CompoundThermodynamicState, self)._apply_to_context_in_state(context, thermodynamic_state)
+        for s in self._composable_states:
+            s.apply_to_context(context)
+
+    def _find_force_groups_to_update(self, context, current_context_state, memo):
+        """Find the force groups to be recomputed when moving to the given state.
+
+        Override ThermodynamicState._find_force_groups_to_update to find
+        groups to update for changes of composable states.
+        """
+        # Initialize memo: create new cache for each composable state.
+        if len(memo) == 0:
+            memo.update({i: {} for i in range(len(self._composable_states))})
+        # Find force group to update for parent class.
+        force_groups = super(CompoundThermodynamicState, self)._find_force_groups_to_update(
+            context, current_context_state, memo)
+        # Find force group to update for composable states.
+        for composable_state_idx, composable_state in enumerate(self._composable_states):
+            force_groups.update(composable_state._find_force_groups_to_update(
+                context, current_context_state, memo[composable_state_idx]))
+        return force_groups
 
 
 if __name__ == '__main__':

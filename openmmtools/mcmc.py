@@ -577,8 +577,10 @@ class BaseIntegratorMove(object):
     restart_attempts : int, optional
         When greater than 0, if after the integration there are NaNs in energies,
         the move will restart. When the integrator has a random component, this
-        may help recovering. An IntegratorMoveError is raised after the given
-        number of attempts if there are still NaNs.
+        may help recovering. On the last attempt, the ``Context`` is
+        re-initialized in a slower process, but better than the simulation
+        crashing. An IntegratorMoveError is raised after the given number of
+        attempts if there are still NaNs.
 
     Attributes
     ----------
@@ -695,8 +697,14 @@ class BaseIntegratorMove(object):
                 err_msg = ('Potential energy is NaN after {} attempts of integration '
                            'with move {}'.format(attempt_counter, self.__class__.__name__))
 
+                # If we are on our last chance before crash, try to re-initialize context
+                if attempt_counter == self.n_restart_attempts - 1:
+                    logger.error(err_msg + ' Trying to reinitialize Context as a last-resort restart attempt...')
+                    context.reinitialize()
+                    sampler_state.apply_to_context(context)
+                    thermodynamic_state.apply_to_context(context)
                 # If we have hit the number of restart attempts, raise an exception.
-                if attempt_counter == self.n_restart_attempts:
+                elif attempt_counter == self.n_restart_attempts:
                     # Restore the context to the state right before the integration.
                     sampler_state.apply_to_context(context)
                     logger.error(err_msg)
@@ -982,7 +990,7 @@ class IntegratorMove(BaseIntegratorMove):
 
 
 # =============================================================================
-# LANGEVIN DYNAMICS MOVE
+# LANGEVIN DYNAMICS MOVES
 # =============================================================================
 
 class LangevinDynamicsMove(BaseIntegratorMove):
@@ -1117,6 +1125,156 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         """Implement BaseIntegratorMove._get_integrator()."""
         return openmm.LangevinIntegrator(thermodynamic_state.temperature,
                                          self.collision_rate, self.timestep)
+
+
+class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
+    """
+    Langevin dynamics segment with custom splitting of the operators and optional Metropolized Monte Carlo validation.
+
+    Besides all the normal properties of the :class:`LangevinDynamicsMove`, this class implements the custom splitting
+    sequence of the :class:`openmmtools.integrators.LangevinIntegrator`. Additionally, the steps can be wrapped around
+    a proper Generalized Hybrid Monte Carlo step to ensure that the exact distribution is generated.
+
+    Parameters
+    ----------
+    timestep : simtk.unit.Quantity, optional
+        The timestep to use for Langevin integration
+        (time units, default is 1*simtk.unit.femtosecond).
+    collision_rate : simtk.unit.Quantity, optional
+        The collision rate with fictitious bath particles
+        (1/time units, default is 10/simtk.unit.picoseconds).
+    n_steps : int, optional
+        The number of integration timesteps to take each time the
+        move is applied (default is 1000).
+    reassign_velocities : bool, optional
+        If True, the velocities will be reassigned from the Maxwell-Boltzmann
+        distribution at the beginning of the move (default is False).
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    splitting : string, default: "V R O R V"
+        Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
+
+        Forces are only used in V-step. Handle multiple force groups by appending the force group index
+        to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
+        "{" will cause metropolization, and must be followed later by a "}".
+
+    constraint_tolerance : float, default: 1.0e-8
+        Tolerance for constraint solver
+
+    measure_shadow_work : boolean, default: False
+        Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
+
+    measure_heat : boolean, default: False
+        Accumulate the heat exchanged with the bath in each step, in the global `heat`
+
+    Attributes
+    ----------
+    timestep : simtk.unit.Quantity
+        The timestep to use for Langevin integration (time units).
+    collision_rate : simtk.unit.Quantity
+        The collision rate with fictitious bath particles (1/time units).
+    n_steps : int
+        The number of integration timesteps to take each time the move
+        is applied.
+    reassign_velocities : bool
+        If True, the velocities will be reassigned from the Maxwell-Boltzmann
+        distribution at the beginning of the move.
+    context_cache : openmmtools.cache.ContextCache
+        The ContextCache to use for Context creation. If None, the global
+        cache openmmtools.cache.global_context_cache is used.
+    splitting : str
+        Splitting applied to this integrator represented as a string.
+    constraint_tolerance : float, default: 1.0e-8
+        Tolerance for constraint solver
+    measure_shadow_work : boolean, default: False
+        Accumulate the shadow work performed by the symplectic substeps, in the global `shadow_work`
+    measure_heat : boolean, default: False
+        Accumulate the heat exchanged with the bath in each step, in the global `heat`
+
+    Examples
+    --------
+    First we need to create the thermodynamic state and the sampler
+    state to propagate. Here we create an alanine dipeptide system
+    in vacuum.
+
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems
+    >>> from openmmtools.states import SamplerState, ThermodynamicState
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system, temperature=298*unit.kelvin)
+
+    Create a Langevin move with default parameters
+
+    >>> move = LangevinSplittingDynamicsMove()
+
+    or create a Langevin move with specified splitting.
+
+    >>> move = LangevinSplittingDynamicsMove(splitting="O { V R V } O")
+
+    Where this splitting is a 5 step symplectic integrator:
+
+        *. Ornstein-Uhlenbeck (O) interactions with the stochastic heat bath interactions
+        *. Hybrid Metropolized step around the half-step velocity updates (V) with full position updates (R).
+
+    Perform one update of the sampler state. The sampler state is updated
+    with the new state.
+
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
+
+    The same move can be applied to a different state, here an ideal gas.
+
+    >>> test = testsystems.IdealGas()
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=298*unit.kelvin)
+    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> np.allclose(sampler_state.positions, test.positions)
+    False
+
+    """
+
+    def __init__(self, timestep=1.0 * unit.femtosecond, collision_rate=10.0 / unit.picoseconds,
+                 n_steps=1000, reassign_velocities=False, splitting="V R O R V", constraint_tolerance=1.0e-8,
+                 measure_shadow_work=False, measure_heat=False, **kwargs):
+        super(LangevinSplittingDynamicsMove, self).__init__(n_steps=n_steps,
+                                                            reassign_velocities=reassign_velocities,
+                                                            timestep=timestep,
+                                                            collision_rate=collision_rate,
+                                                            **kwargs)
+        self.splitting = splitting
+        self.constraint_tolerance = constraint_tolerance
+        self.measure_shadow_work = measure_shadow_work
+        self.measure_heat = measure_heat
+
+    def __getstate__(self):
+        serialization = super(LangevinSplittingDynamicsMove, self).__getstate__()
+        serialization['splitting'] = self.splitting
+        serialization['constraint_tolerance'] = self.constraint_tolerance
+        serialization['measure_shadow_work'] = self.measure_shadow_work
+        serialization['measure_heat'] = self.measure_heat
+        return serialization
+
+    def __setstate__(self, serialization):
+        super(LangevinSplittingDynamicsMove, self).__setstate__(serialization)
+        self.splitting = serialization['splitting']
+        self.constraint_tolerance = serialization['constraint_tolerance']
+        self.measure_shadow_work = serialization['measure_shadow_work']
+        self.measure_heat = serialization['measure_heat']
+
+    def _get_integrator(self, thermodynamic_state):
+        """Implement BaseIntegratorMove._get_integrator()."""
+        return integrators.LangevinIntegrator(temperature=thermodynamic_state.temperature,
+                                              collision_rate=self.collision_rate,
+                                              timestep=self.timestep,
+                                              splitting=self.splitting,
+                                              constraint_tolerance=self.constraint_tolerance,
+                                              measure_shadow_work=self.measure_shadow_work,
+                                              measure_heat=self.measure_heat)
 
 
 # =============================================================================

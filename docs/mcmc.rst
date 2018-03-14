@@ -130,6 +130,7 @@ A number of MCMC component move types that can be arranged into groups or subcla
     MetropolizedMove
     IntegratorMove
     LangevinDynamicsMove
+    LangevinSplittingDynamicsMove
     GHMCMove
     HMCMove
     MonteCarloBarostatMove

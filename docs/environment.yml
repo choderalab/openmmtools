@@ -11,3 +11,5 @@ dependencies:
     - openmm
     - parmed
     - numpydoc
+    - netCDF4
+    - pyyaml

@@ -233,6 +233,12 @@ def math_eval(expression, variables=None, functions=None):
     - step_hm(x) : Heaviside step function with half-maximum convention.
     - sign(x) : sign function (0.0 for x=0.0)
 
+    Available operators are ``+``, ``-``, ``*``, ``/``, ``**``, ``-x`` (negative),
+    ``&``, ``and``, ``|``, and ``or``
+
+    **The operators ``and`` and ``or`` operate BITWISE and behave the same as ``&`` and ``|`` respectively as this
+    function is not designed to handle logical operations.** If you provide sets, they must be as variables.
+
     Parameters
     ----------
     expression : str
@@ -245,7 +251,7 @@ def math_eval(expression, variables=None, functions=None):
 
     Returns
     -------
-    float
+    result
         The result of the evaluated expression.
 
     Examples
@@ -259,7 +265,10 @@ def math_eval(expression, variables=None, functions=None):
     # Supported operators.
     operators = {ast.Add: operator.add, ast.Sub: operator.sub,
                  ast.Mult: operator.mul, ast.Div: operator.truediv,
-                 ast.Pow: operator.pow, ast.USub: operator.neg}
+                 ast.Pow: operator.pow, ast.USub: operator.neg,
+                 ast.BitAnd: operator.and_, ast.And: operator.and_,
+                 ast.BitOr: operator.or_, ast.Or: operator.or_
+                 }
 
     # Supported functions, not defined in math.
     stock_functions = {'step': lambda x: 1 * (x >= 0),
@@ -278,6 +287,15 @@ def math_eval(expression, variables=None, functions=None):
         elif isinstance(node, ast.BinOp):
             return operators[type(node.op)](_math_eval(node.left),
                                             _math_eval(node.right))
+        elif isinstance(node, ast.BoolOp):
+            # Parse ternary operator
+            if len(node.values) > 2:
+                # Left-to-right precedence.
+                left_value = copy.deepcopy(node)
+                left_value.values.pop(-1)
+            else:
+                left_value = node.values[0]
+            return operators[type(node.op)](_math_eval(left_value), _math_eval(node.values[-1]))
         elif isinstance(node, ast.Name):
             try:
                 return variables[node.id]
@@ -307,6 +325,57 @@ def math_eval(expression, variables=None, functions=None):
 # =============================================================================
 # QUANTITY UTILITIES
 # =============================================================================
+
+def _changes_state(func):
+    """Decorator to signal changes in TrackedQuantity."""
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        self.has_changed = True
+        return func(self, *args, **kwargs)
+    return wrapper
+
+
+class TrackedQuantity(unit.Quantity):
+    """A quantity that keeps track of whether it has been changed."""
+
+    def __init__(self, *args, **kwargs):
+        super(TrackedQuantity, self).__init__(*args, **kwargs)
+        self.has_changed = False
+
+    def __getitem__(self, item):
+        if isinstance(item, slice) and isinstance(self._value, np.ndarray):
+            return TrackedQuantityView(self, super(TrackedQuantity, self).__getitem__(item))
+        # No need to track a copy.
+        return super(TrackedQuantity, self).__getitem__(item)
+
+    __setitem__ = _changes_state(unit.Quantity.__setitem__)
+    __delitem__ = _changes_state(unit.Quantity.__delitem__)
+    append = _changes_state(unit.Quantity.append)
+    extend = _changes_state(unit.Quantity.extend)
+    insert = _changes_state(unit.Quantity.insert)
+    remove = _changes_state(unit.Quantity.remove)
+    pop = _changes_state(unit.Quantity.pop)
+
+
+class TrackedQuantityView(unit.Quantity):
+    """Keeps truck of a numpy view for TrackedQuantity."""
+
+    def __init__(self, tracked_quantity, *args, **kwargs):
+        super(TrackedQuantityView, self).__init__(*args, **kwargs)
+        self._tracked_quantity = tracked_quantity  # Parent.
+
+    def __getitem__(self, item):
+        if isinstance(item, slice):
+            return TrackedQuantityView(self._tracked_quantity,
+                                       super(TrackedQuantityView, self).__getitem__(item))
+        # No need to track a copy.
+        return super(TrackedQuantityView, self).__getitem__(item)
+
+    def __setitem__(self, key, value):
+        super(TrackedQuantityView, self).__setitem__(key, value)
+        self._tracked_quantity.has_changed = True
+
+
 
 # List of simtk.unit methods that are actually units and functions instead of base classes
 # Pre-computed to reduce run-time cost
@@ -345,7 +414,7 @@ def is_quantity_close(quantity1, quantity2):
     value2 = quantity2.value_in_unit_system(unit.md_unit_system)
 
     # np.isclose is not symmetric, so we make it so.
-    if value2 >= value1:
+    if abs(value2) >= abs(value1):
         return np.isclose(value1, value2, rtol=1e-10, atol=0.0)
     else:
         return np.isclose(value2, value1, rtol=1e-10, atol=0.0)
