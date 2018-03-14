@@ -934,6 +934,8 @@ class FlatBottomRestraintForceMixIn(object):
             (units of length).
 
         """
+        if potential_energy == 0.0*unit.kilojoules_per_mole:
+            raise ValueError('Cannot compute the distance at this potential energy.')
         harmonic_radius = _compute_harmonic_radius(self.spring_constant, potential_energy)
         return self.well_radius + harmonic_radius
 

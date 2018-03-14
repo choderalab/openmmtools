@@ -296,8 +296,8 @@ def test_restorable_openmm_object():
 
     # Each test case is a pair (object, is_restorable).
     test_cases = [
-        (RestorableCustomForce('K'), True),
         (RestorableCustomIntegrator(2.0*unit.femtoseconds), True),
+        (RestorableCustomForce('K'), True),
         (openmm.CustomBondForce('K'), False)
     ]
 
