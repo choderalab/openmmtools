@@ -375,7 +375,8 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             The volume of the periodic box (units compatible with nanometer**3).
             This must be provided the thermodynamic state is in NPT. If the
             string 'system' is passed, the maximum volume is computed from
-            the system box vectors.
+            the system box vectors (this has no effect if the system is not
+            periodic).
 
         Returns
         -------
@@ -395,6 +396,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         is_npt = thermodynamic_state.pressure is not None
         if max_volume == 'system':
             # ThermodynamicState.volume is None in the NPT ensemble.
+            # max_volume will still be None if the system is not periodic.
             max_volume = thermodynamic_state.get_volume(ignore_ensemble=True)
         elif max_volume is None and not is_npt:
             max_volume = thermodynamic_state.volume
@@ -402,8 +404,8 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             raise TypeError('max_volume must be provided with NPT ensemble')
 
         # Non periodic systems reweighted to a square-well restraint must always have a cutoff.
-        if (not thermodynamic_state.is_periodic and radius_cutoff is None and
-                    energy_cutoff is None and max_volume is None):
+        if (not thermodynamic_state.is_periodic and square_well is True and
+                    radius_cutoff is None and energy_cutoff is None and max_volume is None):
             raise TypeError('One between radius_cutoff, energy_cutoff, or max_volume '
                             'must be provided when reweighting non-periodic thermodynamic '
                             'states to a square-well restraint.')

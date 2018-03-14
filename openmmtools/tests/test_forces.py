@@ -39,6 +39,12 @@ def assert_quantity_almost_equal(object1, object2):
     assert utils.is_quantity_close(object1, object2), '{} != {}'.format(object1, object2)
 
 
+def assert_equal(*args, **kwargs):
+    """Python 2 work-around to be able to yield nose.tools.assert_equal"""
+    # TODO: Just yield nose.tools.assert_equal after we have dropped Python2 support.
+    nose.tools.assert_equal(*args, **kwargs)
+
+
 # =============================================================================
 # UTILITY FUNCTIONS TESTS
 # =============================================================================
@@ -141,12 +147,12 @@ class TestRadiallySymmetricRestraints(object):
                 yield assert_quantity_almost_equal, restraint.well_radius, self.well_radius
 
             if isinstance(restraint, RadiallySymmetricCentroidRestraintForce):
-                yield nose.tools.assert_equal, restraint.restrained_atom_indices1, self.restrained_atom_indices1
-                yield nose.tools.assert_equal, restraint.restrained_atom_indices2, self.restrained_atom_indices2
+                yield assert_equal, restraint.restrained_atom_indices1, self.restrained_atom_indices1
+                yield assert_equal, restraint.restrained_atom_indices2, self.restrained_atom_indices2
             else:
                 assert isinstance(restraint, RadiallySymmetricBondRestraintForce)
-                yield nose.tools.assert_equal, restraint.restrained_atom_indices1, [self.restrained_atom_index1]
-                yield nose.tools.assert_equal, restraint.restrained_atom_indices2, [self.restrained_atom_index2]
+                yield assert_equal, restraint.restrained_atom_indices1, [self.restrained_atom_index1]
+                yield assert_equal, restraint.restrained_atom_indices2, [self.restrained_atom_index2]
 
     def test_compute_restraint_volume(self):
         """Test the calculation of the restraint volume."""
