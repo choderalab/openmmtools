@@ -2444,9 +2444,9 @@ class CompoundThermodynamicState(ThermodynamicState):
         serialized_thermodynamic_state = serialization['thermodynamic_state']
         serialized_composable_states = serialization['composable_states']
         thermodynamic_state = utils.deserialize(serialized_thermodynamic_state)
-        composable_states = [utils.deserialize(state)
-                             for state in serialized_composable_states]
-        self._initialize(thermodynamic_state, composable_states)
+        self.__dict__ = thermodynamic_state.__dict__
+        self._composable_states = [utils.deserialize(state)
+                                   for state in serialized_composable_states]
 
     # -------------------------------------------------------------------------
     # Internal-usage
