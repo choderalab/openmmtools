@@ -286,63 +286,101 @@ def test_find_all_subclasses():
 # RESTORABLE OPENMM OBJECT
 # =============================================================================
 
-def test_restorable_openmm_object():
-    """Test RestorableOpenMMObject classes can be serialized and copied correctly."""
+class TestRestorableOpenMMObject(object):
+    """Test the RestorableOpenMMObject utility class."""
 
-    class DummyRestorableCustomForce(RestorableOpenMMObject, openmm.CustomBondForce):
-        def __init__(self, *args, **kwargs):
-            super(DummyRestorableCustomForce, self).__init__(*args, **kwargs)
+    @classmethod
+    def setup_class(cls):
+        """Example restorable classes for tests."""
+        class DummyRestorableCustomForce(RestorableOpenMMObject, openmm.CustomBondForce):
+            def __init__(self, *args, **kwargs):
+                super(DummyRestorableCustomForce, self).__init__(*args, **kwargs)
 
-    class DummyRestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
-        def __init__(self, *args, **kwargs):
-            super(DummyRestorableCustomIntegrator, self).__init__(*args, **kwargs)
+        class DummierRestorableCustomForce(RestorableOpenMMObject, openmm.CustomAngleForce):
+            def __init__(self, *args, **kwargs):
+                super(DummierRestorableCustomForce, self).__init__(*args, **kwargs)
 
-    # Each test case is a pair (object, is_restorable).
-    test_cases = [
-        (DummyRestorableCustomIntegrator(2.0*unit.femtoseconds), True),
-        (DummyRestorableCustomForce('K'), True),
-        (openmm.CustomBondForce('K'), False)
-    ]
+        class DummyRestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
+            def __init__(self, *args, **kwargs):
+                super(DummyRestorableCustomIntegrator, self).__init__(*args, **kwargs)
 
-    for openmm_object, is_restorable in test_cases:
-        assert RestorableOpenMMObject.is_restorable(openmm_object) is is_restorable
-        err_msg = '{}: {}, {}'.format(openmm_object, RestorableOpenMMObject.restore_interface(openmm_object), is_restorable)
-        assert RestorableOpenMMObject.restore_interface(openmm_object) is is_restorable, err_msg
+        cls.dummy_force = DummyRestorableCustomForce('0.0;')
+        cls.dummier_force = DummierRestorableCustomForce('0.0;')
+        cls.dummy_integrator= DummyRestorableCustomIntegrator(2.0*unit.femtoseconds)
 
-        # Serializing/deserializing restore the class correctly.
-        serialization = openmm.XmlSerializer.serialize(openmm_object)
-        deserialized_object = RestorableOpenMMObject.deserialize_xml(serialization)
-        if is_restorable:
-            assert type(deserialized_object) is type(openmm_object)
+    def test_restorable_openmm_object(self):
+        """Test RestorableOpenMMObject classes can be serialized and copied correctly."""
 
-        # Copying keep the Python class and attributes.
-        deserialized_object._monkey_patching = True
-        copied_object = copy.deepcopy(deserialized_object)
-        if is_restorable:
-            assert type(copied_object) is type(openmm_object)
-            assert hasattr(copied_object, '_monkey_patching')
+        # Each test case is a pair (object, is_restorable).
+        test_cases = [
+            (copy.deepcopy(self.dummy_force), True),
+            (copy.deepcopy(self.dummy_integrator), True),
+            (openmm.CustomBondForce('K'), False)
+        ]
 
+        for openmm_object, is_restorable in test_cases:
+            assert RestorableOpenMMObject.is_restorable(openmm_object) is is_restorable
+            err_msg = '{}: {}, {}'.format(openmm_object, RestorableOpenMMObject.restore_interface(openmm_object), is_restorable)
+            assert RestorableOpenMMObject.restore_interface(openmm_object) is is_restorable, err_msg
 
-def test_restorable_openmm_object_failure():
-    """An exception is raised if the class has a restorable hash but the class can't be found."""
-    force = openmm.CustomBondForce('0.0')
-    force.addGlobalParameter('_restorable__class_hash', 15.0)
-    with nose.tools.assert_raises(RestorableOpenMMObjectError):
-        RestorableOpenMMObject.restore_interface(force)
+            # Serializing/deserializing restore the class correctly.
+            serialization = openmm.XmlSerializer.serialize(openmm_object)
+            deserialized_object = RestorableOpenMMObject.deserialize_xml(serialization)
+            if is_restorable:
+                assert type(deserialized_object) is type(openmm_object)
 
+            # Copying keep the Python class and attributes.
+            deserialized_object._monkey_patching = True
+            copied_object = copy.deepcopy(deserialized_object)
+            if is_restorable:
+                assert type(copied_object) is type(openmm_object)
+                assert hasattr(copied_object, '_monkey_patching')
 
-def test_restorable_openmm_object_hash_collisions():
-    """Check hash collisions between all objects inheriting from RestorableOpenMMObject."""
-    restorable_classes = find_all_subclasses(RestorableOpenMMObject)
+    def test_multiple_object_context_creation(self):
+        """Test that it is possible to create contexts with multiple restorable objects."""
+        system = openmm.System()
+        for i in range(4):
+            system.addParticle(1.0*unit.atom_mass_units)
+        system.addForce(copy.deepcopy(self.dummy_force))
+        system.addForce(copy.deepcopy(self.dummier_force))
+        context = openmm.Context(system, copy.deepcopy(self.dummy_integrator))
 
-    # Test pre-condition: make sure that our custom forces and integrators are loaded.
-    restorable_classes_names = {restorable_cls.__name__ for restorable_cls in restorable_classes}
-    assert 'ThermostatedIntegrator' in restorable_classes_names
-    assert 'RadiallySymmetricRestraintForce' in restorable_classes_names
+        # Try modifying the parameter global variable.
+        force_hash_parameter_name = self.dummy_force._hash_parameter_name
+        context.setParameter(force_hash_parameter_name, 1.0)
 
-    # Test hash collisions.
-    all_hashes = set()
-    for restorable_cls in restorable_classes:
-        hash_float = RestorableOpenMMObject._compute_class_hash(restorable_cls)
-        all_hashes.add(hash_float)
-    assert len(all_hashes) == len(restorable_classes)
+        # Check that two forces keep independent global variables.
+        system_serialization = openmm.XmlSerializer.serialize(context.getSystem())
+        system = openmm.XmlSerializer.deserialize(system_serialization)
+        force1, force2 = system.getForce(0), system.getForce(1)
+        assert RestorableOpenMMObject.restore_interface(force1)
+        assert RestorableOpenMMObject.restore_interface(force2)
+        hash1 = force1._get_force_parameter_by_name(force1, force_hash_parameter_name)
+        hash2 = force2._get_force_parameter_by_name(force2, force_hash_parameter_name)
+        assert not np.isclose(hash1, hash2)
+        assert isinstance(force1, self.dummy_force.__class__)
+        assert isinstance(force2, self.dummier_force.__class__)
+
+    def test_restorable_openmm_object_failure(self):
+        """An exception is raised if the class has a restorable hash but the class can't be found."""
+        force = openmm.CustomBondForce('0.0')
+        force_hash_parameter_name = self.dummy_force._hash_parameter_name
+        force.addGlobalParameter(force_hash_parameter_name, 15.0)
+        with nose.tools.assert_raises(RestorableOpenMMObjectError):
+            RestorableOpenMMObject.restore_interface(force)
+
+    def test_restorable_openmm_object_hash_collisions(self):
+        """Check hash collisions between all objects inheriting from RestorableOpenMMObject."""
+        restorable_classes = find_all_subclasses(RestorableOpenMMObject)
+
+        # Test pre-condition: make sure that our custom forces and integrators are loaded.
+        restorable_classes_names = {restorable_cls.__name__ for restorable_cls in restorable_classes}
+        assert 'ThermostatedIntegrator' in restorable_classes_names
+        assert 'RadiallySymmetricRestraintForce' in restorable_classes_names
+
+        # Test hash collisions.
+        all_hashes = set()
+        for restorable_cls in restorable_classes:
+            hash_float = RestorableOpenMMObject._compute_class_hash(restorable_cls)
+            all_hashes.add(hash_float)
+        assert len(all_hashes) == len(restorable_classes)

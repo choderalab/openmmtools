@@ -751,7 +751,7 @@ class RestorableOpenMMObject(object):
 
     def __init__(self, *args, **kwargs):
         super(RestorableOpenMMObject, self).__init__(*args, **kwargs)
-        self._add_global_parameter(self, '_restorable__class_hash',
+        self._add_global_parameter(self, self._hash_parameter_name,
                                    self._compute_class_hash(self.__class__))
 
     @classmethod
@@ -769,7 +769,8 @@ class RestorableOpenMMObject(object):
 
         """
         try:
-            cls._get_global_parameter(openmm_object, '_restorable__class_hash')
+            hash_parameter_name = cls._get_hash_parameter_name(openmm_object)
+            cls._get_global_parameter(openmm_object, hash_parameter_name)
         except Exception:
             return False
         return True
@@ -793,7 +794,8 @@ class RestorableOpenMMObject(object):
 
         """
         try:
-            object_hash = cls._get_global_parameter(openmm_object, '_restorable__class_hash')
+            hash_parameter_name = cls._get_hash_parameter_name(openmm_object)
+            object_hash = cls._get_global_parameter(openmm_object, hash_parameter_name)
         except Exception:
             return False
 
@@ -816,8 +818,26 @@ class RestorableOpenMMObject(object):
         return True
 
     # -------------------------------------------------------------------------
-    # Abstract class methods
+    # Global parameters.
     # -------------------------------------------------------------------------
+
+    @property
+    def _hash_parameter_name(self):
+        """The hash parameter name of this restorable object."""
+        return self._get_hash_parameter_name(self)
+
+    @classmethod
+    def _get_hash_parameter_name(cls, openmm_object):
+        """Return the name of the openmm_object global variable containing the hash.
+
+        As of OpenMM 7.2, it is impossible to create a context with an integrator
+        having a global variable with the same name of a custom force.
+        """
+        if cls._is_force(openmm_object):
+            return '_restorable_force__class_hash'
+        else:
+            # Use _restorable__class_hash with integrators for backwards compatibility.
+            return '_restorable__class_hash'
 
     @classmethod
     def _add_global_parameter(cls, openmm_object, parameter_name, parameter_value):
@@ -833,12 +853,10 @@ class RestorableOpenMMObject(object):
             The value of the global parameter.
 
         """
-        if isinstance(openmm_object, openmm.Force):
+        if cls._is_force(openmm_object):
             openmm_object.addGlobalParameter(parameter_name, parameter_value)
-        elif isinstance(openmm_object, openmm.CustomIntegrator):
-            openmm_object.addGlobalVariable(parameter_name, parameter_value)
         else:
-            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+            openmm_object.addGlobalVariable(parameter_name, parameter_value)
 
     @classmethod
     def _get_global_parameter(cls, openmm_object, parameter_name):
@@ -857,12 +875,18 @@ class RestorableOpenMMObject(object):
             The value of the global parameter.
 
         """
-        if isinstance(openmm_object, openmm.Force):
+        if cls._is_force(openmm_object):
             return cls._get_force_parameter_by_name(openmm_object, parameter_name)
-        elif isinstance(openmm_object, openmm.CustomIntegrator):
-            return openmm_object.getGlobalVariableByName(parameter_name)
         else:
-            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+            return openmm_object.getGlobalVariableByName(parameter_name)
+
+    @classmethod
+    def _get_force_parameter_by_name(cls, force, parameter_name):
+        """Get a force global parameter default value from its name."""
+        for parameter_idx in range(force.getNumGlobalParameters()):
+            if force.getGlobalParameterName(parameter_idx) == parameter_name:
+                return force.getGlobalParameterDefaultValue(parameter_idx)
+        raise KeyError('No parameter called {} in force {}'.format(parameter_name, force))
 
     # -------------------------------------------------------------------------
     # Copy and serialization utilities
@@ -911,6 +935,16 @@ class RestorableOpenMMObject(object):
     # -------------------------------------------------------------------------
 
     @staticmethod
+    def _is_force(openmm_object):
+        """Return True if openmm_object is a force object, False if it is an integrator."""
+        if isinstance(openmm_object, openmm.Force):
+            return True
+        elif isinstance(openmm_object, openmm.CustomIntegrator):
+            return False
+        else:
+            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+
+    @staticmethod
     def _compute_class_hash(openmm_class):
         """Return a numeric hash for the OpenMM class.
 
@@ -924,14 +958,6 @@ class RestorableOpenMMObject(object):
         lost in the conversion.
         """
         return float(zlib.adler32(openmm_class.__name__.encode()))
-
-    @classmethod
-    def _get_force_parameter_by_name(cls, force, parameter_name):
-        """Get a force global parameter default value from its name."""
-        for parameter_idx in range(force.getNumGlobalParameters()):
-            if force.getGlobalParameterName(parameter_idx) == parameter_name:
-                return force.getGlobalParameterDefaultValue(parameter_idx)
-        raise KeyError('No parameter called {} in force {}'.format(parameter_name, force))
 
 
 if __name__ == '__main__':
