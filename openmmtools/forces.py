@@ -131,14 +131,15 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     forces = {}
     for force_idx, force in enumerate(iterate_forces(system)):
         # Check force name.
-        if re_pattern is not None and re_pattern.match(force.__class__.__name__):
-            forces[force_idx] = force
+        if re_pattern is not None:
+            if re_pattern.match(force.__class__.__name__):
+                forces[force_idx] = force
         # Check if the force class matches the requirements.
-        if type(force) is force_type:
+        elif type(force) is force_type or (include_subclasses and isinstance(force, force_type)):
             forces[force_idx] = force
 
     # Second pass to find all subclasses of the matching forces.
-    if include_subclasses:
+    if include_subclasses and re_pattern is not None:
         matched_force_classes = [force.__class__ for force in forces.values()]
         for force_idx, force in enumerate(iterate_forces(system)):
             if force_idx in forces:

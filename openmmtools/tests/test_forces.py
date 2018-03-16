@@ -73,6 +73,8 @@ def test_find_forces():
     found_forces = find_forces(system, openmm.CustomBondForce, include_subclasses=True)
     yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
                                               (6, openmm.CustomBondForce)]
+    found_forces = find_forces(system, RadiallySymmetricRestraintForce, include_subclasses=True)
+    yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce)]
 
     # Test exact name matching.
     found_forces = find_forces(system, 'HarmonicBondForce')
