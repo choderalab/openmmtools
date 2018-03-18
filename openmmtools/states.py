@@ -1413,18 +1413,31 @@ class ThermodynamicState(object):
             If the system contains unsupported barostats.
 
         """
+        import sys
+        def flush(msg):
+            print(msg)
+            sys.stdout.flush()
         try:
+            flush('_find_barostat 1')
             force_idx, barostat = forces.find_forces(system, '.*Barostat.*', only_one=True)
+            flush('_find_barostat 2')
         except forces.MultipleForcesError:
+            flush('_find_barostat 3')
             raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
         except forces.NoForceFoundError:
+            flush('_find_barostat 4')
             force_idx, barostat = None, None
         else:
+            flush('_find_barostat 5')
             if barostat.__class__.__name__ not in cls._SUPPORTED_BAROSTATS:
+                flush('_find_barostat 6')
                 raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
                                           barostat.__class__.__name__)
+        flush('_find_barostat 7')
         if get_index:
+            flush('_find_barostat 8')
             return force_idx, barostat
+        flush('_find_barostat 9')
         return barostat
 
     @classmethod

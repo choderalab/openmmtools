@@ -16,7 +16,7 @@ Test State classes in states.py.
 import nose
 import pickle
 import operator
-
+from nose.plugins.attrib import attr
 from openmmtools import testsystems
 from openmmtools.states import *
 
@@ -37,6 +37,7 @@ def get_barostat_temperature(barostat):
 # TEST THERMODYNAMIC STATE
 # =============================================================================
 
+@attr('temp')
 class TestThermodynamicState(object):
     """Test suite for states.ThermodynamicState class."""
 
@@ -147,17 +148,27 @@ class TestThermodynamicState(object):
 
     def test_method_find_barostat(self):
         """ThermodynamicState._find_barostat() method."""
+        import sys
+        def flush(msg):
+            print(msg)
+            sys.stdout.flush()
+        flush('test_method_find_barostat 1')
         barostat = ThermodynamicState._find_barostat(self.barostated_alanine)
+        flush('test_method_find_barostat 2')
         assert isinstance(barostat, openmm.MonteCarloBarostat)
+        flush('test_method_find_barostat 3')
 
         # Raise exception if multiple or unsupported barostats found
         TE = ThermodynamicsError  # shortcut
         test_cases = [(self.multiple_barostat_alanine, TE.MULTIPLE_BAROSTATS),
                       (self.unsupported_barostat_alanine, TE.UNSUPPORTED_BAROSTAT)]
         for system, err_code in test_cases:
+            flush('test_method_find_barostat 4: (err code: {}_'.format(err_code))
             with nose.tools.assert_raises(ThermodynamicsError) as cm:
                 ThermodynamicState._find_barostat(system)
+            flush('test_method_find_barostat 5')
             assert cm.exception.code == err_code
+        flush('test_method_find_barostat 6')
 
     def test_method_find_thermostat(self):
         """ThermodynamicState._find_thermostat() method."""
