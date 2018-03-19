@@ -295,7 +295,7 @@ class MCMCSampler(object):
 # MCMC MOVE CONTAINERS
 # =============================================================================
 
-class SequenceMove(object):
+class SequenceMove(MCMCMove):
     """A sequence of MCMC moves.
 
     Parameters
@@ -385,7 +385,7 @@ class SequenceMove(object):
         self.move_list = [utils.deserialize(move) for move in serialized_moves]
 
 
-class WeightedMove(object):
+class WeightedMove(MCMCMove):
     """Pick an MCMC move out of set with given probability at each iteration.
 
     Parameters
@@ -550,7 +550,7 @@ class IntegratorMoveError(Exception):
                 f.write(serialized_object)
 
 
-class BaseIntegratorMove(object):
+class BaseIntegratorMove(MCMCMove):
     """A general MCMC move that applies an integrator.
 
     This class is intended to be inherited by MCMCMoves that need to integrate
@@ -760,7 +760,7 @@ class BaseIntegratorMove(object):
 # METROPOLIZED MOVE BASE CLASS
 # =============================================================================
 
-class MetropolizedMove(object):
+class MetropolizedMove(MCMCMove):
     """A base class for metropolized moves.
 
     This class is intended to be inherited by MCMCMoves that needs to
