@@ -135,52 +135,63 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     forces = {}
     flush('find_forces 1')
     for force_idx, force in enumerate(iterate_forces(system)):
+        flush('find_forces 1.1 ({})'.format(force_idx))
+        force_name = force.__class__.__name__
+        flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
         # Check force name.
         if re_pattern is not None:
-            flush('find_forces 2 ({}, {})'.format(force_idx, force.__class__.__name__))
-            if re_pattern.match(force.__class__.__name__):
+            flush('find_forces 1.2.1')
+            if re_pattern.match(force_name):
+                flush('find_forces 1.2.1.1')
                 forces[force_idx] = force
+                flush('find_forces 1.2.1.2')
         # Check if the force class matches the requirements.
         elif type(force) is force_type or (include_subclasses and isinstance(force, force_type)):
-            flush('find_forces 3 ({}, {})'.format(force_idx, force.__class__.__name__))
+            flush('find_forces 1.2.2')
             forces[force_idx] = force
-        flush('find_forces 4 ({}, {})'.format(force_idx, force.__class__.__name__))
+        flush('find_forces 1.3')
 
     # Second pass to find all subclasses of the matching forces.
+    flush('find_forces 2')
     if include_subclasses and re_pattern is not None:
-        flush('find_forces 5')
+        flush('find_forces 2.1')
         matched_force_classes = [force.__class__ for force in forces.values()]
-        flush('find_forces 6')
+        flush('find_forces 2.2')
         for force_idx, force in enumerate(iterate_forces(system)):
+            flush('find_forces 2.2.1')
+            force_name = force.__class__.__name__
+            flush('find_forces 2.2.2')
             if force_idx in forces:
-                flush('find_forces 7 ({}, {})'.format(force_idx, force.__class__.__name__))
+                flush('find_forces 2.2.2.1')
                 continue
             for matched_force_class in matched_force_classes:
-                flush('find_forces 8 ({}, {}, {})'.format(force_idx, force.__class__.__name__, matched_force_class.__name__))
+                flush('find_forces 2.2.2.2')
+                matched_force_name = matched_force_class.__name__
+                flush('find_forces 2.2.2.3 ({}, {}, {})'.format(force_idx, force_name, matched_force_name))
                 if isinstance(force, matched_force_class):
-                    flush('find_forces 9 ({}, {}, {})'.format(force_idx, force.__class__.__name__, matched_force_class.__name__))
+                    flush('find_forces 2.2.2.3.1')
                     forces[force_idx] = force
-                flush('find_forces 10 ({}, {}, {})'.format(force_idx, force.__class__.__name__, matched_force_class.__name__))
-            flush('find_forces 11 ({}, {})'.format(force_idx, force.__class__.__name__))
-        flush('find_forces 12')
+                flush('find_forces 2.2.2.4')
+            flush('find_forces 2.2.3')
+        flush('find_forces 2.3')
 
     # Reorder forces by index.
-    flush('find_forces 13')
+    flush('find_forces 3')
     forces = collections.OrderedDict(sorted(forces.items()))
-    flush('find_forces 14')
+    flush('find_forces 4')
 
     # Handle only_one.
     if only_one is True:
-        flush('find_forces 15')
+        flush('find_forces 4.1')
         if len(forces) == 0:
-            flush('find_forces 16')
+            flush('find_forces 4.1.1')
             raise NoForceFoundError('No force of type {} could be found.'.format(force_type))
         if len(forces) > 1:
-            flush('find_forces 17')
+            flush('find_forces 4.1.2')
             raise MultipleForcesError('Found multiple forces of type {}'.format(force_type))
-        flush('find_forces 18')
+        flush('find_forces 4.2')
         return forces.popitem(last=False)
-
+    flush('find_forces 5')
     return forces
 
 
