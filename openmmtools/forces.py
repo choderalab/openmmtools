@@ -134,7 +134,9 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     # Find all forces matching the force_type.
     forces = {}
     flush('find_forces 1')
-    for force_idx, force in enumerate(iterate_forces(system)):
+    for force_idx, force in enumerate(system.getForces()):
+        flush('find_forces 1.0 ({})'.format(force_idx))
+        utils.RestorableOpenMMObject.restore_interface(force)
         flush('find_forces 1.1 ({})'.format(force_idx))
         force_name = force.__class__.__name__
         flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
