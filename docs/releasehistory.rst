@@ -8,6 +8,10 @@ Development snapshot
 0.14.0 - Exact treatment of alchemical PME electrostatics, water cluster test system, optimizations
 ===================================================================================================
 
+Development
+-----------
+- Optimization of `states.CompoundThermodynamicState` deserialization (`#338 <https://github.com/choderalab/openmmtools/pull/338>`_).
+
 New features
 ------------
 - Add a ``WaterCluster`` testsystem (`#322 <https://github.com/choderalab/openmmtools/pull/322>`_)

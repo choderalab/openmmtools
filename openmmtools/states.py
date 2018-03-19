@@ -2277,7 +2277,23 @@ class CompoundThermodynamicState(ThermodynamicState):
 
     """
     def __init__(self, thermodynamic_state, composable_states):
-        self._initialize(thermodynamic_state, composable_states)
+        # Check that composable states expose the correct interface.
+        for composable_state in composable_states:
+            assert isinstance(composable_state, IComposableState)
+
+        # Copy internal attributes of thermodynamic state.
+        thermodynamic_state = copy.deepcopy(thermodynamic_state)
+        self.__dict__ = thermodynamic_state.__dict__
+
+        # Setting self._composable_states signals __setattr__ to start
+        # searching in composable states as well, so this must be the
+        # last new attribute set in the constructor.
+        composable_states = copy.deepcopy(composable_states)
+        self._composable_states = composable_states
+
+        # This call causes the thermodynamic state standard system
+        # to be standardized also w.r.t. all the composable states.
+        self.set_system(self._standard_system, fix_state=True)
 
     def get_system(self, **kwargs):
         """Manipulate and return the system.
@@ -2444,33 +2460,13 @@ class CompoundThermodynamicState(ThermodynamicState):
         serialized_thermodynamic_state = serialization['thermodynamic_state']
         serialized_composable_states = serialization['composable_states']
         thermodynamic_state = utils.deserialize(serialized_thermodynamic_state)
-        composable_states = [utils.deserialize(state)
-                             for state in serialized_composable_states]
-        self._initialize(thermodynamic_state, composable_states)
+        self.__dict__ = thermodynamic_state.__dict__
+        self._composable_states = [utils.deserialize(state)
+                                   for state in serialized_composable_states]
 
     # -------------------------------------------------------------------------
     # Internal-usage
     # -------------------------------------------------------------------------
-
-    def _initialize(self, thermodynamic_state, composable_states):
-        """Initialize the sampler state."""
-        # Check that composable states expose the correct interface.
-        for composable_state in composable_states:
-            assert isinstance(composable_state, IComposableState)
-
-        # Copy internal attributes of thermodynamic state.
-        thermodynamic_state = copy.deepcopy(thermodynamic_state)
-        self.__dict__ = thermodynamic_state.__dict__
-
-        # Setting self._composable_states signals __setattr__ to start
-        # searching in composable states as well, so this must be the
-        # last new attribute set in the constructor.
-        composable_states = copy.deepcopy(composable_states)
-        self._composable_states = composable_states
-
-        # This call causes the thermodynamic state standard system
-        # to be standardized also w.r.t. all the composable states.
-        self.set_system(self._standard_system, fix_state=True)
 
     def _standardize_system(self, system):
         """Standardize the system.
