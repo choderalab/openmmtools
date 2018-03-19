@@ -715,7 +715,7 @@ def find_subclass(parent_cls, subcls_name):
         if subcls.__name__ == subcls_name:
             subclasses.append(subcls)
     if len(subclasses) == 0:
-        raise ValueError('Could not found class {} inheriting from {}'
+        raise ValueError('Could not find class {} inheriting from {}'
                          ''.format(subcls_name, parent_cls))
     if len(subclasses) > 1:
         raise ValueError('Found multiple classes inheriting from {}: {}'
