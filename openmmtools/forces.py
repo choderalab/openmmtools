@@ -138,7 +138,7 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
         flush('find_forces 1.0 ({})'.format(force_idx))
         utils.RestorableOpenMMObject.restore_interface(force)
         flush('find_forces 1.1 ({})'.format(force_idx))
-        force_name = force.__class__.__name__
+        force_name = copy.deepcopy(force.__class__.__name__)
         flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
         # Check force name.
         if re_pattern is not None:
