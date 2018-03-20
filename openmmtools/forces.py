@@ -135,19 +135,17 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     forces = {}
     flush('find_forces 1')
     for force_idx, force in enumerate(system.getForces()):
-        flush('find_forces 1.0 ({})'.format(force_idx))
         utils.RestorableOpenMMObject.restore_interface(force)
         flush('find_forces 1.1 ({})'.format(force_idx))
         force_name = copy.deepcopy(force.__class__.__name__)
         flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
         # Check force name.
         if re_pattern is not None:
-            flush('find_forces 1.2.1 ({} [{}], {} [{}])'.format(force_type, type(force_type), force_name, type(force_name)))
             flush('find_forces 1.2.1 ({} [{}], {} [{}], {} [{}])'.format(force_type, type(force_type), force_name, type(force_name), re_pattern, type(re_pattern)))
             re_pattern.match(force_name)
             flush('find_forces 1.2.1 after first match')
-            re_pattern.match(force_name)
-            flush('find_forces 1.2.1 after second match')
+            # re_pattern.match(force_name)
+            # flush('find_forces 1.2.1 after second match')
             if re_pattern.match(force_name):
                 flush('find_forces 1.2.1.1')
                 forces[force_idx] = force

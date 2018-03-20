@@ -1419,7 +1419,7 @@ class ThermodynamicState(object):
             sys.stdout.flush()
         try:
             flush('_find_barostat 1')
-            force_idx, barostat = forces.find_forces(system, '.*Barostat.*', only_one=True)
+            force_idx, barostat = forces.find_forces(system, '.*?Barostat.*?', only_one=True)
             flush('_find_barostat 2')
         except forces.MultipleForcesError:
             raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
@@ -1526,7 +1526,7 @@ class ThermodynamicState(object):
 
         """
         try:
-            force_idx, thermostat = forces.find_forces(system, '.*Thermostat.*', only_one=True)
+            force_idx, thermostat = forces.find_forces(system, '.*?Thermostat.*?', only_one=True)
         except forces.MultipleForcesError:
             raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_THERMOSTATS)
         except forces.NoForceFoundError:
