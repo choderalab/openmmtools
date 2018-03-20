@@ -127,9 +127,9 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
         print(msg)
         sys.stdout.flush()
     # Handle force_type argument when it's not a class.
-    re_pattern = None
-    if not inspect.isclass(force_type):
-        re_pattern = re.compile(force_type)
+    # re_pattern = None
+    # if not inspect.isclass(force_type):
+    #     re_pattern = re.compile(force_type)
 
     # Find all forces matching the force_type.
     forces = {}
@@ -140,13 +140,16 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
         force_name = copy.deepcopy(force.__class__.__name__)
         flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
         # Check force name.
-        if re_pattern is not None:
-            flush('find_forces 1.2.1 ({} [{}], {} [{}], {} [{}])'.format(force_type, type(force_type), force_name, type(force_name), re_pattern, type(re_pattern)))
-            re_pattern.match(force_name)
-            flush('find_forces 1.2.1 after first match')
+        # if re_pattern is not None:
+        if not inspect.isclass(force_type):
+            flush('find_forces 1.2.1 ({} [{}], {} [{}])'.format(force_type, type(force_type), force_name, type(force_name)))
+            # flush('find_forces 1.2.1 ({} [{}], {} [{}], {} [{}])'.format(force_type, type(force_type), force_name, type(force_name), re_pattern, type(re_pattern)))
+            # re_pattern.match(force_name)
+            # flush('find_forces 1.2.1 after first match')
             # re_pattern.match(force_name)
             # flush('find_forces 1.2.1 after second match')
-            if re_pattern.match(force_name):
+            # if re_pattern.match(force_name):
+            if re.match(force_type, force_name):
                 flush('find_forces 1.2.1.1')
                 forces[force_idx] = force
                 flush('find_forces 1.2.1.2')
@@ -158,7 +161,7 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
 
     # Second pass to find all subclasses of the matching forces.
     flush('find_forces 2')
-    if include_subclasses and re_pattern is not None:
+    if include_subclasses and not inspect.isclass(force_type):
         flush('find_forces 2.1')
         matched_force_classes = [force.__class__ for force in forces.values()]
         flush('find_forces 2.2')
