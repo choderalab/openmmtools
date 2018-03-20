@@ -136,9 +136,9 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     flush('find_forces 1')
     for force_idx, force in enumerate(system.getForces()):
         utils.RestorableOpenMMObject.restore_interface(force)
-        flush('find_forces 1.1 ({})'.format(force_idx))
+        # flush('find_forces 1.1 ({})'.format(force_idx))
         force_name = copy.deepcopy(force.__class__.__name__)
-        flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
+        # flush('find_forces 1.2 ({}, {})'.format(force_idx, force_name))
         # Check force name.
         # if re_pattern is not None:
         if not inspect.isclass(force_type):
@@ -150,41 +150,41 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
             # flush('find_forces 1.2.1 after second match')
             # if re_pattern.match(force_name):
             if force_type in force_name:
-                flush('find_forces 1.2.1.1')
+                # flush('find_forces 1.2.1.1')
                 forces[force_idx] = force
-                flush('find_forces 1.2.1.2')
+                # flush('find_forces 1.2.1.2')
         # Check if the force class matches the requirements.
         elif type(force) is force_type or (include_subclasses and isinstance(force, force_type)):
-            flush('find_forces 1.2.2')
+            # flush('find_forces 1.2.2')
             forces[force_idx] = force
-        flush('find_forces 1.3')
+        # flush('find_forces 1.3')
 
     # Second pass to find all subclasses of the matching forces.
     flush('find_forces 2')
     if include_subclasses and not inspect.isclass(force_type):
-        flush('find_forces 2.1')
+        # flush('find_forces 2.1')
         matched_force_classes = [force.__class__ for force in forces.values()]
-        flush('find_forces 2.2')
+        # flush('find_forces 2.2')
         for force_idx, force in enumerate(iterate_forces(system)):
-            flush('find_forces 2.2.1')
+            # flush('find_forces 2.2.1')
             force_name = force.__class__.__name__
-            flush('find_forces 2.2.2')
+            # flush('find_forces 2.2.2')
             if force_idx in forces:
-                flush('find_forces 2.2.2.1')
+                # flush('find_forces 2.2.2.1')
                 continue
             for matched_force_class in matched_force_classes:
-                flush('find_forces 2.2.2.2')
+                # flush('find_forces 2.2.2.2')
                 matched_force_name = matched_force_class.__name__
-                flush('find_forces 2.2.2.3 ({}, {}, {})'.format(force_idx, force_name, matched_force_name))
+                # flush('find_forces 2.2.2.3 ({}, {}, {})'.format(force_idx, force_name, matched_force_name))
                 if isinstance(force, matched_force_class):
-                    flush('find_forces 2.2.2.3.1')
+                    # flush('find_forces 2.2.2.3.1')
                     forces[force_idx] = force
-                flush('find_forces 2.2.2.4')
-            flush('find_forces 2.2.3')
-        flush('find_forces 2.3')
+                # flush('find_forces 2.2.2.4')
+            # flush('find_forces 2.2.3')
+        # flush('find_forces 2.3')
 
     # Reorder forces by index.
-    flush('find_forces 3')
+    # flush('find_forces 3')
     forces = collections.OrderedDict(sorted(forces.items()))
     flush('find_forces 4')
 

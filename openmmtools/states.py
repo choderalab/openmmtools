@@ -1431,6 +1431,7 @@ class ThermodynamicState(object):
                 flush('_find_barostat 4')
                 raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
                                           barostat.__class__.__name__)
+        flush('_find_barostat 5')
         if get_index:
             return force_idx, barostat
         return barostat
