@@ -149,7 +149,7 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
             # re_pattern.match(force_name)
             # flush('find_forces 1.2.1 after second match')
             # if re_pattern.match(force_name):
-            if re.match(force_type, force_name):
+            if force_type in force_name:
                 flush('find_forces 1.2.1.1')
                 forces[force_idx] = force
                 flush('find_forces 1.2.1.2')
