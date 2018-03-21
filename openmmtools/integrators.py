@@ -2073,7 +2073,7 @@ class BAOABIntegrator(LangevinIntegrator):
 class GeodesicBAOABIntegrator(LangevinIntegrator):
     """Create a geodesic-BAOAB integrator."""
 
-    def __init__(self, K_r=2, *args, **kwargs):
+    def __init__(self, *args, K_r=2, **kwargs):
         """Create a geodesic BAOAB Langevin integrator.
 
         Parameters
