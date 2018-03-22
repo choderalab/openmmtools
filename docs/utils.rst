@@ -73,7 +73,6 @@ Serialization utilities
 Metaclass utilities
 -------------------
 
-
 .. currentmodule:: openmmtools.utils
 .. autosummary::
     :nosignatures:
@@ -81,3 +80,15 @@ Metaclass utilities
 
     with_metaclass
     SubhookedABCMeta
+    find_all_subclasses
+    find_subclass
+
+OpenMM custom object utilities
+------------------------------
+
+.. currentmodule:: openmmtools.utils
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    RestorableOpenMMObject

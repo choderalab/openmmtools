@@ -82,7 +82,6 @@ A number of useful mix-ins are provided to endow integrators with additional fea
     :toctree: api/generated/
 
     PrettyPrintableIntegrator
-    RestorableIntegrator
     ThermostatedIntegrator
 
 Base classes
@@ -95,6 +94,5 @@ New integrators can inherit from these base classes to inherit extra features
     :nosignatures:
     :toctree: api/generated/
 
-    RestorableIntegrator
     ThermostatedIntegrator
     NonequilibriumLangevinIntegrator

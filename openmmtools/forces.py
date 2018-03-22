@@ -48,7 +48,7 @@ class NoForceFoundError(Exception):
 
 
 def iterate_forces(system):
-    """Iterate over the restored forces in the system."""
+    """Iterate over and restore the Python interface of the forces in the system."""
     for force in system.getForces():
         utils.RestorableOpenMMObject.restore_interface(force)
         yield force
@@ -57,7 +57,7 @@ def iterate_forces(system):
 
 
 def find_forces(system, force_type, only_one=False, include_subclasses=False):
-    """Iterate over all OpenMM ``Force``s of a given type in an OpenMM system.
+    """Find all the ``Force`` object of a given type in an OpenMM system.
 
     Parameters
     ----------
@@ -646,7 +646,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
 class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
                                               openmm.CustomCentroidBondForce):
-    """Base class for radially-symmetric ligand-receptor restraint force.
+    """Base class for radially-symmetric restraints between the centroids of two groups of atoms.
 
     The restraint is applied between the centers of mass of two groups
     of atoms. The restraint strength is controlled by a global context
@@ -717,7 +717,7 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
 
 class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
                                           openmm.CustomBondForce):
-    """Base class for radially-symmetric restraints using a CustomBondForce.
+    """Base class for radially-symmetric restraints between two atoms.
 
     This is a version of ``RadiallySymmetricCentroidRestraintForce`` that can
     be used with OpenCL 32-bit platforms. It supports atom groups with only a
@@ -771,7 +771,7 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
 # =============================================================================
 
 class HarmonicRestraintForceMixIn(object):
-    """A mix-in providing the common interface for harmonic restraints."""
+    """A mix-in providing the interface for harmonic restraints."""
 
     def __init__(self, spring_constant, *args, **kwargs):
         energy_function = '(K/2)*distance(g1,g2)^2'
@@ -820,7 +820,7 @@ class HarmonicRestraintForceMixIn(object):
 
 class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
                              RadiallySymmetricCentroidRestraintForce):
-    """Impose a single harmonic restraint between ligand and receptor.
+    """Impose a single harmonic restraint between the centroids of two groups of atoms.
 
     This can be used to prevent the ligand from drifting too far from the
     protein in implicit solvent calculations or to keep the ligand close
@@ -972,7 +972,7 @@ class FlatBottomRestraintForceMixIn(object):
 
 class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
                                RadiallySymmetricCentroidRestraintForce):
-    """A receptor-ligand restraint using a flat potential well with harmonic walls.
+    """A restraint between the centroids of two groups of atoms using a flat potential well with harmonic walls.
 
     An alternative choice to receptor-ligand restraints that uses a flat
     potential inside most of the protein volume with harmonic restraining
@@ -1025,7 +1025,7 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
 
 class FlatBottomRestraintBondForce(FlatBottomRestraintForceMixIn,
                                    RadiallySymmetricBondRestraintForce):
-    """Impose a single flat-bottom restraint between two atoms.
+    """A restraint between two atoms using a flat potential well with harmonic walls.
 
     This is a version of ``FlatBottomRestraintForce`` that can be used with
     OpenCL 32-bit platforms. It supports atom groups with only a single atom.
