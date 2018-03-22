@@ -69,8 +69,7 @@ def test_integrators_and_testsystems():
     # Get all the CustomIntegrators in the integrators module.
     is_integrator = lambda x: (inspect.isclass(x) and
                                issubclass(x, openmm.CustomIntegrator) and
-                               x != integrators.ThermostatedIntegrator and
-                               x != integrators.RestorableIntegrator)
+                               x != integrators.ThermostatedIntegrator)
     custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
 
     def all_subclasses(cls):

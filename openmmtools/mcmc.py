@@ -295,7 +295,7 @@ class MCMCSampler(object):
 # MCMC MOVE CONTAINERS
 # =============================================================================
 
-class SequenceMove(object):
+class SequenceMove(MCMCMove):
     """A sequence of MCMC moves.
 
     Parameters
@@ -385,7 +385,7 @@ class SequenceMove(object):
         self.move_list = [utils.deserialize(move) for move in serialized_moves]
 
 
-class WeightedMove(object):
+class WeightedMove(MCMCMove):
     """Pick an MCMC move out of set with given probability at each iteration.
 
     Parameters
@@ -469,10 +469,6 @@ class WeightedMove(object):
         return dict(moves=serialized_moves, weights=weights)
 
     def __setstate__(self, serialization):
-        serialized_moves = serialization['move_list']
-        self.move_list = [utils.deserialize(move) for move in serialized_moves]
-
-    def __setstate__(self, serialization):
         serialized_moves = serialization['moves']
         weights = serialization['weights']
         self.move_set = [(utils.deserialize(move), weight)
@@ -554,7 +550,7 @@ class IntegratorMoveError(Exception):
                 f.write(serialized_object)
 
 
-class BaseIntegratorMove(object):
+class BaseIntegratorMove(MCMCMove):
     """A general MCMC move that applies an integrator.
 
     This class is intended to be inherited by MCMCMoves that need to integrate
@@ -764,7 +760,7 @@ class BaseIntegratorMove(object):
 # METROPOLIZED MOVE BASE CLASS
 # =============================================================================
 
-class MetropolizedMove(object):
+class MetropolizedMove(MCMCMove):
     """A base class for metropolized moves.
 
     This class is intended to be inherited by MCMCMoves that needs to
@@ -865,7 +861,7 @@ class MetropolizedMove(object):
         if self.atom_subset is None:
             atom_subset = slice(None)
         elif not isinstance(self.atom_subset, slice) and len(self.atom_subset) == 1:
-            # Slice to maintain the 2D shape.
+            # Slice so that initial_positions (below) will have a 2D shape.
             atom_subset = slice(self.atom_subset[0], self.atom_subset[0]+1)
         else:
             atom_subset = self.atom_subset

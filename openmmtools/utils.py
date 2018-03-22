@@ -21,12 +21,14 @@ import time
 import math
 import copy
 import shutil
+import inspect
 import logging
 import operator
 import tempfile
 import functools
 import importlib
 import contextlib
+import zlib
 
 import numpy as np
 from simtk import openmm, unit
@@ -386,7 +388,7 @@ _VALID_UNIT_FUNCTIONS = {method: getattr(unit, method) for method in dir(unit)
                          if callable(getattr(unit, method)) and type(getattr(unit, method)) is not type}
 
 
-def is_quantity_close(quantity1, quantity2):
+def is_quantity_close(quantity1, quantity2, rtol=1e-10, atol=0.0):
     """Check if the quantities are equal up to floating-point precision errors.
 
     Parameters
@@ -395,6 +397,10 @@ def is_quantity_close(quantity1, quantity2):
         The first quantity to compare.
     quantity2 : simtk.unit.Quantity
         The second quantity to compare.
+    rtol : float, optional
+        Relative tolerance (default is 1e-10).
+    atol : float, optional
+        Absolute tolerance (default is 0.0).
 
     Returns
     -------
@@ -415,9 +421,9 @@ def is_quantity_close(quantity1, quantity2):
 
     # np.isclose is not symmetric, so we make it so.
     if abs(value2) >= abs(value1):
-        return np.isclose(value1, value2, rtol=1e-10, atol=0.0)
+        return np.isclose(value1, value2, rtol=rtol, atol=atol)
     else:
-        return np.isclose(value2, value1, rtol=1e-10, atol=0.0)
+        return np.isclose(value2, value1, rtol=rtol, atol=atol)
 
 
 def quantity_from_string(expression):
@@ -649,6 +655,309 @@ class SubhookedABCMeta(with_metaclass(abc.ABCMeta)):
             if not any(abstract_method in C.__dict__ for C in subclass.__mro__):
                 return False
         return True
+
+
+def find_all_subclasses(parent_cls, discard_abstract=False, include_parent=True):
+    """Return a set of all the classes inheriting from ``parent_cls``.
+
+    The functions handle multiple inheritance and discard the same classes.
+
+    Parameters
+    ----------
+    parent_cls : type
+        The parent class.
+    discard_abstract : bool, optional
+        If True, abstract classes are not returned (default is False).
+    include_parent : bool, optional
+        If True, the parent class will be included, unless it is abstract
+        and ``discard_abstract`` is ``True``.
+
+    Returns
+    -------
+    subclasses : set of type
+        The set of all the classes inheriting from ``parent_cls``.
+
+    """
+    subclasses = set()
+    for subcls in parent_cls.__subclasses__():
+        if not (discard_abstract and inspect.isabstract(subcls)):
+            subclasses.add(subcls)
+        subclasses.update(find_all_subclasses(subcls, discard_abstract))
+
+    if include_parent and not inspect.isabstract(parent_cls):
+        subclasses.add(parent_cls)
+    return subclasses
+
+
+def find_subclass(parent_cls, subcls_name):
+    """Return the class called ``subcls_name`` inheriting from ``parent_cls``.
+
+    Parameters
+    ----------
+    parent_cls : type
+        The parent class.
+    subcls_name : str
+        The name of the class inheriting from ``parent_cls``.
+
+    Returns
+    -------
+    subcls : type
+        The class inheriting from ``parent_cls`` called ``subcls_name``.
+
+    Raises
+    ------
+    ValueError
+        If there is no class or there are multiple classes called ``subcls_name``
+        that inherit from ``parent_cls``.
+    """
+    subclasses = []
+    for subcls in find_all_subclasses(parent_cls):
+        if subcls.__name__ == subcls_name:
+            subclasses.append(subcls)
+    if len(subclasses) == 0:
+        raise ValueError('Could not find class {} inheriting from {}'
+                         ''.format(subcls_name, parent_cls))
+    if len(subclasses) > 1:
+        raise ValueError('Found multiple classes inheriting from {}: {}'
+                         ''.format(parent_cls, subclasses))
+    return subclasses[0]
+
+
+# =============================================================================
+# RESTORABLE OPENMM OBJECT
+# =============================================================================
+
+class RestorableOpenMMObjectError(Exception):
+    """Raised when the object has a restorable hash but no matching class can be found."""
+    pass
+
+
+class RestorableOpenMMObject(object):
+    """Base class for restorable custom integrators and forces.
+
+    Normally, a custom OpenMM object loses its specific class (and all its
+    methods) when it is copied or deserialized from its XML representation.
+    Class interfaces inheriting from this can be restored through the method
+    ``restore_interface()``. Also, this class extend the copying functions
+    to copy also Python attributes.
+
+    The class automatically adds a global parameter or variable in custom
+    forces and integrators respectively on __init__ to keep track of the
+    original class.
+
+    """
+
+    _cached_hash_subclasses = {}
+
+    def __init__(self, *args, **kwargs):
+        super(RestorableOpenMMObject, self).__init__(*args, **kwargs)
+        self._add_global_parameter(self, self._hash_parameter_name,
+                                   self._compute_class_hash(self.__class__))
+
+    @classmethod
+    def is_restorable(cls, openmm_object):
+        """Check if the custom integrator or force has a restorable interface.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The custom integrator or force to check.
+
+        Returns
+        -------
+        True if the object has a restorable interface, False otherwise.
+
+        """
+        try:
+            hash_parameter_name = cls._get_hash_parameter_name(openmm_object)
+            cls._get_global_parameter(openmm_object, hash_parameter_name)
+        except Exception:
+            return False
+        return True
+
+    @classmethod
+    def restore_interface(cls, openmm_object):
+        """Restore the original interface of an OpenMM custom force or integrator.
+
+        The function restore the methods of the original class that
+        inherited from ``RestorableOpenMMObject``. Return False if the
+        interface could not be restored.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The object to restore.
+
+        Returns
+        -------
+        True if the original class interface could be restored, False otherwise.
+
+        """
+        try:
+            hash_parameter_name = cls._get_hash_parameter_name(openmm_object)
+            object_hash = cls._get_global_parameter(openmm_object, hash_parameter_name)
+        except Exception:
+            return False
+
+        # Reload the hash table for all subclasses if there's no matching class.
+        if object_hash not in cls._cached_hash_subclasses:
+            all_subclasses = find_all_subclasses(parent_cls=cls, discard_abstract=True,
+                                                 include_parent=True)
+            cls._cached_hash_subclasses = {cls._compute_class_hash(subcls): subcls
+                                           for subcls in all_subclasses}
+
+        # Retrieve object class.
+        try:
+            object_class = cls._cached_hash_subclasses[object_hash]
+        except KeyError:
+            raise RestorableOpenMMObjectError('Could not find a class matching '
+                                              'the hash {}'.format(object_hash))
+
+        # Restore class interface.
+        openmm_object.__class__ = object_class
+        return True
+
+    # -------------------------------------------------------------------------
+    # Global parameters.
+    # -------------------------------------------------------------------------
+
+    @property
+    def _hash_parameter_name(self):
+        """The hash parameter name of this restorable object."""
+        return self._get_hash_parameter_name(self)
+
+    @classmethod
+    def _get_hash_parameter_name(cls, openmm_object):
+        """Return the name of the openmm_object global variable containing the hash.
+
+        As of OpenMM 7.2, it is impossible to create a context with an integrator
+        having a global variable with the same name of a custom force.
+        """
+        if cls._is_force(openmm_object):
+            return '_restorable_force__class_hash'
+        else:
+            # Use _restorable__class_hash with integrators for backwards compatibility.
+            return '_restorable__class_hash'
+
+    @classmethod
+    def _add_global_parameter(cls, openmm_object, parameter_name, parameter_value):
+        """Add a new global parameter/variable to the OpenMM custom force/integrator.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The OpenMM custom integrator/force to which add the parameter.
+        parameter_name : str
+            The name of the global parameter.
+        parameter_value : float
+            The value of the global parameter.
+
+        """
+        if cls._is_force(openmm_object):
+            openmm_object.addGlobalParameter(parameter_name, parameter_value)
+        else:
+            openmm_object.addGlobalVariable(parameter_name, parameter_value)
+
+    @classmethod
+    def _get_global_parameter(cls, openmm_object, parameter_name):
+        """Get a global parameter/variable from the OpenMM custom force/integrator.
+
+        Parameters
+        ----------
+        openmm_object : object
+            The OpenMM integrator/force to which add the parameter.
+        parameter_name : str
+            The name of the global parameter.
+
+        Returns
+        -------
+        parameter_value : float
+            The value of the global parameter.
+
+        """
+        if cls._is_force(openmm_object):
+            return cls._get_force_parameter_by_name(openmm_object, parameter_name)
+        else:
+            return openmm_object.getGlobalVariableByName(parameter_name)
+
+    @classmethod
+    def _get_force_parameter_by_name(cls, force, parameter_name):
+        """Get a force global parameter default value from its name."""
+        for parameter_idx in range(force.getNumGlobalParameters()):
+            if force.getGlobalParameterName(parameter_idx) == parameter_name:
+                return force.getGlobalParameterDefaultValue(parameter_idx)
+        raise KeyError('No parameter called {} in force {}'.format(parameter_name, force))
+
+    # -------------------------------------------------------------------------
+    # Copy and serialization utilities
+    # -------------------------------------------------------------------------
+
+    @classmethod
+    def deserialize_xml(cls, xml_serialization):
+        """Shortcut to deserialize the XML representation and the restore interface.
+
+        Parameters
+        ----------
+        xml_serialization : str
+            The XML representation of the OpenMM custom force/integrator.
+
+        Returns
+        -------
+        openmm_object
+            The deserialized OpenMM force/integrator with the original interface
+            restored (if restorable).
+
+        """
+        openmm_object = openmm.XmlSerializer.deserialize(xml_serialization)
+        cls.restore_interface(openmm_object)
+        return openmm_object
+
+    def __deepcopy__(self, memo):
+        """Overwrite implementation to copy class and attributes."""
+        return self.__copy__()
+
+    def __copy__(self):
+        """Overwrite implementation to copy class and attributes."""
+        copied_self = super(RestorableOpenMMObject, self).__copy__()
+
+        # Assign correct class instead of OpenMM class.
+        copied_self.__class__ = self.__class__
+
+        # Copy attributes. SWIG objects have only 1 attribute (this),
+        # everything else is part of the implementation.
+        attributes_self = {k: v for k, v in self.__dict__.items() if k != 'this'}
+        copied_self.__dict__.update(copy.deepcopy(attributes_self))
+
+        return copied_self
+
+    # -------------------------------------------------------------------------
+    # Internal-usage
+    # -------------------------------------------------------------------------
+
+    @staticmethod
+    def _is_force(openmm_object):
+        """Return True if openmm_object is a force object, False if it is an integrator."""
+        if isinstance(openmm_object, openmm.Force):
+            return True
+        elif isinstance(openmm_object, openmm.CustomIntegrator):
+            return False
+        else:
+            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+
+    @staticmethod
+    def _compute_class_hash(openmm_class):
+        """Return a numeric hash for the OpenMM class.
+
+        The hash will become part of the OpenMM object serialization,
+        so it is important for it consistent across processes in case
+        the integrator is sent to a remote worker. The hash() built-in
+        function is seeded by the PYTHONHASHSEED environmental variable,
+        so we can't use it here.
+
+        We also need to convert to float because some digits may be
+        lost in the conversion.
+        """
+        return float(zlib.adler32(openmm_class.__name__.encode()))
 
 
 if __name__ == '__main__':

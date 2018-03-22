@@ -13,17 +13,20 @@ Test custom integrators.
 # GLOBAL IMPORTS
 #=============================================================================================
 
-import numpy as np
+import copy
 import inspect
 import pymbar
 
 from unittest import TestCase
 
+import numpy as np
 from simtk import unit
 from simtk import openmm
 
-from openmmtools import integrators, testsystems, alchemy
-from openmmtools.integrators import RestorableIntegrator, ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator, GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator
+from openmmtools import integrators, testsystems
+from openmmtools.integrators import (ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator,
+                                     GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator)
+
 
 #=============================================================================================
 # CONSTANTS
@@ -53,8 +56,7 @@ def get_all_custom_integrators(only_thermostated=False):
     """
     predicate = lambda x: (inspect.isclass(x) and
                            issubclass(x, openmm.CustomIntegrator) and
-                           x != integrators.ThermostatedIntegrator and
-                           x != integrators.RestorableIntegrator)
+                           x != integrators.ThermostatedIntegrator)
     if only_thermostated:
         old_predicate = predicate  # Avoid infinite recursion.
         predicate = lambda x: old_predicate(x) and issubclass(x, integrators.ThermostatedIntegrator)
@@ -589,6 +591,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
 
         del context, integrator
 
+
 def test_temperature_getter_setter():
     """Test that temperature setter and getter modify integrator variables."""
     temperature = 350*unit.kelvin
@@ -634,16 +637,14 @@ def test_temperature_getter_setter():
         del context
 
 
-def test_thermostated_integrator_hash():
-    """Check hash collisions between ThermostatedIntegrators."""
+def test_restorable_integrator_copy():
+    """Check that ThermostatedIntegrator copies the correct class and attributes."""
     thermostated_integrators = get_all_custom_integrators(only_thermostated=True)
-    all_hashes = set()
     for integrator_name, integrator_class in thermostated_integrators:
-        hash_float = RestorableIntegrator._compute_class_hash(integrator_class)
-        all_hashes.add(hash_float)
         integrator = integrator_class()
-        assert integrator.getGlobalVariableByName('_restorable__class_hash') == hash_float
-    assert len(all_hashes) == len(thermostated_integrators)
+        integrator_copied = copy.deepcopy(integrator)
+        assert isinstance(integrator_copied, integrator_class)
+        assert set(integrator_copied.__dict__.keys()) == set(integrator.__dict__.keys())
 
 
 def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):

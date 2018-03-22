@@ -391,6 +391,7 @@ class AlchemicalState(object):
         """Set the state from a dictionary representation."""
         parameters = serialization['parameters']
         alchemical_variables = serialization['alchemical_variables']
+        # New attribute in OpenMMTools 0.14.0.
         update_alchemical_charges = serialization.get('update_alchemical_charges', True)
         alchemical_functions = dict()
 

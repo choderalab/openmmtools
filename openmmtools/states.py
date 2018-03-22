@@ -23,7 +23,7 @@ import weakref
 import numpy as np
 from simtk import openmm, unit
 
-from openmmtools import utils, integrators, constants
+from openmmtools import utils, integrators, forces, constants
 
 
 # =============================================================================
@@ -556,6 +556,11 @@ class ThermodynamicState(object):
             raise
 
     @property
+    def default_box_vectors(self):
+        """The default box vectors of the System (read-only)."""
+        return self._standard_system.getDefaultPeriodicBoxVectors()
+
+    @property
     def volume(self):
         """Constant volume of the thermodynamic state (read-only).
 
@@ -563,12 +568,30 @@ class ThermodynamicState(object):
         not in a periodic box this is None.
 
         """
-        if self.pressure is not None:  # Volume fluctuates.
+        return self.get_volume()
+
+    def get_volume(self, ignore_ensemble=False):
+        """Volume of the periodic box (read-only).
+
+        Parameters
+        ----------
+        ignore_ensemble : bool, optional
+            If True, the volume of the periodic box vectors is returned
+            even if the volume fluctuates.
+
+        Returns
+        -------
+        volume : simtk.unit.Quantity
+            The volume of the periodic box (units of length^3) or
+            None if the system is not periodic or allowed to fluctuate.
+
+        """
+        # Check if volume fluctuates
+        if self.pressure is not None and not ignore_ensemble:
             return None
         if not self._standard_system.usesPeriodicBoundaryConditions():
             return None
-        box_vectors = self._standard_system.getDefaultPeriodicBoxVectors()
-        return _box_vectors_volume(box_vectors)
+        return _box_vectors_volume(self.default_box_vectors)
 
     @property
     def n_particles(self):
@@ -1374,11 +1397,13 @@ class ThermodynamicState(object):
     _SUPPORTED_BAROSTATS = {'MonteCarloBarostat'}
 
     @classmethod
-    def _find_barostat(cls, system):
+    def _find_barostat(cls, system, get_index=False):
         """Return the first barostat found in the system.
 
         Returns
         -------
+        force_idx : int or None, optional
+            The force index of the barostat.
         barostat : OpenMM Force object
             The barostat in system, or None if no barostat is found.
 
@@ -1388,13 +1413,18 @@ class ThermodynamicState(object):
             If the system contains unsupported barostats.
 
         """
-        barostat_id = cls._find_barostat_index(system)
-        if barostat_id is None:
-            return None
-        barostat = system.getForce(barostat_id)
-        if barostat.__class__.__name__ not in cls._SUPPORTED_BAROSTATS:
-            raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
-                                      barostat.__class__.__name__)
+        try:
+            force_idx, barostat = forces.find_forces(system, '.*Barostat.*', only_one=True)
+        except forces.MultipleForcesError:
+            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
+        except forces.NoForceFoundError:
+            force_idx, barostat = None, None
+        else:
+            if barostat.__class__.__name__ not in cls._SUPPORTED_BAROSTATS:
+                raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
+                                          barostat.__class__.__name__)
+        if get_index:
+            return force_idx, barostat
         return barostat
 
     @classmethod
@@ -1406,38 +1436,14 @@ class ThermodynamicState(object):
         The removed barostat if it was found, None otherwise.
 
         """
-        barostat_id = cls._find_barostat_index(system)
-        if barostat_id is not None:
+        barostat_idx, barostat = cls._find_barostat(system, get_index=True)
+        if barostat_idx is not None:
             # We need to copy the barostat since we don't own
             # its memory (i.e. we can't add it back to the system).
-            barostat = copy.deepcopy(system.getForce(barostat_id))
-            system.removeForce(barostat_id)
+            barostat = copy.deepcopy(barostat)
+            system.removeForce(barostat_idx)
             return barostat
         return None
-
-    @staticmethod
-    def _find_barostat_index(system):
-        """Return the index of the first barostat found in the system.
-
-        Returns
-        -------
-        barostat_id : int
-            The index of the barostat force in system or None if
-            no barostat is found.
-
-        Raises
-        ------
-        ThermodynamicsError
-            If the system contains multiple barostats.
-
-        """
-        barostat_ids = [i for i, force in enumerate(system.getForces())
-                        if 'Barostat' in force.__class__.__name__]
-        if len(barostat_ids) == 0:
-            return None
-        if len(barostat_ids) > 1:
-            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
-        return barostat_ids[0]
 
     def _is_barostat_consistent(self, barostat):
         """Check the barostat's temperature and pressure."""
@@ -1500,43 +1506,33 @@ class ThermodynamicState(object):
     # -------------------------------------------------------------------------
 
     @classmethod
-    def _find_thermostat(cls, system):
+    def _find_thermostat(cls, system, get_index=False):
         """Return the first thermostat in the system.
 
         Returns
         -------
+        force_idx : int or None, optional
+            The force index of the thermostat.
         thermostat : OpenMM Force object or None
             The thermostat in system, or None if no thermostat is found.
 
         """
-        thermostat_id = cls._find_thermostat_index(system)
-        if thermostat_id is not None:
-            return system.getForce(thermostat_id)
-        return None
+        try:
+            force_idx, thermostat = forces.find_forces(system, '.*Thermostat.*', only_one=True)
+        except forces.MultipleForcesError:
+            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_THERMOSTATS)
+        except forces.NoForceFoundError:
+            force_idx, thermostat = None, None
+        if get_index:
+            return force_idx, thermostat
+        return thermostat
 
     @classmethod
     def _remove_thermostat(cls, system):
-        """Remove the system thermostat.
-
-        Returns
-        -------
-        True if the thermostat was found and removed, False otherwise.
-
-        """
-        thermostat_id = cls._find_thermostat_index(system)
-        if thermostat_id is not None:
-            system.removeForce(thermostat_id)
-
-    @staticmethod
-    def _find_thermostat_index(system):
-        """Return the index of the first thermostat in the system."""
-        thermostat_ids = [i for i, force in enumerate(system.getForces())
-                          if 'Thermostat' in force.__class__.__name__]
-        if len(thermostat_ids) == 0:
-            return None
-        if len(thermostat_ids) > 1:
-            raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_THERMOSTATS)
-        return thermostat_ids[0]
+        """Remove the system thermostat."""
+        thermostat_idx, thermostat = cls._find_thermostat(system, get_index=True)
+        if thermostat_idx is not None:
+            system.removeForce(thermostat_idx)
 
     @classmethod
     def _set_system_temperature(cls, system, temperature):

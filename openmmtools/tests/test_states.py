@@ -367,7 +367,8 @@ class TestThermodynamicState(object):
         assert cm.exception.code == ThermodynamicsError.NO_THERMOSTAT
 
         state.set_system(system, fix_state=True)
-        thermostat = state._find_thermostat(state.system)
+        system = state.system
+        thermostat = state._find_thermostat(system)
         assert utils.is_quantity_close(thermostat.getDefaultTemperature(), self.std_temperature)
         assert state.barostat is None
 

@@ -489,7 +489,7 @@ class ContextCache(object):
 
         """
         standard_integrator = copy.deepcopy(integrator)
-        integrators.RestorableIntegrator.restore_interface(standard_integrator)
+        integrators.ThermostatedIntegrator.restore_interface(standard_integrator)
         for attribute, std_value in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
             try:  # setter
                 getattr(standard_integrator, 'set' + attribute)(std_value)
