@@ -1,11 +1,12 @@
 Release History
 ===============
 
-Development snapshot
-====================
+0.15.0 - Restraint forces
+=========================
 - Add radially-symmetric restraint custom forces (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
 - Copy Python attributes of integrators on ``deepcopy()`` (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
 - Optimization of `states.CompoundThermodynamicState` deserialization (`#338 <https://github.com/choderalab/openmmtools/pull/338>`_).
+- Bugfixes (`#332 <https://github.com/choderalab/openmmtools/pull/332>`_, `#343 <https://github.com/choderalab/openmmtools/pull/343>`_).
 
 
 0.14.0 - Exact treatment of alchemical PME electrostatics, water cluster test system, optimizations
