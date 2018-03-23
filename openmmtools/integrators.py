@@ -1950,10 +1950,11 @@ class BAOABIntegrator(LangevinIntegrator):
         kwargs['splitting'] = "V R O R V"
         super(BAOABIntegrator, self).__init__(*args, **kwargs)
 
+
 class GeodesicBAOABIntegrator(LangevinIntegrator):
     """Create a geodesic-BAOAB integrator."""
 
-    def __init__(self, K_r=2, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         """Create a geodesic BAOAB Langevin integrator.
 
         Parameters
@@ -1992,8 +1993,11 @@ class GeodesicBAOABIntegrator(LangevinIntegrator):
         >>> timestep = 1.0 * unit.femtoseconds
         >>> integrator = GeodesicBAOABIntegrator(K_r=3, temperature=temperature, collision_rate=collision_rate, timestep=timestep)
         """
+        # TODO: move this as an explicity keyword argument after dropping Python 2 support.
+        K_r = kwargs.pop('K_r', 2)
         kwargs['splitting'] = " ".join(["V"] + ["R"] * K_r + ["O"] + ["R"] * K_r + ["V"])
         super(GeodesicBAOABIntegrator, self).__init__(*args, **kwargs)
+
 
 class GHMCIntegrator(LangevinIntegrator):
     """Create a generalized hybrid Monte Carlo (GHMC) integrator."""
