@@ -238,7 +238,6 @@ class AlchemicalState(object):
         for force, parameter_name, parameter_id in cls._get_system_lambda_parameters(
                 system, other_parameters={_UPDATE_ALCHEMICAL_CHARGES_PARAMETER}):
             parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
-
             # Check that we haven't already found
             # the parameter with a different value.
             if parameter_name in alchemical_parameters:
@@ -288,8 +287,14 @@ class AlchemicalState(object):
                     0.0 <= new_value <= 1.0)
             instance._parameters[self._parameter_name] = new_value
 
-    lambda_sterics = _LambdaProperty('lambda_sterics')
-    lambda_electrostatics = _LambdaProperty('lambda_electrostatics')
+    lambda_sterics_0 = _LambdaProperty('lambda_sterics_0')
+    lambda_sterics_1 = _LambdaProperty('lambda_sterics_1')
+    lambda_sterics_2 = _LambdaProperty('lambda_sterics_2')
+    lambda_sterics_3 = _LambdaProperty('lambda_sterics_3')
+    lambda_electrostatics_0 = _LambdaProperty('lambda_electrostatics_0')
+    lambda_electrostatics_1 = _LambdaProperty('lambda_electrostatics_1')
+    lambda_electrostatics_2 = _LambdaProperty('lambda_electrostatics_2')
+    lambda_electrostatics_3 = _LambdaProperty('lambda_electrostatics_3')
     lambda_bonds = _LambdaProperty('lambda_bonds')
     lambda_angles = _LambdaProperty('lambda_angles')
     lambda_torsions = _LambdaProperty('lambda_torsions')
@@ -677,7 +682,13 @@ class AlchemicalState(object):
             If the system does not have the required lambda global variables.
 
         """
-        has_lambda_electrostatics_changed = False
+        # Create dictionary of names for names of electrostatic regions used in system
+        electrostatic_regions = {}
+        for _, parameter_name, __ in self._get_system_lambda_parameters(system):
+            if parameter_name not in electrostatic_regions:
+                    electrostatic_regions[parameter_name] = False
+        electrostatic_regions = {k:v for (k,v) in electrostatic_regions.items() if k.startswith('lambda_electrostatics')}
+
         parameters_applied = set()
         for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
             parameter_value = getattr(self, parameter_name)
@@ -688,10 +699,11 @@ class AlchemicalState(object):
                 # If lambda_electrostatics, first check if we're changing it for later.
                 # This avoids us to loop through the System forces if we don't need to
                 # set the NonbondedForce charges.
-                if parameter_name == 'lambda_electrostatics':
+                has_lambda_electrostatics_changed = False
+                if parameter_name in electrostatic_regions:
                     old_parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
-                    has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
-                                                         parameter_value != old_parameter_value)
+                    has_lambda_electrostatics_changed = (parameter_value != old_parameter_value)
+                    electrostatic_regions[parameter_name] = has_lambda_electrostatics_changed
                 parameters_applied.add(parameter_name)
                 force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
 
@@ -701,16 +713,23 @@ class AlchemicalState(object):
                     parameter_name not in parameters_applied):
                 err_msg = 'Could not find parameter {} in the system'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
-
         # Nothing else to do if we don't need to modify the exact PME forces.
-        if not (has_lambda_electrostatics_changed or set_update_charges_flag):
+        if not (all(value == True for value in electrostatic_regions.values()) or set_update_charges_flag):
             return
 
-        # Loop through system and retrieve exact PME forces.
-        original_charges_force, nonbonded_force = self._find_exact_pme_forces(system)
-
+        # Loop through system and retrieve exact PME forces for regions with changed electrostatics
+        changed_electrostaics_regions = {k: v for (k, v) in electrostatic_regions.items() if v == True}
+        original_charges_force, nonbonded_force = self._find_exact_pme_forces(system, changed_electrostaics_regions)
+        #add lambda_electrostatics to corresponding value in original_charges_force.
+        #this ensures correct lambda value goes to correct force in _set_exact_pme_charges
+        if original_charges_force != None:
+            for parameter_name in electrostatic_regions:
+                if parameter_name in original_charges_force:
+                    lambda_electrostatics = getattr(self, parameter_name)
+                    original_charges_force[parameter_name].append(lambda_electrostatics)
+        #print(original_charges_force)
         # Write NonbondedForce charges if PME is treated exactly.
-        if has_lambda_electrostatics_changed:
+        if not (all(value == False for value in electrostatic_regions.values())):
             self._set_exact_pme_charges(original_charges_force, nonbonded_force)
 
         # Flag if updateParametersInContext is allowed.
@@ -724,9 +743,12 @@ class AlchemicalState(object):
 
         parameter_idx = _UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX  # Shortcut.
         if self.update_alchemical_charges:
-            original_charges_force.setGlobalParameterDefaultValue(parameter_idx, 1)
+            for alchemical_region in original_charges_force.values():
+                alchemical_region[0].setGlobalParameterDefaultValue(parameter_idx, 1)
         else:
-            original_charges_force.setGlobalParameterDefaultValue(parameter_idx, 0)
+            for alchemical_region in original_charges_force.values():
+                alchemical_region[0].setGlobalParameterDefaultValue(parameter_idx, 1)
+
 
     @classmethod
     def _get_supported_parameters(cls):
@@ -754,7 +776,6 @@ class AlchemicalState(object):
         """
         supported_parameters = cls._get_supported_parameters()
         searched_parameters = supported_parameters.union(other_parameters)
-
         # Retrieve all the forces with global supported parameters.
         for force_index in range(system.getNumForces()):
             force = system.getForce(force_index)
@@ -786,24 +807,26 @@ class AlchemicalState(object):
                 setattr(self, parameter_name, new_value)
 
     @classmethod
-    def _find_exact_pme_forces(cls, system, original_charges_only=False):
+    def _find_exact_pme_forces(cls, system, changed_electrostaics_regions, original_charges_only=False):
         """Return the NonbondedForce and the CustomNonbondedForce with the original charges."""
-        original_charges_force = None
+        original_charges_force = {}
         nonbonded_force = None
         n_found = 0
         for force_idx, force in enumerate(system.getForces()):
             if (isinstance(force, openmm.CustomNonbondedForce) and
                         force.getEnergyFunction() == '0.0;' and
-                        force.getGlobalParameterName(0) == 'lambda_electrostatics'):
-                original_charges_force = force
-                if original_charges_only:
-                    break
+                        force.getGlobalParameterName(0) in changed_electrostaics_regions):
+                original_charges_force[force.getGlobalParameterName(0)] = [force]
+                #original_charges_force[force.getGlobalParameterName(0)] = force
                 n_found += 1
+                if original_charges_only and len(original_charges_force) == len(changed_electrostaics_regions):
+                    break
             elif isinstance(force, openmm.NonbondedForce):
                 nonbonded_force = force
                 n_found += 1
-            if n_found == 2:
+            if n_found == len(changed_electrostaics_regions) + 1:
                 break
+        if len(original_charges_force) == 0: original_charges_force = None
         if original_charges_only:
             return original_charges_force
         return original_charges_force, nonbonded_force
@@ -813,15 +836,17 @@ class AlchemicalState(object):
         # If we don't treat PME exactly, we don't need to set the charges.
         if original_charges_force is None:
             return
-
         # Set alchemical atoms charges.
-        lambda_electrostatics = self.lambda_electrostatics
-        _, alchemical_atoms = original_charges_force.getInteractionGroupParameters(0)
-        for atom_idx in alchemical_atoms:
-            charge, sigma, epsilon = nonbonded_force.getParticleParameters(atom_idx)
-            original_charge = original_charges_force.getParticleParameters(atom_idx)[0]
-            charge = lambda_electrostatics * original_charge
-            nonbonded_force.setParticleParameters(atom_idx, charge, sigma, epsilon)
+        for alchemical_region in original_charges_force.values():
+                force = alchemical_region[0]
+                lambda_electrostatics = alchemical_region[1]
+                _, alchemical_atoms = force.getInteractionGroupParameters(0)
+                for atom_idx in alchemical_atoms:
+                    charge, sigma, epsilon = nonbonded_force.getParticleParameters(atom_idx)
+                    original_charge = force.getParticleParameters(atom_idx)[0]
+                    charge = lambda_electrostatics * original_charge
+                    nonbonded_force.setParticleParameters(atom_idx, charge, sigma, epsilon)
+                    charge, sigma, epsilon = nonbonded_force.getParticleParameters(atom_idx)
 
 
 # =============================================================================
@@ -1067,13 +1092,15 @@ class AbsoluteAlchemicalFactory(object):
         """
         # TODO implement multiple alchemical regions support.
         if not isinstance(alchemical_regions, AlchemicalRegion):
-            raise NotImplemented('There is no support for multiple alchemical regions yet.')
-        alchemical_region = alchemical_regions
+           print('Using %s alchemical regions' % (len(alchemical_regions)))
+        #alchemical_region = alchemical_regions
 
-        # Resolve alchemical region.
-        alchemical_region = self._resolve_alchemical_region(reference_system, alchemical_region)
+        AlchemicalRegions = []
+        # Resolve alchemical regions.
+        for alchemical_region in alchemical_regions:
+            AlchemicalRegions.append(self._resolve_alchemical_region(reference_system, alchemical_region))
 
-        # Record timing statistics.
+        #Record timing statistics.
         timer = utils.Timer()
         timer.start('Create alchemically modified system')
 
@@ -1083,10 +1110,11 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_system = copy.deepcopy(reference_system)
 
         # Check that there are no virtual sites to alchemically modify.
-        for particle_index in range(reference_system.getNumParticles()):
-            if (reference_system.isVirtualSite(particle_index) and
+        for alchemical_region in AlchemicalRegions:
+            for particle_index in range(reference_system.getNumParticles()):
+                if (reference_system.isVirtualSite(particle_index) and
                         particle_index in alchemical_region.alchemical_atoms):
-                raise ValueError('Alchemically modified virtual sites are not supported')
+                    raise ValueError('Alchemically modified virtual sites are not supported')
 
         # Modify forces as appropriate. We delete the forces that
         # have been processed modified at the end of the for loop.
@@ -1104,7 +1132,7 @@ class AbsoluteAlchemicalFactory(object):
                 # The reference system force will be deleted.
                 forces_to_remove.append(force_index)
                 # Collect all the Force objects modeling the reference force.
-                alchemical_forces = alchemical_force_creator_func(reference_force, alchemical_region)
+                alchemical_forces = alchemical_force_creator_func(reference_force, AlchemicalRegions)
                 for lambda_variable_name, lambda_forces in alchemical_forces.items():
                     try:
                         alchemical_forces_by_lambda[lambda_variable_name].extend(lambda_forces)
@@ -1275,8 +1303,8 @@ class AbsoluteAlchemicalFactory(object):
         for region in reference_counts:
             total_alchemically_modified += len(alchemical_region['alchemical_' + region + 's'])
         if total_alchemically_modified == 0:
-            raise ValueError('The AlchemicalRegion is empty.')
-
+            #raise ValueError('The AlchemicalRegion is empty.')
+            print('No Alch Region')
         # Return a new AlchemicalRegion with the resolved indices lists.
         return AlchemicalRegion(**alchemical_region)
 
@@ -1482,8 +1510,12 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
+
+        alchemical_region = alchemical_region[0]
+
         # Don't create a force if there are no alchemical torsions.
         if len(alchemical_region.alchemical_torsions) == 0:
+            print('no tosrsions')
             return {'': [copy.deepcopy(reference_force)]}
 
         # Create PeriodicTorsionForce to handle unmodified torsions.
@@ -1533,8 +1565,10 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
+        alchemical_region = alchemical_region[0]
         # Don't create a force if there are no alchemical angles.
         if len(alchemical_region.alchemical_angles) == 0:
+            print('no angles')
             return {'': [copy.deepcopy(reference_force)]}
 
         # Create standard HarmonicAngleForce to handle unmodified angles.
@@ -1582,8 +1616,11 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
+
+        alchemical_region = alchemical_region[0]
         # Don't create a force if there are no alchemical bonds.
         if len(alchemical_region.alchemical_bonds) == 0:
+            print('no bonds')
             return {'': [copy.deepcopy(reference_force)]}
 
         # Create standard HarmonicBondForce to handle unmodified bonds.
@@ -1609,16 +1646,34 @@ class AbsoluteAlchemicalFactory(object):
 
         return {'': [force], 'lambda_bonds': [custom_force]}
 
-    def _get_electrostatics_energy_expressions(self, reference_force):
+    def _get_nonbonded_energy_exspressions(self, alchemical_region_idx):
+        # Sterics mixing rules.
+        sterics_mixing_rules = ('epsilon = sqrt(epsilon1*epsilon2);'  # Mixing rule for epsilon.
+                                'sigma = 0.5*(sigma1 + sigma2);')  # Mixing rule for sigma.
+
+        # Soft-core Lennard-Jones.
+        exceptions_sterics_energy_expression = ('U_sterics_{0};'
+                                                'U_sterics_{0} = (lambda_sterics_{0}^softcore_a)*4*epsilon*x*(x-1.0);'
+                                                'x = (sigma/reff_sterics)^6;'
+                                                # Effective softcore distance for sterics.
+                                                'reff_sterics = sigma*((softcore_alpha*(1.0-lambda_sterics_{0})^softcore_b + (r/sigma)^softcore_c))^(1/softcore_c);').format(
+                                                alchemical_region_idx)
+
+        # Define energy expression for electrostatics.
+        sterics_energy_expression = (exceptions_sterics_energy_expression + sterics_mixing_rules)
+        return sterics_energy_expression
+
+
+    def _get_electrostatics_energy_expressions(self, reference_force, alchemical_region_idx):
         """Return the energy expressions for electrostatics."""
 
         # The final expression will be prefix + method + suffix.
-        electrostatics_prefix = ('U_electrostatics;'
-                                 'U_electrostatics=(lambda_electrostatics^softcore_d)*ONE_4PI_EPS0*chargeprod')
+        electrostatics_prefix = ('U_electrostatics_{0};'
+                                 'U_electrostatics_{0}=(lambda_electrostatics_{0}^softcore_d)*ONE_4PI_EPS0*chargeprod').format(alchemical_region_idx)
 
         # Effective softcore distance for electrostatics (common to all methods).
-        electrostatics_suffix = ('reff_electrostatics = sigma*((softcore_beta*(1.0-lambda_electrostatics)^softcore_e + (r/sigma)^softcore_f))^(1/softcore_f);'
-                                 'ONE_4PI_EPS0 = {};').format(ONE_4PI_EPS0)  # Already in OpenMM units.
+        electrostatics_suffix = ('reff_electrostatics = sigma*((softcore_beta*(1.0-lambda_electrostatics_{0})^softcore_e + (r/sigma)^softcore_f))^(1/softcore_f);'
+                                 'ONE_4PI_EPS0 = {1};').format(alchemical_region_idx, ONE_4PI_EPS0)  # Already in OpenMM units.
 
         # Define mixing rules.
         electrostatics_mixing_rules = ('chargeprod = charge1*charge2;'  # Mixing rule for charges.
@@ -1636,6 +1691,7 @@ class AbsoluteAlchemicalFactory(object):
 
         # With exact treatment, the energy expression is irrelevant as CustomNonbondedForces
         # only keep the original charges, but they don't contribute to the energy of the system.
+
         if is_ewald_method and self.alchemical_pme_treatment == 'exact':
             electrostatics_energy_expression = '0.0;'
             exceptions_electrostatics_energy_expression = (electrostatics_prefix + coulomb_expression +
@@ -1742,7 +1798,7 @@ class AbsoluteAlchemicalFactory(object):
                           "alpha_ewald = {};").format(alpha_ewald)
         return pme_expression
 
-    def _alchemically_modify_NonbondedForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_NonbondedForce(self, reference_force, alchemical_regions):
         """Create alchemically-modified version of NonbondedForce.
 
         Parameters
@@ -1789,26 +1845,19 @@ class AbsoluteAlchemicalFactory(object):
         # TODO Try using a single, common "reff" effective softcore distance for both Lennard-Jones and Coulomb.
 
         # Don't create a force if there are no alchemical atoms.
-        if len(alchemical_region.alchemical_atoms) == 0:
+        if len(alchemical_regions[0].alchemical_atoms) == 0:
             return {'': [copy.deepcopy(reference_force)]}
 
         # --------------------------------------------------
         # Determine energy expression for all custom forces
         # --------------------------------------------------
 
-        # Sterics mixing rules.
-        sterics_mixing_rules = ('epsilon = sqrt(epsilon1*epsilon2);'  # Mixing rule for epsilon.
-                                'sigma = 0.5*(sigma1 + sigma2);')  # Mixing rule for sigma.
-
-        # Soft-core Lennard-Jones.
-        exceptions_sterics_energy_expression = ('U_sterics;'
-                                                'U_sterics = (lambda_sterics^softcore_a)*4*epsilon*x*(x-1.0);'
-                                                'x = (sigma/reff_sterics)^6;'
-                                                # Effective softcore distance for sterics.
-                                                'reff_sterics = sigma*((softcore_alpha*(1.0-lambda_sterics)^softcore_b + (r/sigma)^softcore_c))^(1/softcore_c);')
-
         # Define energy expression for sterics.
-        sterics_energy_expression = exceptions_sterics_energy_expression + sterics_mixing_rules
+        sterics_energy_expression = []
+        exceptions_sterics_energy_expression = []
+        for alchemical_region_idx in range(len(alchemical_regions)):
+            sterics_energy_expression.append(self._get_nonbonded_energy_exspressions(alchemical_region_idx))
+            exceptions_sterics_energy_expression.append(sterics_energy_expression[0])
 
         # Define energy expression for electrostatics based on nonbonded method.
         nonbonded_method = reference_force.getNonbondedMethod()
@@ -1819,6 +1868,9 @@ class AbsoluteAlchemicalFactory(object):
         is_periodic_method = is_ewald_method or nonbonded_method == openmm.NonbondedForce.CutoffPeriodic
         use_exact_pme_treatment = is_ewald_method and self.alchemical_pme_treatment == 'exact'
 
+        # Warn about hard coded alchemical region limit under PME
+        if len(alchemical_regions) >= 5 and use_exact_pme_treatment:
+            raise Exception('Only 4 hard coded regions for PME')
         # Warn about reaction field.
         if is_rf_method:
             logger.warning('Reaction field support is still experimental. For free energy '
@@ -1827,16 +1879,19 @@ class AbsoluteAlchemicalFactory(object):
         # Check that PME treatment is supported with the region's parameters.
         if use_exact_pme_treatment:
             err_msg = ' not supported with exact treatment of Ewald electrostatics.'
-            if not alchemical_region.annihilate_electrostatics:
+            if not alchemical_regions[0].annihilate_electrostatics:
                 raise ValueError('Decoupled electrostatics is' + err_msg)
             if self.consistent_exceptions:
                 raise ValueError('Consistent exceptions are' + err_msg)
-            if (alchemical_region.softcore_beta, alchemical_region.softcore_d, alchemical_region.softcore_e) != (0, 1, 1):
+            if (alchemical_regions[0].softcore_beta, alchemical_regions[0].softcore_d, alchemical_regions[0].softcore_e) != (0, 1, 1):
                 raise ValueError('Softcore electrostatics is' + err_msg)
 
-        energy_expressions = self._get_electrostatics_energy_expressions(reference_force)
-        (electrostatics_energy_expression,
-         exceptions_electrostatics_energy_expression) = energy_expressions  # Unpack tuple.
+        electrostatics_energy_expression = []
+        exceptions_electrostatics_energy_expression = []
+        for alchemical_region_idx in range(len(alchemical_regions)):
+            energy_expressions = self._get_electrostatics_energy_expressions(reference_force, alchemical_region_idx)
+            electrostatics_energy_expression.append(energy_expressions[0])
+            exceptions_electrostatics_energy_expression.append(energy_expressions[1])# Unpack tuple.
 
         # ------------------------------------------------------------
         # Create and configure all forces to add to alchemical system
@@ -1886,28 +1941,36 @@ class AbsoluteAlchemicalFactory(object):
         # Create CustomNonbondedForces to handle sterics particle interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
         # to 1.0 for decoupled interactions in alchemical/alchemical force.
-        na_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
-                                                         'lambda_sterics', is_lambda_controlled=True)
-        aa_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
-                                                         'lambda_sterics', alchemical_region.annihilate_sterics)
+
+        na_sterics_custom_nonbonded_force = []
+        aa_sterics_custom_nonbonded_force = []
+        for alchemical_region_idx in range(len(alchemical_regions)):
+
+            na_sterics_custom_nonbonded_force.append(create_force(openmm.CustomNonbondedForce, sterics_energy_expression[alchemical_region_idx],
+                                                                    'lambda_sterics_{}'.format(alchemical_region_idx), is_lambda_controlled=True))
+
+            aa_sterics_custom_nonbonded_force.append(create_force(openmm.CustomNonbondedForce, sterics_energy_expression[alchemical_region_idx],
+                                                                    'lambda_sterics_{}'.format(alchemical_region_idx), alchemical_regions[alchemical_region_idx].annihilate_sterics))
+
         all_sterics_custom_nonbonded_forces = [na_sterics_custom_nonbonded_force, aa_sterics_custom_nonbonded_force]
 
         # Add parameters and configure CustomNonbondedForces to match reference force
-        for force in all_sterics_custom_nonbonded_forces:
-            force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
-            force.addPerParticleParameter("epsilon")  # Lennard-Jones epsilon
-            force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
-            force.setCutoffDistance(nonbonded_force.getCutoffDistance())
-            force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
-            if self.disable_alchemical_dispersion_correction:
-                force.setUseLongRangeCorrection(False)
-            else:
-                force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
+        for alchemical_region in all_sterics_custom_nonbonded_forces:
+            for force in alchemical_region:
+                force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
+                force.addPerParticleParameter("epsilon")  # Lennard-Jones epsilon
+                force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
+                force.setCutoffDistance(nonbonded_force.getCutoffDistance())
+                force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
+                if self.disable_alchemical_dispersion_correction:
+                    force.setUseLongRangeCorrection(False)
+                else:
+                    force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
 
-            if is_periodic_method:
-                force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-            else:
-                force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
+                if is_periodic_method:
+                    force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+                else:
+                    force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
 
         # With exact PME treatment, we create a single CustomNonbondedForce
         # to store the original alchemically-modified charges.
@@ -1915,77 +1978,106 @@ class AbsoluteAlchemicalFactory(object):
             # We add the lambda_electrostatics global variable even
             # if it doesn't affect the force to make sure we have
             # a very quick way to check the status of the charges.
-            original_charges_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression,
-                                                                   'lambda_electrostatics', is_lambda_controlled=True)
-            # Keep an extra global parameter to flag whether changes in
-            # electrostatics through updateParametersInContext are allowed.
-            original_charges_custom_nonbonded_force.addGlobalParameter(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER, 1)
+            original_charges_custom_nonbonded_force = []
+            for alchemical_region_idx in range(len(alchemical_regions)):
+                original_charges_custom_nonbonded_force.append(create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression[alchemical_region_idx],
+                                                                            'lambda_electrostatics_{}'.format(alchemical_region_idx), is_lambda_controlled=True))
+                # Keep an extra global parameter to flag whether changes in
+                # electrostatics through updateParametersInContext are allowed.
+                original_charges_custom_nonbonded_force[alchemical_region_idx].addGlobalParameter(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER, 1)
             all_electrostatics_custom_nonbonded_forces = [original_charges_custom_nonbonded_force]
         else:
             # Create CustomNonbondedForces to handle electrostatics particle interactions between
             # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
-            # to 1.0 for decoupled interactions in alchemical/alchemical force.
-            na_electrostatics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression,
-                                                                    'lambda_electrostatics', is_lambda_controlled=True)
-            aa_electrostatics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression,
-                                                                    'lambda_electrostatics', alchemical_region.annihilate_electrostatics)
+            # to 1.0 for decoupled interactions in alchemical/alchemical force
+            na_electrostatics_custom_nonbonded_force = []
+            aa_electrostatics_custom_nonbonded_force = []
+            for alchemical_region_idx in range(len(alchemical_regions)):
+
+                na_electrostatics_custom_nonbonded_force.append(create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression[alchemical_region_idx],
+                                                                'lambda_electrostatics_{}'.format(alchemical_region_idx), is_lambda_controlled=True))
+
+                aa_electrostatics_custom_nonbonded_force.append(create_force(openmm.CustomNonbondedForce, electrostatics_energy_expression[alchemical_region_idx],
+                                                                'lambda_electrostatics_{}'.format(alchemical_region_idx), alchemical_regions[alchemical_region_idx].annihilate_electrostatics))
+
             all_electrostatics_custom_nonbonded_forces = [na_electrostatics_custom_nonbonded_force,
                                                           aa_electrostatics_custom_nonbonded_force]
 
         # Common parameters and configuration for electrostatics CustomNonbondedForces.
-        for force in all_electrostatics_custom_nonbonded_forces:
-            force.addPerParticleParameter("charge")  # partial charge
-            # The sigma parameter is necessary only if we don't treat PME exactly.
-            if not use_exact_pme_treatment:
-                force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
-            if ((is_ewald_method and self.alchemical_pme_treatment == 'coulomb') or
-                    (is_rf_method and self.alchemical_rf_treatment == 'switched')):
-                # Use switching function for alchemical electrostatics to ensure force continuity at cutoff.
-                force.setUseSwitchingFunction(True)
-            else:
-                force.setUseSwitchingFunction(False)
-            force.setSwitchingDistance(nonbonded_force.getCutoffDistance() - self.switch_width)
-            force.setCutoffDistance(nonbonded_force.getCutoffDistance())
-            force.setUseLongRangeCorrection(False)  # long-range dispersion correction is meaningless for electrostatics
+        for alchemical_region in all_electrostatics_custom_nonbonded_forces:
+            for force in alchemical_region:
+                force.addPerParticleParameter("charge")  # partial charge
+                # The sigma parameter is necessary only if we don't treat PME exactly.
+                if not use_exact_pme_treatment:
+                    force.addPerParticleParameter("sigma")  # Lennard-Jones sigma
+                if ((is_ewald_method and self.alchemical_pme_treatment == 'coulomb') or
+                        (is_rf_method and self.alchemical_rf_treatment == 'switched')):
+                    # Use switching function for alchemical electrostatics to ensure force continuity at cutoff.
+                    force.setUseSwitchingFunction(True)
+                else:
+                    force.setUseSwitchingFunction(False)
+                force.setSwitchingDistance(nonbonded_force.getCutoffDistance() - self.switch_width)
+                force.setCutoffDistance(nonbonded_force.getCutoffDistance())
+                force.setUseLongRangeCorrection(False)  # long-range dispersion correction is meaningless for electrostatics
 
-            if is_periodic_method:
-                force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
-            else:
-                force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
+                if is_periodic_method:
+                    force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+                else:
+                    force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
 
         # Create CustomBondForces to handle sterics 1,4 exceptions interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
-        # to 1.0 for decoupled interactions in alchemical/alchemical force.
-        na_sterics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_sterics_energy_expression,
-                                                    'lambda_sterics', is_lambda_controlled=True)
-        aa_sterics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_sterics_energy_expression,
-                                                    'lambda_sterics', alchemical_region.annihilate_sterics)
+        # to 1.0 for decoupled interactions in alchemical/alchemical force.i
+
+        na_sterics_custom_bond_force = []
+        aa_sterics_custom_bond_force = []
+        for alchemical_region_idx in range(len(alchemical_regions)):
+
+            na_sterics_custom_bond_force.append(create_force(openmm.CustomBondForce, exceptions_sterics_energy_expression[alchemical_region_idx],
+                                                'lambda_sterics_{}'.format(alchemical_region_idx), is_lambda_controlled=True))
+
+            aa_sterics_custom_bond_force.append(create_force(openmm.CustomBondForce, exceptions_sterics_energy_expression[alchemical_region_idx],
+                                                'lambda_sterics_{}'.format(alchemical_region_idx), alchemical_regions[alchemical_region_idx].annihilate_sterics))
+
         all_sterics_custom_bond_forces = [na_sterics_custom_bond_force, aa_sterics_custom_bond_force]
 
-        for force in all_sterics_custom_bond_forces:
-            force.addPerBondParameter("sigma")  # Lennard-Jones effective sigma
-            force.addPerBondParameter("epsilon")  # Lennard-Jones effective epsilon
+        for alchemical_region in all_sterics_custom_bond_forces:
+            for force in alchemical_region:
+                force.addPerBondParameter("sigma")  # Lennard-Jones effective sigma
+                force.addPerBondParameter("epsilon")  # Lennard-Jones effective epsilon
 
         # Create CustomBondForces to handle electrostatics 1,4 exceptions interactions between
         # non-alchemical/alchemical atoms (na) and alchemical/alchemical atoms (aa). Fix lambda
         # to 1.0 for decoupled interactions in alchemical/alchemical force.
-        na_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
-                                                           'lambda_electrostatics', is_lambda_controlled=True)
-        aa_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
-                                                           'lambda_electrostatics', alchemical_region.annihilate_electrostatics)
+
+        na_electrostatics_custom_bond_force = []
+        aa_electrostatics_custom_bond_force = []
+        for alchemical_region_idx in range(len(alchemical_regions)):
+
+            na_electrostatics_custom_bond_force.append(create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression[alchemical_region_idx],
+                                                        'lambda_electrostatics_{}'.format(alchemical_region_idx), is_lambda_controlled=True))
+
+            aa_electrostatics_custom_bond_force.append(create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression[alchemical_region_idx],
+                                                        'lambda_electrostatics_{}'.format(alchemical_region_idx), alchemical_regions[alchemical_region_idx].annihilate_electrostatics))
+
         all_electrostatics_custom_bond_forces = [na_electrostatics_custom_bond_force, aa_electrostatics_custom_bond_force]
 
         # Create CustomBondForce to handle exceptions for electrostatics
-        for force in all_electrostatics_custom_bond_forces:
-            force.addPerBondParameter("chargeprod")  # charge product
-            force.addPerBondParameter("sigma")  # Lennard-Jones effective sigma
+        for alchemical_region in all_electrostatics_custom_bond_forces:
+            for force in alchemical_region:
+                force.addPerBondParameter("chargeprod")  # charge product
+                force.addPerBondParameter("sigma")  # Lennard-Jones effective sigma
 
         # -------------------------------------------------------------------------------
         # Distribute particle interactions contributions in appropriate nonbonded forces
         # -------------------------------------------------------------------------------
 
         # Create atom groups.
-        alchemical_atomset = alchemical_region.alchemical_atoms
+        alchemical_atomsets = []
+        alchemical_atomset = []
+        for alchemical_region in alchemical_regions:
+            alchemical_atomsets.append(alchemical_region.alchemical_atoms)
+            alchemical_atomset += alchemical_region.alchemical_atoms
         all_atomset = set(range(reference_force.getNumParticles()))  # all atoms, including alchemical region
         nonalchemical_atomset = all_atomset.difference(alchemical_atomset)
 
@@ -2017,18 +2109,22 @@ class AbsoluteAlchemicalFactory(object):
             if (sigma / unit.angstroms) == 0.0:
                 raise Exception('sigma is %s for particle %d; sigma must be positive' % (str(sigma), particle_index))
             # Set sterics parameters to custom forces.
-            for force in all_sterics_custom_nonbonded_forces:
-                force.addParticle([sigma, epsilon])
+            for alchemical_region in all_sterics_custom_nonbonded_forces:
+                for force in alchemical_region:
+                    force.addParticle([sigma, epsilon])
             # Set electrostatics parameters to custom forces.
             if use_exact_pme_treatment:
-                if particle_index in alchemical_atomset:
-                    electrostatics_parameters = [charge]
-                else:
-                    electrostatics_parameters = [abs(0.0*charge)]
+                for alchemical_atomset in alchemical_atomsets:
+                    if particle_index in alchemical_atomset:
+                        electrostatics_parameters = [charge]
+                        break
+                    else:
+                        electrostatics_parameters = [abs(0.0*charge)]
             else:
                 electrostatics_parameters = [charge, sigma]
-            for force in all_electrostatics_custom_nonbonded_forces:
-                force.addParticle(electrostatics_parameters)
+            for alchemical_region in all_electrostatics_custom_nonbonded_forces:
+                for force in alchemical_region:
+                    force.addParticle(electrostatics_parameters)
 
         # Turn off interactions contribution from alchemically-modified particles in unmodified
         # NonbondedForce that will be handled by all other forces
@@ -2038,18 +2134,22 @@ class AbsoluteAlchemicalFactory(object):
             # Wit exact treatment of the PME electrostatics, the NonbondedForce handles the electrostatics.
             if not use_exact_pme_treatment:
                 charge = abs(0.0*charge)
-            if particle_index in alchemical_atomset:
-                nonbonded_force.setParticleParameters(particle_index, charge, sigma, abs(0*epsilon))
+            for alchemical_atomset in alchemical_atomsets:
+                if particle_index in alchemical_atomset:
+                    nonbonded_force.setParticleParameters(particle_index, charge, sigma, abs(0*epsilon))
 
         # Restrict interaction evaluation of CustomNonbondedForces to their respective atom groups.
-        na_sterics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset)
-        aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, alchemical_atomset)
+        for alchemical_region_idx in range(len(na_sterics_custom_nonbonded_force)):
+            na_sterics_custom_nonbonded_force[alchemical_region_idx].addInteractionGroup(nonalchemical_atomset, alchemical_atomsets[alchemical_region_idx])
+            aa_sterics_custom_nonbonded_force[alchemical_region_idx].addInteractionGroup(alchemical_atomsets[alchemical_region_idx], alchemical_atomsets[alchemical_region_idx])
         if use_exact_pme_treatment:
             # The custom force only holds the original charges. It doesn't contribute to the energy.
-            original_charges_custom_nonbonded_force.addInteractionGroup({}, alchemical_atomset)
+            for alchemical_region_idx in range(len(original_charges_custom_nonbonded_force)):
+                original_charges_custom_nonbonded_force[alchemical_region_idx].addInteractionGroup({}, alchemical_atomsets[alchemical_region_idx])
         else:
-            na_electrostatics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset)
-            aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, alchemical_atomset)
+            for alchemical_region_idx in range(len(na_electrostatics_custom_nonbonded_force)):
+                na_electrostatics_custom_nonbonded_force[alchemical_region_idx].addInteractionGroup(nonalchemical_atomset, alchemical_atomsets[alchemical_region_idx])
+                aa_electrostatics_custom_nonbonded_force[alchemical_region_idx].addInteractionGroup(alchemical_atomsets[alchemical_region_idx], alchemical_atomsets[alchemical_region_idx])
 
         # ---------------------------------------------------------------
         # Distribute exceptions contributions in appropriate bond forces
@@ -2064,8 +2164,9 @@ class AbsoluteAlchemicalFactory(object):
 
             # Exclude this atom pair in CustomNonbondedForces. All nonbonded forces
             # must have the same number of exceptions/exclusions on CUDA platform.
-            for force in all_custom_nonbonded_forces:
-                force.addExclusion(iatom, jatom)
+            for alchemical_region in all_custom_nonbonded_forces:
+                for force in alchemical_region:
+                    force.addExclusion(iatom, jatom)
 
             # Check how many alchemical atoms we have
             both_alchemical = iatom in alchemical_atomset and jatom in alchemical_atomset
@@ -2098,30 +2199,39 @@ class AbsoluteAlchemicalFactory(object):
                                                        abs(0.0*chargeprod), sigma, abs(0.0*epsilon))
 
         # Add global parameters to forces.
-        def add_global_parameters(force):
-            force.addGlobalParameter('softcore_alpha', alchemical_region.softcore_alpha)
-            force.addGlobalParameter('softcore_beta', alchemical_region.softcore_beta)
-            force.addGlobalParameter('softcore_a', alchemical_region.softcore_a)
-            force.addGlobalParameter('softcore_b', alchemical_region.softcore_b)
-            force.addGlobalParameter('softcore_c', alchemical_region.softcore_c)
-            force.addGlobalParameter('softcore_d', alchemical_region.softcore_d)
-            force.addGlobalParameter('softcore_e', alchemical_region.softcore_e)
-            force.addGlobalParameter('softcore_f', alchemical_region.softcore_f)
+        def add_global_parameters(force, id):
+            force.addGlobalParameter('softcore_alpha', alchemical_regions[id].softcore_alpha)
+            force.addGlobalParameter('softcore_beta', alchemical_regions[id].softcore_beta)
+            force.addGlobalParameter('softcore_a', alchemical_regions[id].softcore_a)
+            force.addGlobalParameter('softcore_b', alchemical_regions[id].softcore_b)
+            force.addGlobalParameter('softcore_c', alchemical_regions[id].softcore_c)
+            force.addGlobalParameter('softcore_d', alchemical_regions[id].softcore_d)
+            force.addGlobalParameter('softcore_e', alchemical_regions[id].softcore_e)
+            force.addGlobalParameter('softcore_f', alchemical_regions[id].softcore_f)
 
         all_custom_forces = (all_custom_nonbonded_forces +
                              all_sterics_custom_bond_forces +
                              all_electrostatics_custom_bond_forces)
-        for force in all_custom_forces:
-            add_global_parameters(force)
+
+        for x in all_custom_forces:
+            for alchemical_region_idx, force in enumerate(x):
+                add_global_parameters(force, alchemical_region_idx)
 
         # With exact treatment of PME electrostatics, the NonbondedForce
         # is affected by lambda electrostatics as well.
-        forces_by_lambda = {
-            'lambda_electrostatics': all_electrostatics_custom_nonbonded_forces + all_electrostatics_custom_bond_forces,
-            'lambda_sterics': all_sterics_custom_nonbonded_forces + all_sterics_custom_bond_forces,
-        }
+
+        forces_by_lambda = {}
+        all_electrostatics_custom_nonbonded_forces = list(map(list, zip(*all_electrostatics_custom_nonbonded_forces)))
+        all_electrostatics_custom_bond_forces = list(map(list, zip(*all_electrostatics_custom_bond_forces)))
+        all_sterics_custom_nonbonded_forces = list(map(list, zip(*all_sterics_custom_nonbonded_forces)))
+        all_sterics_custom_bond_forces = list(map(list, zip(*all_sterics_custom_bond_forces)))
+        for alchemical_region_idx in range(len(alchemical_regions)):
+            forces_by_lambda.update({
+            'lambda_electrostatics_{}'.format(alchemical_region_idx): all_electrostatics_custom_nonbonded_forces[alchemical_region_idx] + all_electrostatics_custom_bond_forces[alchemical_region_idx],
+            'lambda_sterics_{}'.format(alchemical_region_idx): all_sterics_custom_nonbonded_forces[alchemical_region_idx] + all_sterics_custom_bond_forces[alchemical_region_idx],
+        })
         if use_exact_pme_treatment:
-            forces_by_lambda['lambda_electrostatics'].append(nonbonded_force)
+                forces_by_lambda['lambda_electrostatics_0'].append(nonbonded_force)
         else:
             forces_by_lambda[''] = [nonbonded_force]
         return forces_by_lambda
@@ -2496,3 +2606,4 @@ if __name__ == '__main__':
     import doctest
     doctest.testmod()
     # doctest.run_docstring_examples(AlchemicalFunction, globals())
+
