@@ -1864,8 +1864,8 @@ class AbsoluteAlchemicalFactory(object):
         is_periodic_method = is_ewald_method or nonbonded_method == openmm.NonbondedForce.CutoffPeriodic
         use_exact_pme_treatment = is_ewald_method and self.alchemical_pme_treatment == 'exact'
 
-        # Warn about hard coded alchemical region limit under PME
-        if len(alchemical_regions) >= 5 and use_exact_pme_treatment:
+        # Warn about four alchemical region limit
+        if len(alchemical_regions) >= 5:
             raise Exception('Only 4 hard coded regions for PME')
         # Warn about reaction field.
         if is_rf_method:
