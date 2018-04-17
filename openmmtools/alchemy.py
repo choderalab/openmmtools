@@ -464,17 +464,14 @@ class AlchemicalState(object):
 
     def apply_to_context(self, context):
         """Put the Context into this AlchemicalState.
-
         Parameters
         ----------
         context : simtk.openmm.Context
             The context to set.
-
         Raises
         ------
         AlchemicalStateError
             If the context does not have the required lambda global variables.
-
         """
         has_lambda_electrostatics_changed = False
         context_parameters = context.getParameters()
@@ -525,7 +522,6 @@ class AlchemicalState(object):
         """Standardize the given system.
 
         Set all global lambda parameters of the system to 1.0.
-
         Parameters
         ----------
         system : simtk.openmm.System
@@ -2168,9 +2164,13 @@ class AbsoluteAlchemicalFactory(object):
                 for force in alchemical_region:
                     force.addExclusion(iatom, jatom)
 
+            for alchemical_region, alchemical_atomset in enumerate(alchemical_atomsets):
             # Check how many alchemical atoms we have
-            both_alchemical = iatom in alchemical_atomset and jatom in alchemical_atomset
-            only_one_alchemical = (iatom in alchemical_atomset) != (jatom in alchemical_atomset)
+                both_alchemical, alchemical_region_idx = iatom in alchemical_atomset and jatom in alchemical_atomset, alchemical_region
+                only_one_alchemical, alchemical_region_idx = (iatom in alchemical_atomset) != (jatom in alchemical_atomset), alchemical_region
+                if both_alchemical:
+                    only_one_alchemical = False
+                    break
 
             # Check if this is an exception or an exclusion
             is_exception_epsilon = abs(epsilon.value_in_unit_system(unit.md_unit_system)) > 0.0
@@ -2180,14 +2180,14 @@ class AbsoluteAlchemicalFactory(object):
             # handle alchemically-modified Lennard-Jones and electrostatics exceptions
             if both_alchemical:
                 if is_exception_epsilon:
-                    aa_sterics_custom_bond_force.addBond(iatom, jatom, [sigma, epsilon])
+                    aa_sterics_custom_bond_force[alchemical_region_idx].addBond(iatom, jatom, [sigma, epsilon])
                 if is_exception_chargeprod:
-                    aa_electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
+                    aa_electrostatics_custom_bond_force[alchemical_region_idx].addBond(iatom, jatom, [chargeprod, sigma])
             elif only_one_alchemical:
                 if is_exception_epsilon:
-                    na_sterics_custom_bond_force.addBond(iatom, jatom, [sigma, epsilon])
+                    na_sterics_custom_bond_force[alchemical_region_idx].addBond(iatom, jatom, [sigma, epsilon])
                 if is_exception_chargeprod:
-                    na_electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
+                    na_electrostatics_custom_bond_force[alchemical_region_idx].addBond(iatom, jatom, [chargeprod, sigma])
             # else: both particles are non-alchemical, leave them in the unmodified NonbondedForce
 
         # Turn off all exception contributions from alchemical atoms in the NonbondedForce
@@ -2367,7 +2367,7 @@ class AbsoluteAlchemicalFactory(object):
             # Retrieve parameters.
             [charge, radius, scaling_factor] = reference_force.getParticleParameters(particle_index)
             # Set particle parameters.
-            if particle_index in alchemical_region.alchemical_atoms:
+            if particle_index in alchemical_region[0].alchemical_atoms:
                 parameters = [charge, radius, scaling_factor, 1.0]
             else:
                 parameters = [charge, radius, scaling_factor, 0.0]
@@ -2469,7 +2469,7 @@ class AbsoluteAlchemicalFactory(object):
             parameters = reference_force.getParticleParameters(particle_index)
             # Append alchemical parameter
             parameters = list(parameters)
-            if particle_index in alchemical_region.alchemical_atoms:
+            if particle_index in alchemical_region[0].alchemical_atoms:
                 parameters.append(1.0)
             else:
                 parameters.append(0.0)
