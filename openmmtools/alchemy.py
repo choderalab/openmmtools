@@ -740,10 +740,10 @@ class AlchemicalState(object):
         parameter_idx = _UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX  # Shortcut.
         if self.update_alchemical_charges:
             for alchemical_region in original_charges_force.values():
-                alchemical_region[0].setGlobalParameterDefaultValue(parameter_idx, 1)
+                alchemical_region.setGlobalParameterDefaultValue(parameter_idx, 1)
         else:
             for alchemical_region in original_charges_force.values():
-                alchemical_region[0].setGlobalParameterDefaultValue(parameter_idx, 1)
+                alchemical_region.setGlobalParameterDefaultValue(parameter_idx, 1)
 
 
     @classmethod
