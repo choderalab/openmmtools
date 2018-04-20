@@ -1879,9 +1879,9 @@ class AbsoluteAlchemicalFactory(object):
         is_periodic_method = is_ewald_method or nonbonded_method == openmm.NonbondedForce.CutoffPeriodic
         use_exact_pme_treatment = is_ewald_method and self.alchemical_pme_treatment == 'exact'
 
-        # Warn about hard coded alchemical region limit under PME
-        if len(alchemical_regions) >= 5 and use_exact_pme_treatment:
-            raise Exception('Only 4 hard coded regions for PME')
+        # Warn about hard coded alchemical regions
+        if len(alchemical_regions) >= 5:
+            raise Exception('Only 4 hard coded regions')
         # Warn about reaction field.
         if is_rf_method:
             logger.warning('Reaction field support is still experimental. For free energy '
@@ -2383,7 +2383,7 @@ class AbsoluteAlchemicalFactory(object):
             # Retrieve parameters.
             [charge, radius, scaling_factor] = reference_force.getParticleParameters(particle_index)
             # Set particle parameters.
-            if particle_index in alchemical_region[0].alchemical_atoms:
+            if particle_index in alchemical_region.alchemical_atoms:
                 parameters = [charge, radius, scaling_factor, 1.0]
             else:
                 parameters = [charge, radius, scaling_factor, 0.0]
@@ -2485,7 +2485,7 @@ class AbsoluteAlchemicalFactory(object):
             parameters = reference_force.getParticleParameters(particle_index)
             # Append alchemical parameter
             parameters = list(parameters)
-            if particle_index in alchemical_region[0].alchemical_atoms:
+            if particle_index in alchemical_region.alchemical_atoms:
                 parameters.append(1.0)
             else:
                 parameters.append(0.0)
