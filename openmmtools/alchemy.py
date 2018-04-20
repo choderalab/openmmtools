@@ -464,18 +464,25 @@ class AlchemicalState(object):
 
     def apply_to_context(self, context):
         """Put the Context into this AlchemicalState.
+
         Parameters
         ----------
         context : simtk.openmm.Context
             The context to set.
+
         Raises
         ------
         AlchemicalStateError
             If the context does not have the required lambda global variables.
-        """
-        has_lambda_electrostatics_changed = False
-        context_parameters = context.getParameters()
 
+        """
+
+        context_parameters = context.getParameters()
+        electrostatic_regions = {}
+        for parameter_name in context_parameters:
+            if parameter_name not in electrostatic_regions:
+                electrostatic_regions[parameter_name] = False
+        electrostatic_regions = {k:v for (k,v) in electrostatic_regions.items() if k.startswith('lambda_electrostatics')}
         # Set lambda parameters in Context.
         for parameter_name in self._parameters:
             parameter_value = getattr(self, parameter_name)
@@ -489,25 +496,33 @@ class AlchemicalState(object):
                 # If lambda_electrostatics, first check if we're changing it for later.
                 # This avoids us to loop through the System forces if we don't need to
                 # set the NonbondedForce charges.
-                if parameter_name == 'lambda_electrostatics':
+                has_lambda_electrostatics_changed = False
+                if parameter_name in electrostatic_regions:
                     old_parameter_value = context_parameters[parameter_name]
-                    has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
-                                                         parameter_value != old_parameter_value)
+                    has_lambda_electrostatics_changed = (parameter_value != old_parameter_value)
+                    electrostatic_regions[parameter_name] = has_lambda_electrostatics_changed
                 context.setParameter(parameter_name, parameter_value)
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
                 raise AlchemicalStateError(err_msg.format(parameter_name))
-
         # Handle lambda_electrostatics changes with exact PME electrostatic treatment.
         # If the context doesn't use exact PME electrostatics, or if lambda_electrostatics
         # hasn't changed, we don't need to do anything.
         if (_UPDATE_ALCHEMICAL_CHARGES_PARAMETER not in context_parameters or
-                not has_lambda_electrostatics_changed):
+                not (all(value == True for value in electrostatic_regions.values()))):
             return
 
         # Find exact PME treatment key force objects.
-        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem())
+        changed_electrostaics_regions = {k: v for (k, v) in electrostatic_regions.items() if v == True}
+        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem(), changed_electrostaics_regions)
 
+        #add lambda_electrostatics to corresponding value in original_charges_force.
+        #this ensures correct lambda value goes to correct force in _set_exact_pme_charges
+        if original_charges_force != None:
+            for parameter_name in electrostatic_regions:
+                if parameter_name in original_charges_force:
+                    lambda_electrostatics = getattr(self, parameter_name)
+                    original_charges_force[parameter_name].append(lambda_electrostatics)
         # Quick checks for compatibility.
         context_charge_update = bool(context_parameters[_UPDATE_ALCHEMICAL_CHARGES_PARAMETER])
         if not (context_charge_update and self.update_alchemical_charges):
@@ -1865,8 +1880,8 @@ class AbsoluteAlchemicalFactory(object):
         use_exact_pme_treatment = is_ewald_method and self.alchemical_pme_treatment == 'exact'
 
         # Warn about hard coded alchemical region limit under PME
-        if len(alchemical_regions) >= 5:
-            raise Exception('Only 4 hard coded regions')
+        if len(alchemical_regions) >= 5 and use_exact_pme_treatment:
+            raise Exception('Only 4 hard coded regions for PME')
         # Warn about reaction field.
         if is_rf_method:
             logger.warning('Reaction field support is still experimental. For free energy '
@@ -2164,6 +2179,7 @@ class AbsoluteAlchemicalFactory(object):
                 for force in alchemical_region:
                     force.addExclusion(iatom, jatom)
 
+            #what if exsclusion straddles two differnt regions?
             for alchemical_region, alchemical_atomset in enumerate(alchemical_atomsets):
             # Check how many alchemical atoms we have
                 both_alchemical, alchemical_region_idx = iatom in alchemical_atomset and jatom in alchemical_atomset, alchemical_region
@@ -2367,7 +2383,7 @@ class AbsoluteAlchemicalFactory(object):
             # Retrieve parameters.
             [charge, radius, scaling_factor] = reference_force.getParticleParameters(particle_index)
             # Set particle parameters.
-            if particle_index in alchemical_region.alchemical_atoms:
+            if particle_index in alchemical_region[0].alchemical_atoms:
                 parameters = [charge, radius, scaling_factor, 1.0]
             else:
                 parameters = [charge, radius, scaling_factor, 0.0]
@@ -2469,7 +2485,7 @@ class AbsoluteAlchemicalFactory(object):
             parameters = reference_force.getParticleParameters(particle_index)
             # Append alchemical parameter
             parameters = list(parameters)
-            if particle_index in alchemical_region.alchemical_atoms:
+            if particle_index in alchemical_region[0].alchemical_atoms:
                 parameters.append(1.0)
             else:
                 parameters.append(0.0)
