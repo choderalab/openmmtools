@@ -2084,7 +2084,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
     Kyle A. Beauchamp (https://github.com/kyleabeauchamp/openmmtools/tree/mjhmc2/openmmtools/hmc_integrators)
     """
 
-    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
+    def __init__(self, temperature=298.0 * unit.kelvin, steps_per_hmc=10, timestep=1 * unit.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
         mm.CustomIntegrator.__init__(self, timestep)
 
         self.temperature = temperature
