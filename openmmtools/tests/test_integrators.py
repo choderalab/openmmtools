@@ -765,7 +765,7 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
         for nsteps in [0, 1, 10]:
-            run_alchemical_langevin_integrator(nsteps=nsteps)
+            run_alchemical_langevin_integrator(nsteps=nsteps, splitting=splitting)
 
 if __name__=="__main__":
     test_alchemical_langevin_integrator()
