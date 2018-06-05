@@ -678,10 +678,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     # Create harmonic oscillator testsystem
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
     system = testsystem.system
-    positions = testsystem.positions
 
     # Get equilibrium samples from initial and final states
-    burn_in = 5 * 20 # 5 periods
     thinning = 5 * 20 # 5 periods
 
     # Collect forward and reverse work values
