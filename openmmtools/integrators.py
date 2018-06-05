@@ -451,7 +451,7 @@ class GradientDescentMinimizationIntegrator(mm.CustomIntegrator):
 
 class PositionVerletIntegrator(mm.CustomIntegrator):
 
-    def __init__(self, timestep=1.0 * simtk.unit.femtoseconds):
+    def __init__(self, timestep=1.0 * unit.femtoseconds):
 
         super(PositionVerletIntegrator, self).__init__(timestep)
 
