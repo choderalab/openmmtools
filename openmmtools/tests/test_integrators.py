@@ -25,7 +25,7 @@ from simtk import openmm
 
 from openmmtools import integrators, testsystems
 from openmmtools.integrators import (ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator,
-                                     GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator)
+                                     GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator, XCGHMCIntegrator)
 
 
 #=============================================================================================
@@ -765,7 +765,32 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
         for nsteps in [0, 1, 10]:
-            run_alchemical_langevin_integrator(nsteps=nsteps)
+            run_alchemical_langevin_integrator(nsteps=nsteps, splitting=splitting)
+
+def test_xcghmc_integrator_stability():
+    """Loop over the various extra-chance parameters to test stability"""
+
+    test_case = testsystems.AlanineDipeptideVacuum()
+    test_name = test_case.__class__.__name__
+
+    for extra_chances in [0, 1, 2]:
+        for steps_per_hmc in [1, 2]:
+            for steps_per_extra_hmc in [1, 2]:
+
+                integrator = XCGHMCIntegrator(extra_chances=extra_chances,
+                                              steps_per_hmc=steps_per_hmc,
+                                              steps_per_extra_hmc=steps_per_extra_hmc
+                                              )
+
+                check_stability.description = ("Testing XCGHMC (extra_chances={}, "
+                                               "steps_per_hmc={}, "
+                                               "steps_per_extra_hmc={}) "
+                                               "for stability over a short number of "
+                                               "integration steps of {}.").format(
+                    extra_chances, steps_per_hmc, steps_per_extra_hmc, test_name)
+
+                yield check_stability, integrator, test_case
+
 
 if __name__=="__main__":
     test_alchemical_langevin_integrator()
