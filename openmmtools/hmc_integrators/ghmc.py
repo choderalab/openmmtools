@@ -185,14 +185,14 @@ class GHMCIntegrator(GHMCBase):
 
     Parameters
     ----------
-    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+    temperature : simtk.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
        The temperature.
     steps_per_hmc : int, default: 10
        The number of velocity Verlet steps to take per round of hamiltonian dynamics
-    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+    timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
        The integration timestep.  The total time taken per iteration
        will equal timestep * steps_per_hmc
-    collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+    collision_rate : simtk.unit.Quantity compatible with 1 / femtoseconds, default: None
        The collision rate for the velocity corruption (GHMC).  If None,
        velocities information will be discarded after each round (HMC).
 
@@ -200,9 +200,9 @@ class GHMCIntegrator(GHMCBase):
     -----
     This loosely follows the definition of GHMC given in the two below
     references.  Specifically, the velocities are corrupted,
-    several steps of hamiltonian dynamics are performed, and then
+    several steps of Hamiltonian dynamics are performed, and then
     an accept / reject move is taken.  If collision_rate is set to None, however,
-    we will do non-generalized HMC, where the velocities information is discarded
+    we will do non-generalized HMC, where the velocity information is discarded
     at each iteration.
 
     This class is the base class for a number of more specialized versions
