@@ -20,24 +20,24 @@ logger = logging.getLogger(__name__)
 class XCGHMCIntegrator(GHMCIntegrator):
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
 
-        Parameters
-        ----------
-        temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
-            The temperature.
-        steps_per_hmc : int, default: 10
-            The number of velocity Verlet steps to take per round of hamiltonian dynamics
-        timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-            The integration timestep.  The total time taken per iteration
-            will equal timestep * steps_per_hmc
-        extra_chances : int, optional, default=2
-            The number of extra chances.  If the initial move is rejected, up to
-            `extra_chances` rounds of additional moves will be attempted to find
-            an accepted proposal.  `extra_chances=0` correponds to vanilla (G)HMC.
-        steps_per_extra_hmc : int, optional, default=1
-            During each extra chance, do this many steps of hamiltonian dynamics.
-        collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
-           The collision rate for the velocity corruption (GHMC).  If None,
-           velocities information will be discarded after each round (HMC).
+    Parameters
+    ----------
+    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+        The temperature.
+    steps_per_hmc : int, default: 10
+        The number of velocity Verlet steps to take per round of hamiltonian dynamics
+    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+        The integration timestep.  The total time taken per iteration
+        will equal timestep * steps_per_hmc
+    extra_chances : int, optional, default=2
+        The number of extra chances.  If the initial move is rejected, up to
+        `extra_chances` rounds of additional moves will be attempted to find
+        an accepted proposal.  `extra_chances=0` correponds to vanilla (G)HMC.
+    steps_per_extra_hmc : int, optional, default=1
+        During each extra chance, do this many steps of hamiltonian dynamics.
+    collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+       The collision rate for the velocity corruption (GHMC).  If None,
+       velocities information will be discarded after each round (HMC).
 
     Notes
     -----
