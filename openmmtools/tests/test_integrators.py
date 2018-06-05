@@ -23,7 +23,7 @@ import numpy as np
 from simtk import unit
 from simtk import openmm
 
-from openmmtools import integrators, testsystems
+from openmmtools import integrators, testsystems, hmc_integrators
 from openmmtools.integrators import (ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator,
                                      GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator)
 
@@ -61,6 +61,7 @@ def get_all_custom_integrators(only_thermostated=False):
         old_predicate = predicate  # Avoid infinite recursion.
         predicate = lambda x: old_predicate(x) and issubclass(x, integrators.ThermostatedIntegrator)
     custom_integrators = inspect.getmembers(integrators, predicate=predicate)
+    custom_integrators = custom_integrators + inspect.getmembers(hmc_integrators, predicate=predicate)
     return custom_integrators
 
 
