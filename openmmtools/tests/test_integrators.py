@@ -729,7 +729,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
+def run_nonequilibrium_switching(init_x, alchemical_integrator, alchemical_ctx, temperature=298 * unit.kelvin):
     """Perform a nonequilibrium switching protocol
 
     Parameters
