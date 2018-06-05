@@ -8,7 +8,6 @@ import logging
 import pandas as pd
 
 import simtk.unit as u
-import simtk.openmm as mm
 
 from .utils import warn_experimental
 from .ghmc import GHMCIntegrator
