@@ -2047,6 +2047,7 @@ class GHMCIntegrator(LangevinIntegrator):
         kwargs['splitting'] = "O { V R V } O"
         super(GHMCIntegrator, self).__init__(*args, **kwargs)
 
+
 class XCGHMCIntegrator(ThermostatedIntegrator):
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
 
