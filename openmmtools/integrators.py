@@ -2049,6 +2049,7 @@ class GHMCIntegrator(LangevinIntegrator):
 
 class XCGHMCIntegrator(GHMCIntegrator):
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
+
         Parameters
         ----------
         temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
@@ -2080,7 +2081,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
     Author
     ------
-    Kyle A. Beauchamp
+    Kyle A. Beauchamp (https://github.com/kyleabeauchamp/openmmtools/tree/mjhmc2/openmmtools/hmc_integrators)
     """
 
     def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
