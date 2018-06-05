@@ -22,11 +22,11 @@ class XCGHMCIntegrator(GHMCIntegrator):
 
     Parameters
     ----------
-    temperature : numpy.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
+    temperature : simtk.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
         The temperature.
     steps_per_hmc : int, default: 10
         The number of velocity Verlet steps to take per round of hamiltonian dynamics
-    timestep : numpy.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+    timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
         The integration timestep.  The total time taken per iteration
         will equal timestep * steps_per_hmc
     extra_chances : int, optional, default=2
@@ -35,9 +35,9 @@ class XCGHMCIntegrator(GHMCIntegrator):
         an accepted proposal.  `extra_chances=0` correponds to vanilla (G)HMC.
     steps_per_extra_hmc : int, optional, default=1
         During each extra chance, do this many steps of hamiltonian dynamics.
-    collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
+    collision_rate : simtk.unit.Quantity compatible with 1 / femtoseconds, default: None
        The collision rate for the velocity corruption (GHMC).  If None,
-       velocities information will be discarded after each round (HMC).
+       velocity information will be discarded after each round (HMC).
 
     Notes
     -----
