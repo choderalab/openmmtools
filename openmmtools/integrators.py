@@ -449,6 +449,21 @@ class GradientDescentMinimizationIntegrator(mm.CustomIntegrator):
         # Update step size.
         self.addComputeGlobal("step_size", "step_size * (2.0*accept + 0.5*(1-accept))")
 
+class PositionVerletIntegrator(mm.CustomIntegrator):
+
+    def __init__(self, timestep=1.0 * simtk.unit.femtoseconds):
+
+        super(PositionVerletIntegrator, self).__init__(timestep)
+
+        self.addUpdateContextState()
+        self.addConstrainVelocities()
+
+        self.addComputePerDof("x", "x + v * dt / 2")
+        self.addConstrainPositions()
+        self.addComputePerDof("v", "v + dt * f / m")
+        self.addConstrainVelocities()
+        self.addComputePerDof("x", "x + v * dt / 2")
+        self.addConstrainPositions()
 
 class VelocityVerletIntegrator(mm.CustomIntegrator):
 
