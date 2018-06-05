@@ -2047,7 +2047,7 @@ class GHMCIntegrator(LangevinIntegrator):
         kwargs['splitting'] = "O { V R V } O"
         super(GHMCIntegrator, self).__init__(*args, **kwargs)
 
-class XCGHMCIntegrator(GHMCIntegrator):
+class XCGHMCIntegrator(ThermostatedIntegrator):
     """Extra Chance generalized hybrid Monte Carlo (XCGHMC) integrator.
 
         Parameters
@@ -2066,13 +2066,24 @@ class XCGHMCIntegrator(GHMCIntegrator):
         steps_per_extra_hmc : int, optional, default=1
             During each extra chance, do this many steps of hamiltonian dynamics.
         collision_rate : numpy.unit.Quantity compatible with 1 / femtoseconds, default: None
-           The collision rate for the velocity corruption (GHMC).  If None,
-           velocities information will be discarded after each round (HMC).
+           The collision rate for the velocity corruption (GHMC).
+           If None, velocities information will be discarded after each round (HMC).
 
     Notes
     -----
     This integrator attempts to circumvent rejections by propagating up to
     `extra_chances` steps of additional dynamics.
+
+    Examples
+    --------
+
+    Create a Extra-Chance GHMC integrator.
+
+    >>> temperature = 298.0 * unit.kelvin
+    >>> collision_rate = 1.0 / unit.picoseconds
+    >>> timestep = 1.0 * unit.femtoseconds
+    >>> integrator = XCGHMCIntegrator(temperature, timestep=timestep, extra_chances=5, steps_per_extra_hmc=5, collision_rate=collision_rate)
+
 
     References
     ----------
@@ -2085,7 +2096,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
     """
 
     def __init__(self, temperature=298.0 * unit.kelvin, steps_per_hmc=10, timestep=1 * unit.femtoseconds, extra_chances=2, steps_per_extra_hmc=1, collision_rate=None):
-        mm.CustomIntegrator.__init__(self, timestep)
+        super(XCGHMCIntegrator, self).__init__(temperature, timestep)
 
         self.temperature = temperature
         self.steps_per_hmc = steps_per_hmc
@@ -2093,6 +2104,7 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.timestep = timestep
         self.extra_chances = extra_chances
         self.collision_rate = collision_rate
+        self.is_GHMC = (self.collision_rate is not None)
 
         self.add_compute_steps()
 
@@ -2168,9 +2180,8 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("nrounds", 0)  # number of "rounds" of XHMC, e.g. the number of times k = 0
 
         # Below this point is possible base class material
-
-        self.addGlobalVariable("kT", self.kT)  # thermal energy
         self.addPerDofVariable("sigma", 0)
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
         self.addGlobalVariable("ke", 0)  # kinetic energy
         self.addPerDofVariable("xold", 0)  # old positions
         self.addPerDofVariable("vold", 0)  # old velocities
@@ -2184,8 +2195,6 @@ class XCGHMCIntegrator(GHMCIntegrator):
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
 
         self.addGlobalVariable("uni", 0)  # Uniform random number draw in XCHMC
-        self.addComputePerDof("sigma", "sqrt(kT/m)")
-
 
         if self.is_GHMC:
             self.addGlobalVariable("b", self.b)  # velocity mixing parameter
