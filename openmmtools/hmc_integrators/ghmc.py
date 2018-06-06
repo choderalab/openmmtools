@@ -70,10 +70,6 @@ class GHMCBase(ThermostatedIntegrator):
         return self.time_per_step / (60. * 60. * 24.)
 
     @property
-    def effective_ns_per_day(self):
-        return (self.effective_timestep / self.days_per_step) / u.nanoseconds
-
-    @property
     def ns_per_day(self):
         return (self.timestep / self.days_per_step) / u.nanoseconds
 
@@ -131,8 +127,6 @@ class GHMCBase(ThermostatedIntegrator):
         """
         d = {}
         d["arate"] = self.acceptance_rate
-        d["effective_timestep"] = self.effective_timestep / u.femtoseconds
-        d["effective_ns_per_day"] = self.effective_ns_per_day
         d["ns_per_day"] = self.ns_per_day
         keys = ["accept", "ke", "Enew", "Eold"]
 
@@ -169,11 +163,6 @@ class GHMCBase(ThermostatedIntegrator):
         are both proportional to the number of MC moves taken.
         """
         return self.steps_accepted / self.steps_taken
-
-    @property
-    def effective_timestep(self):
-        """The acceptance rate times the timestep."""
-        return self.acceptance_rate * self.timestep
 
     @property
     def is_GHMC(self):
