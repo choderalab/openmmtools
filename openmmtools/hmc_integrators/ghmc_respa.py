@@ -144,8 +144,3 @@ class GHMCRESPAIntegrator(RESPAMixIn, GHMCIntegrator):
         warn_experimental()
         self.groups = check_groups(groups)
         super(GHMCRESPAIntegrator, self).__init__(temperature=temperature, steps_per_hmc=steps_per_hmc, timestep=timestep, collision_rate=collision_rate)
-        #self.steps_per_hmc = steps_per_hmc
-        #self.collision_rate = collision_rate
-        #self.timestep = timestep
-
-        #self.add_compute_steps()
