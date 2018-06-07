@@ -176,18 +176,18 @@ class GHMCIntegrator(GHMCBase):
     ----------
     temperature : simtk.unit.Quantity compatible with kelvin, default: 298*simtk.unit.kelvin
        The temperature.
-    steps_per_hmc : int, default: 10
-       The number of velocity Verlet steps to take per round of hamiltonian dynamics
-    timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
-       The integration timestep.  The total time taken per iteration
-       will equal timestep * steps_per_hmc
     collision_rate : simtk.unit.Quantity compatible with 1 / femtoseconds, default: None
        The collision rate for the velocity corruption (GHMC).  If None,
        velocities information will be discarded after each round (HMC).
+    timestep : simtk.unit.Quantity compatible with femtoseconds, default: 1*simtk.unit.femtoseconds
+       The integration timestep.  The total time taken per iteration
+       will equal timestep * steps_per_hmc
+    steps_per_hmc : int, default: 1
+       The number of velocity Verlet steps to take per round of hamiltonian dynamics
 
     Notes
     -----
-    This loosely follows the definition of GHMC given in the two below
+    This loosely follows the definition of GHMC given in the three below
     references.  Specifically, the velocities are corrupted,
     several steps of Hamiltonian dynamics are performed, and then
     an accept / reject move is taken.  If collision_rate is set to None, however,
@@ -197,13 +197,17 @@ class GHMCIntegrator(GHMCBase):
     This class is the base class for a number of more specialized versions
     of GHMC.
 
+    Additional global variables 'ntrials' and  'naccept' keep track of how many trials have been attempted and accepted, respectively.
+
     References
     ----------
     C. M. Campos, J. M. Sanz-Serna, J. Comp. Phys. 281, (2015)
     J. Sohl-Dickstein, M. Mudigonda, M. DeWeese.  ICML (2014)
+    Lelievre T, Stoltz G, and Rousset M. Free Energy Computations: A Mathematical Perspective
+        http://www.amazon.com/Free-Energy-Computations-Mathematical-Perspective/dp/1848162472
     """
 
-    def __init__(self, temperature=298.0 * u.kelvin, steps_per_hmc=10, timestep=1 * u.femtoseconds, collision_rate=None):
+    def __init__(self, temperature=298.0 * u.kelvin, collision_rate=91 / u.picosecond, timestep=1 * u.femtoseconds, steps_per_hmc=1):
         warn_experimental()
         super(GHMCIntegrator, self).__init__(temperature, timestep)
 
@@ -223,8 +227,13 @@ class GHMCIntegrator(GHMCBase):
         self.addGlobalVariable("accept", 0)  # accept or reject
         self.addPerDofVariable("x1", 0)  # for constraints
 
+
+
         self.addGlobalVariable("steps_accepted", 0)  # Number of productive hamiltonian steps
         self.addGlobalVariable("steps_taken", 0)  # Number of total hamiltonian steps
+
+        self.addGlobalVariable("naccept", 0)  # Number of accepted proposal trajectories
+        self.addGlobalVariable("ntrials", 0) # Number of trial trajectories
 
         if self.is_GHMC:
             val = np.exp(-1.0 * self.collision_rate * self.timestep)
@@ -267,3 +276,7 @@ class GHMCIntegrator(GHMCBase):
 
         self.addComputeGlobal("steps_accepted", "steps_accepted + accept * %d" % (self.steps_per_hmc))
         self.addComputeGlobal("steps_taken", "steps_taken + %d" % (self.steps_per_hmc))
+
+        # For compatibility with the old GHMCIntegrator
+        self.addComputeGlobal("naccept", "naccept + accept")
+        self.addComputeGlobal("ntrials", "ntrials + 1")
