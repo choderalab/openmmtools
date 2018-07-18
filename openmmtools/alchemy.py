@@ -260,6 +260,7 @@ class AlchemicalState(object):
         # Handle the update parameters flag.
         update_alchemical_charges = bool(alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER,
                                                                    cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT))
+        print(update_alchemical_charges)
 
         # Check that the system is alchemical.
         if len(alchemical_parameters) == 0:
@@ -295,10 +296,13 @@ class AlchemicalState(object):
                     0.0 <= new_value <= 1.0)
             instance._parameters[self._parameter_name] = new_value
 
+    lambda_sterics_zero = _LambdaProperty('lambda_sterics_zero')
+    lambda_electrostatics_zero = _LambdaProperty('lambda_electrostatics_zero')
     lambda_sterics_one = _LambdaProperty('lambda_sterics_one')
     lambda_electrostatics_one = _LambdaProperty('lambda_electrostatics_one')
     lambda_sterics_two = _LambdaProperty('lambda_sterics_two')
     lambda_electrostatics_two = _LambdaProperty('lambda_electrostatics_two')
+
     lambda_bonds = _LambdaProperty('lambda__bonds')
     lambda_angles = _LambdaProperty('lambda__angles')
     lambda_torsions = _LambdaProperty('lambda__torsions')
@@ -728,14 +732,17 @@ class AlchemicalState(object):
                 raise AlchemicalStateError(err_msg.format(parameter_name))
 
         # Nothing else to do if we don't need to modify the exact PME forces.
-        print(not (has_lambda_electrostatics_changed or set_update_charges_flag))
+        print(set_update_charges_flag)
         if not (has_lambda_electrostatics_changed or set_update_charges_flag):
+            print('HI')
             return
 
         # Loop through system and retrieve exact PME forces.
         original_charges_force, nonbonded_force = self._find_exact_pme_forces(system, region_name)
         if original_charges_force != None:
             lambda_electrostatics = getattr(self, elec_region)
+        else:
+            lambda_electrostatics = None
 
         # Write NonbondedForce charges if PME is treated exactly.
         if has_lambda_electrostatics_changed:
@@ -797,8 +804,7 @@ class AlchemicalState(object):
                     if parameter_name in searched_parameters:
                         yield force, parameter_name, parameter_id
         else:
-            print(region_name)
-            raise Exception('pls')
+            raise Exception('')
 
     def _set_alchemical_parameters(self, new_value, exclusions):
         """Set all defined parameters to the given value.
@@ -1171,29 +1177,31 @@ class AbsoluteAlchemicalFactory(object):
                             alchemical_forces_by_lambda[lambda_variable_name].extend(lambda_forces)
                         except KeyError:
                             alchemical_forces_by_lambda[lambda_variable_name] = lambda_forces
-                    if reference_force_name ==  'NonbondedForce':
-                        #print(alchemical_forces_by_lambda)
-                        NB = alchemical_forces_by_lambda[''][-1]
-                        if not isinstance(NB, openmm.NonbondedForce):
-                            NB = alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
-                        else:
-                            pass
+                    if not alchemical_region == AlchemicalRegions[-1]:
+                        if reference_force_name ==  'NonbondedForce':
+                            #print(alchemical_forces_by_lambda)
+                            NB = alchemical_forces_by_lambda[''][-1]
+                            if not isinstance(NB, openmm.NonbondedForce):
+                                NB = alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
+                                del alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
+                            else:
+                                del alchemical_forces_by_lambda[''][-1]
 
-        #print(alchemical_forces_by_lambda[''])
-        #print(alchemical_forces_by_lambda[''][-2])
-        print(alchemical_forces_by_lambda)
+
+
+        for x in alchemical_forces_by_lambda:
+            print(x, alchemical_forces_by_lambda[x])
+            print('/////////////////')
+        """
         NB = alchemical_forces_by_lambda[''][-2]
         if isinstance(NB, openmm.NonbondedForce):
             print(alchemical_forces_by_lambda[''][-2])
             del alchemical_forces_by_lambda[''][-2]
         else:
             print('PME')
-            print(alchemical_forces_by_lambda['lambda_electrostatics_one'][-1])
-            del alchemical_forces_by_lambda['lambda_electrostatics_one'][-1]
-        #del alchemical_forces_by_lambda[''][2]
-        #del alchemical_forces_by_lambda[''][1]
-        #del alchemical_forces_by_lambda[''][0]
-        #print(alchemical_forces_by_lambda[''])
+            print(alchemical_forces_by_lambda['lambda_electrostatics_zero'][-1])
+            del alchemical_forces_by_lambda['lambda_electrostatics_zero'][-1]
+        """
 
         # Remove original forces that have been alchemically modified.
         #print(forces_to_remove)
