@@ -19,6 +19,7 @@ import sys
 import copy
 import zlib
 import weakref
+import collections
 
 import numpy as np
 from simtk import openmm, unit
@@ -1618,6 +1619,7 @@ class SamplerState(object):
     total_energy
     volume
     n_particles
+    collective_variables
 
     Examples
     --------
@@ -1676,6 +1678,13 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, positions, velocities=None, box_vectors=None):
+        # Allocate variables, they get set in _initialize
+        self._positions = None
+        self._velocities = None
+        self._box_vectors = None
+        self._collective_variables = None
+        self._kinetic_energy = None
+        self._potential_energy = None
         self._initialize(copy.deepcopy(positions), copy.deepcopy(velocities), copy.deepcopy(box_vectors))
 
     @classmethod
@@ -1760,16 +1769,18 @@ class SamplerState(object):
             value = unit.Quantity(value)
         self._box_vectors = value
 
+    # Derived properties
+
     @property
     def potential_energy(self):
         """simtk.unit.Quantity or None: Potential energy of this configuration."""
-        if self.positions is None or self.positions.has_changed:
+        if self._test_positions_valid:
             return None
         return self._potential_energy
 
     @potential_energy.setter
     def potential_energy(self, new_value):
-        self._potential_energy = new_value
+        raise AttributeError("Cannot set potential energy as it is a function of Context")
 
     @property
     def kinetic_energy(self):
@@ -1780,7 +1791,18 @@ class SamplerState(object):
 
     @kinetic_energy.setter
     def kinetic_energy(self, new_value):
-        self._kinetic_energy = new_value
+        raise AttributeError("Cannot set kinetic energy as it is a function of Context")
+
+    @property
+    def collective_variables(self):
+        """dict or None: Collective variables for this configuration if present in Context"""
+        if self._test_positions_valid:
+            return None
+        return self._collective_variables
+
+    @collective_variables.setter
+    def collective_variables(self, new_value):
+        raise AttributeError("Cannot set collective variables as it is a function of Context")
 
     @property
     def total_energy(self):
@@ -1833,7 +1855,9 @@ class SamplerState(object):
         ----------
         context_state : simtk.openmm.Context or simtk.openmm.State
             The object to read. If a State, it must contain information
-            on positions, velocities and energies.
+            on positions, velocities and energies. Collective
+            variables can only be updated from a Context, NOT a State
+            at the moment. If a State is provided, collective variables are nullified.
 
         Raises
         ------
@@ -1843,7 +1867,7 @@ class SamplerState(object):
         """
         self._read_context_state(context_state, check_consistency=True)
 
-    def apply_to_context(self, context, ignore_velocities=False):
+    def apply_to_context(self, context, ignore_velocities=False, ignore_collective_variables=False):
         """Set the context state.
 
         If velocities and box vectors have not been specified in the
@@ -1857,6 +1881,10 @@ class SamplerState(object):
             If True, velocities are not set in the Context even if they
             are defined. This can be useful if you only need to use the
             Context only to compute energies.
+        ignore_collective_variables : bool, optional
+            If True, the collective variables are not updated from the
+            Context, so the SamplerState's internal tracking
+            of their values remains unchanged
 
         """
         # NOTE: Box vectors MUST be updated before positions are set.
@@ -1865,6 +1893,8 @@ class SamplerState(object):
         context.setPositions(self._unitless_positions)
         if self._velocities is not None and not ignore_velocities:
             context.setVelocities(self._unitless_velocities)
+        if not ignore_collective_variables:
+            self._set_collective_variables(context)
 
     def has_nan(self):
         """Check that energies and positions are finite.
@@ -1906,9 +1936,10 @@ class SamplerState(object):
         # Copy box vectors.
         sampler_state.box_vectors = copy.deepcopy(self.box_vectors)
 
-        # Energies for only a subset of atoms is undefined.
-        sampler_state.potential_energy = None
-        sampler_state.kinetic_energy = None
+        # Energies/CV's for only a subset of atoms is undefined.
+        sampler_state._potential_energy = None
+        sampler_state._kinetic_energy = None
+        sampler_state._collective_variables = None
         return sampler_state
 
     def __getstate__(self):
@@ -1916,7 +1947,8 @@ class SamplerState(object):
         serialization = dict(
             positions=self.positions, velocities=self.velocities,
             box_vectors=self.box_vectors, potential_energy=self.potential_energy,
-            kinetic_energy=self.kinetic_energy
+            kinetic_energy=self.kinetic_energy,
+            collective_variables=self.collective_variables
         )
         return serialization
 
@@ -1929,13 +1961,14 @@ class SamplerState(object):
     # -------------------------------------------------------------------------
 
     def _initialize(self, positions, velocities, box_vectors,
-                    potential_energy=None, kinetic_energy=None):
+                    potential_energy=None, kinetic_energy=None, collective_variables=None):
         """Initialize the sampler state."""
         self._set_positions(positions, from_context=False, check_consistency=False)
         self.velocities = velocities  # Checks consistency and units.
         self.box_vectors = box_vectors  # Make sure box vectors is Quantity.
-        self.potential_energy = potential_energy
-        self.kinetic_energy = kinetic_energy
+        self._potential_energy = potential_energy
+        self._kinetic_energy = kinetic_energy
+        self._collective_variables = collective_variables
 
     def _set_positions(self, new_positions, from_context, check_consistency):
         """Set the positions without checking for consistency."""
@@ -1951,7 +1984,10 @@ class SamplerState(object):
         self._positions = utils.TrackedQuantity(new_positions)
 
         # The potential energy changes with different positions.
-        self.potential_energy = None
+        self._potential_energy = None
+
+        # The CVs change with different positions too
+        self._collective_variables = None
 
     def _set_velocities(self, new_velocities, from_context):
         """Set the velocities."""
@@ -1968,7 +2004,7 @@ class SamplerState(object):
         self._velocities = new_velocities
 
         # The kinetic energy changes with different positions.
-        self.kinetic_energy = None
+        self._kinetic_energy = None
 
     @property
     def _unitless_positions(self):
@@ -1977,7 +2013,7 @@ class SamplerState(object):
             self._unitless_positions_cache = self.positions.value_in_unit_system(unit.md_unit_system)
         if self._positions.has_changed:
             self._positions.has_changed = False
-            self.potential_energy = None
+            self._potential_energy = None
         return self._unitless_positions_cache
 
     @property
@@ -1989,7 +2025,7 @@ class SamplerState(object):
             self._unitless_velocities_cache = self._velocities.value_in_unit_system(unit.md_unit_system)
         if self._velocities.has_changed:
             self._velocities.has_changed = False
-            self.kinetic_energy = None
+            self._kinetic_energy = None
         return self._unitless_velocities_cache
 
     def _read_context_state(self, context_state, check_consistency):
@@ -2027,8 +2063,41 @@ class SamplerState(object):
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
         # Potential energy and kinetic energy must be updated
         # after positions and velocities or they'll be reset.
-        self.potential_energy = openmm_state.getPotentialEnergy()
-        self.kinetic_energy = openmm_state.getKineticEnergy()
+        self._potential_energy = openmm_state.getPotentialEnergy()
+        self._kinetic_energy = openmm_state.getKineticEnergy()
+        self._set_collective_variables(context_state)
+
+    def _set_collective_variables(self, context_state):
+        """
+        Update the collective variables from the context object
+
+        Parameters
+        ----------
+        context_state : simtk.openmm.Context or simtk.openmm.State
+            The object to read. This only works with Context's for now,
+            but in the future, this may support OpenMM State objects as well.
+        """
+        if isinstance(context_state, openmm.State):
+            self._collective_variables = None
+            return
+        # Allows direct key assignment without initializing each key:dict pair
+        collective_variables = collections.defaultdict(dict)
+        system = context_state.getSystem()
+        for force_index, force in enumerate(system.getForces()):
+            try:
+                cv_values = force.getCollectiveVariableValues(context_state)
+                for cv_index in range(force.getNumCollectiveVariables()):
+                    cv_name = force.getCollectiveVariableName(cv_index)
+                    collective_variables[cv_name][force_index] = cv_values[cv_index]
+            except AttributeError:
+                pass
+        # Trap no variables found (empty dict), return None
+        self._collective_variables = collective_variables if collective_variables else None
+
+    @property
+    def _test_positions_valid(self):
+        """Helper function to reduce this check duplication in multiple properties"""
+        return self.positions is None or self.positions.has_changed
 
 
 # =============================================================================

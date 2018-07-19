@@ -1,6 +1,13 @@
 Release History
 ===============
 
+0.15.1 - Something New This Way Comes [WIP]
+===========================================
+
+New features
+------------
+- Add ability for `SamplerState` to access new `OpenMM Custom CV Force Variables <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_
+
 0.15.0 - Restraint forces
 =========================
 - Add radially-symmetric restraint custom forces (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
