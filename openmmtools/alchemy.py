@@ -554,7 +554,7 @@ class AlchemicalState(object):
         # states with different settings must be incompatible.
         alchemical_state._apply_to_system(system, set_update_charges_flag=False)
 
-    def _on_setattr(self, standard_system, attribute_name):
+    def _on_setattr(self, standard_system, attribute_name, old_attribute_value):
         """Check if the standard system needs changes after a state attribute is set.
 
         Parameters
@@ -563,6 +563,8 @@ class AlchemicalState(object):
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
+        old_attribute_value : float
+            The value of the attribute retrieved before being set.
 
         Returns
         -------
