@@ -1026,16 +1026,19 @@ class ThermodynamicState(object):
     def __getstate__(self, skip_system=False):
         """Return a dictionary representation of the state.
 
-        Zlib compresses the serialized system after its created
-        Many alchemical systems have very long serializations, so this method  helps reduce space in memory and on disk
-        Forces encoding for compatibility between separate Python installs (utf-8 by default)
+        Zlib compresses the serialized system after its created. Many
+        alchemical systems have very long serializations so this method
+        helps reduce space in memory and on disk. The compression forces
+        the encoding for compatibility between separate Python installs
+        (utf-8 by default).
 
         Parameters
         ----------
         skip_system: bool, Default: False
-            Chooses whether or not to get the serialized system as the part of the return.
-            If False, then the serialized system is computed and returned
-            If True, Then "None" is returned for the "standard_system"
+            Choose whether or not to get the serialized system as the part
+            of the return. If False, then the serialized system is computed
+            and included in the serialization. If True, then ``None`` is
+            returned for the ``'standard_system'`` field of the serialization.
 
         """
         serialized_system = None
@@ -2071,7 +2074,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Raises
         ------
-        CompatibleStateError
+        ComposableStateError
             If the system is not compatible with the state.
 
         """
@@ -2134,14 +2137,14 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Raises
         ------
-        CompatibleStateError
+        ComposableStateError
             If the system is not compatible with the state.
 
         """
         pass
 
     @abc.abstractmethod
-    def _on_setattr(self, standard_system, attribute_name):
+    def _on_setattr(self, standard_system, attribute_name, old_attribute_value):
         """Check if standard system needs to be updated after a state attribute is set.
 
         This callback function is called after an attribute is set (i.e.
@@ -2155,12 +2158,19 @@ class IComposableState(utils.SubhookedABCMeta):
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
+        old_attribute_value : float
+            The value of the attribute retrieved before being set.
 
         Returns
         -------
         need_changes : bool
             True if the standard system has to be updated, False if no change
             occurred.
+
+        Raises
+        ------
+        ComposableStateError
+            If the attribute change put the system in an inconsistent state.
 
         """
         pass
@@ -2388,8 +2398,9 @@ class CompoundThermodynamicState(ThermodynamicState):
     def __getattr__(self, name):
         def setter_decorator(func, composable_state):
             def _setter_decorator(*args, **kwargs):
+                old_value = getattr(composable_state, name)
                 func(*args, **kwargs)
-                self._on_setattr_callback(composable_state, name)
+                self._on_setattr_callback(composable_state, name, old_value)
             return _setter_decorator
 
         # Called only if the attribute couldn't be found in __dict__.
@@ -2421,14 +2432,17 @@ class CompoundThermodynamicState(ThermodynamicState):
         elif any(name in C.__dict__ for C in self.__class__.__mro__):
             super(CompoundThermodynamicState, self).__setattr__(name, value)
 
-        # Update composable states attributes (check ancestors).
-        # We can't use hasattr here because it calls __getattr__,
-        # which search in all composable states as well.
+        # Update composable states attributes. This catches also normal
+        # attributes besides properties and methods.
         else:
             for s in self._composable_states:
-                if hasattr(s, name):
+                try:
+                    old_value = getattr(s, name)
+                except AttributeError:
+                    pass
+                else:
                     s.__setattr__(name, value)
-                    self._on_setattr_callback(s, name)
+                    self._on_setattr_callback(s, name, old_value)
                     return
 
             # No attribute found. This is monkey patching.
@@ -2484,9 +2498,20 @@ class CompoundThermodynamicState(ThermodynamicState):
         for composable_state in self._composable_states:
             composable_state._standardize_system(system)
 
-    def _on_setattr_callback(self, composable_state, attribute_name):
+    def _on_setattr_callback(self, composable_state, attribute_name, old_attribute_value):
         """Updates the standard system (and hash) after __setattr__."""
-        if composable_state._on_setattr(self._standard_system, attribute_name):
+        try:
+            change_standard_system = composable_state._on_setattr(self._standard_system, attribute_name, old_attribute_value)
+        except TypeError:
+            change_standard_system = composable_state._on_setattr(self._standard_system, attribute_name)
+            # TODO Drop support for the old signature and remove deprecation warning from 0.17 on.
+            import warnings
+            old_signature = '_on_setattr(self, standard_system, attribute_name)'
+            new_signature = old_signature[:-1] + ', old_attribute_value)'
+            warnings.warn('The signature IComposableState.{} has been deprecated, '
+                          'and future versions of openmmtools will support only the '
+                          'new one: {}.'.format(old_signature, new_signature))
+        if change_standard_system:
             new_standard_system = copy.deepcopy(self._standard_system)
             composable_state.apply_to_system(new_standard_system)
             composable_state._standardize_system(new_standard_system)
