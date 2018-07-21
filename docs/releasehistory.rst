@@ -1,11 +1,29 @@
 Release History
 ===============
 
+0.16.0 - GlobalParameterState class
+===================================
+
+New features
+------------
+- Added the new class ``states.GlobalParameterState`` designed to simplify the implementation of composable states that
+  control global variables (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
+- Allow restraint force classes to be controlled by a parameter other than ``lambda_restraints``. This will enable
+  multi-restraints simulations (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
+
+Deprecated
+----------
+- Python2 is officially deprecated. Support will be dropped in future versions.
+- Deprecated the signature of ``IComposableState._on_setattr`` to fix a bug where the objects were temporarily left in
+  an inconsistent state when an exception was raised and caught.
+- Deprecated ``update_alchemical_charges`` in ``AlchemicalState`` in anticipation of the new implementation of the
+  exact PME that will be based on the ``NonbondedForce`` offsets rather than ``updateParametersInContext()``.
+
 0.15.0 - Restraint forces
 =========================
 - Add radially-symmetric restraint custom forces (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
 - Copy Python attributes of integrators on ``deepcopy()`` (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
-- Optimization of `states.CompoundThermodynamicState` deserialization (`#338 <https://github.com/choderalab/openmmtools/pull/338>`_).
+- Optimization of ``states.CompoundThermodynamicState`` deserialization (`#338 <https://github.com/choderalab/openmmtools/pull/338>`_).
 - Bugfixes (`#332 <https://github.com/choderalab/openmmtools/pull/332>`_, `#343 <https://github.com/choderalab/openmmtools/pull/343>`_).
 
 
