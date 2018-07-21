@@ -118,6 +118,7 @@ class TestRadiallySymmetricRestraints(object):
         cls.restrained_atom_indices2 = [10, 11]
         cls.restrained_atom_index1=12
         cls.restrained_atom_index2=2
+        cls.custom_parameter_name = 'restraints_parameter'
 
         cls.restraints = [
             HarmonicRestraintForce(spring_constant=cls.spring_constant,
@@ -131,7 +132,15 @@ class TestRadiallySymmetricRestraints(object):
                                      restrained_atom_indices2=cls.restrained_atom_indices2),
             FlatBottomRestraintBondForce(spring_constant=cls.spring_constant, well_radius=cls.well_radius,
                                          restrained_atom_index1=cls.restrained_atom_index1,
-                                         restrained_atom_index2=cls.restrained_atom_index2)
+                                         restrained_atom_index2=cls.restrained_atom_index2),
+            HarmonicRestraintForce(spring_constant=cls.spring_constant,
+                                   restrained_atom_indices1=cls.restrained_atom_indices1,
+                                   restrained_atom_indices2=cls.restrained_atom_indices2,
+                                   controlling_parameter_name=cls.custom_parameter_name),
+            FlatBottomRestraintBondForce(spring_constant=cls.spring_constant, well_radius=cls.well_radius,
+                                         restrained_atom_index1=cls.restrained_atom_index1,
+                                         restrained_atom_index2=cls.restrained_atom_index2,
+                                         controlling_parameter_name=cls.custom_parameter_name),
         ]
 
     def test_restorable_forces(self):
@@ -155,6 +164,22 @@ class TestRadiallySymmetricRestraints(object):
                 assert isinstance(restraint, RadiallySymmetricBondRestraintForce)
                 yield assert_equal, restraint.restrained_atom_indices1, [self.restrained_atom_index1]
                 yield assert_equal, restraint.restrained_atom_indices2, [self.restrained_atom_index2]
+
+    def test_controlling_parameter_name(self):
+        """Test that the controlling parameter name enters the energy function correctly."""
+        default_name_restraint = self.restraints[0]
+        custom_name_restraints = self.restraints[-2:]
+
+        assert default_name_restraint.controlling_parameter_name == 'lambda_restraints'
+        energy_function = default_name_restraint.getEnergyFunction()
+        assert 'lambda_restraints' in energy_function
+        assert self.custom_parameter_name not in energy_function
+
+        for custom_name_restraint in custom_name_restraints:
+            assert custom_name_restraint.controlling_parameter_name == self.custom_parameter_name
+            energy_function = custom_name_restraint.getEnergyFunction()
+            assert 'lambda_restraints' not in energy_function
+            assert self.custom_parameter_name in energy_function
 
     def test_compute_restraint_volume(self):
         """Test the calculation of the restraint volume."""
