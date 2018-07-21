@@ -211,6 +211,12 @@ class AlchemicalState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, **kwargs):
+        if 'update_alchemical_charges' in kwargs:
+            # TODO Drop support for the parameter and remove deprecation warning from 0.17 on
+            # TODO after implementing new way for exact PME based on the NonbondedForce offsets.
+            import warnings
+            warnings.warn('The update_alchemical_charges in AlchemicalState.__init__ has been '
+                          'deprecated, and future versions of openmmtools may not support it.')
         self._initialize(**kwargs)
 
     @classmethod
