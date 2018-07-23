@@ -2,12 +2,8 @@
 Various Python tools for OpenMM.
 """
 from __future__ import print_function
-import os
 import sys
-from distutils.core import setup, Extension
-from setuptools import setup, Extension, find_packages
-import numpy
-import glob
+from setuptools import setup
 import os
 from os.path import relpath, join
 import subprocess
@@ -171,8 +167,6 @@ setup(
     packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts', 'openmmtools.storage'],
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
-    install_requires=['numpy', 'scipy', 'openmm', 'parmed', 'mdtraj', 'netCDF4', 'pyyaml'],
-    tests_requires=['nose', 'pymbar', 'netCDF4', 'pyyaml'],
     zip_safe=False,
     scripts=[],
     ext_modules=extensions,

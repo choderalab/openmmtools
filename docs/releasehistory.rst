@@ -1,11 +1,19 @@
 Release History
 ===============
 
+0.15.1 - Something New This Way Comes [WIP]
+===========================================
+
+New features
+------------
+- Add ability for ``SamplerState`` to access new `OpenMM Custom CV Force Variables <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_
+- ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only recommended for advanced users.
+
 0.15.0 - Restraint forces
 =========================
 - Add radially-symmetric restraint custom forces (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
 - Copy Python attributes of integrators on ``deepcopy()`` (`#336 <https://github.com/choderalab/openmmtools/pull/336>`_).
-- Optimization of `states.CompoundThermodynamicState` deserialization (`#338 <https://github.com/choderalab/openmmtools/pull/338>`_).
+- Optimization of ``states.CompoundThermodynamicState`` deserialization (`#338 <https://github.com/choderalab/openmmtools/pull/338>`_).
 - Bugfixes (`#332 <https://github.com/choderalab/openmmtools/pull/332>`_, `#343 <https://github.com/choderalab/openmmtools/pull/343>`_).
 
 
