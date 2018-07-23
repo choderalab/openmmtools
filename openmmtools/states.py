@@ -1788,7 +1788,9 @@ class SamplerState(object):
 
     @potential_energy.setter
     def potential_energy(self, new_value):
-        raise AttributeError("Cannot set potential energy as it is a function of Context")
+        if new_value is not None:
+            raise AttributeError("Cannot set potential energy as it is a function of Context")
+        self._potential_energy = None
 
     @property
     def kinetic_energy(self):
@@ -1799,7 +1801,9 @@ class SamplerState(object):
 
     @kinetic_energy.setter
     def kinetic_energy(self, new_value):
-        raise AttributeError("Cannot set kinetic energy as it is a function of Context")
+        if new_value is not None:
+            raise AttributeError("Cannot set kinetic energy as it is a function of Context")
+        self._kinetic_energy = None
 
     @property
     def collective_variables(self):
@@ -1810,7 +1814,9 @@ class SamplerState(object):
 
     @collective_variables.setter
     def collective_variables(self, new_value):
-        raise AttributeError("Cannot set collective variables as it is a function of Context")
+        if new_value is not None:
+            raise AttributeError("Cannot set collective variables as it is a function of Context")
+        self._collective_variables = new_value
 
     @property
     def total_energy(self):
@@ -1866,7 +1872,7 @@ class SamplerState(object):
             The object to read. If a State, it must contain information
             on positions, velocities and energies. Collective
             variables can only be updated from a Context, NOT a State
-            at the moment. If a State is provided, collective variables are nullified.
+            at the moment.
         ignore_positions : bool, optional
             If True, the positions (and potential energy) are not updated from the
             Context. This can cause the SamplerState to no longer be consistent between
@@ -1882,8 +1888,6 @@ class SamplerState(object):
             Context. If a State is passed in,
             this raises an error if False, otherwise, it would be ambiguous
             between a State tied to a System with collective variables, and one without.
-            Also if a State is passed in, the collective variables are invalidated since
-            the State does not know of the CVs
 
         Raises
         ------
@@ -2077,8 +2081,6 @@ class SamplerState(object):
             Context. If a State is passed in,
             this raises an error if False, otherwise, it would be ambiguous
             between a State tied to a System with collective variables, and one without.
-            If a State is passed in, and this is True, collective variables will be invalidated
-            due to ambiguity.
 
         Raises
         ------
@@ -2113,26 +2115,19 @@ class SamplerState(object):
             self._set_velocities(velocities, from_context=True)
             self._kinetic_energy = openmm_state.getKineticEnergy()
         self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
-        # This has its own function for handling ignore_cv's because States have different behavior
-        self._read_collective_variables(context_state, ignore_collective_variables)
+        if not ignore_collective_variables:
+            self._read_collective_variables(context_state)
 
-    def _read_collective_variables(self, context_state, ignore_collective_variables):
+    def _read_collective_variables(self, context_state):
         """
         Update the collective variables from the context object
 
         Parameters
         ----------
-        context_state : simtk.openmm.Context or simtk.openmm.State
+        context_state : simtk.openmm.Context
             The object to read. This only works with Context's for now,
             but in the future, this may support OpenMM State objects as well.
-        ignore_collective_variables : bool
-            Choose to just ignore this value
         """
-        if ignore_collective_variables:
-            if isinstance(context_state, openmm.State):
-                # Invalidate if State is passed in
-                self._collective_variables = None
-            return
         # Allows direct key assignment without initializing each key:dict pair
         collective_variables = collections.defaultdict(dict)
         system = context_state.getSystem()
