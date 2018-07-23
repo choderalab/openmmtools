@@ -417,7 +417,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
 
         assert (integrator.get_protocol_work(dimensionless=True) == 0)
         integrator.step(5)
-        assert(integrator.get_protocol_work(dimensionless=True) == 0)
+        assert np.allclose(integrator.get_protocol_work(dimensionless=True), 0)
 
     def test_reset_protocol_work(self):
         """

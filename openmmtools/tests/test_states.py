@@ -854,12 +854,11 @@ class TestSamplerState(object):
             sampler_state.positions = copy.deepcopy(positions)
             assert sampler_state._unitless_positions_cache is None
 
-            # TODO reactivate this test once OpenMM 7.2 is released with bugfix for #1940
-            # if isinstance(sampler_state._positions._value, np.ndarray):
-            #     old_unitless_positions = copy.deepcopy(sampler_state._unitless_positions)
-            #     sampler_state.positions[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * pos_unit
-            #     assert sampler_state.positions.has_changed
-            #     assert np.all(old_unitless_positions[5:8] != sampler_state._unitless_positions[5:8])
+            if isinstance(sampler_state._positions._value, np.ndarray):
+                old_unitless_positions = copy.deepcopy(sampler_state._unitless_positions)
+                sampler_state.positions[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * pos_unit
+                assert sampler_state.positions.has_changed
+                assert np.all(old_unitless_positions[5:8] != sampler_state._unitless_positions[5:8])
 
             if sampler_state.velocities is not None:
                 old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
@@ -869,15 +868,13 @@ class TestSamplerState(object):
                 sampler_state.velocities = copy.deepcopy(sampler_state.velocities)
                 assert sampler_state._unitless_velocities_cache is None
 
-                # TODO reactivate this test once OpenMM 7.2 is released with bugfix for #1940
-                # if isinstance(sampler_state._velocities._value, np.ndarray):
-                #     old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
-                #     sampler_state.velocities[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * vel_unit
-                #     assert sampler_state.velocities.has_changed
-                #     assert np.all(old_unitless_velocities[5:8] != sampler_state._unitless_velocities[5:8])
+                if isinstance(sampler_state._velocities._value, np.ndarray):
+                    old_unitless_velocities = copy.deepcopy(sampler_state._unitless_velocities)
+                    sampler_state.velocities[5:8] = [[2.0, 2.0, 2.0], [2.0, 2.0, 2.0], [2.0, 2.0, 2.0]] * vel_unit
+                    assert sampler_state.velocities.has_changed
+                    assert np.all(old_unitless_velocities[5:8] != sampler_state._unitless_velocities[5:8])
             else:
                 assert sampler_state._unitless_velocities is None
-
 
     def test_method_is_context_compatible(self):
         """SamplerState.is_context_compatible() method."""
@@ -966,6 +963,53 @@ class TestSamplerState(object):
         assert sliced_sampler_state.kinetic_energy is None
         assert sliced_sampler_state.potential_energy is None
 
+    def test_collective_variable(self):
+        """Test that CV calculation is working (If on OpenMM >=7.3)"""
+        # TODO: Remove the if statement and require OpenMM 7.3 once 7.3 is actually released
+        if not hasattr(openmm, "CustomCVForce"):
+            return
+        # Setup the CV tests if we have a late enough OpenMM
+        # alanine_explicit_cv = copy.deepcopy(self.alanine_explicit)
+        system_cv = self.alanine_explicit_state.system
+        cv_distance = openmm.CustomBondForce("r")
+        cv_distance.addBond(0, 1, [])
+        cv_angle = openmm.CustomAngleForce("theta")
+        cv_angle.addAngle(0, 1, 2, [])
+        # 3 unique CV names in the Context: BondCV, AngleCVSingle, AngleCV
+        cv_single_1 = openmm.CustomCVForce("4*BondCV")
+        # We are going to use this name later too
+        cv_single_1.addCollectiveVariable('BondCV', copy.deepcopy(cv_distance))
+        cv_single_2 = openmm.CustomCVForce("sin(AngleCVSingle)")  # This is suppose to be unique
+        cv_single_2.addCollectiveVariable('AngleCVSingle', copy.deepcopy(cv_angle))
+        cv_combined = openmm.CustomCVForce("4*BondCV + sin(AngleCV)")
+        cv_combined.addCollectiveVariable("BondCV", cv_distance)
+        cv_combined.addCollectiveVariable("AngleCV", cv_angle)
+        for force in [cv_single_1, cv_single_2, cv_combined]:
+            system_cv.addForce(force)
+        thermo_state = ThermodynamicState(system_cv, self.alanine_explicit_state.temperature)
+        context = self.create_context(thermo_state)
+        context.setPositions(self.alanine_explicit_positions)
+        sampler_state = SamplerState.from_context(context)
+        collective_variables = sampler_state.collective_variables
+        name_count = (('BondCV', 2), ('AngleCV', 1), ('AngleCVSingle', 1))
+        # Ensure the CV's are all accounted for
+        assert len(collective_variables.keys()) == 3
+        for name, count in name_count:
+            # Ensure the CV's show up in the Context the number of times we expect them to
+            assert len(collective_variables[name].keys()) == count
+        # Ensure CVs which are the same in different forces are equal
+        assert len(set(collective_variables['BondCV'].values())) == 1  # Cast values of CV to set, make sure len == 1
+        # Ensure invalidation with single replacement
+        new_pos = copy.deepcopy(self.alanine_explicit_positions)
+        new_pos[0] *= 2
+        sampler_state.positions[0] = new_pos[0]
+        assert sampler_state.collective_variables is None
+        # Ensure CV's are read from context
+        sampler_state.update_from_context(context)
+        assert sampler_state.collective_variables is not None
+        # Ensure invalidation with full variable swap
+        sampler_state.positions = new_pos
+        assert sampler_state.collective_variables is None
 
 # =============================================================================
 # TEST COMPOUND STATE
