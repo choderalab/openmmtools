@@ -1715,6 +1715,8 @@ class SamplerState(object):
         """
         sampler_state = cls([])
         sampler_state._read_context_state(context_state, check_consistency=False,
+                                          ignore_positions=False,
+                                          ignore_velocities=False,
                                           ignore_collective_variables=ignore_collective_variables)
         return sampler_state
 
@@ -1851,7 +1853,8 @@ class SamplerState(object):
         is_compatible = self.n_particles == context.getSystem().getNumParticles()
         return is_compatible
 
-    def update_from_context(self, context_state, ignore_collective_variables=False):
+    def update_from_context(self, context_state, ignore_positions=False, ignore_velocities=False,
+                            ignore_collective_variables=False):
         """Read the state from the given Context or State object.
 
         The context must be compatible. Use SamplerState.from_context
@@ -1864,11 +1867,23 @@ class SamplerState(object):
             on positions, velocities and energies. Collective
             variables can only be updated from a Context, NOT a State
             at the moment. If a State is provided, collective variables are nullified.
+        ignore_positions : bool, optional
+            If True, the positions (and potential energy) are not updated from the
+            Context. This can cause the SamplerState to no longer be consistent between
+            its variables, so the defaults err on the side of updating everything,
+            if possible. Only use if you know what you are doing.
+        ignore_velocities : bool, optional
+            If True, the velocities (and kinetic energy) are not updated from the
+            Context. This can cause the SamplerState to no longer be consistent between
+            its variables, so the defaults err on the side of updating everything,
+            if possible. Only use if you know what you are doing.
         ignore_collective_variables : bool, optional
             If True, the collective variables are not updated from the
-            Context, and will be invalidated. If a State is passed in,
+            Context. If a State is passed in,
             this raises an error if False, otherwise, it would be ambiguous
             between a State tied to a System with collective variables, and one without.
+            Also if a State is passed in, the collective variables are invalidated since
+            the State does not know of the CVs
 
         Raises
         ------
@@ -1878,6 +1893,8 @@ class SamplerState(object):
 
         """
         self._read_context_state(context_state, check_consistency=True,
+                                 ignore_positions=ignore_positions,
+                                 ignore_velocities=ignore_velocities,
                                  ignore_collective_variables=ignore_collective_variables)
 
     def apply_to_context(self, context, ignore_velocities=False):
@@ -2036,7 +2053,10 @@ class SamplerState(object):
             self._kinetic_energy = None
         return self._unitless_velocities_cache
 
-    def _read_context_state(self, context_state, check_consistency, ignore_collective_variables):
+    def _read_context_state(self, context_state, check_consistency,
+                            ignore_positions,
+                            ignore_velocities,
+                            ignore_collective_variables):
         """Read the Context state.
 
         Parameters
@@ -2046,11 +2066,19 @@ class SamplerState(object):
         check_consistency : bool
             If True, raise an error if the context system have a
             different number of particles than the current state.
+        ignore_positions : bool
+            If True, the positions and potential energy are not updated from the
+            Context.
+        ignore_velocities : bool
+            If True, the velocities and kinetic energy are not updated from the
+            Context.
         ignore_collective_variables : bool
             If True, the collective variables are not updated from the
-            Context, and will be invalidated. If a State is passed in,
+            Context. If a State is passed in,
             this raises an error if False, otherwise, it would be ambiguous
             between a State tied to a System with collective variables, and one without.
+            If a State is passed in, and this is True, collective variables will be invalidated
+            due to ambiguity.
 
         Raises
         ------
@@ -2061,7 +2089,9 @@ class SamplerState(object):
         """
         if isinstance(context_state, openmm.Context):
             system = context_state.getSystem()
-            openmm_state = context_state.getState(getPositions=True, getVelocities=True, getEnergy=True,
+            openmm_state = context_state.getState(getPositions=not ignore_positions,
+                                                  getVelocities=not ignore_velocities,
+                                                  getEnergy=not (ignore_velocities and ignore_positions),
                                                   enforcePeriodicBox=system.usesPeriodicBoundaryConditions())
         else:
             if not ignore_collective_variables:
@@ -2070,18 +2100,20 @@ class SamplerState(object):
                                         "collective variables.")
             openmm_state = context_state
 
-        positions = openmm_state.getPositions(asNumpy=True)
-        velocities = openmm_state.getVelocities(asNumpy=True)
-
         # We assign positions first, since the velocities
         # property will check its length for consistency.
-        self._set_positions(positions, from_context=True, check_consistency=check_consistency)
-        self._set_velocities(velocities, from_context=True)
-        self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
         # Potential energy and kinetic energy must be updated
         # after positions and velocities or they'll be reset.
-        self._potential_energy = openmm_state.getPotentialEnergy()
-        self._kinetic_energy = openmm_state.getKineticEnergy()
+        if not ignore_positions:
+            positions = openmm_state.getPositions(asNumpy=True)
+            self._set_positions(positions, from_context=True, check_consistency=check_consistency)
+            self._potential_energy = openmm_state.getPotentialEnergy()
+        if not ignore_velocities:
+            velocities = openmm_state.getVelocities(asNumpy=True)
+            self._set_velocities(velocities, from_context=True)
+            self._kinetic_energy = openmm_state.getKineticEnergy()
+        self.box_vectors = openmm_state.getPeriodicBoxVectors(asNumpy=True)
+        # This has its own function for handling ignore_cv's because States have different behavior
         self._read_collective_variables(context_state, ignore_collective_variables)
 
     def _read_collective_variables(self, context_state, ignore_collective_variables):
@@ -2094,10 +2126,12 @@ class SamplerState(object):
             The object to read. This only works with Context's for now,
             but in the future, this may support OpenMM State objects as well.
         ignore_collective_variables : bool
-            Choose to just ignore this value. If True, invalidate the CV's
+            Choose to just ignore this value
         """
         if ignore_collective_variables:
-            self._collective_variables = None
+            if isinstance(context_state, openmm.State):
+                # Invalidate if State is passed in
+                self._collective_variables = None
             return
         # Allows direct key assignment without initializing each key:dict pair
         collective_variables = collections.defaultdict(dict)
