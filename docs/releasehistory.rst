@@ -1,11 +1,16 @@
 Release History
 ===============
 
-0.16.0 - GlobalParameterState class
-===================================
+0.16.0 - GlobalParameterState class, SamplerState reads CVs
+============================================================
 
 New features
 ------------
+- Add ability for ``SamplerState`` to access new `OpenMM Custom CV Force Variables
+  <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_ 
+  (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
+- ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only
+  recommended for advanced users (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
 - Added the new class ``states.GlobalParameterState`` designed to simplify the implementation of composable states that
   control global variables (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
 - Allow restraint force classes to be controlled by a parameter other than ``lambda_restraints``. This will enable
@@ -18,6 +23,7 @@ Deprecated
   an inconsistent state when an exception was raised and caught.
 - Deprecated ``update_alchemical_charges`` in ``AlchemicalState`` in anticipation of the new implementation of the
   exact PME that will be based on the ``NonbondedForce`` offsets rather than ``updateParametersInContext()``.
+
 
 0.15.0 - Restraint forces
 =========================

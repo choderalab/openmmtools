@@ -12,22 +12,20 @@ build:
 requirements:
   build:
     - python
-    - cython
-    - numpy
-    - scipy
+#    - cython
+#    - numpy
+#    - scipy
     - setuptools
     - openmm
-    - parmed
-    - mdtraj
-    - netcdf4
-    - pyyaml
+#    - parmed
+#    - mdtraj
+#    - netcdf4
+#    - pyyaml
 
   run:
     - python
-    - cython
     - numpy
     - scipy
-    - setuptools
     - six
     - openmm
     - parmed

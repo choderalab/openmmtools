@@ -715,7 +715,14 @@ class BaseIntegratorMove(MCMCMove):
 
         # Updated sampler state.
         timer.start("{}: update sampler state".format(move_name))
-        sampler_state.update_from_context(context_state)
+        # This is an optimization around the fact that Collective Variables are not a part of the State,
+        # but are a part of the Context. We do this call twice to minimize duplicating information fetched from
+        # the State.
+        # Update everything but the collective variables from the State object
+        sampler_state.update_from_context(context_state, ignore_collective_variables=True)
+        # Update only the collective variables from the Context
+        sampler_state.update_from_context(context, ignore_positions=True, ignore_velocities=True,
+                                          ignore_collective_variables=False)
         timer.stop("{}: update sampler state".format(move_name))
 
         #timer.report_timing()
