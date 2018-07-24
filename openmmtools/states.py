@@ -3190,8 +3190,11 @@ class GlobalParameterState(object):
             suffix = ''
         else:
             suffix = '_' + parameters_name_suffix
-        # inspect.getmembers() resolves automatically the MRO.
-        controlled_parameters = {name + suffix: descriptor for name, descriptor in inspect.getmembers(cls)
+        # TODO just use inspect.getmembers when dropping Python 2 which automatically resolves the MRO.
+        # controlled_parameters = {name + suffix: descriptor for name, descriptor in inspect.getmembers(cls)
+        #                          if isinstance(descriptor, cls.GlobalParameter)}
+        controlled_parameters = {name + suffix: descriptor for c in inspect.getmro(cls)
+                                 for name, descriptor in c.__dict__.items()
                                  if isinstance(descriptor, cls.GlobalParameter)}
         return controlled_parameters
 
@@ -3203,7 +3206,7 @@ class GlobalParameterState(object):
             parameter_value = self._parameters[key]
         except KeyError:
             # Parameter not found, fall back to normal behavior.
-            parameter_value = super().__getattribute__(key)
+            parameter_value = super(GlobalParameterState, self).__getattribute__(key)
         return parameter_value
 
     def __setattr__(self, key, value):

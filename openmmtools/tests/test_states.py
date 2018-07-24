@@ -1593,7 +1593,7 @@ class TestGlobalParameterState(object):
         integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
         context = self.diatomic_molecule_ts.create_context(integrator)
 
-        def check_not_applicable(states, error):
+        def check_not_applicable(states, error, context):
             for s in states:
                 with nose.tools.assert_raises_regexp(GlobalParameterError, error):
                     s.apply_to_context(context)
@@ -1602,12 +1602,12 @@ class TestGlobalParameterState(object):
         state, state_suffix = self.read_system_state(system)
         state.lambda_bonds = None
         state_suffix.lambda_bonds_mysuffix = None
-        check_not_applicable([state, state_suffix], 'undefined in this state')
+        check_not_applicable([state, state_suffix], 'undefined in this state', context)
 
         # Raise error if the state defines global parameters that are undefined in the Context.
         state, state_suffix = self.read_system_state(system)
         state_suffix.gamma_mysuffix = 2.0
-        check_not_applicable([state_suffix], 'Could not find parameter')
+        check_not_applicable([state_suffix], 'Could not find parameter', context)
 
         # Test-precondition: Context parameters are different than the value we'll test.
         tested_value = 0.2
