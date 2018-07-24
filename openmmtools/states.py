@@ -2584,12 +2584,12 @@ class GlobalParameterState(object):
     >>> from simtk import openmm, unit
     >>> # Define a diatomic molecule.
     >>> system = openmm.System()
-    >>> system.addParticle(40.0*unit.amu)
-    >>> system.addParticle(40.0*unit.amu)
+    >>> particle_idx = system.addParticle(40.0*unit.amu)
+    >>> particle_idx = system.addParticle(40.0*unit.amu)
     >>> custom_force = openmm.CustomBondForce('lambda_bonds^gamma*60000*(r-0.15)^2;')
-    >>> custom_force.addGlobalParameter('lambda_bonds', 1.0)  # Default value is 1.0.
-    >>> custom_force.addGlobalParameter('gamma', 1.0)  # Default value is 1.0.
-    >>> custom_force.addBond(0, 1, [])
+    >>> parameter_idx = custom_force.addGlobalParameter('lambda_bonds', 1.0)  # Default value is 1.0.
+    >>> parameter_idx = custom_force.addGlobalParameter('gamma', 1.0)  # Default value is 1.0.
+    >>> bond_idx = custom_force.addBond(0, 1, [])
     >>> force_index = system.addForce(custom_force)
     >>> # Create a thermodynamic state object controlling the temperature of the system.
     >>> thermodynamic_state = ThermodynamicState(system, temperature=300.0*unit.kelvin)
@@ -2599,14 +2599,14 @@ class GlobalParameterState(object):
     are not specified in the constructor are left undefined.
 
     >>> class MyComposableState(GlobalParameterState):
-    ...     gamma = GlobalParameterState.GlobalParameter(1.0, standard_value='gamma')
-    ...     lambda_bonds = GlobalParameterState.GlobalParameter(1.0, standard_value='lambda_bonds')
+    ...     gamma = GlobalParameterState.GlobalParameter('gamma', standard_value=1.0)
+    ...     lambda_bonds = GlobalParameterState.GlobalParameter('lambda_bonds', standard_value=1.0)
     ...
     >>> my_composable_state = MyComposableState(gamma=1.0)
     >>> my_composable_state.gamma
     1.0
-    >>> my_composable_state.lambda_bonds
-    None
+    >>> my_composable_state.lambda_bonds is None
+    True
 
     There is a second static constructor you can use to read the state
     of an OpenMM ``System`` from the default values of its force parameters.
@@ -2625,11 +2625,11 @@ class GlobalParameterState(object):
     ...     lambda_bonds = GlobalParameterState.GlobalParameter('lambda_bonds', standard_value=0.0)
     ...     @lambda_bonds.validator
     ...     def lambda_bonds(self, instance, new_value):
-    ...         if not (0.0 <= new_value <= 1.0):
+    ...         if new_value is not None and not (0.0 <= new_value <= 1.0):
     ...             raise ValueError('lambda_bonds must be between 0.0 and 1.0')
     ...         return new_value
     ...
-    >>> my_composable_state = MyComposableState()
+    >>> my_composable_state = MyComposableState(gamma=1.0)
     >>> my_composable_state.lambda_bonds = 2.0
     Traceback (most recent call last):
     ...
@@ -2638,11 +2638,14 @@ class GlobalParameterState(object):
     You can then add it to a ``CompoundThermodynamicState`` to manipulate
     OpenMM ``System`` and ``Context`` objects.
 
+    >>> my_composable_state.lambda_bonds = 1.0
     >>> compound_state = CompoundThermodynamicState(thermodynamic_state, composable_states=[my_composable_state])
-    >>> compound_state.system.getForce(0).getGlobalParameterDefaultValue(0)  # lambda_bonds global parameter.
+    >>> state_system = compound_state.get_system()
+    >>> state_system.getForce(0).getGlobalParameterDefaultValue(0)  # lambda_bonds global parameter.
     1.0
     >>> compound_state.lambda_bonds = 0.0
-    >>> compound_state.system.getForce(0).getGlobalParameterDefaultValue(0)  # lambda_bonds global parameter.
+    >>> state_system = compound_state.get_system()
+    >>> state_system.getForce(0).getGlobalParameterDefaultValue(0)  # lambda_bonds global parameter.
     0.0
 
     >>> context = compound_state.create_context(openmm.VerletIntegrator(1.0*unit.femtoseconds))
@@ -2660,21 +2663,21 @@ class GlobalParameterState(object):
 
     >>> # Add a second custom force using similar global parameters.
     >>> custom_force = openmm.CustomBondForce('lambda_bonds_mysuffix*20000*(r-0.15)^2;')
-    >>> custom_force.addGlobalParameter('lambda_bonds_mysuffix', 1.0)  # Default value is 1.0.
-    >>> custom_force.addBond(0, 1, [])
-    >>> system.addForce(custom_force)
+    >>> parameter_idx = custom_force.addGlobalParameter('lambda_bonds_mysuffix', 1.0)  # Default value is 1.0.
+    >>> bond_idx = custom_force.addBond(0, 1, [])
+    >>> force_idx = system.addForce(custom_force)
     >>> # Create a state controlling the modified global parameter.
     >>> my_composable_state = MyComposableState(parameters_name_suffix='mysuffix', lambda_bonds=0.0)
     >>> my_composable_state.lambda_bonds_mysuffix = 1.0
-    >>> my_composable_state.gamma_mysuffix
-    None
+    >>> my_composable_state.gamma_mysuffix is None
+    True
     >>> my_composable_state.apply_to_system(system)
     >>> # The unmodified parameter becomes unaccessible.
     >>> my_composable_state.apply_to_system(system)
     >>> my_composable_state.lambda_bonds
     Traceback (most recent call last):
     ...
-    GlobalParameterError: This state does not control lambda_bonds but lambda_bonds_mysuffix.
+    AttributeError: This state does not control lambda_bonds but lambda_bonds_mysuffix.
 
     Note also in the example above that the forces don't need to define
     all the global parameters controlled by the state. The state object
@@ -2685,7 +2688,7 @@ class GlobalParameterState(object):
     >>> my_composable_state.apply_to_system(system)
     Traceback (most recent call last):
     ...
-    GlobalParameterError: Could not find global parameter gamma_mysuffix in the System.
+    GlobalParameterError: Could not find global parameter gamma_mysuffix in the system.
 
     """
 
@@ -2833,7 +2836,7 @@ class GlobalParameterState(object):
             """
             if instance._parameters_name_suffix is not None:
                 suffixed_parameter_name = self.parameter_name + '_' + instance._parameters_name_suffix
-                err_msg = 'This state does not control {} but {}'
+                err_msg = 'This state does not control {} but {}.'
                 raise AttributeError(err_msg.format(self.parameter_name, suffixed_parameter_name))
 
     # -------------------------------------------------------------------------
@@ -2870,7 +2873,7 @@ class GlobalParameterState(object):
         for parameter_name in self._get_controlled_parameters(self._parameters_name_suffix):
             if (self._parameters[parameter_name] is not None and
                     parameter_name not in parameters_applied):
-                err_msg = 'Could not find parameter {} in the system.'
+                err_msg = 'Could not find global parameter {} in the system.'
                 raise GlobalParameterError(err_msg.format(parameter_name))
 
     def check_system_consistency(self, system):
