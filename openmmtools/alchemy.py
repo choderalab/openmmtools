@@ -117,7 +117,7 @@ class AlchemicalState(object):
     lambda_torsions : float, optional
         Scaling factor for alchemically-softened torsions (default is 1.0).
     update_alchemical_charges : bool, optional
-        If True, ``lambda_electrostatics`` changes in alchemical systems
+        If False, ``lambda_electrostatics`` changes in alchemical systems
         that use exact treatment of PME electrostatics will be considered
         incompatible. This means that a new ``Context`` will be required
         for each `lambda_electrostatics`` state.
@@ -257,16 +257,19 @@ class AlchemicalState(object):
                 alchemical_parameters[parameter_name] = parameter_value
 
         # Handle the update parameters flag.
-        update_alchemical_charges = bool(alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER,
-                                                                   cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT))
+        update_alchemical_charges = alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER, None)
 
         # Check that the system is alchemical.
         if len(alchemical_parameters) == 0:
             raise AlchemicalStateError('System has no lambda parameters.')
 
+        # Avoid passing update_alchemical_charges if not necessary to not raise deprecation warning.
+        if (update_alchemical_charges is not None and
+                    update_alchemical_charges != cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT):
+            alchemical_parameters['update_alchemical_charges'] = bool(update_alchemical_charges)
+
         # Create and return the AlchemicalState.
-        return AlchemicalState(update_alchemical_charges=update_alchemical_charges,
-                               **alchemical_parameters)
+        return AlchemicalState(**alchemical_parameters)
 
     # -------------------------------------------------------------------------
     # Lambda properties
@@ -398,7 +401,8 @@ class AlchemicalState(object):
         parameters = serialization['parameters']
         alchemical_variables = serialization['alchemical_variables']
         # New attribute in OpenMMTools 0.14.0.
-        update_alchemical_charges = serialization.get('update_alchemical_charges', True)
+        update_alchemical_charges = serialization.get('update_alchemical_charges',
+                                                      self._UPDATE_ALCHEMICAL_CHARGES_DEFAULT)
         alchemical_functions = dict()
 
         # Temporarily store alchemical functions.
