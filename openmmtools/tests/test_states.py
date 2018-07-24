@@ -1552,7 +1552,7 @@ class TestGlobalParameterState(object):
 
         # Raise an error if an extra parameter is defined in the state.
         state_suffix.gamma_mysuffix = 2.0
-        err_msg = 'Could not find parameter gamma_mysuffix in the system.'
+        err_msg = 'Could not find global parameter gamma_mysuffix in the system.'
         with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
             state_suffix.apply_to_system(system)
 
@@ -1703,7 +1703,7 @@ class TestGlobalParameterState(object):
 
         # Trying to set in the constructor undefined global parameters raise an exception.
         composable_states[1].gamma_mysuffix = 2.0
-        err_msg = 'Could not find parameter gamma_mysuffix in the system.'
+        err_msg = 'Could not find global parameter gamma_mysuffix in the system.'
         with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
             CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
 
