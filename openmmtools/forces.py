@@ -700,7 +700,7 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
                  restrained_atom_indices1, restrained_atom_indices2,
                  controlling_parameter_name='lambda_restraints'):
         # Initialize CustomCentroidBondForce.
-        energy_function = controlling_parameter_name + ' * ' + energy_function
+        energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
         custom_centroid_bond_force_args = [2, energy_function]
         super(RadiallySymmetricCentroidRestraintForce, self).__init__(
             restraint_parameters, restrained_atom_indices1, restrained_atom_indices2,
@@ -749,7 +749,7 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
                  controlling_parameter_name='lambda_restraints'):
         # Initialize CustomBondForce.
         energy_function = energy_function.replace('distance(g1,g2)', 'r')
-        energy_function = controlling_parameter_name + ' * ' + energy_function
+        energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
         super(RadiallySymmetricBondRestraintForce, self).__init__(
             restraint_parameters, [restrained_atom_index1], [restrained_atom_index2],
             controlling_parameter_name, energy_function)
