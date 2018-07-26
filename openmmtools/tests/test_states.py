@@ -964,10 +964,7 @@ class TestSamplerState(object):
         assert sliced_sampler_state.potential_energy is None
 
     def test_collective_variable(self):
-        """Test that CV calculation is working (If on OpenMM >=7.3)"""
-        # TODO: Remove the if statement and require OpenMM 7.3 once 7.3 is actually released
-        if not hasattr(openmm, "CustomCVForce"):
-            return
+        """Test that CV calculation is working"""
         # Setup the CV tests if we have a late enough OpenMM
         # alanine_explicit_cv = copy.deepcopy(self.alanine_explicit)
         system_cv = self.alanine_explicit_state.system
