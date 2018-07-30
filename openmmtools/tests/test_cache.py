@@ -193,12 +193,57 @@ class TestContextCache(object):
 
     def test_copy_integrator_state(self):
         """ContextCache._copy_integrator_state correctly copies state."""
-        langevin1 = copy.deepcopy(self.langevin_2fs_310k)
-        langevin2 = openmm.LangevinIntegrator(300*unit.kelvin, 8.0/unit.picosecond,
-                                              3.0*unit.femtosecond)
-        assert langevin1.__getstate__() != langevin2.__getstate__()
-        ContextCache._copy_integrator_state(langevin1, langevin2)
-        assert langevin1.__getstate__() == langevin2.__getstate__()
+        # Each test case has two integrators of the same class with a different state.
+        test_cases = [
+            # The Langevin integrators require using setter/getters.
+            [copy.deepcopy(self.langevin_2fs_310k),
+             openmm.LangevinIntegrator(300*unit.kelvin, 8.0/unit.picosecond,
+                                       3.0*unit.femtosecond)],
+            # The Langevin splittin integrator requires setting global variables.
+            [integrators.LangevinIntegrator(temperature=270*unit.kelvin,
+                                            collision_rate=90/unit.picoseconds),
+             integrators.LangevinIntegrator(temperature=270*unit.kelvin,
+                                            collision_rate=180/unit.picoseconds)],
+        ]
+        # Add a fake Python attribute to the last two integrators to test those as well.
+        test_cases[1][0].fake_attribute = 1
+        test_cases[1][1].fake_attribute = 2
+
+        for integrator1, integrator2 in copy.deepcopy(test_cases):
+            assert integrator1.__getstate__() != integrator2.__getstate__()
+            ContextCache._copy_integrator_state(integrator1, integrator2)
+            assert integrator1.__getstate__() == integrator2.__getstate__()
+
+        # If we update the INCOMPATIBLE_INTEGRATOR_ATTRIBUTES, the integrators become incompatible.
+        def read_attribute(integrator, attribute_name):
+            try:
+                return getattr(integrator, attribute_name)
+            except:
+                try:
+                    return getattr(integrator, 'get' + attribute_name)()
+                except:
+                    return integrator.getGlobalVariableByName(attribute_name)
+
+        test_cases.append(copy.deepcopy(test_cases[1]))
+        test_cases[0].append('Temperature')  # Getter/setter.
+        test_cases[1].append('fake_attribute')  # Python attribute.
+        test_cases[2].append('a')  # Global variable.
+
+        for integrator1, integrator2, incompatible_attribute in test_cases:
+            ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES.add(incompatible_attribute)
+            if incompatible_attribute == 'Temperature':
+                old_standard_value = ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES.pop(incompatible_attribute)
+
+            integ = [integrator1, integrator2]
+            old_values = [read_attribute(i, incompatible_attribute) for i in integ]
+            assert old_values[0] != old_values[1]
+            ContextCache._copy_integrator_state(integrator1, integrator2)
+            new_values = [read_attribute(i, incompatible_attribute) for i in integ]
+            assert old_values == new_values
+
+            ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES.remove(incompatible_attribute)
+            if incompatible_attribute == 'Temperature':
+                ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES[incompatible_attribute] = old_standard_value
 
     def test_generate_compatible_context_key(self):
         """ContextCache._generate_context_id creates same id for compatible contexts."""

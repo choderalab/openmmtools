@@ -214,7 +214,15 @@ class ContextCache(object):
     and have compatible integrators. In general, two integrators are compatible
     if they have the same serialized state, but ContextCache can decide to store
     a single Context to optimize memory when two integrators differ by only few
-    parameters that can be set after the Context is initialized.
+    parameters that can be set after the Context is initialized. These parameters
+    include all the global variables defined by a ``CustomIntegrator``, and all
+    its Python attributes. You can force ``ContextCache`` to consider an
+    integrator global variable incompatible by adding it to the blacklist
+    ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES``. Similarly, you can add
+    other attributes that should be considered compatible through the whitelist
+    ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``. If an attribute in that
+    dictionary is not found in the integrator, the cache will search for a
+    corresponding getter and setter.
 
     Parameters
     ----------
@@ -441,17 +449,9 @@ class ContextCache(object):
         'Temperature': 273,
         'Friction': 5,
         'RandomNumberSeed': 0,
-        'heat': 0,
-        'old_ke': 0,
-        'new_ke': 0,
-        'old_pe': 0,
-        'new_pe': 0,
-        'shadow_work': 0,
-        'accept': 0,
-        'ntrials': 0,
-        'nreject': 0,
-        'naccept': 0,
     }
+
+    INCOMPATIBLE_INTEGRATOR_ATTRIBUTES = set()
 
     @classmethod
     def _copy_integrator_state(cls, copied_integrator, integrator):
@@ -460,23 +460,46 @@ class ContextCache(object):
         Simply using __getstate__ and __setstate__ doesn't work because
         __setstate__ set also the bound Context.
 
+        We can assume the two integrators are of the same class since
+        get_context() found that they match the has.
+
         """
+        # Check that there are no contrasting settings for the attribute compatibility.
+        shared_attributes = set(cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES)
+        shared_attributes = shared_attributes.intersection(cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES)
+        if len(shared_attributes) != 0:
+            raise RuntimeError('Some integrator attributes have been specified both as '
+                               'compatible and incompatible: {}'.format(shared_attributes))
+
         # Restore temperature getter/setter before copying attributes.
         integrators.ThermostatedIntegrator.restore_interface(integrator)
         integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
+        assert integrator.__class__ == copied_integrator.__class__
 
+        # Copy eventual global variables.
+        try:
+            n_global_variables = integrator.getNumGlobalVariables()
+        except AttributeError:
+            n_global_variables = 0
+        for global_variable_idx in range(n_global_variables):
+            # Do not set variables that should be incompatible.
+            global_variable_name = copied_integrator.getGlobalVariableName(global_variable_idx)
+            if global_variable_name in cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES:
+                continue
+            value = copied_integrator.getGlobalVariable(global_variable_idx)
+            integrator.setGlobalVariable(global_variable_idx, value)
+
+        # Copy the Python attributes (except for the SWIG pointer).
+        python_attributes = {k: v for k, v in copied_integrator.__dict__.items()
+                             if k != 'this' and k not in cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES}
+        integrator.__dict__.update(copy.deepcopy(python_attributes))
+
+        # Copy other compatible attributes through getters/setters.
         for attribute in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES:
             try:  # getter/setter
                 value = getattr(copied_integrator, 'get' + attribute)()
             except AttributeError:
-                # Try a CustomIntegrator global variable.
-                if isinstance(copied_integrator, openmm.CustomIntegrator):
-                    try:
-                        value = copied_integrator.getGlobalVariableByName(attribute)
-                    except Exception:
-                        pass
-                    else:
-                        integrator.setGlobalVariableByName(attribute, value)
+                pass
             else:  # getter/setter
                 getattr(integrator, 'set' + attribute)(value)
 
