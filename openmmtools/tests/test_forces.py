@@ -58,6 +58,7 @@ def test_find_forces():
                                                  restrained_atom_index1=2, restrained_atom_index2=5)
     system.addForce(restraint_force)
     system.addForce(openmm.CustomBondForce('0.0'))
+    system.addForce(openmm.CustomCVForce('0.0'))
 
     def assert_forces_equal(found_forces, expected_force_classes):
         # Forces should be ordered by their index.
@@ -70,9 +71,9 @@ def test_find_forces():
     yield assert_forces_equal, found_forces, [(6, openmm.CustomBondForce)]
 
     # Test find force and include subclasses.
-    found_forces = find_forces(system, openmm.CustomBondForce, include_subclasses=True)
+    found_forces = find_forces(system, openmm.CustomCVForce, include_subclasses=True)
     yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
-                                              (6, openmm.CustomBondForce)]
+                                              (7, openmm.CustomCVForce)]
     found_forces = find_forces(system, RadiallySymmetricRestraintForce, include_subclasses=True)
     yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce)]
 
@@ -88,16 +89,16 @@ def test_find_forces():
 
     # Find all forces from the name including the subclasses.
     # Test find force and include subclasses.
-    found_forces = find_forces(system, 'CustomBond.*', include_subclasses=True)
+    found_forces = find_forces(system, 'CustomCV.*', include_subclasses=True)
     yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
-                                              (6, openmm.CustomBondForce)]
+                                              (7, openmm.CustomCVForce)]
 
     # With check_multiple=True only one force is returned.
     force_idx, force = find_forces(system, openmm.NonbondedForce, only_one=True)
     yield assert_forces_equal, {force_idx: force}, [(3, openmm.NonbondedForce)]
 
     # An exception is raised with "only_one" if multiple forces are found.
-    yield nose.tools.assert_raises, MultipleForcesError, find_forces, system, 'CustomBondForce', True, True
+    yield nose.tools.assert_raises, MultipleForcesError, find_forces, system, 'CustomCVForce', True, True
 
     # An exception is raised with "only_one" if the force wasn't found.
     yield nose.tools.assert_raises, NoForceFoundError, find_forces, system, 'NonExistentForce', True
@@ -116,8 +117,8 @@ class TestRadiallySymmetricRestraints(object):
         cls.spring_constant = 15000.0 * unit.joule/unit.mole/unit.nanometers**2
         cls.restrained_atom_indices1 = [2, 3, 4]
         cls.restrained_atom_indices2 = [10, 11]
-        cls.restrained_atom_index1=12
-        cls.restrained_atom_index2=2
+        cls.restrained_atom_index1 = 12
+        cls.restrained_atom_index2 = 2
         cls.custom_parameter_name = 'restraints_parameter'
 
         cls.restraints = [

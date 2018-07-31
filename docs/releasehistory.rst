@@ -15,6 +15,9 @@ New features
   control global variables (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
 - Allow restraint force classes to be controlled by a parameter other than ``lambda_restraints``. This will enable
   multi-restraints simulations (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
+- ``RadiallySymmetricRestraintForce`` and all subclasses are now a ``CustomCVForce`` subclass wrapping their
+  respective ``CustomBondForce`` and ``CustomCentroidBondForce`` objects. This breaks backwards compatibility, but
+  enables tracking the restraint distances through the new ``SamplerSate`` collective variable features.
 
 Deprecated
 ----------
