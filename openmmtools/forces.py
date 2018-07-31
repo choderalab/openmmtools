@@ -228,7 +228,7 @@ def _compute_harmonic_radius(spring_constant, potential_energy):
 # =============================================================================
 
 class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject,
-                                      openmm.CustomCVForce, abc.ABC):
+                                      openmm.CustomCVForce):
     """Base class for radially-symmetric restraint force.
 
     Provide facility functions to compute the standard state correction
@@ -289,6 +289,8 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject,
         assert len(restraint_parameters) == 1 or isinstance(restraint_parameters, collections.OrderedDict)
         assert "Distance" not in restraint_parameters, ('"Distance" cannot be a restraint_parameter as it will ' 
                                                         'clash with the CV Variable"')
+        assert "Distance" in energy_string, ('"Distance" must be in the energy_string as it will be the collective '
+                                             'variable the base CustomCVForce uses.')
 
         # Augment energy_string with parameters
         energy_string += ";"

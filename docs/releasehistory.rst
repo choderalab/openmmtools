@@ -27,6 +27,18 @@ Deprecated
 - Deprecated ``update_alchemical_charges`` in ``AlchemicalState`` in anticipation of the new implementation of the
   exact PME that will be based on the ``NonbondedForce`` offsets rather than ``updateParametersInContext()``.
 
+Compatibility Warnings
+----------------------
+- ``RadiallySymmetricRestraintForce``'s conversion to ``CustomCVForce``'s break the backwards compatibility with older
+  codes which implement subclasses of it. The largest change is how the Energy Function is implemented, and subclass
+  hierarchy. E.g. All these classes are now ``CustomCVForce``'s instead of ``CustomBondForce`` and
+  ``CustomCentroidBondForce`` objects.
+
+     - This affects ``RadiallySymmetricRestraintForce``,
+       ``RadiallySymmetricCentroidRestraintForce``, ``RadiallySymmetricBondRestraintForce``,
+       ``HarmonicRestraintForceMixIn``, ``HarmonicRestraintForce``, ``HarmonicRestraintBondForce``,
+       ``FlatBottomRestraintForceMixIn``, ``FlatBottomRestraintForce``, and ``FlatBottomRestraintBondForce``.
+
 
 0.15.0 - Restraint forces
 =========================
