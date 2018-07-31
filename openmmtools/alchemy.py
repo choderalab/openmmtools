@@ -260,7 +260,6 @@ class AlchemicalState(object):
         # Handle the update parameters flag.
         update_alchemical_charges = bool(alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER,
                                                                    cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT))
-        print(update_alchemical_charges)
 
         # Check that the system is alchemical.
         if len(alchemical_parameters) == 0:
@@ -302,6 +301,8 @@ class AlchemicalState(object):
     lambda_electrostatics_one = _LambdaProperty('lambda_electrostatics_one')
     lambda_sterics_two = _LambdaProperty('lambda_sterics_two')
     lambda_electrostatics_two = _LambdaProperty('lambda_electrostatics_two')
+    lambda_sterics_three = _LambdaProperty('lambda_sterics_three')
+    lambda_electrostatics_three = _LambdaProperty('lambda_electrostatics_three')
 
     lambda_bonds = _LambdaProperty('lambda__bonds')
     lambda_angles = _LambdaProperty('lambda__angles')
@@ -395,7 +396,6 @@ class AlchemicalState(object):
         for parameter_class in ['parameters', 'alchemical_variables']:
             parameters = getattr(self, '_' + parameter_class)
             for parameter, value in parameters.items():
-                print(parameter, value)
                 if isinstance(value, AlchemicalFunction):
                     serialization[parameter_class][parameter] = value._expression
                 else:
@@ -407,8 +407,6 @@ class AlchemicalState(object):
         parameters = serialization['parameters']
         alchemical_variables = serialization['alchemical_variables']
         region_name = serialization['region_name']
-        print('//////////////')
-        print(region_name)
         # New attribute in OpenMMTools 0.14.0.
         update_alchemical_charges = serialization.get('update_alchemical_charges', True)
         alchemical_functions = dict()
@@ -489,7 +487,6 @@ class AlchemicalState(object):
             If the context does not have the required lambda global variables.
 
         """
-        print('Apply to Context')
         has_lambda_electrostatics_changed = False
         context_parameters = context.getParameters()
 
@@ -667,7 +664,6 @@ class AlchemicalState(object):
     def _initialize(self, region_name = None, update_alchemical_charges=_UPDATE_ALCHEMICAL_CHARGES_DEFAULT,
                     **kwargs):
         self.region_name = region_name
-        print(region_name)
         """Initialize the alchemical state."""
         self._alchemical_variables = {}
         self.update_alchemical_charges = update_alchemical_charges
@@ -699,13 +695,11 @@ class AlchemicalState(object):
             If the system does not have the required lambda global variables.
 
         """
-        print('Apply to System')
         region_name = self.region_name
         has_lambda_electrostatics_changed = False
         parameters_applied = set()
         for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
             parameter_value = getattr(self, parameter_name)
-            print(region_name, parameter_name)
             if region_name in parameter_name:
                 if parameter_value == None:
                     err_msg = 'The system parameter {} is not defined in this state.'
@@ -714,13 +708,11 @@ class AlchemicalState(object):
                     # If lambda_electrostatics, first check if we're changing it for later.
                     # This avoids us to loop through the System forces if we don't need to
                     # set the NonbondedForce charges.
-                    print(parameter_name)
                     if 'electrostatics' in parameter_name:
                         elec_region = parameter_name
                         old_parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
                         has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
                                                              parameter_value != old_parameter_value)
-                        print(old_parameter_value, has_lambda_electrostatics_changed)
                     parameters_applied.add(parameter_name)
                     force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
 
@@ -732,9 +724,7 @@ class AlchemicalState(object):
                 raise AlchemicalStateError(err_msg.format(parameter_name))
 
         # Nothing else to do if we don't need to modify the exact PME forces.
-        print(set_update_charges_flag)
         if not (has_lambda_electrostatics_changed or set_update_charges_flag):
-            print('HI')
             return
 
         # Loop through system and retrieve exact PME forces.
@@ -746,7 +736,6 @@ class AlchemicalState(object):
 
         # Write NonbondedForce charges if PME is treated exactly.
         if has_lambda_electrostatics_changed:
-            print('SET PME')
             self._set_exact_pme_charges(original_charges_force, nonbonded_force, lambda_electrostatics)
 
         # Flag if updateParametersInContext is allowed.
@@ -859,7 +848,6 @@ class AlchemicalState(object):
             charge, sigma, epsilon = nonbonded_force.getParticleParameters(atom_idx)
             original_charge = original_charges_force.getParticleParameters(atom_idx)[0]
             charge = lambda_electrostatics * original_charge
-            print(charge, lambda_electrostatics, original_charge)
             nonbonded_force.setParticleParameters(atom_idx, charge, sigma, epsilon)
 
 
@@ -1116,7 +1104,6 @@ class AbsoluteAlchemicalFactory(object):
             AlchemicalRegions.append(self._resolve_alchemical_region(reference_system, alchemical_region))
             AllAlchemicalAtoms.append(alchemical_region.alchemical_atoms)
 
-        print(AllAlchemicalAtoms)
         CheckDuplicateNames = []
         CheckDuplicateAtoms = []
         for alchemical_region in AlchemicalRegions:
@@ -1160,7 +1147,6 @@ class AbsoluteAlchemicalFactory(object):
             for alchemical_region in AlchemicalRegions:
                 # TODO switch to functools.singledispatch when we drop Python2 support
                 reference_force_name = reference_force.__class__.__name__
-                print(reference_force_name)
                 alchemical_force_creator_name = '_alchemically_modify_{}'.format(reference_force_name)
                 try:
                     alchemical_force_creator_func = getattr(self, alchemical_force_creator_name)
@@ -1177,10 +1163,13 @@ class AbsoluteAlchemicalFactory(object):
                             alchemical_forces_by_lambda[lambda_variable_name].extend(lambda_forces)
                         except KeyError:
                             alchemical_forces_by_lambda[lambda_variable_name] = lambda_forces
+                    # Want to pass NonBondedForce to next alchemical region and remove it from current
+                    # alchemical region unless we are in the last alchemical region.
                     if not alchemical_region == AlchemicalRegions[-1]:
                         if reference_force_name ==  'NonbondedForce':
                             #print(alchemical_forces_by_lambda)
                             NB = alchemical_forces_by_lambda[''][-1]
+                            #If using PME the NonbondedForce will be found as last entry of 'lambda_electrostatics'
                             if not isinstance(NB, openmm.NonbondedForce):
                                 NB = alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
                                 del alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
@@ -1188,20 +1177,11 @@ class AbsoluteAlchemicalFactory(object):
                                 del alchemical_forces_by_lambda[''][-1]
 
 
+        #DEBUG
+        #for x in alchemical_forces_by_lambda:
+        #    print(x, alchemical_forces_by_lambda[x])
+        #    print('/////////////////')
 
-        for x in alchemical_forces_by_lambda:
-            print(x, alchemical_forces_by_lambda[x])
-            print('/////////////////')
-        """
-        NB = alchemical_forces_by_lambda[''][-2]
-        if isinstance(NB, openmm.NonbondedForce):
-            print(alchemical_forces_by_lambda[''][-2])
-            del alchemical_forces_by_lambda[''][-2]
-        else:
-            print('PME')
-            print(alchemical_forces_by_lambda['lambda_electrostatics_zero'][-1])
-            del alchemical_forces_by_lambda['lambda_electrostatics_zero'][-1]
-        """
 
         # Remove original forces that have been alchemically modified.
         #print(forces_to_remove)
@@ -1679,7 +1659,6 @@ class AbsoluteAlchemicalFactory(object):
         # Don't create a force if there are no alchemical bonds.
         if len(alchemical_region.alchemical_bonds) == 0:
             return {'': [copy.deepcopy(reference_force)]}
-
         # Create standard HarmonicBondForce to handle unmodified bonds.
         force = openmm.HarmonicBondForce()
         force.setForceGroup(reference_force.getForceGroup())
@@ -1716,9 +1695,9 @@ class AbsoluteAlchemicalFactory(object):
                                                 'reff_sterics = sigma*((softcore_alpha*(1.0-lambda_sterics_{0})^softcore_b + (r/sigma)^softcore_c))^(1/softcore_c);').format(
                                                 alchemical_region_idx)
 
+
         # Define energy expression for electrostatics.
-        sterics_energy_expression = (exceptions_sterics_energy_expression + sterics_mixing_rules)
-        return sterics_energy_expression
+        return sterics_mixing_rules, exceptions_sterics_energy_expression
 
     def _get_electrostatics_energy_expressions(self, reference_force, alchemical_region_idx):
         """Return the energy expressions for electrostatics."""
@@ -1907,9 +1886,9 @@ class AbsoluteAlchemicalFactory(object):
         # Determine energy expression for all custom forces
         # --------------------------------------------------
         RegionName = alchemical_region.name
-        print(RegionName)
-        sterics_energy_expression = self._get_nonbonded_energy_exspressions(RegionName)
-        exceptions_sterics_energy_expression = sterics_energy_expression[0]
+        sterics_mixing_rules, exceptions_sterics_energy_expression = self._get_nonbonded_energy_exspressions(RegionName)
+        sterics_energy_expression = exceptions_sterics_energy_expression + sterics_mixing_rules
+
 
         # Define energy expression for electrostatics based on nonbonded method.
         nonbonded_method = reference_force.getNonbondedMethod()
@@ -2092,7 +2071,6 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_atomset = alchemical_region.alchemical_atoms
         all_atomset = set(range(reference_force.getNumParticles()))  # all atoms, including alchemical region
         all_alchemical_atoms = [item for sublist in all_alchemical_atoms for item in sublist]
-        print(all_alchemical_atoms)
         nonalchemical_atomset = all_atomset.difference(all_alchemical_atoms)
 
         # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0), which should have sigma > 0.
