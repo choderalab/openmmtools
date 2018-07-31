@@ -27,7 +27,7 @@ requirements:
     - numpy
     - scipy
     - six
-    - openmm >= 7.2
+    - openmm >=7.2
     - parmed
     - mdtraj
     - netcdf4
