@@ -25,6 +25,7 @@ install:
   - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - conda config --add channels omnia
   - conda config --add channels conda-forge
+  - pip install netcdf4  # This has to be done through pip since Windows NetCF4 has a DLL issue on conda
 
 build: false
 

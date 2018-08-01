@@ -30,7 +30,8 @@ requirements:
     - openmm >=7.2
     - parmed
     - mdtraj
-    - netcdf4
+    # NetCDF4 on windows conda has DLL issues and has for a while, must get from pip
+    - netcdf4 # [not win]
     - pyyaml
 
 

@@ -143,14 +143,6 @@ class TestRadiallySymmetricRestraints(object):
                                          restrained_atom_index2=cls.restrained_atom_index2,
                                          controlling_parameter_name=cls.custom_parameter_name),
         ]
-        tforce = cls.restraints[0]
-        from openmmtools.utils import deserialize as dese
-        from openmmtools.utils import serialize as se
-        import pdb
-        pdb.set_trace()
-        s = se(tforce)
-        reforce = dese(s)
-        pass
 
     def test_restorable_forces(self):
         """Test that the restraint interface can be restored after serialization."""
@@ -158,6 +150,14 @@ class TestRadiallySymmetricRestraints(object):
             force_serialization = openmm.XmlSerializer.serialize(restorable_force)
             deserialized_force = utils.RestorableOpenMMObject.deserialize_xml(force_serialization)
             yield assert_pickles_equal, restorable_force, deserialized_force
+            # Make sure Python properties are restored correctly
+            yield assert_equal, restorable_force.controlling_parameter_name, \
+                  deserialized_force.controlling_parameter_name
+            if isinstance(restorable_force, FlatBottomRestraintForceMixIn):
+                yield assert_quantity_almost_equal, restorable_force.spring_constant, deserialized_force.spring_constant
+                yield assert_quantity_almost_equal, restorable_force.well_radius, deserialized_force.well_radius
+            elif isinstance(restorable_force, HarmonicRestraintForceMixIn):
+                yield assert_quantity_almost_equal, restorable_force.spring_constant, deserialized_force.spring_constant
 
     def test_restraint_properties(self):
         """Test that properties work as expected."""
