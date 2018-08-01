@@ -32,7 +32,7 @@ requirements:
     - mdtraj
     # NetCDF4 on windows conda has DLL issues, so pin libnetcdf
     - netcdf4
-    - libnetcdf 4.4.1.1 # [win]
+    - libnetcdf ==4.6.1=h183b1a9_3 # [win]
     - pyyaml
 
 
