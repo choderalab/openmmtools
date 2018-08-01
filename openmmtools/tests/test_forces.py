@@ -143,6 +143,14 @@ class TestRadiallySymmetricRestraints(object):
                                          restrained_atom_index2=cls.restrained_atom_index2,
                                          controlling_parameter_name=cls.custom_parameter_name),
         ]
+        tforce = cls.restraints[0]
+        from openmmtools.utils import deserialize as dese
+        from openmmtools.utils import serialize as se
+        import pdb
+        pdb.set_trace()
+        s = se(tforce)
+        reforce = dese(s)
+        pass
 
     def test_restorable_forces(self):
         """Test that the restraint interface can be restored after serialization."""

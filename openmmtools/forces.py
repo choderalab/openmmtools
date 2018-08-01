@@ -336,6 +336,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject,
         force : OpenMM.Force
             The force measuring distance to be used as the CV
         """
+        pass
 
     @abc.abstractmethod
     def _create_bond(self, restrained_atom_indices1,
