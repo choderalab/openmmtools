@@ -301,12 +301,18 @@ class AlchemicalState(object):
     lambda_electrostatics_one = _LambdaProperty('lambda_electrostatics_one')
     lambda_sterics_two = _LambdaProperty('lambda_sterics_two')
     lambda_electrostatics_two = _LambdaProperty('lambda_electrostatics_two')
-    lambda_sterics_three = _LambdaProperty('lambda_sterics_three')
-    lambda_electrostatics_three = _LambdaProperty('lambda_electrostatics_three')
 
-    lambda_bonds = _LambdaProperty('lambda__bonds')
-    lambda_angles = _LambdaProperty('lambda__angles')
-    lambda_torsions = _LambdaProperty('lambda__torsions')
+    lambda_torsions_zero = _LambdaProperty('lambda_torsions_zero')
+    lambda_torsions_one = _LambdaProperty('lambda_torsions_one')
+    lambda_torsions_two = _LambdaProperty('lambda_torsions_two')
+
+    lambda_bonds_zero = _LambdaProperty('lambda_bonds_zero')
+    lambda_bonds_one = _LambdaProperty('lambda_bonds_one')
+    lambda_bonds_two = _LambdaProperty('lambda_bonds_two')
+
+    lambda_angles_zero = _LambdaProperty('lambda_angles_zero')
+    lambda_angles_one = _LambdaProperty('lambda_angles_one')
+    lambda_angles_two = _LambdaProperty('lambda_angles_two')
 
     def set_alchemical_parameters(self, new_value):
         """Set all defined parameters to the given value.
@@ -1096,6 +1102,8 @@ class AbsoluteAlchemicalFactory(object):
         # TODO implement multiple alchemical regions support.
         if not isinstance(alchemical_regions, AlchemicalRegion):
             print('Using %s alchemical regions' % (len(alchemical_regions)))
+            if len(alchemical_regions) > 3:
+                raise ValueError('Maximum alchemical regions is 3')
 
         # Resolve alchemical region.
         AlchemicalRegions = []
@@ -1176,12 +1184,12 @@ class AbsoluteAlchemicalFactory(object):
                             else:
                                 del alchemical_forces_by_lambda[''][-1]
 
-
+        '''
         #DEBUG
-        #for x in alchemical_forces_by_lambda:
-        #    print(x, alchemical_forces_by_lambda[x])
-        #    print('/////////////////')
-
+        for x in alchemical_forces_by_lambda:
+            print(x, alchemical_forces_by_lambda[x])
+            print('/////////////////')
+        '''
 
         # Remove original forces that have been alchemically modified.
         #print(forces_to_remove)
@@ -1565,9 +1573,9 @@ class AbsoluteAlchemicalFactory(object):
         force.setForceGroup(reference_force.getForceGroup())
 
         # Create CustomTorsionForce to handle alchemically modified torsions.
-        energy_function = "lambda_torsions*k*(1+cos(periodicity*theta-phase))"
+        energy_function = "lambda_torsions_{}*k*(1+cos(periodicity*theta-phase))".format(alchemical_region.name)
         custom_force = openmm.CustomTorsionForce(energy_function)
-        custom_force.addGlobalParameter('lambda_torsions', 1.0)
+        custom_force.addGlobalParameter('lambda_torsions_{}'.format(alchemical_region.name), 1.0)
         custom_force.addPerTorsionParameter('periodicity')
         custom_force.addPerTorsionParameter('phase')
         custom_force.addPerTorsionParameter('k')
@@ -1583,7 +1591,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Standard torsion.
                 force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
 
-        return {'': [force], 'lambda_torsions': [custom_force]}
+        return {'': [force], 'lambda_torsions_{}'.format(alchemical_region.name): [custom_force]}
 
     @staticmethod
     def _alchemically_modify_HarmonicAngleForce(reference_force, alchemical_region, all_alchemical_atoms, NB):
@@ -1616,9 +1624,9 @@ class AbsoluteAlchemicalFactory(object):
         force.setForceGroup(reference_force.getForceGroup())
 
         # Create CustomAngleForce to handle alchemically modified angles.
-        energy_function = "lambda_angles*(K/2)*(theta-theta0)^2;"
+        energy_function = "lambda_angles_{}*(K/2)*(theta-theta0)^2;".format(alchemical_region.name)
         custom_force = openmm.CustomAngleForce(energy_function)
-        custom_force.addGlobalParameter('lambda_angles', 1.0)
+        custom_force.addGlobalParameter('lambda_angles_{}'.format(alchemical_region.name), 1.0)
         custom_force.addPerAngleParameter('theta0')
         custom_force.addPerAngleParameter('K')
         # Process reference angles.
@@ -1632,7 +1640,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Standard angle.
                 force.addAngle(particle1, particle2, particle3, theta0, K)
 
-        return {'': [force], 'lambda_angles': [custom_force]}
+        return {'': [force], 'lambda_angles_{}'.format(alchemical_region.name): [custom_force]}
 
     @staticmethod
     def _alchemically_modify_HarmonicBondForce(reference_force, alchemical_region, all_alchemical_atoms, NB):
@@ -1664,9 +1672,9 @@ class AbsoluteAlchemicalFactory(object):
         force.setForceGroup(reference_force.getForceGroup())
 
         # Create CustomBondForce to handle alchemically modified bonds.
-        energy_function = "lambda_bonds*(K/2)*(r-r0)^2;"
+        energy_function = "lambda_bonds_{}*(K/2)*(r-r0)^2;".format(alchemical_region.name)
         custom_force = openmm.CustomBondForce(energy_function)
-        custom_force.addGlobalParameter('lambda_bonds', 1.0)
+        custom_force.addGlobalParameter('lambda_bonds_{}'.format(alchemical_region.name), 1.0)
         custom_force.addPerBondParameter('r0')
         custom_force.addPerBondParameter('K')
         # Process reference bonds.
@@ -1680,7 +1688,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Standard bond.
                 force.addBond(particle1, particle2, theta0, K)
 
-        return {'': [force], 'lambda_bonds': [custom_force]}
+        return {'': [force], 'lambda_bonds_{}'.format(alchemical_region.name): [custom_force]}
 
     def _get_nonbonded_energy_exspressions(self, alchemical_region_idx):
         # Sterics mixing rules.
