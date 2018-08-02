@@ -30,9 +30,10 @@ requirements:
     - openmm >=7.2
     - parmed
     - mdtraj
-    # NetCDF4 on windows conda has DLL issues, so pin libnetcdf
-    - netcdf4
-    - libnetcdf ==4.6.1=h183b1a9_3 # [win]
+    # NetCDF4 on windows conda has DLL issues, so pin libnetcdf. Remove this later
+    - netcdf4 # [not win]
+    - netcdf4 ==1.4.0=0 # [win]
+    - libnetcdf ==4.6.1=vc14_2 # [win]
     - pyyaml
 
 
