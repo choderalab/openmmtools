@@ -63,7 +63,7 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     ----------
     system : simtk.openmm.System
         The system to search.
-    force_type : str, or type
+    force_type : str or type
         The class of the force to search, or a regular expression that
         is used to match its name. Note that ``re.match()`` is used in
         this case, not ``re.search()``. The ``iter_subclasses`` argument
@@ -227,21 +227,43 @@ def _compute_harmonic_radius(spring_constant, potential_energy):
 # GENERIC CLASSES FOR RADIALLY SYMMETRIC RECEPTOR-LIGAND RESTRAINTS
 # =============================================================================
 
-class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
+class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject,
+                                      openmm.CustomCVForce):
     """Base class for radially-symmetric restraint force.
 
     Provide facility functions to compute the standard state correction
     of a receptor-ligand restraint.
+
+    These facilities are implemented through the CustomCVForce around the internal
+    force the restraint.
 
     To create a subclass, implement the properties :func:`restrained_atom_indices1`
     and :func:`restrained_atom_indices2` (with their setters) that return
     the indices of the restrained atoms.
 
     You will also have to implement :func:`_create_bond`, which should add the
-    bond using the correct function/signature.
+    bond using the correct function/signature. This should not do anything with the
+    parameter values as those are handled through the parent CV force
+
+    Finally, you will need to implement the :func:`_create_distance_force`, which returns the
+    Force object that the CustomCVForce will use. This should only create a very
+    simple force which measures the radial distance. This force can be
+    accessed through the property _distance_force available to this class
 
     Optionally, you can implement :func:`distance_at_energy` if an
     analytical expression for distance(potential_energy) exists.
+
+    If you want to access any of the restraint parameters, concrete class
+    implementations must infer them from the energy function, including
+    if they should bear units or not. A helper function exists in
+    this parent class called :func:``_get_parameter_in_energy_function``
+    which accepts a single arg of a string of the parameter name
+    (case sensitive) and returns the int or float value that is the
+    parameter.
+
+    If you subclass this, and plan on adding additional
+    global parameters, you need to invoke this class super().__init__ first as the
+    ``controlling_parameter_name`` must be the first global variable.
 
     Parameters
     ----------
@@ -249,15 +271,27 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         An ordered dictionary containing the bond parameters in the form
         parameter_name: parameter_value. The order is important to make
         sure that parameters can be retrieved from the bond force with
-        the correct force index.
+        the correct force index. If these are unit bearing quantities,
+        these will be converted to the OpenMM MD Unit system before
+        being stripped and assigned to the Force
     restrained_atom_indices1 : iterable of int
         The indices of the first group of atoms to restrain.
     restrained_atom_indices2 : iterable of int
         The indices of the second group of atoms to restrain.
     controlling_parameter_name : str
         The name of the global parameter controlling the energy function.
+    energy_function : str
+        Energy Expression for the CustomCVForce object. Use the variable
+        "symmetric_restraint_distance" to reference the internal distance force CV.
+        You should NOT add the value of the parameters in the
+        string, the ``restraint_parameters`` dict will automatically
+        augment this string.
+
+        If you were to accidentally include the values, then
+        the restraint_parameters key is effectively ignored, and
+        could lead to unintended behavior
     *args, **kwargs
-        Parameters to pass to the super constructor.
+        Additional parameters to pass to the super constructor.
 
     Attributes
     ----------
@@ -267,35 +301,76 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
     def __init__(self, restraint_parameters, restrained_atom_indices1,
                  restrained_atom_indices2, controlling_parameter_name,
+                 energy_function,
                  *args, **kwargs):
+        # Ensure parameter names are in the correct format
+        assert len(restraint_parameters) == 1 or isinstance(restraint_parameters, collections.OrderedDict)
+        assert "symmetric_restraint_distance" not in restraint_parameters, \
+            '"symmetric_restraint_distance" cannot be a restraint_parameter as it will clash with the CV Variable"'
+        assert "symmetric_restraint_distance" in energy_function, \
+            ('"symmetric_restraint_distance" must be in the energy_function as it will be the collective ' 
+             'variable the base CustomCVForce uses.')
+
+        # Augment energy_function with parameters
+        energy_function += ";"
+        for parameter_name, parameter_value in restraint_parameters.items():
+            # Ensure OpenMM Unit system
+            if isinstance(parameter_value, unit.Quantity):
+                parameter_value = parameter_value.in_unit_system(unit.md_unit_system)
+                restraint_parameters[parameter_name] = parameter_value
+                # Strip unit without overwriting dict entry efficiently
+                # Fetching value is faster than dividing by unit since
+                # we are already in correct unit system
+                parameter_value = parameter_value._value
+            energy_function += "{} = {};".format(parameter_name, parameter_value)
+        # Augment args with the energy string
+        args = (energy_function,) + args
+
+        # Construct
         super(RadiallySymmetricRestraintForce, self).__init__(*args, **kwargs)
         self._controlling_parameter_name = controlling_parameter_name
 
-        # Unzip bond parameters names and values from dict.
-        assert len(restraint_parameters) == 1 or isinstance(restraint_parameters, collections.OrderedDict)
-        parameter_names, parameter_values = zip(*restraint_parameters.items())
+        # Create the distance force used for the CV force wraps
+        distance_force = self._create_distance_force()
+        self.addCollectiveVariable("symmetric_restraint_distance", distance_force)
 
         # Let the subclass initialize its bond.
-        self._create_bond(parameter_values, restrained_atom_indices1, restrained_atom_indices2)
+        self._create_bond(restrained_atom_indices1, restrained_atom_indices2)
 
         # Add parameters.
+        # First global parameter is _restorable_force__class_hash from the RestorableOpenMMObject class
+        assert self.getNumGlobalParameters() == 1, ("The first global parameter after _restorable_force__class_hash "
+                                                    "(from parent) is expected to be the "
+                                                    "controlling_parameter_name, but there are additional global "
+                                                    "parameters before it. This is likely because the subclass "
+                                                    "called addGlobalParameter before calling super()__init__ to "
+                                                    "the parent class.")
         self.addGlobalParameter(self._controlling_parameter_name, 1.0)
-        for parameter in parameter_names:
-            self.addPerBondParameter(parameter)
+        self._restraint_parameters = restraint_parameters
 
     # -------------------------------------------------------------------------
     # Abstract methods.
     # -------------------------------------------------------------------------
 
     @abc.abstractmethod
-    def _create_bond(self, bond_parameter_values, restrained_atom_indices1,
+    def _create_distance_force(self):
+        """
+        Create and return the underlying force object
+
+        Returns
+        -------
+        force : OpenMM.Force
+            The force measuring distance to be used as the CV
+        """
+        pass
+
+    @abc.abstractmethod
+    def _create_bond(self, restrained_atom_indices1,
                      restrained_atom_indices2):
         """Create the bond modelling the restraint.
 
         Parameters
         ----------
-        bond_parameter_values : list of floats
-            The list of the parameter values of the bond.
         restrained_atom_indices1 : list of int
             The indices of the first group of atoms to restrain.
         restrained_atom_indices2 : list of int
@@ -319,17 +394,9 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         pass
 
     @property
-    def restraint_parameters(self):
-        """OrderedDict: The restraint parameters in dictionary form."""
-        parameter_values = self.getBondParameters(0)[-1]
-        restraint_parameters = [(self.getPerBondParameterName(parameter_idx), parameter_value)
-                                for parameter_idx, parameter_value in enumerate(parameter_values)]
-        return collections.OrderedDict(restraint_parameters)
-
-    @property
     def controlling_parameter_name(self):
         """str: The name of the global parameter controlling the energy function (read-only)."""
-        return self._controlling_parameter_name
+        return self.getGlobalParameterName(1)
 
     def distance_at_energy(self, potential_energy):
         """Compute the distance at which the potential energy is ``potential_energy``.
@@ -520,7 +587,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         force.restrained_atom_indices1 = [0]
         force.restrained_atom_indices2 = [1]
         # Disable the PBC for this approximation of the analytical solution.
-        force.setUsesPeriodicBoundaryConditions(False)
+        force._distance_force.setUsesPeriodicBoundaryConditions(False)
         system.addForce(force)
 
         # Create a Reference context to evaluate energies on the CPU.
@@ -529,7 +596,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         context = openmm.Context(system, integrator, platform)
 
         # Set default positions.
-        positions = unit.Quantity(np.zeros([2,3]), distance_unit)
+        positions = unit.Quantity(np.zeros([2, 3]), distance_unit)
         context.setPositions(positions)
 
         # Create a function to compute integrand as a function of interparticle separation.
@@ -656,9 +723,48 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         r_max *= distance_unit
         return r_min, r_max, analytical_volume
 
+    @property
+    def _distance_force(self):
+        """Helper to return the correct CV object independent of copy operations"""
+        return self.getCollectiveVariable(0)
 
-class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
-                                              openmm.CustomCentroidBondForce):
+    def _get_parameter_in_energy_function(self, parameter):
+        """
+        Helper function to parse a restraint_parameter from the energy function
+
+        Parameters
+        ----------
+        parameter : str
+            Case-sensitive parameter to regex from the energy string
+
+        Returns
+        -------
+        value : int or float
+            Value of the parameter in the string. Checks if value
+            is an integer (+-{digits}, no trailing decimal) to
+            return int, otherwise returns float
+        """
+        energy_function = self.getEnergyFunction()
+        # This compile will find the *first* entry, and therefore the
+        # one OpenMM uses as its value in implementation.
+        # There are some ambiguous energy function corner cases users could write,
+        # but that is then their error.
+        # Should catch int, float, +-, sci. notation
+        re_search = re.compile(r';{} = ([-+\d\.eE]+);'.format(parameter))
+        try:
+            value = re_search.search(energy_function).group(1)
+        except AttributeError:
+            # Trap the match returning None (bad parameter)
+            raise ValueError("Parameter {} not found in energy function!".format(parameter))
+        # An efficient check if string is safe to be cast to int, or if it should be float
+        # https://stackoverflow.com/questions/1265665
+        # This is a slightly more restrictive check than the example to favor floats over ints
+        if value == '0' or (value if value.find('..') > -1 else value.lstrip('-+')).isdigit():
+            return int(value)
+        return float(value)
+
+
+class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce):
     """Base class for radially-symmetric restraints between the centroids of two groups of atoms.
 
     The restraint is applied between the centers of mass of two groups
@@ -671,9 +777,10 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
     Parameters
     ----------
     energy_function : str
-        The energy function to pass to ``CustomCentroidBondForce``. The
+        The energy function to pass to ``CustomCVForce``. The
         name of the controlling global parameter  will be prepended to
-        this expression.
+        this expression. The radially symmetric distance in this expression
+        can is the variable ``symmetric_restraint_distance``.
     restraint_parameters : OrderedDict
         An ordered dictionary containing the bond parameters in the form
         parameter_name: parameter_value. The order is important to make
@@ -689,7 +796,6 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
 
     Attributes
     ----------
-    restraint_parameters
     restrained_atom_indices1
     restrained_atom_indices2
     controlling_parameter_name
@@ -701,41 +807,42 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
                  controlling_parameter_name='lambda_restraints'):
         # Initialize CustomCentroidBondForce.
         energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
-        custom_centroid_bond_force_args = [2, energy_function]
         super(RadiallySymmetricCentroidRestraintForce, self).__init__(
             restraint_parameters, restrained_atom_indices1, restrained_atom_indices2,
-            controlling_parameter_name, *custom_centroid_bond_force_args)
+            controlling_parameter_name, energy_function)
 
     @property
     def restrained_atom_indices1(self):
         """The indices of the first group of restrained atoms."""
-        restrained_atom_indices1, weights_group1 = self.getGroupParameters(0)
+        restrained_atom_indices1, weights_group1 = self._distance_force.getGroupParameters(0)
         return list(restrained_atom_indices1)
 
     @restrained_atom_indices1.setter
     def restrained_atom_indices1(self, atom_indices):
-        self.setGroupParameters(0, atom_indices)
+        self._distance_force.setGroupParameters(0, atom_indices)
 
     @property
     def restrained_atom_indices2(self):
         """The indices of the first group of restrained atoms."""
-        restrained_atom_indices2, weights_group2 = self.getGroupParameters(1)
+        restrained_atom_indices2, weights_group2 = self._distance_force.getGroupParameters(1)
         return list(restrained_atom_indices2)
 
     @restrained_atom_indices2.setter
     def restrained_atom_indices2(self, atom_indices):
-        self.setGroupParameters(1, atom_indices)
+        self._distance_force.setGroupParameters(1, atom_indices)
 
-    def _create_bond(self, bond_parameter_values, restrained_atom_indices1,
+    def _create_distance_force(self):
+        return openmm.CustomCentroidBondForce(2, "distance(g1,g2)")
+
+    def _create_bond(self, restrained_atom_indices1,
                      restrained_atom_indices2):
         """Create the bond modelling the restraint."""
-        self.addGroup(restrained_atom_indices1)
-        self.addGroup(restrained_atom_indices2)
-        self.addBond([0, 1], bond_parameter_values)
+        self._distance_force.addGroup(restrained_atom_indices1)
+        self._distance_force.addGroup(restrained_atom_indices2)
+        self._distance_force.addBond([0, 1], [])
 
 
-class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
-                                          openmm.CustomBondForce):
+class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce):
     """Base class for radially-symmetric restraints between two atoms.
 
     This is a version of ``RadiallySymmetricCentroidRestraintForce`` that can
@@ -748,7 +855,6 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
                  restrained_atom_index1, restrained_atom_index2,
                  controlling_parameter_name='lambda_restraints'):
         # Initialize CustomBondForce.
-        energy_function = energy_function.replace('distance(g1,g2)', 'r')
         energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
         super(RadiallySymmetricBondRestraintForce, self).__init__(
             restraint_parameters, [restrained_atom_index1], [restrained_atom_index2],
@@ -761,30 +867,33 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
     @property
     def restrained_atom_indices1(self):
         """The indices of the first group of restrained atoms."""
-        atom1, atom2, parameters = self.getBondParameters(0)
+        atom1, atom2, parameters = self._distance_force.getBondParameters(0)
         return [atom1]
 
     @restrained_atom_indices1.setter
     def restrained_atom_indices1(self, atom_indices):
         assert len(atom_indices) == 1
-        atom1, atom2, parameters = self.getBondParameters(0)
-        self.setBondParameters(0, atom_indices[0], atom2, parameters)
+        atom1, atom2, parameters = self._distance_force.getBondParameters(0)
+        self._distance_force.setBondParameters(0, atom_indices[0], atom2, parameters)
 
     @property
     def restrained_atom_indices2(self):
         """The indices of the first group of restrained atoms."""
-        atom1, atom2, parameters = self.getBondParameters(0)
+        atom1, atom2, parameters = self._distance_force.getBondParameters(0)
         return [atom2]
 
     @restrained_atom_indices2.setter
     def restrained_atom_indices2(self, atom_indices):
         assert len(atom_indices) == 1
-        atom1, atom2, parameters = self.getBondParameters(0)
-        self.setBondParameters(0, atom1, atom_indices[0], parameters)
+        atom1, atom2, parameters = self._distance_force.getBondParameters(0)
+        self._distance_force.setBondParameters(0, atom1, atom_indices[0], parameters)
 
-    def _create_bond(self, bond_parameter_values, restrained_atom_indices1, restrained_atom_indices2):
+    def _create_bond(self, restrained_atom_indices1, restrained_atom_indices2):
         """Create the bond modelling the restraint."""
-        self.addBond(restrained_atom_indices1[0], restrained_atom_indices2[0], bond_parameter_values)
+        self._distance_force.addBond(restrained_atom_indices1[0], restrained_atom_indices2[0], [])
+
+    def _create_distance_force(self):
+        return openmm.CustomBondForce("r")
 
 
 # =============================================================================
@@ -795,7 +904,7 @@ class HarmonicRestraintForceMixIn(object):
     """A mix-in providing the interface for harmonic restraints."""
 
     def __init__(self, spring_constant, *args, **kwargs):
-        energy_function = '(K/2)*distance(g1,g2)^2'
+        energy_function = '(K/2)*symmetric_restraint_distance^2'
         restraint_parameters = collections.OrderedDict([('K', spring_constant)])
         super(HarmonicRestraintForceMixIn, self).__init__(energy_function, restraint_parameters,
                                                           *args, **kwargs)
@@ -803,9 +912,8 @@ class HarmonicRestraintForceMixIn(object):
     @property
     def spring_constant(self):
         """unit.simtk.Quantity: The spring constant K (units of energy/mole/distance^2)."""
-        # This works for both CustomBondForce and CustomCentroidBondForce.
-        parameters = self.getBondParameters(0)[-1]
-        return parameters[0] * unit.kilojoule_per_mole/unit.nanometers**2
+        k = self._get_parameter_in_energy_function('K')
+        return k * unit.kilojoule_per_mole / unit.nanometers**2
 
     def distance_at_energy(self, potential_energy):
         """Compute the distance at which the potential energy is ``potential_energy``.
@@ -853,9 +961,9 @@ class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
 
     The energy expression of the restraint is given by
 
-       ``E = controlling_parameter * (K/2)*r^2``
+       ``E = controlling_parameter * (K/2)*symmetric_restraint_distance^2``
 
-    where `K` is the spring constant, `r` is the distance between the
+    where `K` is the spring constant, `Distance` is the distance between the
     two group centroids, and `controlling_parameter` is a scale factor that
     can be used to control the strength of the restraint.
 
@@ -879,7 +987,6 @@ class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
     spring_constant
     restrained_atom_indices1
     restrained_atom_indices2
-    restraint_parameters
     controlling_parameter_name
 
     """
@@ -912,7 +1019,6 @@ class HarmonicRestraintBondForce(HarmonicRestraintForceMixIn,
     spring_constant
     restrained_atom_indices1
     restrained_atom_indices2
-    restraint_parameters
     controlling_parameter_name
 
     """
@@ -928,7 +1034,7 @@ class FlatBottomRestraintForceMixIn(object):
     """A mix-in providing the interface for flat-bottom restraints."""
 
     def __init__(self, spring_constant, well_radius, *args, **kwargs):
-        energy_function = 'step(distance(g1,g2)-r0) * (K/2)*(distance(g1,g2)-r0)^2'
+        energy_function = 'step(symmetric_restraint_distance-r0) * (K/2)*(symmetric_restraint_distance-r0)^2'
         restraint_parameters = collections.OrderedDict([
             ('K', spring_constant),
             ('r0', well_radius)
@@ -940,15 +1046,15 @@ class FlatBottomRestraintForceMixIn(object):
     def spring_constant(self):
         """unit.simtk.Quantity: The spring constant K (units of energy/mole/length^2)."""
         # This works for both CustomBondForce and CustomCentroidBondForce.
-        parameters = self.getBondParameters(0)[-1]
-        return parameters[0] * unit.kilojoule_per_mole/unit.nanometers**2
+        k = self._get_parameter_in_energy_function('K')
+        return k * unit.kilojoule_per_mole / unit.nanometers**2
 
     @property
     def well_radius(self):
         """unit.simtk.Quantity: The distance at which the harmonic restraint is imposed (units of length)."""
         # This works for both CustomBondForce and CustomCentroidBondForce.
-        parameters = self.getBondParameters(0)[-1]
-        return parameters[1] * unit.nanometers
+        r0 = self._get_parameter_in_energy_function('r0')
+        return r0 * unit.nanometers
 
     def distance_at_energy(self, potential_energy):
         """Compute the distance at which the potential energy is ``potential_energy``.
@@ -1014,9 +1120,9 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
 
     More precisely, the energy expression of the restraint is given by
 
-        ``E = controlling_parameter * step(r-r0) * (K/2)*(r-r0)^2``
+        ``E = controlling_parameter * step(symmetric_restraint_distance-r0) * (K/2)*(symmetric_restraint_distance-r0)^2``
 
-    where ``K`` is the spring constant, ``r`` is the distance between the
+    where ``K`` is the spring constant, ``symmetric_restraint_distance`` is the distance between the
     restrained atoms, ``r0`` is another parameter defining the distance
     at which the restraint is imposed, and ``controlling_parameter``
     is a scale factor that can be used to control the strength of the
@@ -1046,7 +1152,6 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
     well_radius
     restrained_atom_indices1
     restrained_atom_indices2
-    restraint_parameters
     controlling_parameter_name
 
     """
@@ -1083,7 +1188,6 @@ class FlatBottomRestraintBondForce(FlatBottomRestraintForceMixIn,
     well_radius
     restrained_atom_indices1
     restrained_atom_indices2
-    restraint_parameters
     controlling_parameter_name
 
     """

@@ -27,10 +27,12 @@ requirements:
     - numpy
     - scipy
     - six
-    - openmm
+    - openmm >=7.2
     - parmed
     - mdtraj
+    # NetCDF4 on windows conda has DLL issues, so pin libnetcdf
     - netcdf4
+    - libnetcdf ==4.6.1=h183b1a9_3 # [win]
     - pyyaml
 
 
