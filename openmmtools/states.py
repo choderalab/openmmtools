@@ -2692,6 +2692,15 @@ class GlobalParameterState(object):
         The value of the parameters controlled by this state. Parameters
         that are not passed here are left undefined.
 
+    Notes
+    -----
+    The class automatically implement the static constructor ``from_system``
+    that reads and create a state object from an OpenMM ``System``. The function
+    calls ``__init__`` and passes the parameter name suffix string as the
+    first positional argument, so it is possible to overwrite ``__init__``
+    and rename ``parameters_name_suffix`` as long as it is the first parameter
+    of the constructor.
+
     Examples
     --------
 
@@ -2861,7 +2870,7 @@ class GlobalParameterState(object):
         # Create and return the GlobalParameterState. The constructor of
         # GlobalParameterState takes the parameters without the suffix so
         # we left them undefined in the constructor and assign the attributes.
-        state = cls(parameters_name_suffix=parameters_name_suffix)
+        state = cls(parameters_name_suffix)
         for parameter_name, parameter_value in state_parameters.items():
             setattr(state, parameter_name, parameter_value)
         return state
