@@ -495,28 +495,30 @@ class AlchemicalState(object):
         """
         has_lambda_electrostatics_changed = False
         context_parameters = context.getParameters()
-
+        region_name = self.region_name
         # Set lambda parameters in Context.
         for parameter_name in self._parameters:
-            parameter_value = getattr(self, parameter_name)
-            if parameter_value is None:
-                # Check that Context does not have this parameter.
-                if parameter_name in context_parameters:
-                    err_msg = 'Context has parameter {} which is undefined in this state'
-                    raise AlchemicalStateError(err_msg.format(parameter_name))
-                continue
-            try:
-                # If lambda_electrostatics, first check if we're changing it for later.
-                # This avoids us to loop through the System forces if we don't need to
-                # set the NonbondedForce charges.
-                if parameter_name == 'lambda_electrostatics':
-                    old_parameter_value = context_parameters[parameter_name]
-                    has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
+            if region_name in parameter_name:
+                parameter_value = getattr(self, parameter_name)
+                if parameter_value is None:
+                    # Check that Context does not have this parameter.
+                    if parameter_name in context_parameters:
+                        err_msg = 'Context has parameter {} which is undefined in this state'
+                        raise AlchemicalStateError(err_msg.format(parameter_name))
+                    continue
+                try:
+                    # If lambda_electrostatics, first check if we're changing it for later.
+                    # This avoids us to loop through the System forces if we don't need to
+                    # set the NonbondedForce charges.
+                    if 'electrostatics' in parameter_name:
+                        elec_region = parameter_name
+                        old_parameter_value = context_parameters[parameter_name]
+                        has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
                                                          parameter_value != old_parameter_value)
-                context.setParameter(parameter_name, parameter_value)
-            except Exception:
-                err_msg = 'Could not find parameter {} in context'
-                raise AlchemicalStateError(err_msg.format(parameter_name))
+                    context.setParameter(parameter_name, parameter_value)
+                except Exception:
+                    err_msg = 'Could not find parameter {} in context'
+                    raise AlchemicalStateError(err_msg.format(parameter_name))
 
         # Handle lambda_electrostatics changes with exact PME electrostatic treatment.
         # If the context doesn't use exact PME electrostatics, or if lambda_electrostatics
@@ -526,7 +528,11 @@ class AlchemicalState(object):
             return
 
         # Find exact PME treatment key force objects.
-        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem())
+        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem(), region_name)
+        if original_charges_force != None:
+            lambda_electrostatics = getattr(self, elec_region)
+        else:
+            lambda_electrostatics = None
 
         # Quick checks for compatibility.
         context_charge_update = bool(context_parameters[_UPDATE_ALCHEMICAL_CHARGES_PARAMETER])
@@ -535,7 +541,7 @@ class AlchemicalState(object):
             raise AlchemicalStateError(err_msg)
 
         # Write NonbondedForce charges
-        self._set_exact_pme_charges(original_charges_force, nonbonded_force)
+        self._set_exact_pme_charges(original_charges_force, nonbonded_force, lambda_electrostatics)
         nonbonded_force.updateParametersInContext(context)
 
     def _standardize_system(self, system, set_lambda_electrostatics=False):
