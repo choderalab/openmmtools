@@ -1113,27 +1113,32 @@ class AbsoluteAlchemicalFactory(object):
 
         # Resolve alchemical region.
         AlchemicalRegions = []
-        AllAlchemicalAtoms = []
+        allalchemical = {'Atoms': [], 'Bonds': [], 'Angles': [], 'Torsions': []}
+        CheckDuplicateNames = []
         for alchemical_region in alchemical_regions:
             AlchemicalRegions.append(self._resolve_alchemical_region(reference_system, alchemical_region))
-            AllAlchemicalAtoms.append(alchemical_region.alchemical_atoms)
-
-        CheckDuplicateNames = []
-        CheckDuplicateAtoms = []
-        for alchemical_region in AlchemicalRegions:
+            allalchemical['Atoms'].append(alchemical_region.alchemical_atoms)
+            allalchemical['Bonds'].append(alchemical_region.alchemical_bonds)
+            allalchemical['Angles'].append(alchemical_region.alchemical_angles)
+            allalchemical['Torsions'].append(alchemical_region.alchemical_torsions)
             CheckDuplicateNames.append(alchemical_region.name)
-            CheckDuplicateAtoms.append(alchemical_region.alchemical_atoms)
+
         if len(CheckDuplicateNames) != len(set(CheckDuplicateNames)):
             raise ValueError('Two regions alchemical regions have the identical name')
-        for i, region in enumerate(CheckDuplicateAtoms):
-            if i == len(CheckDuplicateAtoms)-1:
-                break
-            a = region
-            b = CheckDuplicateAtoms[i+1]
-            if not set(a).isdisjoint(b):
-                raise ValueError('Two regions alchemical regions contain the same atoms')
         del CheckDuplicateNames
-        del CheckDuplicateAtoms
+
+        #remove all Nones and check for duplicates
+        for k, v in allalchemical.items():
+            v = [x for x in v if x is not None]
+            for i, region in enumerate(v):
+                if i == len(v)-1:
+                    break
+                a = region
+                b = v[i+1]
+                if not set(a).isdisjoint(b):
+                    raise ValueError('Two alchemical regions share same entries, please remove duplicates from {}'.format(k))
+
+        allalchemicalatoms = allalchemical['Atoms']
 
         # Record timing statistics.
         timer = utils.Timer()
@@ -1157,7 +1162,7 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_forces_by_lambda = {}
 
         for force_index, reference_force in enumerate(reference_system.getForces()):
-            NB = None
+            cumulative_force = None
             for alchemical_region in AlchemicalRegions:
                 # TODO switch to functools.singledispatch when we drop Python2 support
                 reference_force_name = reference_force.__class__.__name__
@@ -1171,7 +1176,7 @@ class AbsoluteAlchemicalFactory(object):
                     if force_index not in forces_to_remove:
                         forces_to_remove.append(force_index)
                     # Collect all the Force objects modeling the reference force.
-                    alchemical_forces = alchemical_force_creator_func(reference_force, alchemical_region, AllAlchemicalAtoms, NB)
+                    alchemical_forces = alchemical_force_creator_func(reference_force, alchemical_region, allalchemicalatoms, cumulative_force)
                     for lambda_variable_name, lambda_forces in alchemical_forces.items():
                         try:
                             alchemical_forces_by_lambda[lambda_variable_name].extend(lambda_forces)
@@ -1182,20 +1187,33 @@ class AbsoluteAlchemicalFactory(object):
                     if not alchemical_region == AlchemicalRegions[-1]:
                         if reference_force_name ==  'NonbondedForce':
                             #print(alchemical_forces_by_lambda)
-                            NB = alchemical_forces_by_lambda[''][-1]
+                            cumulative_force = alchemical_forces_by_lambda[''][-1]
                             #If using PME the NonbondedForce will be found as last entry of 'lambda_electrostatics'
-                            if not isinstance(NB, openmm.NonbondedForce):
-                                NB = alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
+                            if not isinstance(cumulative_force, openmm.NonbondedForce):
+                                cumulative_force = alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
                                 del alchemical_forces_by_lambda['lambda_electrostatics_{}'.format(alchemical_region.name)][-1]
                             else:
                                 del alchemical_forces_by_lambda[''][-1]
+                        if reference_force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']:
+                            cumulative_force = alchemical_forces_by_lambda[''][-1]
+                            del alchemical_forces_by_lambda[''][-1]
+                        else:
+                            pass
 
-        '''
+        #Do I need to check the NonbondedForce is where it is supposed to be. Might be needed if last alchemical region contains no alchemical
+        # atoms and using PME because in this case NonbondedForce will appear at the end of '' not the end of lambda_electrostatics
+        #Does this matter?
+
+        #Could clean up 'HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce' here as these forces are calculating
+        #potneials in the alchemical region twice once in customforce then again in standard force but with K = 0
+
+        #Is treatment of aa steric interaction correct? By what combination rule do two different alchemical regions see each other?
+        """
         #DEBUG
         for x in alchemical_forces_by_lambda:
             print(x, alchemical_forces_by_lambda[x])
             print('/////////////////')
-        '''
+        """
 
         # Remove original forces that have been alchemically modified.
         #print(forces_to_remove)
@@ -1549,7 +1567,7 @@ class AbsoluteAlchemicalFactory(object):
                 alchemical_system.addForce(force)
 
     @staticmethod
-    def _alchemically_modify_PeriodicTorsionForce(reference_force, alchemical_region, all_alchemical_atoms, NB):
+    def _alchemically_modify_PeriodicTorsionForce(reference_force, alchemical_region, _, cumulative_torsion_force):
         """Create alchemically-modified version of PeriodicTorsionForce.
 
         Parameters
@@ -1570,13 +1588,13 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
-        # Don't create a force if there are no alchemical torsions.
-        if len(alchemical_region.alchemical_torsions) == 0:
-            return {'': [copy.deepcopy(reference_force)]}
+        if cumulative_torsion_force == None:
+            force = copy.deepcopy(reference_force)
+        else:
+            force = copy.deepcopy(cumulative_torsion_force)
 
-        # Create PeriodicTorsionForce to handle unmodified torsions.
-        force = openmm.PeriodicTorsionForce()
-        force.setForceGroup(reference_force.getForceGroup())
+        if len(alchemical_region.alchemical_torsions) == 0:
+            return {'': [copy.deepcopy(force)]}
 
         # Create CustomTorsionForce to handle alchemically modified torsions.
         energy_function = "lambda_torsions_{}*k*(1+cos(periodicity*theta-phase))".format(alchemical_region.name)
@@ -1586,21 +1604,20 @@ class AbsoluteAlchemicalFactory(object):
         custom_force.addPerTorsionParameter('phase')
         custom_force.addPerTorsionParameter('k')
         # Process reference torsions.
-        for torsion_index in range(reference_force.getNumTorsions()):
+        for torsion_index in range(force.getNumTorsions()):
             # Retrieve parameters.
-            particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(torsion_index)
+            particle1, particle2, particle3, particle4, periodicity, phase, k = force.getTorsionParameters(torsion_index)
+            #print(torsion_index, particle1, particle2, particle3, particle4, periodicity, phase, k)
             # Create torsions.
             if torsion_index in alchemical_region.alchemical_torsions:
-                # Alchemically modified torsion.
+                #Add to alchemical
                 custom_force.addTorsion(particle1, particle2, particle3, particle4, [periodicity, phase, k])
-            else:
-                # Standard torsion.
-                force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
-
+                #Remove from std
+                force.setTorsionParameters(torsion_index, particle1, particle2, particle3, particle4, periodicity, phase, k*0.0)
         return {'': [force], 'lambda_torsions_{}'.format(alchemical_region.name): [custom_force]}
 
     @staticmethod
-    def _alchemically_modify_HarmonicAngleForce(reference_force, alchemical_region, all_alchemical_atoms, NB):
+    def _alchemically_modify_HarmonicAngleForce(reference_force, alchemical_region, _, cumulative_angle_force):
         """Create alchemically-modified version of HarmonicAngleForce
 
         Parameters
@@ -1621,13 +1638,13 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
-        # Don't create a force if there are no alchemical angles.
-        if len(alchemical_region.alchemical_angles) == 0:
-            return {'': [copy.deepcopy(reference_force)]}
+        if cumulative_angle_force == None:
+            force = copy.deepcopy(reference_force)
+        else:
+            force = copy.deepcopy(cumulative_angle_force)
 
-        # Create standard HarmonicAngleForce to handle unmodified angles.
-        force = openmm.HarmonicAngleForce()
-        force.setForceGroup(reference_force.getForceGroup())
+        if len(alchemical_region.alchemical_angles) == 0:
+            return {'': [copy.deepcopy(force)]}
 
         # Create CustomAngleForce to handle alchemically modified angles.
         energy_function = "lambda_angles_{}*(K/2)*(theta-theta0)^2;".format(alchemical_region.name)
@@ -1636,20 +1653,19 @@ class AbsoluteAlchemicalFactory(object):
         custom_force.addPerAngleParameter('theta0')
         custom_force.addPerAngleParameter('K')
         # Process reference angles.
-        for angle_index in range(reference_force.getNumAngles()):
+        for angle_index in range(force.getNumAngles()):
             # Retrieve parameters.
-            [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
+            [particle1, particle2, particle3, theta0, K] = force.getAngleParameters(angle_index)
             if angle_index in alchemical_region.alchemical_angles:
-                # Alchemically modified angle.
+                # Add alchemical
                 custom_force.addAngle(particle1, particle2, particle3, [theta0, K])
-            else:
-                # Standard angle.
-                force.addAngle(particle1, particle2, particle3, theta0, K)
+                #remove std
+                force.setAngleParameters(angle_index, particle1, particle2, particle3, theta0, K*0.0)
 
         return {'': [force], 'lambda_angles_{}'.format(alchemical_region.name): [custom_force]}
 
     @staticmethod
-    def _alchemically_modify_HarmonicBondForce(reference_force, alchemical_region, all_alchemical_atoms, NB):
+    def _alchemically_modify_HarmonicBondForce(reference_force, alchemical_region, _, cumulative_bond_force):
         """Create alchemically-modified version of HarmonicBondForce
 
         Parameters
@@ -1670,12 +1686,13 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
-        # Don't create a force if there are no alchemical bonds.
+        if cumulative_bond_force == None:
+            force = copy.deepcopy(reference_force)
+        else:
+            force = copy.deepcopy(cumulative_bond_force)
+
         if len(alchemical_region.alchemical_bonds) == 0:
-            return {'': [copy.deepcopy(reference_force)]}
-        # Create standard HarmonicBondForce to handle unmodified bonds.
-        force = openmm.HarmonicBondForce()
-        force.setForceGroup(reference_force.getForceGroup())
+            return {'': [copy.deepcopy(force)]}
 
         # Create CustomBondForce to handle alchemically modified bonds.
         energy_function = "lambda_bonds_{}*(K/2)*(r-r0)^2;".format(alchemical_region.name)
@@ -1684,15 +1701,14 @@ class AbsoluteAlchemicalFactory(object):
         custom_force.addPerBondParameter('r0')
         custom_force.addPerBondParameter('K')
         # Process reference bonds.
-        for bond_index in range(reference_force.getNumBonds()):
+        for bond_index in range(force.getNumBonds()):
             # Retrieve parameters.
-            [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
+            [particle1, particle2, theta0, K] = force.getBondParameters(bond_index)
             if bond_index in alchemical_region.alchemical_bonds:
-                # Alchemically modified bond.
+                # add alchemical
                 custom_force.addBond(particle1, particle2, [theta0, K])
-            else:
-                # Standard bond.
-                force.addBond(particle1, particle2, theta0, K)
+                #remove from std
+                force.setBondParameters(bond_index, particle1, particle2, theta0, K*0.0)
 
         return {'': [force], 'lambda_bonds_{}'.format(alchemical_region.name): [custom_force]}
 
@@ -1846,7 +1862,7 @@ class AbsoluteAlchemicalFactory(object):
                           "alpha_ewald = {};").format(alpha_ewald)
         return pme_expression
 
-    def _alchemically_modify_NonbondedForce(self, reference_force, alchemical_region, all_alchemical_atoms, NB):
+    def _alchemically_modify_NonbondedForce(self, reference_force, alchemical_region, all_alchemical_atoms, cumulative_nonbonded_force):
         """Create alchemically-modified version of NonbondedForce.
 
         Parameters
@@ -1892,9 +1908,16 @@ class AbsoluteAlchemicalFactory(object):
         # TODO Change softcore_beta to a dimensionless scalar to multiply some intrinsic length-scale, like Lennard-Jones alpha.
         # TODO Try using a single, common "reff" effective softcore distance for both Lennard-Jones and Coulomb.
 
+        # Create a copy of the NonbondedForce to handle particle interactions and
+        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
+        if cumulative_nonbonded_force == None:
+            nonbonded_force = copy.deepcopy(reference_force)
+        else:
+            nonbonded_force = copy.deepcopy(cumulative_nonbonded_force)
+
         # Don't create a force if there are no alchemical atoms.
         if len(alchemical_region.alchemical_atoms) == 0:
-            return {'': [copy.deepcopy(reference_force)]}
+            return {'': [copy.deepcopy(nonbonded_force)]}
 
         # --------------------------------------------------
         # Determine energy expression for all custom forces
@@ -1962,13 +1985,6 @@ class AbsoluteAlchemicalFactory(object):
         # --------------------------------------------------------------------------------------------------
         # na_electrostatics_custom_bond_force      | electrostatics exceptions non-alchemical/alchemical   |
         # --------------------------------------------------------------------------------------------------
-
-        # Create a copy of the NonbondedForce to handle particle interactions and
-        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
-        if NB == None:
-            nonbonded_force = copy.deepcopy(reference_force)
-        else:
-            nonbonded_force = copy.deepcopy(NB)
 
         def create_force(force_cls, energy_expression, lambda_variable_name, is_lambda_controlled):
             """Shortcut to create a lambda-controlled custom forces."""
@@ -2229,10 +2245,10 @@ class AbsoluteAlchemicalFactory(object):
             forces_by_lambda[''] = [nonbonded_force]
         return forces_by_lambda
 
-    def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region, all_alchemical_atoms):
+    def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region, _, __):
         raise Exception("Not implemented; needs CustomMultipleForce")
 
-    def _alchemically_modify_AmoebaVdwForce(self, reference_force, alchemical_region, all_alchemical_atoms):
+    def _alchemically_modify_AmoebaVdwForce(self, reference_force, alchemical_region, _, __):
         """Create alchemically-modified version of AmoebaVdwForce.
 
         Not implemented.
@@ -2294,7 +2310,7 @@ class AbsoluteAlchemicalFactory(object):
         return [softcore_force]
 
     @staticmethod
-    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, all_alchemical_atoms, sasa_model='ACE'):
+    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, _, __, sasa_model='ACE'):
         """Create alchemically-modified version of GBSAOBCForce.
 
         Parameters
@@ -2368,7 +2384,7 @@ class AbsoluteAlchemicalFactory(object):
 
         return {'lambda_electrostatics': [custom_force]}
 
-    def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region, all_alchemical_atoms):
+    def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region, _, __):
         """Create alchemically-modified version of CustomGBForce.
 
         The GB functions are meta-programmed using the following rules:
