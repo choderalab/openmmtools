@@ -1,0 +1,57 @@
+<ForceField>
+  <AtomTypes>
+    <Type name="dms-ss-1" class="ss" element="S" mass="32.060000"/>
+    <Type name="dms-c3-2" class="c3" element="C" mass="12.010000"/>
+    <Type name="dms-h1-3" class="h1" element="H" mass="1.008000"/>
+    <Type name="dms-h1-4" class="h1" element="H" mass="1.008000"/>
+    <Type name="dms-h1-5" class="h1" element="H" mass="1.008000"/>
+    <Type name="dms-c3-6" class="c3" element="C" mass="12.010000"/>
+    <Type name="dms-h1-7" class="h1" element="H" mass="1.008000"/>
+    <Type name="dms-h1-8" class="h1" element="H" mass="1.008000"/>
+    <Type name="dms-h1-9" class="h1" element="H" mass="1.008000"/>
+  </AtomTypes>
+  <Residues>
+    <Residue name="dms">
+      <Atom name="S" type="dms-ss-1"/>
+      <Atom name="C" type="dms-c3-2"/>
+      <Atom name="H" type="dms-h1-3"/>
+      <Atom name="H1" type="dms-h1-4"/>
+      <Atom name="H2" type="dms-h1-5"/>
+      <Atom name="C1" type="dms-c3-6"/>
+      <Atom name="H3" type="dms-h1-7"/>
+      <Atom name="H4" type="dms-h1-8"/>
+      <Atom name="H5" type="dms-h1-9"/>
+      <Bond from="0" to="1"/>
+      <Bond from="0" to="5"/>
+      <Bond from="1" to="2"/>
+      <Bond from="1" to="3"/>
+      <Bond from="1" to="4"/>
+      <Bond from="5" to="6"/>
+      <Bond from="5" to="7"/>
+      <Bond from="5" to="8"/>
+    </Residue>
+  </Residues>
+  <HarmonicBondForce>
+    <Bond class1="c3" class2="ss" length="0.18210" k="188949.44000"/>
+    <Bond class1="c3" class2="h1" length="0.10930" k="281081.12000"/>
+  </HarmonicBondForce>
+  <HarmonicAngleForce>
+    <Angle class1="h1" class2="c3" class3="ss" angle="1.9083430041" k="449.02688"/>
+    <Angle class1="c3" class2="ss" class3="c3" angle="1.7439329886" k="1000.48192"/>
+    <Angle class1="h1" class2="c3" class3="h1" angle="1.9120081956" k="327.85824"/>
+  </HarmonicAngleForce>
+  <PeriodicTorsionForce>
+    <Proper class1="h1" class2="c3" class3="ss" class4="c3" periodicity1="3" phase1="0.0000000000" k1="20"/>
+  </PeriodicTorsionForce>
+  <NonbondedForce coulomb14scale="0.833333" lj14scale="0.5">
+    <Atom type="dms-ss-1" charge="-0.2812000000" sigma="0.3563594873" epsilon="1.0460000000" parameterize="charge,sigma,epsilon"/>
+    <Atom type="dms-c3-2" charge="-0.0450000000" sigma="0.3399669508" epsilon="0.4577296000" parameterize="charge,sigma,epsilon"/>
+    <Atom type="dms-h1-3" charge="0.0617000000" sigma="0.2471353044" epsilon="0.0656888000" parameterize="sigma,epsilon" parameter_eval="charge=-1.0*(1*PARM['Atom/charge/dms-ss-1']+2*PARM['Atom/charge/dms-c3-2'])/6"/>
+    <Atom type="dms-h1-4" charge="0.0617000000" sigma="0.2471353044" epsilon="0.0656888000" parameter_eval="charge=-1.0*(1*PARM['Atom/charge/dms-ss-1']+2*PARM['Atom/charge/dms-c3-2'])/6,sigma=PARM['Atom/sigma/dms-h1-3'],epsilon=PARM['Atom/epsilon/dms-h1-3']"/>
+    <Atom type="dms-h1-5" charge="0.0617000000" sigma="0.2471353044" epsilon="0.0656888000" parameter_eval="charge=-1.0*(1*PARM['Atom/charge/dms-ss-1']+2*PARM['Atom/charge/dms-c3-2'])/6,sigma=PARM['Atom/sigma/dms-h1-3'],epsilon=PARM['Atom/epsilon/dms-h1-3']"/>
+    <Atom type="dms-c3-6" charge="-0.0450000000" sigma="0.3399669508" epsilon="0.4577296000" parameter_eval="charge=PARM['Atom/charge/dms-c3-2'],sigma=PARM['Atom/sigma/dms-c3-2'],epsilon=PARM['Atom/epsilon/dms-c3-2']"/>
+    <Atom type="dms-h1-7" charge="0.0617000000" sigma="0.2471353044" epsilon="0.0656888000" parameter_eval="charge=-1.0*(1*PARM['Atom/charge/dms-ss-1']+2*PARM['Atom/charge/dms-c3-2'])/6,sigma=PARM['Atom/sigma/dms-h1-3'],epsilon=PARM['Atom/epsilon/dms-h1-3']"/>
+    <Atom type="dms-h1-8" charge="0.0617000000" sigma="0.2471353044" epsilon="0.0656888000" parameter_eval="charge=-1.0*(1*PARM['Atom/charge/dms-ss-1']+2*PARM['Atom/charge/dms-c3-2'])/6,sigma=PARM['Atom/sigma/dms-h1-3'],epsilon=PARM['Atom/epsilon/dms-h1-3']"/>
+    <Atom type="dms-h1-9" charge="0.0617000000" sigma="0.2471353044" epsilon="0.0656888000" parameter_eval="charge=-1.0*(1*PARM['Atom/charge/dms-ss-1']+2*PARM['Atom/charge/dms-c3-2'])/6,sigma=PARM['Atom/sigma/dms-h1-3'],epsilon=PARM['Atom/epsilon/dms-h1-3']"/>
+  </NonbondedForce>
+</ForceField>
