@@ -780,7 +780,7 @@ class AlchemicalState(object):
         return supported_parameters
 
     @classmethod
-    def _get_system_lambda_parameters(cls, system, other_parameters=frozenset(), region_name = None):
+    def _get_system_lambda_parameters(cls, system, other_parameters=frozenset()):
         """Yields the supported lambda parameters in the system.
 
         Yields
@@ -789,23 +789,23 @@ class AlchemicalState(object):
         lambda parameter.
 
         """
-        if region_name == None:
-            supported_parameters = cls._get_supported_parameters()
-            searched_parameters = supported_parameters.union(other_parameters)
 
-            # Retrieve all the forces with global supported parameters.
-            for force_index in range(system.getNumForces()):
-                force = system.getForce(force_index)
-                try:
-                    n_global_parameters = force.getNumGlobalParameters()
-                except AttributeError:
-                    continue
-                for parameter_id in range(n_global_parameters):
-                    parameter_name = force.getGlobalParameterName(parameter_id)
-                    if parameter_name in searched_parameters:
-                        yield force, parameter_name, parameter_id
-        else:
-            raise Exception('')
+        supported_parameters = cls._get_supported_parameters()
+        searched_parameters = supported_parameters.union(other_parameters)
+
+        # Retrieve all the forces with global supported parameters.
+        for force_index in range(system.getNumForces()):
+            force = system.getForce(force_index)
+            try:
+                n_global_parameters = force.getNumGlobalParameters()
+            except AttributeError:
+                continue
+            for parameter_id in range(n_global_parameters):
+                parameter_name = force.getGlobalParameterName(parameter_id)
+                if parameter_name in searched_parameters:
+                    yield force, parameter_name, parameter_id
+
+
 
     def _set_alchemical_parameters(self, new_value, exclusions):
         """Set all defined parameters to the given value.
@@ -2131,7 +2131,6 @@ class AbsoluteAlchemicalFactory(object):
             if (sigma / unit.angstroms) == 0.0:
                 raise Exception('sigma is %s for particle %d; sigma must be positive' % (str(sigma), particle_index))
             # Set sterics parameters to custom forces.
-            #ALC
             for force in all_sterics_custom_nonbonded_forces:
                 force.addParticle([sigma, epsilon])
             # Set electrostatics parameters to custom forces.
@@ -2142,7 +2141,6 @@ class AbsoluteAlchemicalFactory(object):
                     electrostatics_parameters = [abs(0.0*charge)]
             else:
                 electrostatics_parameters = [charge, sigma]
-            #ALC
             for force in all_electrostatics_custom_nonbonded_forces:
                 force.addParticle(electrostatics_parameters)
 
@@ -2154,7 +2152,6 @@ class AbsoluteAlchemicalFactory(object):
             # Wit exact treatment of the PME electrostatics, the NonbondedForce handles the electrostatics.
             if not use_exact_pme_treatment:
                 charge = abs(0.0*charge)
-            #ALC
             if particle_index in alchemical_atomset:
                 nonbonded_force.setParticleParameters(particle_index, charge, sigma, abs(0*epsilon))
 
@@ -2181,12 +2178,10 @@ class AbsoluteAlchemicalFactory(object):
 
             # Exclude this atom pair in CustomNonbondedForces. All nonbonded forces
             # must have the same number of exceptions/exclusions on CUDA platform.
-            #ALC
             for force in all_custom_nonbonded_forces:
                 force.addExclusion(iatom, jatom)
 
             # Check how many alchemical atoms we have
-            #ALC
             both_alchemical = iatom in alchemical_atomset and jatom in alchemical_atomset
             only_one_alchemical = (iatom in alchemical_atomset) != (jatom in alchemical_atomset)
 
