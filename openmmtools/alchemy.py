@@ -235,7 +235,8 @@ class AlchemicalState(object):
             if the system has no lambda parameters.
 
         """
-
+        #if region_name == None:
+        #    region_name = 'zero'
         alchemical_parameters = {}
         for force, parameter_name, parameter_id in cls._get_system_lambda_parameters(
                 system, other_parameters={_UPDATE_ALCHEMICAL_CHARGES_PARAMETER}):
@@ -470,7 +471,7 @@ class AlchemicalState(object):
             If the system is not consistent with this state.
 
         """
-        system_alchemical_state = AlchemicalState.from_system(system)
+        system_alchemical_state = AlchemicalState.from_system(system, self.region_name)
 
         # Check if parameters are all the same.
         if self != system_alchemical_state:
@@ -496,6 +497,8 @@ class AlchemicalState(object):
         has_lambda_electrostatics_changed = False
         context_parameters = context.getParameters()
         region_name = self.region_name
+        #if region_name == None:
+        #    region_name = 'zero'
         # Set lambda parameters in Context.
         for parameter_name in self._parameters:
             if region_name in parameter_name:
@@ -673,7 +676,7 @@ class AlchemicalState(object):
 
     _UPDATE_ALCHEMICAL_CHARGES_DEFAULT = True
 
-    def _initialize(self, region_name = None, update_alchemical_charges=_UPDATE_ALCHEMICAL_CHARGES_DEFAULT,
+    def _initialize(self, region_name = None , update_alchemical_charges=_UPDATE_ALCHEMICAL_CHARGES_DEFAULT,
                     **kwargs):
         self.region_name = region_name
         """Initialize the alchemical state."""
@@ -708,6 +711,8 @@ class AlchemicalState(object):
 
         """
         region_name = self.region_name
+        #if region_name == None:
+        #    region_name = 'zero'
         has_lambda_electrostatics_changed = False
         parameters_applied = set()
         for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
@@ -789,10 +794,8 @@ class AlchemicalState(object):
         lambda parameter.
 
         """
-
         supported_parameters = cls._get_supported_parameters()
         searched_parameters = supported_parameters.union(other_parameters)
-
         # Retrieve all the forces with global supported parameters.
         for force_index in range(system.getNumForces()):
             force = system.getForce(force_index)
@@ -1110,6 +1113,8 @@ class AbsoluteAlchemicalFactory(object):
             print('Using %s alchemical regions' % (len(alchemical_regions)))
             if len(alchemical_regions) > 3:
                 raise ValueError('Maximum alchemical regions is 3')
+        else:
+            alchemical_regions = [alchemical_regions]
 
         # Resolve alchemical region.
         AlchemicalRegions = []
@@ -1208,12 +1213,12 @@ class AbsoluteAlchemicalFactory(object):
         #potneials in the alchemical region twice once in customforce then again in standard force but with K = 0
 
         #Is treatment of aa steric interaction correct? By what combination rule do two different alchemical regions see each other?
-        """
+
         #DEBUG
         for x in alchemical_forces_by_lambda:
             print(x, alchemical_forces_by_lambda[x])
             print('/////////////////')
-        """
+
 
         # Remove original forces that have been alchemically modified.
         #print(forces_to_remove)
@@ -1923,6 +1928,8 @@ class AbsoluteAlchemicalFactory(object):
         # Determine energy expression for all custom forces
         # --------------------------------------------------
         RegionName = alchemical_region.name
+        #if RegionName == None:
+        #    RegionName = 'zero'
         sterics_mixing_rules, exceptions_sterics_energy_expression = self._get_nonbonded_energy_exspressions(RegionName)
         sterics_energy_expression = exceptions_sterics_energy_expression + sterics_mixing_rules
 
@@ -2157,13 +2164,13 @@ class AbsoluteAlchemicalFactory(object):
 
         # Restrict interaction evaluation of CustomNonbondedForces to their respective atom groups.
         na_sterics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset)
-        aa_sterics_custom_nonbonded_force.addInteractionGroup(all_alchemical_atoms, alchemical_atomset)
+        aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, alchemical_atomset)
         if use_exact_pme_treatment:
             # The custom force only holds the original charges. It doesn't contribute to the energy.
             original_charges_custom_nonbonded_force.addInteractionGroup({}, alchemical_atomset)
         else:
             na_electrostatics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset)
-            aa_electrostatics_custom_nonbonded_force.addInteractionGroup(all_alchemical_atoms, alchemical_atomset)
+            aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset, alchemical_atomset)
 
         # ---------------------------------------------------------------
         # Distribute exceptions contributions in appropriate bond forces
