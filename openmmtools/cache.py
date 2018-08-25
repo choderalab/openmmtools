@@ -215,14 +215,14 @@ class ContextCache(object):
     if they have the same serialized state, but ContextCache can decide to store
     a single Context to optimize memory when two integrators differ by only few
     parameters that can be set after the Context is initialized. These parameters
-    include all the global variables defined by a ``CustomIntegrator``, and all
-    its Python attributes. You can force ``ContextCache`` to consider an
-    integrator global variable incompatible by adding it to the blacklist
-    ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES``. Similarly, you can add
-    other attributes that should be considered compatible through the whitelist
-    ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``. If an attribute in that
-    dictionary is not found in the integrator, the cache will search for a
-    corresponding getter and setter.
+    include all the global variables defined by a ``CustomIntegrator``.
+
+    You can force ``ContextCache`` to consider an integrator global variable incompatible
+    by adding it to the blacklist ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES``.
+    Similarly, you can add other attributes that should be considered compatible
+    through the whitelist ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``. If
+    an attribute in that dictionary is not found in the integrator, the cache
+    will search for a corresponding getter and setter.
 
     Parameters
     ----------
@@ -238,6 +238,14 @@ class ContextCache(object):
     platform
     capacity
     time_to_live
+
+    Warnings
+    --------
+    Python instance attributes are not copied when ``ContextCache.get_context()``
+    is called. You can force this by setting adding them to the whitelist
+    ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``, but if modifying your
+    Python attributes won't modify the OpenMM serialization, this will likely cause
+    problems so this is discouraged unless you know exactly what you are doing.
 
     Examples
     --------
@@ -382,6 +390,14 @@ class ContextCache(object):
             The integrator to be used to propagate the Context. Can be
             a difference instance from the one passed as an argument.
 
+        Warnings
+        --------
+        Python instance attributes are not copied when ``get_context()``
+        is called. You can force this by setting adding them to the whitelist
+        ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``, but if modifying the
+        attributes won't modify the OpenMM serialization, this will likely cause
+        problems so this is discouraged unless you know exactly what you're doing.
+
         """
         context = None
 
@@ -510,6 +526,7 @@ class ContextCache(object):
         get_context() found that they match the has.
 
         """
+        # Check that there are no contrasting settings for the attribute compatibility.
         cls._check_integrator_compatibility_configuration()
 
         # Restore temperature getter/setter before copying attributes.
@@ -521,9 +538,10 @@ class ContextCache(object):
         cls._set_integrator_compatible_variables(integrator, copied_integrator)
 
         # Copy the Python attributes (except for the SWIG pointer).
-        python_attributes = {k: v for k, v in copied_integrator.__dict__.items()
-                             if k != 'this' and k not in cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES}
-        integrator.__dict__.update(copy.deepcopy(python_attributes))
+        # TODO: Remove Python attributes
+        # python_attributes = {k: v for k, v in copied_integrator.__dict__.items()
+        #                      if k != 'this' and k not in cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES}
+        # integrator.__dict__.update(copy.deepcopy(python_attributes))
 
         # Copy other compatible attributes through getters/setters.
         for attribute in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES:
@@ -542,6 +560,7 @@ class ContextCache(object):
         different integrators that differ by only compatible parameters.
 
         """
+        # Check that there are no contrasting settings for the attribute compatibility.
         cls._check_integrator_compatibility_configuration()
 
         standard_integrator = copy.deepcopy(integrator)

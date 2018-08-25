@@ -205,9 +205,6 @@ class TestContextCache(object):
              integrators.LangevinIntegrator(temperature=270*unit.kelvin,
                                             collision_rate=180/unit.picoseconds)],
         ]
-        # Add a fake Python attribute to the last two integrators to test those as well.
-        test_cases[1][0].fake_attribute = 1
-        test_cases[1][1].fake_attribute = 2
 
         for integrator1, integrator2 in copy.deepcopy(test_cases):
             assert integrator1.__getstate__() != integrator2.__getstate__()
@@ -224,10 +221,8 @@ class TestContextCache(object):
                 except:
                     return integrator.getGlobalVariableByName(attribute_name)
 
-        test_cases.append(copy.deepcopy(test_cases[1]))
         test_cases[0].append('Temperature')  # Getter/setter.
-        test_cases[1].append('fake_attribute')  # Python attribute.
-        test_cases[2].append('a')  # Global variable.
+        test_cases[1].append('a')  # Global variable.
 
         for integrator1, integrator2, incompatible_attribute in test_cases:
             ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES.add(incompatible_attribute)
