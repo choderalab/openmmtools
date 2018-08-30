@@ -14,7 +14,13 @@ New features
 
 Enhancements
 ------------
-- Global variables of integrators are now automatically copied over the integrator returned by ``ContextCache.get_context``. It is possible to specify exception through ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES`` (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
+- Global variables of integrators are now automatically copied over the integrator returned by ``ContextCache.get_context``.
+  It is possible to specify exception through ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES`` (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
+
+Others
+------
+- Integrator ``MCMCMove``s now attempt to recover from NaN automatically by default (with ``n_restart_attempts`` set to
+  4) (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
 
 0.15.0 - Restraint forces
 =========================
