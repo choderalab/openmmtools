@@ -1,13 +1,26 @@
 Release History
 ===============
 
-0.15.1 - Something New This Way Comes [WIP]
-===========================================
+0.15.1 - Development
+====================
 
 New features
 ------------
-- Add ability for ``SamplerState`` to access new `OpenMM Custom CV Force Variables <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_
-- ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only recommended for advanced users.
+- Add ability for ``SamplerState`` to access new `OpenMM Custom CV Force Variables
+  <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_ 
+  (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
+- ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only
+  recommended for advanced users (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
+
+Enhancements
+------------
+- Global variables of integrators are now automatically copied over the integrator returned by ``ContextCache.get_context``.
+  It is possible to specify exception through ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES`` (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
+
+Others
+------
+- Integrator ``MCMCMove``s now attempt to recover from NaN automatically by default (with ``n_restart_attempts`` set to
+  4) (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
 
 0.15.0 - Restraint forces
 =========================

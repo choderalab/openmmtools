@@ -614,7 +614,7 @@ class BaseIntegratorMove(MCMCMove):
     """
 
     def __init__(self, n_steps, context_cache=None,
-                 reassign_velocities=False, n_restart_attempts=0):
+                 reassign_velocities=False, n_restart_attempts=4):
         self.n_steps = n_steps
         self.context_cache = context_cache
         self.reassign_velocities = reassign_velocities

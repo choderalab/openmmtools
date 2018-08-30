@@ -214,7 +214,15 @@ class ContextCache(object):
     and have compatible integrators. In general, two integrators are compatible
     if they have the same serialized state, but ContextCache can decide to store
     a single Context to optimize memory when two integrators differ by only few
-    parameters that can be set after the Context is initialized.
+    parameters that can be set after the Context is initialized. These parameters
+    include all the global variables defined by a ``CustomIntegrator``.
+
+    You can force ``ContextCache`` to consider an integrator global variable incompatible
+    by adding it to the blacklist ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES``.
+    Similarly, you can add other attributes that should be considered compatible
+    through the whitelist ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``. If
+    an attribute in that dictionary is not found in the integrator, the cache
+    will search for a corresponding getter and setter.
 
     Parameters
     ----------
@@ -230,6 +238,14 @@ class ContextCache(object):
     platform
     capacity
     time_to_live
+
+    Warnings
+    --------
+    Python instance attributes are not copied when ``ContextCache.get_context()``
+    is called. You can force this by setting adding them to the whitelist
+    ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``, but if modifying your
+    Python attributes won't modify the OpenMM serialization, this will likely cause
+    problems so this is discouraged unless you know exactly what you are doing.
 
     Examples
     --------
@@ -374,6 +390,14 @@ class ContextCache(object):
             The integrator to be used to propagate the Context. Can be
             a difference instance from the one passed as an argument.
 
+        Warnings
+        --------
+        Python instance attributes are not copied when ``get_context()``
+        is called. You can force this by setting adding them to the whitelist
+        ``ContextCache.COMPATIBLE_INTEGRATOR_ATTRIBUTES``, but if modifying the
+        attributes won't modify the OpenMM serialization, this will likely cause
+        problems so this is discouraged unless you know exactly what you're doing.
+
         """
         context = None
 
@@ -410,7 +434,10 @@ class ContextCache(object):
         context_integrator = context.getIntegrator()
 
         # Update state of system and integrator of the cached context.
-        self._copy_integrator_state(integrator, context_integrator)
+        # We don't have to copy the state of the integrator if the user
+        # didn't ask for a specific one.
+        if integrator is not None:
+            self._copy_integrator_state(integrator, context_integrator)
         thermodynamic_state.apply_to_context(context)
         return context, context_integrator
 
@@ -441,42 +468,81 @@ class ContextCache(object):
         'Temperature': 273,
         'Friction': 5,
         'RandomNumberSeed': 0,
-        'heat': 0,
-        'old_ke': 0,
-        'new_ke': 0,
-        'old_pe': 0,
-        'new_pe': 0,
-        'shadow_work': 0,
-        'accept': 0,
-        'ntrials': 0,
-        'nreject': 0,
-        'naccept': 0,
+    }
+
+    INCOMPATIBLE_INTEGRATOR_ATTRIBUTES = {
+        '_restorable__class_hash',
     }
 
     @classmethod
+    def _check_integrator_compatibility_configuration(cls):
+        """Verify that the user didn't specify the same attributes as both compatible and incompatible."""
+        shared_attributes = set(cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES)
+        shared_attributes = shared_attributes.intersection(cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES)
+        if len(shared_attributes) != 0:
+            raise RuntimeError('These integrator attributes have been specified both as '
+                               'compatible and incompatible: {}'.format(shared_attributes))
+
+    @classmethod
+    def _set_integrator_compatible_variables(cls, integrator, reference_value):
+        """Set all the global variables to the specified reference.
+
+        If the argument reference_value is another integrator, the global
+        variables will be copied. If integrator is not a CustomIntegrator,
+        the function has no effect.
+
+        The function doesn't copy the global variables that are included in
+        the blacklist INCOMPATIBLE_INTEGRATOR_ATTRIBUTES.
+        """
+        # Check if the integrator has no global variables.
+        try:
+            n_global_variables = integrator.getNumGlobalVariables()
+        except AttributeError:
+            return
+        # Check if we'll have to copy the values from a reference integrator.
+        is_reference_integrator = isinstance(reference_value, integrator.__class__)
+
+        for global_variable_idx in range(n_global_variables):
+            # Do not set variables that should be incompatible.
+            global_variable_name = integrator.getGlobalVariableName(global_variable_idx)
+            if global_variable_name in cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES:
+                continue
+            # Either copy the value from the reference integrator or just set it.
+            if is_reference_integrator:
+                value = reference_value.getGlobalVariable(global_variable_idx)
+            else:
+                value = reference_value
+            integrator.setGlobalVariable(global_variable_idx, value)
+
+
+    @classmethod
     def _copy_integrator_state(cls, copied_integrator, integrator):
-        """Copy the supported attributes of copied_integrator to integrator.
+        """Copy the compatible parameters of copied_integrator to integrator.
 
         Simply using __getstate__ and __setstate__ doesn't work because
         __setstate__ set also the bound Context.
 
+        We can assume the two integrators are of the same class since
+        get_context() found that they match the has.
+
         """
+        # Check that there are no contrasting settings for the attribute compatibility.
+        cls._check_integrator_compatibility_configuration()
+
         # Restore temperature getter/setter before copying attributes.
         integrators.ThermostatedIntegrator.restore_interface(integrator)
         integrators.ThermostatedIntegrator.restore_interface(copied_integrator)
+        assert integrator.__class__ == copied_integrator.__class__
 
+        # Copy all compatible global variables.
+        cls._set_integrator_compatible_variables(integrator, copied_integrator)
+
+        # Copy other compatible attributes through getters/setters.
         for attribute in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES:
             try:  # getter/setter
                 value = getattr(copied_integrator, 'get' + attribute)()
             except AttributeError:
-                # Try a CustomIntegrator global variable.
-                if isinstance(copied_integrator, openmm.CustomIntegrator):
-                    try:
-                        value = copied_integrator.getGlobalVariableByName(attribute)
-                    except Exception:
-                        pass
-                    else:
-                        integrator.setGlobalVariableByName(attribute, value)
+                pass
             else:  # getter/setter
                 getattr(integrator, 'set' + attribute)(value)
 
@@ -485,21 +551,29 @@ class ContextCache(object):
         """Return a standard copy of the integrator.
 
         This is used to determine if the same context can be used with
-        different integrators that differ by only few supported parameters.
+        different integrators that differ by only compatible parameters.
 
         """
+        # Check that there are no contrasting settings for the attribute compatibility.
+        cls._check_integrator_compatibility_configuration()
+
         standard_integrator = copy.deepcopy(integrator)
         integrators.ThermostatedIntegrator.restore_interface(standard_integrator)
+
+        # Set all compatible global variables to 0, except those in the blacklist.
+        cls._set_integrator_compatible_variables(standard_integrator, 0.0)
+
+        # Copy other compatible attributes through getters/setters overwriting
+        # eventual global variables with a different standard value.
         for attribute, std_value in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES.items():
             try:  # setter
                 getattr(standard_integrator, 'set' + attribute)(std_value)
             except AttributeError:
                 # Try to set CustomIntegrator global variable
-                if isinstance(standard_integrator, openmm.CustomIntegrator):
-                    try:
-                        standard_integrator.setGlobalVariableByName(attribute, std_value)
-                    except Exception:
-                        pass
+                try:
+                    standard_integrator.setGlobalVariableByName(attribute, std_value)
+                except Exception:
+                    pass
         return standard_integrator
 
     @staticmethod
