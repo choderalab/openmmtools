@@ -537,12 +537,6 @@ class ContextCache(object):
         # Copy all compatible global variables.
         cls._set_integrator_compatible_variables(integrator, copied_integrator)
 
-        # Copy the Python attributes (except for the SWIG pointer).
-        # TODO: Remove Python attributes
-        # python_attributes = {k: v for k, v in copied_integrator.__dict__.items()
-        #                      if k != 'this' and k not in cls.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES}
-        # integrator.__dict__.update(copy.deepcopy(python_attributes))
-
         # Copy other compatible attributes through getters/setters.
         for attribute in cls.COMPATIBLE_INTEGRATOR_ATTRIBUTES:
             try:  # getter/setter
