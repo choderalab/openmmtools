@@ -210,8 +210,8 @@ New Features
   `#187 <https://github.com/choderalab/openmmtools/issues/187>`_)
 
 
-Release 0.9.4 - Nonequilibrium integrators overhaul
-===================================================
+0.9.4 - Nonequilibrium integrators overhaul
+===========================================
 
 Major changes
 -------------
