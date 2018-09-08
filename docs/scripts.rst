@@ -1,4 +1,4 @@
-.. _scripts::
+.. _scripts:
 
 :mod:`openmmtools.scripts` contains scripts that may be useful in testing your OpenMM installation is functioning correctly:
 

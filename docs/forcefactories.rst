@@ -1,4 +1,4 @@
-.. _forcefactories::
+.. _forcefactories:
 
 Force Factories
 ===============
