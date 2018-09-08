@@ -31,6 +31,110 @@ from openmmtools import utils, integrators, forces, constants
 # MODULE FUNCTIONS
 # =============================================================================
 
+def create_thermodynamic_state_protocol(system, protocol, constants=None,
+                                        composable_states=None):
+    """An optimized utility function to create a list of thermodynamic states.
+
+    The method takes advantage of the fact that copying a thermodynamic state
+    does not require a copy of the OpenMM ``System`` object and that setting
+    parameters that are controlled by the ``(Compound)ThermodynamicState``
+    is effectively instantaneous.
+
+    Parameters
+    ----------
+    reference_state : ThermodynamicState or simtk.openmm.System
+        ``ThermodynamicState`` or The OpenMM ``System``. If a ``System`` the
+        constants must specify the temperature.
+    protocol : dict: str -> list
+        A dictionary associating the thermodynamic parameters to a list of
+        values. All the lists must have the same length.
+    constants : dict: str -> list
+        A dictionary associating a thermodnamic parameter to a value that
+        must remain constant along the protocol.
+    composable_states : IComposableState or list, optional
+        If specified, the function returns a list of ``CompoundThermodynamicState``
+        instead of simple ``ThermodynamicState`` objects.
+
+    Returns
+    -------
+    states : list of ``ThermodynamicState`` or ``CompoundThermodynamicState``
+        The sequence of thermodynamic states for the given protocol.
+
+    Examples
+    --------
+
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems
+    >>> system = testsystems.TolueneVacuum().system
+    >>> protocol = {'temperature': [300, 310, 330]*unit.kelvin,
+    ...             'pressure': [1.0, 1.1, 1.2]*unit.atmosphere}
+    >>> states = create_thermodynamic_state_protocol(system, protocol)
+    >>> len(states)
+    3
+
+    """
+    # Check that all elements of the protocol have the same length.
+    if len(protocol) == 0:
+        raise ValueError('No protocol has been specified.')
+    values_lengths = [len(values) for values in protocol.values()]
+    if len(set(values_lengths)) != 1:
+        raise ValueError('The protocol parameter values have different '
+                         'lengths!\n{}'.format(protocol))
+    protocol_length = values_lengths[0]
+
+    # Handle default value.
+    if constants is None:
+        constants = {}
+
+    # Check that the user didn't specify the same parameter as both
+    # a constant and a protocol variable.
+    if len(set(constants).intersection(set(protocol))) != 0:
+        raise ValueError('Some parameters have been specified both '
+                         'in constants and protocol.')
+
+    # Augument protocol to include the constants values as well.
+    for constant_parameter, value in constants.items():
+        protocol[constant_parameter] = [value for _ in range(protocol_length)]
+
+    # Create the reference ThermodynamicState.
+    if isinstance(system, openmm.System):
+        # Make sure the temperature is defined somewhere.
+        try:
+            temperature = constants['temperature']
+        except KeyError:
+            try:
+                temperature = protocol['temperature'][0]
+            except KeyError:
+                raise ValueError('If a System is passed the list of '
+                                 'constants must specify the temperature.')
+        thermo_state = ThermodynamicState(system, temperature=temperature)
+    else:
+        thermo_state = system
+
+    # Check if we need to create a reference CompoundThermodynamicState.
+    # Cast a single ComposableState into a list.
+    if isinstance(composable_states, IComposableState):
+        composable_states = [composable_states]
+    if composable_states is not None:
+        thermo_state = CompoundThermodynamicState(thermo_state, composable_states)
+
+    # Create all the states. Copying a state is much faster than
+    # initializing one because we don't have to copy System object.
+    states = [copy.deepcopy(thermo_state) for _ in range(protocol_length)]
+
+    # Assign protocol parameters.
+    protocol_keys, protocol_values = zip(*protocol.items())
+    for state_idx, state_values in enumerate(zip(*protocol_values)):
+        state = states[state_idx]
+        for lambda_key, lambda_value in zip(protocol_keys, state_values):
+            if hasattr(state, lambda_key):
+                setattr(state, lambda_key, lambda_value)
+            else:
+                raise AttributeError('{} object does not have protocol attribute '
+                                     '{}'.format(type(state), lambda_key))
+
+    return states
+
 def group_by_compatibility(thermodynamic_states):
     """Utility function to split the thermodynamic states by compatibility.
 
