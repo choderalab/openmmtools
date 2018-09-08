@@ -30,12 +30,11 @@ Features include:
  - high-quality Langevin integrators, including `g-BAOAB <http://rspa.royalsocietypublishing.org/content/472/2189/20160138>`_, `VVVR <http://pubs.acs.org/doi/abs/10.1021/jp411770f>`_, and other splittings
  - integrators that support nonequilibrium switching for free energy calculations or `nonequilibrium candidate Monte Carlo (NCMC) <http://dx.doi.org/10.1073/pnas.1106094108>`_
  - an extensible Markov chain Monte Carlo framework for mixing Monte Carlo and molecular dynamics-based methods
- - enhanced sampling methods, including replica-exchange (REMD) and self-adjusted mixture sampling (SAMS)
  - factories for generating `alchemically-modified <http://alchemistry.org>`_ systems for absolute and relative free energy calculations
  - a suite of test systems for benchmarking, validation, and debugging
 
 You can go through the :ref:`getting started tutorial <gettingstarted>` for an overview of the library or the
-:ref:`developers tutorial <devtutorial>` for more advanced features.
+:ref:`developer's guide <devtutorial>` for information on how to extend the existing features.
 
 .. toctree::
    :maxdepth: 1
