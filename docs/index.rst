@@ -22,7 +22,8 @@ OpenMMTools
 
 A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation engine.
 
-``openmmtools`` is a Python library layer that sits on top of `OpenMM <http://openmm.org>`_ to provide access to a variety of useful tools for building full-featured molecular simulation packages.
+``openmmtools`` is a Python library layer that sits on top of `OpenMM <http://openmm.org>`_ to provide access to a variety
+of useful tools for building full-featured molecular simulation packages.
 
 Features include:
 
@@ -33,11 +34,16 @@ Features include:
  - factories for generating `alchemically-modified <http://alchemistry.org>`_ systems for absolute and relative free energy calculations
  - a suite of test systems for benchmarking, validation, and debugging
 
+You can go through the :ref:`getting started tutorial <gettingstarted>` for an overview of the library or the
+:ref:`developers tutorial <devtutorial>` for more advanced features.
+
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
    :caption: Contents:
 
    installation
+   gettingstarted
+   Developer's guide (in construction) <devtutorial>
    releasehistory
 
 Modules
