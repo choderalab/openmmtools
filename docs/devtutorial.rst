@@ -30,30 +30,29 @@ The purpose of inheriting from :ref:`openmmtools.utils.RestorableOpenMMObject <u
 serialization. Without ``RestorableOpenMMObject``, these objects can still be copied and go through the standard
 serialization and deserialization in OpenMM without errors
 
-.. code-block:: python
+.. testcode::
 
-    >>> from simtk import openmm, unit
-    >>> import openmmtools as mmtools
+    from simtk import openmm, unit
 
-    >>> class VelocityVerlet(openmm.CustomIntegrator):
-    ...
-    ...     def __init(self, *args, **kwargs):
-    ...         super().__init__(*args, **kwargs)
-    ...         self.addComputePerDof("x", "x+dt*v")
-    ...         self.addComputePerDof("v", "v+0.5*dt*f/m")
-    ...
-    ...     def my_method()
-    ...         return 0.0
-    ...
-    >>> integrator = VelocityVerlet(1*unit.femtosecond)
-    >>> copied_integrator = copy.deepcopy(integrator)
-    >>> integrator_serialization = openmm.XmlSerializer.serialize(integrator)
-    >>> deserialized_integrator = openmm.XmlSerializer.deserialize(integrator_serialization)
+    class VelocityVerlet(openmm.CustomIntegrator):
+
+        def __init(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.addComputePerDof("x", "x+dt*v")
+            self.addComputePerDof("v", "v+0.5*dt*f/m")
+
+        def my_method()
+            return 0.0
+
+    integrator = VelocityVerlet(1*unit.femtosecond)
+    copied_integrator = copy.deepcopy(integrator)
+    integrator_serialization = openmm.XmlSerializer.serialize(integrator)
+    deserialized_integrator = openmm.XmlSerializer.deserialize(integrator_serialization)
 
 However, copies and serializations in OpenMM are performed at the C++ level, and thus they don't keep track of the Python
 class and methods.
 
-.. code-block:: python
+.. doctest::
 
     >>> print(type(copied_integrator))
     <class 'simtk.openmm.openmm.CustomIntegrator'>
@@ -67,25 +66,33 @@ Inheriting from :ref:`openmmtools.utils.RestorableOpenMMObject <utils>`, allows 
 after copying or deserializing. This happens automatically for copies, but you'll have to use ``RestorableOpenMMObject.restore_interface()``
 after deserialization.
 
-    >>> class VelocityVerlet(mmtools.utils.RestorableOpenMMObject, openmm.CustomIntegrator):
-    ...
-    ...     def __init(self, *args, **kwargs):
-    ...         super().__init__(*args, **kwargs)
-    ...         self.addComputePerDof("x", "x+dt*v")
-    ...         self.addComputePerDof("v", "v+0.5*dt*f/m")
-    ...
-    ...     def my_method()
-    ...         return 0.0
-    ...
-    >>> integrator = VelocityVerlet(1*unit.femtosecond)
+.. testcode::
+
+    from openmmtools import utils
+
+    class VelocityVerlet(utils.RestorableOpenMMObject, openmm.CustomIntegrator):
+
+        def __init(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self.addComputePerDof("x", "x+dt*v")
+            self.addComputePerDof("v", "v+0.5*dt*f/m")
+
+        def my_method()
+            return 0.0
+
+    integrator = VelocityVerlet(1*unit.femtosecond)
+
+.. doctest::
 
     >>> copied_integrator = copy.deepcopy(integrator)
-    >>> print(isinstance(copied_integrator, VelocityVerlet))
+    >>> isinstance(copied_integrator, VelocityVerlet)
     True
+
+.. doctest::
 
     >>> integrator_serialization = openmm.XmlSerializer.serialize(integrator)
     >>> deserialized_integrator = openmm.XmlSerializer.deserialize(integrator_serialization)
-    >>> mmtools.RestorableOpenMMObject.restore_interface(deserialized_integrator)
+    >>> utils.RestorableOpenMMObject.restore_interface(deserialized_integrator)
     True
     >>> deserialized_integrator.my_method()
     0.0
@@ -105,13 +112,14 @@ The base class :ref:`openmmtools.integrators.ThermostatedIntegrator <integrators
 this purpose. Inheriting from ``ThermostatedIntegrator`` will implicitly add the ``RestorableOpenMMObject`` functionalities
 as well.
 
-.. code-block:: python
+.. doctest::
 
-    >>> class MyIntegrator(mmtools.integrators.ThermostatedIntegrator):
+    >>> from openmmtools import integrators
+
+    >>> class MyIntegrator(integrators.ThermostatedIntegrator):
     ...     def __init__(self, temperature=298.0*unit.kelvin, timestep=1.0*unit.femtoseconds):
     ...         super(TestIntegrator, self).__init__(temperature, timestep)
     ...
-
     >>> integrator = TestIntegrator(temperature=350*unit.kelvin)
     >>> integrator.getTemperature()
     Quantity(value=350.0, unit=kelvin)
@@ -126,7 +134,7 @@ favor using properties that read that attribute from the underlying OpenMM objec
 For example, an integrator exposing the temperature should **not** hold a simple ``temperature`` Python attribute
 internally such as
 
-.. code-block:: python
+.. testcode::
 
     class INCORRECTIntegrator(openmm.CustomIntegrator):
 
@@ -136,7 +144,7 @@ internally such as
 
 but it expose it as a getter or a property similarly to the follow.
 
-.. code-block:: python
+.. testcode::
 
     class CorrectIntegrator(openmm.CustomIntegrator):
 
@@ -169,9 +177,11 @@ Modifying a System object buried in a ThermodynamicState
 Setting a thermodynamic parameter in ``ThermodynamicState`` is practically instantaneous, but modifying anything else
 involves the copy of the internal ``System`` object so it can be very slow.
 
-.. code-block:: python
+.. testcode::
 
-    thermo_state = ThermodynamicState(system, temperature=300*unit.kelvin)
+    from openmmtools import states
+
+    thermo_state = states.ThermodynamicState(system, temperature=300*unit.kelvin)
     thermo_state.pressure = 1.0*unit.atmosphere  # This is super fast.
     system = thermo_state.system  # This is a copy! Changes to this System won't affect thermo_state.
     # Make your changes to system.
@@ -186,7 +196,7 @@ containing an ``AndersenThermostat`` force. If you only use ``ThermodynaicState.
 class to create OpenMM ``Context`` objects, this shouldn't cause issues, but if for any reason you don't want that
 thermostat you can use the getter instead of the property.
 
-.. code-block:: python
+.. testcode::
 
     system = thermo_state.get_system(remove_thermostat=True)
 
@@ -221,7 +231,7 @@ Because of some memory optimizations, copying a ``ThermodynamicState`` or a ``Co
 the internal ``System`` so it is practically instantaneous. On the other hand, initializing a new ``ThermodynamicState``
 or a ``CompoundThermodynamicState`` object does involve a ``System`` copy.
 
-.. code-block:: python
+.. testcode::
 
     thermo_state1 = ThermodynamicState(system, temperature=300*unit.kelvin)
 
@@ -303,7 +313,7 @@ terms using a ``openmm.CustomTorsionForce`` whose energy is multiplied by a glob
 When this is the case, the base class ``mmtools.states.GlobalParameterState`` can be used to create a composable state
 very quickly.
 
-.. code-block:: python
+.. testcode::
 
     from openmmtools.states import GlobalParameterState
 
@@ -313,7 +323,7 @@ very quickly.
 
 It is possible to perform checks on the assigned value by adding a validator.
 
-.. code-block:: python
+.. testcode::
 
     class MyComposableState(GlobalParameterState):
 
@@ -342,7 +352,7 @@ another. OpenMM makes this possible to compute only the energy of a subset of fo
 The utility function ``mmtools.states.reduced_potential_at_states()`` takes advantage of forces separated in different
 groups to efficiently compute the reduced potentials at the thermodynamic states.
 
-.. code-block:: python
+.. testcode::
 
     alanine = mmtools.testsystems.AlchemicalAlanineDipeptide()
     protocol = {'lambda_sterics': [1.0, 0.5, 0.0],
@@ -392,34 +402,28 @@ Custom OpenMM integrators can modify global variables that effectively change th
 
 .. important:: Remember to update the ``thermodynamic_state`` object correctly at the end of ``apply`` if the integrator changes the thermodynamic state of the simulation.
 
-When this is the case, it's not possible to cast your integrator simply as
-
-.. code-block:: python
-
-    integrator = openmmtools.integrators.HMCIntegrator(timestep=1.0*unit.femtosecond)
-    HMC_move = IntegratorMove(integrator, n_steps=100, n_restart_attempts=4, reassign_velocities=True)
-
+When this is the case, it's not possible to cast your integrator into an ``MCMCMove`` with ``IntegratorMove``.
 Nevertheless, it's still possible to take advantage of the extra features already offered by ``IntegratorMove`` by
 subclassing the `mmtools.mcmc.BaseIntegratorMove <mcmc>` class. ``IntegratorMove`` inherits from this base class. An
 implementation would look more or less like this (see the API documentation for the details).
 
 .. code-block:: python
 
-    >>> class MyMove(BaseIntegratorMove):
-    ...     def __init__(self, timestep, n_steps, **kwargs):
-    ...         super(MyMove, self).__init__(n_steps, **kwargs)
-    ...         self.timestep = timestep
-    ...
-    ...     def _get_integrator(self, thermodynamic_state):
-    ...         return MyIntegrator(self.timestep, thermodynamic_state.temperature)
-    ...
-    ...     def _before_integration(self, context, thermodynamic_state):
-    ...         # Optional: Any operation performed after the context
-    ...         # was created but before integration.
-    ...
-    ...     def _after_integration(self, context, thermodynamic_state):
-    ...         # Update thermodynamic_state from context parameters.
-    ...         # Optional: Read statistics from context.getIntegrator() parameters.
+    class MyMove(BaseIntegratorMove):
+        def __init__(self, timestep, n_steps, **kwargs):
+            super(MyMove, self).__init__(n_steps, **kwargs)
+            self.timestep = timestep
+
+        def _get_integrator(self, thermodynamic_state):
+            return MyIntegrator(self.timestep, thermodynamic_state.temperature)
+
+        def _before_integration(self, context, thermodynamic_state):
+            # Optional: Any operation performed after the context
+            # was created but before integration.
+
+        def _after_integration(self, context, thermodynamic_state):
+            # Update thermodynamic_state from context parameters.
+            # Optional: Read statistics from context.getIntegrator() parameters.
 
 Metropolized MCMCMoves
 ----------------------
@@ -427,20 +431,19 @@ Metropolized MCMCMoves
 The `mcmc` module contains a base class for Metropolized moves as well. The following class implement an example that
 simply adds the unit vector to the initial coordinates.
 
-.. code-block:: python
+.. testcode::
 
-    >>> class AddOneVector(MetropolizedMove):
-    ...     def _propose_positions(self, initial_positions):
-    ...         print('Propose new positions')
-    ...         displacement = np.array([1.0, 1.0, 1.0] * unit.angstrom
-    ...         return initial_positions + displacement
-    ...
+    class AddOneVector(MetropolizedMove):
+        def _propose_positions(self, initial_positions):
+            print('Propose new positions')
+            displacement = np.array([1.0, 1.0, 1.0] * unit.angstrom
+            return initial_positions + displacement
 
 The parent class will take care of implementing the Metropolis acceptance criteria, collecting acceptance statistics,
 and updating the ``SamplerState`` correctly. The constructor accepts an optional ``atom_subset`` to limit the move to
 certain atoms. In this case, the ``initial_positions`` will be the positions of the atom subset only.
 
-.. code-block:: python
+.. doctest::
 
     >>> alanine = testsystems.AlanineDipeptideVacuum()
     >>> sampler_state = states.SamplerState(alanine.positions)
