@@ -538,8 +538,8 @@ positions, velocities, and eventually box vectors). The sampler state is updated
 coordinates and velocities after 1000 steps of GHMC integration. Note however that, in princple, the framework allows
 an ``MCMCMove`` to change also the thermodynamic degrees of freedom in ``thermo_state``.
 
-Integrators as MCMCMoves
-------------------------
+OpenMM integrators as MCMCMoves
+-------------------------------
 
 The :ref:`mcmc <mcmc>` module provides a few integrators in the form of an ``MCMCMove``, including ``openmmtools.integrators.LangevinIntegrator``.
 Casting integrators in the form of an ``MCMCMove`` object makes it easy to combine them with Monte Carlo techniques.
@@ -597,6 +597,27 @@ The ``MCMCMove`` above performs in sequence a Metropolized Monte Carlo rigid tra
 molecule followed by 1ps of Langevin dynamics after randomizing the velocities according to the Boltzmann distribution
 at the temperature of ``thermo_state``.
 
+ContextCache and Platform with MCMCMoves
+----------------------------------------
+
+All ``MCMCMove`` objects implemented in OpenMMTools accept a ``context_cache`` in the constructor. This parameter
+defaults to ``mmtools.cache.global_context_cache``, but you can pass a local cache to trigger other behaviors.
+
+.. code-block:: python
+
+    local_cache = ContextCache(platform=openmm.Platform.getPlatformByName('CPU'))
+    dummy_cache = DummyContextCache()  # Create a new Context everytime. Basically disables caching.
+    move = SequenceMove(move_list=[
+        MCDisplacementMove(atom_subset=ligand_atoms, context_cache=local_cache),
+        MCRotationMove(atom_subset=ligand_atoms, context_cache=dummy_cache),
+        LangevinSplittingDynamicsMove()  # Uses global_context_cache.
+    ])
+
+In the example above, applying the ``move`` will perform an MC translation of the ligands atom using a local ``ContextCache``
+that runs on the CPU, then an MC rotation using the ``DummyContextCache``, which recreates context every time effectively
+deactivating caching, and finally propagates the system with Langevin dynamics using the global cache on the fastest
+platform available.
+
 |
 
 Example: A minimal implementation of a general replica-exchange simulation class
@@ -612,7 +633,7 @@ simulation class should give you an idea of what is possible to do when taking a
     from random import random, randint
     from openmmtools import cache
 
-    class ReplicaExchange():
+    class ReplicaExchange:
 
         def __init__(self, thermodynamic_states, sampler_states, mcmc_move):
             self._thermodynamic_states = thermodynamic_states
