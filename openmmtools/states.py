@@ -65,7 +65,7 @@ def create_thermodynamic_state_protocol(system, protocol, constants=None,
 
     >>> from simtk import unit
     >>> from openmmtools import testsystems
-    >>> system = testsystems.TolueneVacuum().system
+    >>> system = testsystems.AlanineDipeptideExplicit().system
     >>> protocol = {'temperature': [300, 310, 330]*unit.kelvin,
     ...             'pressure': [1.0, 1.1, 1.2]*unit.atmosphere}
     >>> states = create_thermodynamic_state_protocol(system, protocol)
