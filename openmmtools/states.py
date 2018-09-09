@@ -135,6 +135,47 @@ def create_thermodynamic_state_protocol(system, protocol, constants=None,
 
     return states
 
+
+def reduced_potential_at_states(sampler_state, thermodynamic_states, context_cache):
+    """Compute the reduced potential of a single configuration at multiple thermodynamic states.
+
+    Parameters
+    ----------
+    sampler_state : SamplerState
+        The state holding the coordinates used to compute the potential.
+    thermodynamic_states : list of ``ThermodynamicState``
+        The list of thermodynamic states at which to compute the potential.
+    context_cache : cache.ContextCache
+        The context cache to use to request ``Context`` objects.
+
+    Returns
+    -------
+    reduced_potentials : np.ndarray of float
+        ``reduced_potentials[i]`` is the unit-less reduced potentials
+        (i.e., in kT units) of state ``thermodynamic_states[i]``.
+
+    """
+    reduced_potentials = np.zeros(len(thermodynamic_states))
+
+    # Group thermodynamic states by compatibility.
+    compatible_groups, original_indices = group_by_compatibility(thermodynamic_states)
+
+    # Compute the reduced potentials of all the compatible states.
+    for compatible_group, state_indices in zip(compatible_groups, original_indices):
+        # Get the context, any Integrator works.
+        context, integrator = context_cache.get_context(compatible_group[0])
+
+        # Update positions and box vectors. We don't need
+        # to set Context velocities for the potential.
+        sampler_state.apply_to_context(context, ignore_velocities=True)
+
+        # Compute and update the reduced potentials.
+        compatible_energies = ThermodynamicState.reduced_potential_at_states(
+            context, compatible_group)
+        for energy_idx, state_idx in enumerate(state_indices):
+            reduced_potentials[state_idx] = compatible_energies[energy_idx]
+
+
 def group_by_compatibility(thermodynamic_states):
     """Utility function to split the thermodynamic states by compatibility.
 
