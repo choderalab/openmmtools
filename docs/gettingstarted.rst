@@ -10,7 +10,11 @@ This tutorial will give you an overview of what you can find in OpenMMTools and 
 .. testsetup::
 
     import copy
-    n_steps = 0
+    import numpy
+    n_steps = 0  # Step 0 so that doctest don't take forever.
+
+    from simtk import openmm
+    platform = openmm.Platform.getPlatformByName('CPU')
 
 Test systems, integrators, and forces
 =====================================
@@ -46,8 +50,8 @@ the binding site of T4-Lysozyme.
     pxylene_dsl = '(resname TMP) and (mass > 1.5)'  # Select heavy atoms of p-xylene.
     binding_site_dsl = ('(resi 77 or resi 86 or resi 101 or resi 110 or '
                         ' resi 117 or resi 120) and (mass > 1.5)')
-    pxylene_atom_indices = lysozyme_pxylene.mdtraj_topology.select(pxylene_dsl)
-    binding_site_atom_indices = lysozyme_pxylene.mdtraj_topology.select(binding_site_dsl)
+    pxylene_atom_indices = lysozyme_pxylene.mdtraj_topology.select(pxylene_dsl).tolist()
+    binding_site_atom_indices = lysozyme_pxylene.mdtraj_topology.select(binding_site_dsl).tolist()
 
 Integrators
 -----------
@@ -133,35 +137,39 @@ AbsoluteAlchemicalFactory and AlchemicalState
 The ``AbsoluteAlchemicalFactory`` class prepare OpenMM ``System`` objects for alchemical manipulation. Let's create an
 alchemical system that we can use to alchemically decouple p-xylene from T4-lysozyme's binding pocket.
 
-.. testcode::
+.. doctest::
 
-    from openmmtools import alchemy
+    >>> from openmmtools import alchemy
 
-    # Define the region of the System to be alchemically modified.
-    pxylene_atoms = lysozyme_pxylene.dsl_select('resname TMP')
-    alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=pxylene_atoms)
+    >>> # Create the reference OpenMM System that will be alchemically modified.
+    >>> lysozyme_pxylene = testsystems.LysozymeImplicit()
+    >>> t4_system = lysozyme_pxylene.system
 
-    absolute_factory = alchemy.AbsoluteAlchemicalFactory()
-    alchemical_system = absolute_factory.create_alchemical_system(t4_system, alchemical_region)
+    >>> # Define the region of the System to be alchemically modified.
+    >>> pxylene_atoms = lysozyme_pxylene.mdtraj_topology.select('resname TMP')
+    >>> alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=pxylene_atoms)
+
+    >>> factory = alchemy.AbsoluteAlchemicalFactory()
+    >>> alchemical_system = factory.create_alchemical_system(t4_system, alchemical_region)
 
 At this point, the p-xylene in alchemical ``System`` is in its interacting state and it can be then simulated normally
 
-.. testcode::
+.. doctest::
 
-    integrator = integrators.LangevinIntegrator()
-    context = openmm.Context(alchemical_system, integrator)
-    context.setPositions(lysozyme_pxylene.positions)
-    integrator.step(n_steps)
+    >>> integrator = integrators.LangevinIntegrator()
+    >>> context = openmm.Context(alchemical_system, integrator)
+    >>> context.setPositions(lysozyme_pxylene.positions)
+    >>> integrator.step(n_steps)
 
 The alchemical degrees of freedom of the Hamiltonian can be controlled during the simulation through the ``AlchemicalState``
 class.
 
-.. testcode::
+.. doctest::
 
-    alchemical_state = alchemy.AlchemicalState.from_system(alchemical_system)
-    alchemical_state.lambda_electrostatics = 0.0
-    alchemical_state.lambda_sterics = 0.5
-    alchemical_state.apply_to_context(context)
+    >>> alchemical_state = alchemy.AlchemicalState.from_system(alchemical_system)
+    >>> alchemical_state.lambda_electrostatics = 0.0
+    >>> alchemical_state.lambda_sterics = 0.5
+    >>> alchemical_state.apply_to_context(context)
 
 The snippet above modifies the simulated ``System`` to completely turn off the electrostatics interaction and halve the
 Lennard-Jones potential between p-xylene and its environment.
@@ -226,8 +234,8 @@ as a generic variable called ``lambda`` goes from ``1.0`` to ``0.0``.
     # in sequence as lambda goes from 1.0 to 0.0.
     f_electrostatics = '2*(lambda-0.5)*step(lambda-0.5)'
     f_sterics = '2*lambda*step_hm(0.5-lambda) + step_hm(lambda-0.5)'
-    alchemical_state.lambda_electrostatics = AlchemicalFunction(f_electrostatics)
-    alchemical_state.lambda_sterics = AlchemicalFunction(f_sterics)
+    alchemical_state.lambda_electrostatics = alchemy.AlchemicalFunction(f_electrostatics)
+    alchemical_state.lambda_sterics = alchemy.AlchemicalFunction(f_sterics)
 
     alchemical_state.set_alchemical_variable('lambda', 0.75)
     assert alchemical_state.lambda_electrostatics == 0.5
@@ -258,15 +266,16 @@ The fundamental class in the ``states`` module is ``ThermodynamicState``. This c
 the ensemble parameters of temperature and pressure. For example, the code below creates a water box in NVT ensemble at
 298 K.
 
-.. testcode::
+.. doctest::
 
-    from openmmtools import states
+    >>> from openmmtools import states
 
-    waterbox = testsystems.WaterBox(box_edge=10*unit.angstroms)
-    thermo_state = states.ThermodynamicState(system=waterbox.system,
-                                             temperature=298.0*unit.kelvin)
-    assert thermo_state.volume == 1.0*unit.nanometer**3
-    assert state.pressure is None
+    >>> waterbox = testsystems.WaterBox(box_edge=2*unit.nanometers)
+    >>> thermo_state = states.ThermodynamicState(system=waterbox.system,
+    ...                                          temperature=298.0*unit.kelvin)
+    >>> thermo_state.volume.format('%.1f')
+    '8.0 nm**3'
+    >>> assert thermo_state.pressure is None
 
 The volume is computed from the box vectors associated to the ``System`` object. To convert the system to an NPT state
 at 298 K and 1 atm pressure, you can set the ``pressure`` attribute.
@@ -280,20 +289,22 @@ Note that the operation of specifying a constant pressure result in a null volum
 the simulation. You can then create an OpenMM ``Context`` object that is guaranteed to be in the specified thermodynamic
 state.
 
-.. testcode::
+.. doctest::
 
-    integrator = integrators.LangevinIntegrator(temperature=298.0*unit.kelvin)
-    context = thermo_state.create_context(integrator)
-    context.setPositions(waterbox.positions)
-    integrator.step(n_steps)
+    >>> integrator = integrators.LangevinIntegrator(temperature=298.0*unit.kelvin)
+    >>> context = thermo_state.create_context(integrator)
+    >>> context.setPositions(waterbox.positions)
+    >>> integrator.step(n_steps)
 
-    # ThermodynamicState takes care of adding and configuring a MonteCarloBarostatForce
-    # to keep the pressure at 1atm.
-    force_index, barostat = forces.find_forces(context.getSystem(),
-                                               openmm.MonteCarloBarostat,
-                                               only_one=True)
-    assert barostat.getDefaultTemperature() == 298.0*unit.kelvin
-    assert barostat.getDefaultPressure() == 1.0*unit.atmosphere
+    >>> # ThermodynamicState takes care of adding and configuring a MonteCarloBarostatForce
+    >>> # to keep the pressure at 1atm.
+    >>> force_index, barostat = forces.find_forces(context.getSystem(),
+    ...                                            openmm.MonteCarloBarostat,
+    ...                                            only_one=True)
+    >>> barostat.getDefaultTemperature().format('%.1f')
+    '298.0 K'
+    >>> print(barostat.getDefaultPressure())
+    1.01325 bar
 
 Consistency checks for free
 ---------------------------
@@ -315,10 +326,10 @@ a barostat to a system in vacuum raises an error.
 
 .. doctest::
 
-    >>> vacuum_system = testsystems.TolueneVacuum()
+    >>> vacuum_system = testsystems.TolueneVacuum().system
     >>> thermo_state = states.ThermodynamicState(system=vacuum_system,
-                                                 temperature=298.15*unit.kelvin,
-                                                 pressure=1.0*unit.atmosphere)
+    ...                                          temperature=298.15*unit.kelvin,
+    ...                                          pressure=1.0*unit.atmosphere)
     Traceback (most recent call last):
     ...
     ThermodynamicsError: Non-periodic systems cannot have a barostat.
@@ -330,8 +341,9 @@ take care of adding an ``AndersenThermostat``.
 
     >>> # Use a non-thermostated integrator.
     >>> thermo_state_nvt = states.ThermodynamicState(system=vacuum_system,
-                                                             temperature=298.15*unit.kelvin)
-    >>> context_nvt = thermo_state.create_context(openmm.VerletIntegrator(2.0*unit.femtoseconds))
+    ...                                              temperature=298.15*unit.kelvin)
+    >>> integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+    >>> context_nvt = thermo_state_nvt.create_context(integrator)
     >>> len(forces.find_forces(context_nvt.getSystem(), openmm.AndersenThermostat))
     1
 
@@ -344,24 +356,28 @@ all the OpenMM forces and integrators that depend on the temperature and pressur
 ``ThermodynamicState`` class decouples the representation of the thermodynamic parameters from their implementation
 details.
 
-.. testcode::
+.. doctest::
 
-    # Modify temperature and pressure of a system employing a Langevin
-    # thermostat and a Monte Carlo barostat.
-    thermo_state.temperature = 400.0*unit.kevlin
-    thermo_state.pressure = 1.2*unit.atmosphere
-    thermo_state.apply_to_context(context)
-    assert context.getIntegrator().getTemperature() == 400.0*unit.kelvin
-    assert context_nvt.getParameter(openmm.MonteCarloBarostat.Pressure()) == 1.2*unit.atmosphere
-    # The MonteCarloBarostat requires also a temperature parameter for the acceptance probability.
-    assert context_nvt.getParameter(openmm.MonteCarloBarostat.Temperature()) == 400.0*unit.kelvin
+    >>> # Modify temperature and pressure of a system employing a Langevin
+    >>> # thermostat and a Monte Carlo barostat.
+    >>> thermo_state.temperature = 400.0*unit.kelvin
+    >>> thermo_state.pressure = 1.2*unit.bar
+    >>> thermo_state.apply_to_context(context)
+    >>> context.getIntegrator().getTemperature().format('%.1f')
+    '400.0 K'
+    >>> context.getParameter(openmm.MonteCarloBarostat.Pressure())
+    1.2
+    >>> # The MonteCarloBarostat requires also a temperature parameter for the acceptance probability.
+    >>> context.getParameter(openmm.MonteCarloBarostat.Temperature())
+    400.0
 
-.. testcode::
+.. doctest::
 
-    # Modify the temperature of a system using an Andersen thermostat.
-    thermo_state_nvt.temperature = 400.0*unit.kevlin
-    thermo_state_nvt.apply_to_context(context_nvt)
-    assert context_nvt.getParameter(openmm.AndersenThermostat.Temperature()) == 400.0*unit.kevlin
+    >>> # Modify the temperature of a system using an Andersen thermostat.
+    >>> thermo_state_nvt.temperature = 400.0*unit.kelvin
+    >>> thermo_state_nvt.apply_to_context(context_nvt)
+    >>> context_nvt.getParameter(openmm.AndersenThermostat.Temperature())
+    400.0
 
 A ``ThermodynamicState`` can be applied to any ``Context`` that was created from a **compatible thermodynamic state**.
 
@@ -374,8 +390,8 @@ and NPT thermodynamic states are incompatible).
 .. doctest::
 
     >>> alanine = testsystems.AlanineDipeptideExplicit()
-    >>> state1 = ThermodynamicState(alanine.system, 273*unit.kelvin)
-    >>> state2 = ThermodynamicState(alanine.system, 310*unit.kelvin)
+    >>> state1 = states.ThermodynamicState(alanine.system, 273*unit.kelvin)
+    >>> state2 = states.ThermodynamicState(alanine.system, 310*unit.kelvin)
     >>> state1.is_state_compatible(state2)
     True
 
@@ -403,7 +419,7 @@ To obtain a ``Context`` simply use the ``ContextCache.get_context()`` method.
     from openmmtools import cache
 
     alanine = testsystems.AlanineDipeptideExplicit()
-    thermo_state = ThermodynamicState(alanine.system, 310*unit.kelvin)
+    thermo_state = states.ThermodynamicState(alanine.system, 310*unit.kelvin)
     integrator = integrators.LangevinIntegrator(temperature=310*unit.kelvin)
 
     context_cache = cache.ContextCache()
@@ -422,15 +438,16 @@ simulate the requested thermodynamic state.
 
 .. doctest::
 
-    >>> compatible_state = ThermodynamicState(alanine.system, 400*unit.kelvin)
+    >>> compatible_state = states.ThermodynamicState(alanine.system, 400*unit.kelvin)
+    >>> compatible_integrator = integrators.LangevinIntegrator(temperature=400*unit.kelvin)
     >>> compatible_context, compatible_integrator = context_cache.get_context(compatible_state,
-    ...                                                                       integrator)
+    ...                                                                       compatible_integrator)
     >>> id(context) == id(compatible_context)
     True
     >>> len(context_cache)  # The number of Contexts maintained in memory.
     1
-    >>> compatible_integrator.getTemperature()
-    400*unit.kelvin
+    >>> compatible_integrator.getTemperature().format('%.1f')
+    '400.0 K'
 
 Requesting a context in a different ensemble causes the creation of another ``Context``.
 
@@ -438,6 +455,7 @@ Requesting a context in a different ensemble causes the creation of another ``Co
 
     >>> thermo_state_npt = copy.deepcopy(thermo_state)
     >>> thermo_state_npt.pressure = 1.0*unit.atmosphere
+    >>> integrator = integrators.LangevinIntegrator(temperature=thermo_state_npt.temperature)
     >>> context_npt, integrator_npt = context_cache.get_context(thermo_state_npt, integrator)
     >>> id(context) == id(context_npt)
     False
@@ -450,11 +468,11 @@ the ``ContextCache``.
 .. doctest::
 
     >>> context_cache = cache.ContextCache(capacity=1, time_to_live=5)
-    >>> verlet_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
     >>> context1, integrator1 = context_cache.get_context(thermo_state,
-    ...                                                   verlet_integrator)
+    ...                                                   copy.deepcopy(integrator))
     >>> context2, integrator2 = context_cache.get_context(thermo_state_npt,
-    ...                                                   verlet_integrator)
+    ...                                                   copy.deepcopy(integrator))
     >>> len(context_cache)
     1
 
@@ -465,7 +483,8 @@ Finally, you can force the ``ContextCache`` to create contexts on a specific pla
 
 .. testcode::
 
-    context_cache.platform = openmm.Platform.getPlatformByName('CUDA')
+    platform = openmm.Platform.getPlatformByName('Reference')
+    context_cache = cache.ContextCache(platform=platform)
 
 The global ContextCache
 -----------------------
@@ -475,8 +494,10 @@ classes in the framework.
 
 .. testcode::
 
+    cache.global_context_cache.platform = openmm.Platform.getPlatformByName('CPU')
     cache.global_context_cache.capacity = 2
     cache.global_context_cache.time_to_live = 10
+    verlet_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
     context, integrator = cache.global_context_cache.get_context(thermo_state,
                                                                  verlet_integrator)
 
@@ -494,25 +515,26 @@ this. Remember the ``alchemy.AlchemicalState`` class we discussed above? ``Alche
 .. testcode::
 
     # Prepare T4-Lysozyme + p-xylene system for alchemical perturbation.
-    absolute_factory = alchemy.AbsoluteAlchemicalFactory()
+    factory = alchemy.AbsoluteAlchemicalFactory()
     alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=pxylene_atoms)
-    alchemical_system = absolute_factory.create_alchemical_system(t4_system, alchemical_region)
+    alchemical_system = factory.create_alchemical_system(t4_system, alchemical_region)
 
     # Define the basic thermodynamic state of the system.
-    thermo_state = states.ThermodynamicState(alchemical_system, temperature=300*unit.kelvin)
+    thermo_state = states.ThermodynamicState(alchemical_system, temperature=298*unit.kelvin)
 
     # Extend the definition of thermodynamic state to consider alchemical parameters as well.
     alchemical_state = alchemy.AlchemicalState.from_system(alchemical_system)
     compound_state = states.CompoundThermodynamicState(thermodynamic_state=thermo_state,
-                                                               composable_states=[alchemical_state])
+                                                       composable_states=[alchemical_state])
 
 At this point, ``compound_state`` is *both* a ``ThermodynamicState`` and an ``AlchemicalState`` in the sense that it
 exposes the interface to modify the thermodynamic parameters controlled by both objects.
 
 .. testcode::
 
+    context = compound_state.create_context(integrators.LangevinIntegrator())
     compound_state.temperature = 350*unit.kelvin  # Increase temperature of simulation.
-    compound_state.lambda_torsions = 0.2  # Soften torsions.
+    compound_state.lambda_sterics = 0.2  # Soften torsions.
     compound_state.apply_to_context(context)
 
 Obviously, ``CompoundThermodynamicState`` is not compatible exclusively with ``AlchemicalState`` but with any object
@@ -549,8 +571,7 @@ integrators and Monte Carlo to propagate the state of the system.
 
     # Propagate the system with a GHMC integrator.
     ghmc_move = mcmc.GHMCMove(timestep=1.0*unit.femtosecond, n_steps=n_steps)
-    ghmc.apply(thermo_state, sampler_state)
-    assert not numpy.allclose(sampler_state.positions, lysozyme_pxylene.positions)
+    ghmc_move.apply(thermo_state, sampler_state)
 
 The ``SamplerState`` object in the snippet above holds the configurational degrees of freedom of the ``System`` (e.g.,
 positions, velocities, and eventually box vectors). The sampler state is updated by ``MCMCMove.apply`` to hold the
@@ -566,8 +587,9 @@ Moreover, integrator ``MCMCMove``s provide a few extra features such as automati
 
 .. testcode::
 
-    langevin_move = LangevinSplittingDynamicsMove(splitting='V R O R V', n_steps=n_steps,
-                                                  n_restart_attempts=5)
+    langevin_move = mcmc.LangevinSplittingDynamicsMove(splitting='V R O R V',
+                                                       n_steps=n_steps,
+                                                       n_restart_attempts=5)
     langevin_move.apply(thermo_state, sampler_state)
 
 Propagating your system through Langevin dynamics has always a non-zero probability of incurring into a NaN error. When
@@ -580,7 +602,7 @@ simulation objects automatically for further debugging.
 
     try:
         langevin_move.apply(thermo_state, sampler_state)
-    except IntegratorMoveError as e:
+    except mcmc.IntegratorMoveError as e:
         # This saves to disk the OpenMM System, Integrator, and State objects.
         e.serialize_error(path_files_prefix='debug/langevin')
 
@@ -592,7 +614,7 @@ This feature can easily be extended to other integrators that are not explicitly
 .. testcode::
 
     integrator = integrators.HMCIntegrator(timestep=1.0*unit.femtosecond)
-    HMC_move = IntegratorMove(integrator, n_steps=n_steps, n_restart_attempts=4)
+    HMC_move = mcmc.IntegratorMove(integrator, n_steps=n_steps, n_restart_attempts=4)
 
 Combining Monte Carlo and dynamics
 ----------------------------------
@@ -604,7 +626,7 @@ Combining and mixing multiple ``MCMCMove`` is usually performed through the ``mc
     sequence_move = mcmc.SequenceMove(move_list=[
         mcmc.MCDisplacementMove(atom_subset=pxylene_atoms),
         mcmc.MCRotationMove(atom_subset=pxylene_atoms),
-        mcmc.LangevinSplittingDynamicsMove(timestep=2.0*femtoseconds, n_steps=n_steps,
+        mcmc.LangevinSplittingDynamicsMove(timestep=2.0*unit.femtoseconds, n_steps=n_steps,
                                            reassign_velocities=True, n_restart_attempts=6)
     ])
 
@@ -625,8 +647,8 @@ defaults to ``mmtools.cache.global_context_cache``, but you can pass a local cac
     local_cache = cache.ContextCache(platform=openmm.Platform.getPlatformByName('CPU'))
     dummy_cache = cache.DummyContextCache()  # Disable caching.
     move = mcmc.SequenceMove(move_list=[
-        mcmc.MCDisplacementMove(atom_subset=ligand_atoms, context_cache=local_cache),
-        mcmc.MCRotationMove(atom_subset=ligand_atoms, context_cache=dummy_cache),
+        mcmc.MCDisplacementMove(atom_subset=pxylene_atoms, context_cache=local_cache),
+        mcmc.MCRotationMove(atom_subset=pxylene_atoms, context_cache=dummy_cache),
         mcmc.LangevinSplittingDynamicsMove(n_steps=n_steps)  # Uses global_context_cache.
     ])
 
@@ -658,7 +680,7 @@ simulation class should give you an idea of what is possible to do when taking a
 
         def run(self, n_iterations=1):
             for iteration in range(n_iterations):
-                self._mix_replicas(n_attempts=10)
+                self._mix_replicas()
                 self._propagate_replicas()
 
         def _propagate_replicas(self):
@@ -666,7 +688,7 @@ simulation class should give you an idea of what is possible to do when taking a
             for thermo_state, sampler_state in zip(self._thermodynamic_states, self._replicas_sampler_states):
                 self._mcmc_move.apply(thermo_state, sampler_state)
 
-        def _mix_replicas(self, n_attempts):
+        def _mix_replicas(self, n_attempts=1):
             # Attempt to switch two replicas at random. Obviously, this scheme can be improved.
             for attempt in range(n_attempts):
                 # Select two replicas at random.
@@ -688,9 +710,9 @@ simulation class should give you an idea of what is possible to do when taking a
                     self._thermodynamic_states[i] = thermo_state_j
                     self._thermodynamic_states[j] = thermo_state_i
 
-        def _compute_reduced_potential(self, thermo_state, sampler_state):
+        def _compute_reduced_potential(self, sampler_state, thermo_state):
             # Obtain a Context to compute the energy with OpenMM. Any integrator will do.
-            context = cache.global_context_cache.get_context(thermo_state)
+            context, integrator = cache.global_context_cache.get_context(thermo_state)
             # Compute the reduced potential of the sampler_state configuration
             # in the given thermodynamic state.
             sampler_state.apply_to_context(context)
@@ -709,23 +731,24 @@ To run a parallel tempering simulation, we just have initialize the ``ReplicaExc
 states that vary in temperature. You can make use of the utility function ``states.create_thermodynamic_state_protocol``
 to initialize efficiently a list of ``ThermodynamicState`` or ``CompoundThermodynamicState``.
 
-.. testcode::
+.. doctest::
 
-    # Initialize thermodynamic states at different temperatures.
-    protocol = {'temperature': [300, 310, 330, 370, 450] * unit.kelvin}
-    thermo_states = states.create_thermodynamic_state_protocol(t4_system, protocol)
+    >>> # Initialize thermodynamic states at different temperatures.
+    >>> host_guest = testsystems.HostGuestVacuum()
+    >>> protocol = {'temperature': [300, 310, 330, 370, 450] * unit.kelvin}
+    >>> thermo_states = states.create_thermodynamic_state_protocol(host_guest.system, protocol)
 
-    # Initialize replica initial configurations.
-    sampler_states = [states.SamplerState(positions=t4lysozyme_pxylene.positions)
-                      for _ in thermo_states]
+    >>> # Initialize replica initial configurations.
+    >>> sampler_states = [states.SamplerState(positions=host_guest.positions)
+    ...                   for _ in thermo_states]
 
-    # Propagate the replicas with Langevin dynamics.
-    langevin_move = mcmc.LangevinSplittingDynamicsMove(timestep=2.0*unit.femtosecond,
-                                                       n_steps=n_steps)
+    >>> # Propagate the replicas with Langevin dynamics.
+    >>> langevin_move = mcmc.LangevinSplittingDynamicsMove(timestep=2.0*unit.femtosecond,
+    ...                                                    n_steps=n_steps)
 
-    # Run the parallel tempering simulation.
-    parallel_tempering = ReplicaExchange(thermo_states, sampler_states, langevin_move)
-    parallel_tempering.run()
+    >>> # Run the parallel tempering simulation.
+    >>> parallel_tempering = ReplicaExchange(thermo_states, sampler_states, langevin_move)
+    >>> parallel_tempering.run()
 
 This example creates 5 replicas starting from the same configurations but at the temperatures of 300, 310, ..., 450 K,
 and propagates the system with Langevin dynamics.
@@ -736,40 +759,39 @@ Hamiltonian replica exchange + parallel tempering
 Let's say we want to implement an enhanced sampling scheme that increases the temperature while alchemically softening
 part of a system.
 
-.. testcode::
+.. doctest::
 
-    # Prepare the T4 Lysozyme + p-xylene system for alchemical modification.
-    alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=pxylene_atoms)
-    absolute_factory = alchemy.AbsoluteAlchemicalFactory()
-    alchemical_system = absolute_factory.create_alchemical_system(t4_system, alchemical_region)
+    >>> # Prepare the T4 Lysozyme + p-xylene system for alchemical modification.
+    >>> guest_atoms = host_guest.mdtraj_topology.select('resname B2')
+    >>> alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=guest_atoms)
+    >>> factory = alchemy.AbsoluteAlchemicalFactory()
+    >>> alchemical_system = factory.create_alchemical_system(host_guest.system, alchemical_region)
 
-    # Initialize compound thermodynamic states at different temperatures and alchemical states.
-    protocol = {'temperature': [300, 310, 330, 370, 450] * unit.kelvin,
-                'lambda_electrostatics': [1.0, 0.5, 0.0, 0.0, 0.0],
-                'lambda_sterics': [1.0, 1.0, 1,0, 0.5, 0.0]}
-    alchemical_state = alchemy.AlchemicalState.from_system(system)
-    compound_states = create_thermodynamic_state_protocol(t4_system, protocol=protocol,
-                                                          composable_states=[alchemical_state])
+    >>> # Initialize compound thermodynamic states at different temperatures and alchemical states.
+    >>> protocol = {'temperature': [300, 310, 330, 370, 450] * unit.kelvin,
+    ...             'lambda_electrostatics': [1.0, 0.5, 0.0, 0.0, 0.0],
+    ...             'lambda_sterics': [1.0, 1.0, 1.0, 0.5, 0.0]}
+    >>> alchemical_state = alchemy.AlchemicalState.from_system(alchemical_system)
+    >>> compound_states = states.create_thermodynamic_state_protocol(
+    ...     alchemical_system, protocol=protocol, composable_states=[alchemical_state])
 
-    # Run the combined Hamiltonian replica exchange + parallel tempering simulation.
-    hrex_tempering = ReplicaExchange(compound_states, sampler_states, langevin_move)
-    hrex_tempering.run()
+    >>> # Run the combined Hamiltonian replica exchange + parallel tempering simulation.
+    >>> hrex_tempering = ReplicaExchange(compound_states, sampler_states, langevin_move)
 
 Hamiltonian replica exchange + parallel tempering mixing Monte Carlo and dynamics
 ---------------------------------------------------------------------------------
 
 Finally, let's mix Monte Carlo and dynamics for propagation.
 
-.. testcode::
+.. doctest::
 
-    sequence_move = SequenceMove(move_list=[
-        MCDisplacementMove(atom_subset=pxylene_atoms, displacement_sigma=1.0*unit.angstrom),
-        MCRotationMove(atom_subset=pxylene_atoms),
-        LangevinSplittingDynamicsMove(timestep=2.0*femtoseconds, n_steps=n_steps,
-                                      reassign_velocities=True, n_restart_attempts=6)
-    ])
+    >>> sequence_move = mcmc.SequenceMove(move_list=[
+    ...     mcmc.MCDisplacementMove(atom_subset=pxylene_atoms),
+    ...     mcmc.MCRotationMove(atom_subset=pxylene_atoms),
+    ...     mcmc.LangevinSplittingDynamicsMove(timestep=2.0*unit.femtoseconds, n_steps=n_steps,
+    ...                                        reassign_velocities=True, n_restart_attempts=6)
+    ... ])
 
-    # Run the combined Hamiltonian replica exchange + parallel tempering simulation
-    # using a combination of Monte Carlo moves and Langevin dynamics.
-    simulation = ReplicaExchange(compound_states, sampler_states, sequence_move)
-    simulation.run()
+    >>> # Run the combined Hamiltonian replica exchange + parallel tempering simulation
+    >>> # using a combination of Monte Carlo moves and Langevin dynamics.
+    >>> hrex_tempering = ReplicaExchange(compound_states, sampler_states, sequence_move)

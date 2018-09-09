@@ -8,6 +8,11 @@ OpenMMTools.
 
 .. contents::
 
+.. testsetup::
+
+    import copy
+    import numpy
+
 Using and implementing integrator and force objects
 ===================================================
 
@@ -36,12 +41,12 @@ serialization and deserialization in OpenMM without errors
 
     class VelocityVerlet(openmm.CustomIntegrator):
 
-        def __init(self, *args, **kwargs):
+        def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             self.addComputePerDof("x", "x+dt*v")
             self.addComputePerDof("v", "v+0.5*dt*f/m")
 
-        def my_method()
+        def my_method(self):
             return 0.0
 
     integrator = VelocityVerlet(1*unit.femtosecond)
@@ -77,7 +82,7 @@ after deserialization.
             self.addComputePerDof("x", "x+dt*v")
             self.addComputePerDof("v", "v+0.5*dt*f/m")
 
-        def my_method()
+        def my_method(self):
             return 0.0
 
     integrator = VelocityVerlet(1*unit.femtosecond)
@@ -118,9 +123,9 @@ as well.
 
     >>> class MyIntegrator(integrators.ThermostatedIntegrator):
     ...     def __init__(self, temperature=298.0*unit.kelvin, timestep=1.0*unit.femtoseconds):
-    ...         super(TestIntegrator, self).__init__(temperature, timestep)
+    ...         super().__init__(temperature, timestep)
     ...
-    >>> integrator = TestIntegrator(temperature=350*unit.kelvin)
+    >>> integrator = MyIntegrator(temperature=350*unit.kelvin)
     >>> integrator.getTemperature()
     Quantity(value=350.0, unit=kelvin)
     >>> integrator.setTemperature(380.0*unit.kelvin)
@@ -180,9 +185,14 @@ involves the copy of the internal ``System`` object so it can be very slow.
 .. testcode::
 
     from openmmtools import states
+    from openmmtools import testsystems
 
+    system = testsystems.TolueneVacuum().system
     thermo_state = states.ThermodynamicState(system, temperature=300*unit.kelvin)
-    thermo_state.pressure = 1.0*unit.atmosphere  # This is super fast.
+
+    # This is very fast.
+    thermo_state.temperature = 400.0*unit.kelvin
+
     system = thermo_state.system  # This is a copy! Changes to this System won't affect thermo_state.
     # Make your changes to system.
     thermo_state.system = system  # This involves another System copy.
@@ -233,16 +243,16 @@ or a ``CompoundThermodynamicState`` object does involve a ``System`` copy.
 
 .. testcode::
 
-    thermo_state1 = ThermodynamicState(system, temperature=300*unit.kelvin)
+    thermo_state1 = states.ThermodynamicState(system, temperature=300*unit.kelvin)
 
     # Very fast.
     thermo_state2 = copy.deepcopy(thermo_state)
     thermo_state2.temperature = 350*unit.kelvin
 
     # Slow.
-    thermo_state2 = ThermodynamicState(system, temperature=350*unit.kelvin)
+    thermo_state2 = states.ThermodynamicState(system, temperature=350*unit.kelvin)
 
-The function :ref:`mmtools.states.create_thermodynamic_state_protocol <states>` takes advantage of this to make it easy
+The function :ref:`openmmtools.states.create_thermodynamic_state_protocol <states>` takes advantage of this to make it easy
 to instantiate a list of ``ThermodynamicState`` or ``CompoundThermodynamicState`` objects that differ only by the controlled
 parameters.
 
@@ -255,7 +265,7 @@ The IComposableInterface
 ------------------------
 
 Composable states allow to control thermodynamic parameters of the simulation while masking their implementation details.
-There are no restrictions on the implementation details, but the class must implement the :ref:`mmtools.states.IComposableState <states>`
+There are no restrictions on the implementation details, but the class must implement the :ref:`openmmtools.states.IComposableState <states>`
 interface. You can see the API docs for contract details, but here is a list of the methods.
 
 .. code-block:: python
@@ -310,7 +320,7 @@ terms using a ``openmm.CustomTorsionForce`` whose energy is multiplied by a glob
     # Other force configurations.
     system.addForce(custom_force)
 
-When this is the case, the base class ``mmtools.states.GlobalParameterState`` can be used to create a composable state
+When this is the case, the base class ``openmmtools.states.GlobalParameterState`` can be used to create a composable state
 very quickly.
 
 .. testcode::
@@ -349,22 +359,25 @@ another. OpenMM makes this possible to compute only the energy of a subset of fo
     force = openmm.CustomBondForce('(K/2)*(r-r0)^2;')
     force.setForceGroup(5)
 
-The utility function ``mmtools.states.reduced_potential_at_states()`` takes advantage of forces separated in different
+The utility function ``openmmtools.states.reduced_potential_at_states()`` takes advantage of forces separated in different
 groups to efficiently compute the reduced potentials at the thermodynamic states.
 
 .. testcode::
 
-    alanine = mmtools.testsystems.AlchemicalAlanineDipeptide()
+    from openmmtools import alchemy
+    from openmmtools import cache
+
+    alanine = testsystems.AlchemicalAlanineDipeptide()
     protocol = {'lambda_sterics': [1.0, 0.5, 0.0],
                 'lambda_electrostatics': [1.0, 0.5, 0.0]}
     constants = {'temperature': 300*unit.kelvin}
-    composable_states = [mmtools.alchemy.AlchemicalState.from_system(system)]
-    compound_states = mmtools.states.create_thermodynamic_state_protocol(
-        alanine.system, protocol, constants, composable_states)
+    composable_states = [alchemy.AlchemicalState.from_system(alanine.system)]
+    compound_states = states.create_thermodynamic_state_protocol(alanine.system, protocol,
+                                                                 constants, composable_states)
 
-    sampler_state = mmtools.states.SamplerState(positions=alanine.positions)
-    reduced_potentials = mmtools.states.reduced_potential_at_states(
-        sampler_state, compound_states, mmtools.cache.global_context_cache)
+    sampler_state = states.SamplerState(positions=alanine.positions)
+    reduced_potentials = states.reduced_potential_at_states(sampler_state, compound_states,
+                                                            cache.global_context_cache)
 
 In order for the optimization to take effect, the composable states must implement the method
 ``_find_force_groups_to_update(self, context, current_context_state, memo)``. This method inspects the ``System``
@@ -404,7 +417,7 @@ Custom OpenMM integrators can modify global variables that effectively change th
 
 When this is the case, it's not possible to cast your integrator into an ``MCMCMove`` with ``IntegratorMove``.
 Nevertheless, it's still possible to take advantage of the extra features already offered by ``IntegratorMove`` by
-subclassing the `mmtools.mcmc.BaseIntegratorMove <mcmc>` class. ``IntegratorMove`` inherits from this base class. An
+subclassing the `openmmtools.mcmc.BaseIntegratorMove <mcmc>` class. ``IntegratorMove`` inherits from this base class. An
 implementation would look more or less like this (see the API documentation for the details).
 
 .. code-block:: python
@@ -433,10 +446,12 @@ simply adds the unit vector to the initial coordinates.
 
 .. testcode::
 
-    class AddOneVector(MetropolizedMove):
+    from openmmtools import mcmc
+
+    class AddOneVector(mcmc.MetropolizedMove):
         def _propose_positions(self, initial_positions):
             print('Propose new positions')
-            displacement = np.array([1.0, 1.0, 1.0] * unit.angstrom
+            displacement = numpy.array([1.0, 1.0, 1.0]) * unit.angstrom
             return initial_positions + displacement
 
 The parent class will take care of implementing the Metropolis acceptance criteria, collecting acceptance statistics,
