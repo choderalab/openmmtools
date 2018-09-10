@@ -31,9 +31,6 @@ script:
   # Test the package
   # TODO: remove the IGNORE_EXCEPTION_DETAIL when we drop Python2 support
   - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-timer --with-doctest --doctest-options="+IGNORE_EXCEPTION_DETAIL" -a '!slow' && cd ..
-  # Test the tutorials
-  - conda install --yes --quiet sphinx numpydoc
-  - cd docs && sphinx-build -b doctest . _build/ gettingstarted.rst devtutorial.rst && cd ..
 
 env:
   matrix:
