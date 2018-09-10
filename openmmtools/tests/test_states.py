@@ -1308,3 +1308,63 @@ def test_uncompressed_thermodynamic_state_serialization():
     ThermodynamicState._standard_system_cache = {}
     deserialized_state = utils.deserialize(uncompressed_serialization)
     assert are_pickle_equal(state, deserialized_state)
+
+def test_create_thermodynamic_state_protocol():
+    """Test the method for efficiently creating a list of thermoydamic states."""
+
+    system = testsystems.AlchemicalAlanineDipeptide().system
+    thermo_state = ThermodynamicState(system, temperature=400*unit.kelvin)
+
+    # The method raises an exception when the protocol is empty.
+    with nose.tools.assert_raises_regexp(ValueError, 'No protocol'):
+        create_thermodynamic_state_protocol(system, protocol={})
+
+    # The method raises an exception when different parameters have different lengths.
+    with nose.tools.assert_raises_regexp(ValueError, 'different lengths'):
+        protocol = {'temperature': [1.0, 2.0],
+                    'pressure': [4.0]}
+        create_thermodynamic_state_protocol(system, protocol=protocol)
+
+    # An exception is raised if the temperature is not specified with a System.
+    with nose.tools.assert_raises_regexp(ValueError, 'must specify the temperature'):
+        protocol = {'pressure': [5.0] * unit.atmosphere}
+        create_thermodynamic_state_protocol(system, protocol=protocol)
+
+    # An exception is raised if a parameter is specified both as constant and protocol.
+    with nose.tools.assert_raises_regexp(ValueError, 'constants and protocol'):
+        protocol = {'temperature': [5.0, 10.0] * unit.kelvin}
+        const = {'temperature': 5.0 * unit.kelvin}
+        create_thermodynamic_state_protocol(system, protocol=protocol, constants=const)
+
+    # Method works as expected with a reference System or ThermodynamicState.
+    protocol = {'temperature': [290, 310, 360]*unit.kelvin}
+    for reference in [system, thermo_state]:
+        states = create_thermodynamic_state_protocol(reference, protocol=protocol)
+        for state, temp in zip(states, protocol['temperature']):
+            assert state.temperature == temp
+        assert len(states) == 3
+
+    # Same with CompoundThermodynamicState.
+    from openmmtools.alchemy import AlchemicalState
+    alchemical_state = AlchemicalState.from_system(system)
+    protocol = {'temperature': [290, 310, 360]*unit.kelvin,
+                'lambda_sterics': [1.0, 0.5, 0.0],
+                'lambda_electrostatics': [0.75, 0.5, 0.25]}
+    for reference in [system, thermo_state]:
+        states = create_thermodynamic_state_protocol(reference, protocol=protocol,
+                                                     composable_states=alchemical_state)
+        for state, temp, sterics, electro in zip(states, protocol['temperature'],
+                                                 protocol['lambda_sterics'],
+                                                 protocol['lambda_electrostatics']):
+            assert state.temperature == temp
+            assert state.lambda_sterics == sterics
+            assert state.lambda_electrostatics == electro
+        assert len(states) == 3
+
+    # Check that constants work correctly.
+    del protocol['temperature']
+    const = {'temperature': 500*unit.kelvin}
+    states = create_thermodynamic_state_protocol(thermo_state, protocol=protocol, constants=const,
+                                                 composable_states=alchemical_state)
+    for state in states:
+        assert state.temperature == 500*unit.kelvin

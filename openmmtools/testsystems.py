@@ -471,6 +471,8 @@ class TestSystem(object):
 
         # Empty topology.
         self._topology = app.Topology()
+        # MDTraj Topology is built on demand.
+        self._mdtraj_topology = None
 
         return
 
@@ -508,10 +510,19 @@ class TestSystem(object):
     @topology.setter
     def topology(self, value):
         self._topology = value
+        self._mdtraj_topology = None
 
     @topology.deleter
     def topology(self):
         del self._topology
+
+    @property
+    def mdtraj_topology(self):
+        """The mdtraj.Topology object corresponding to the test system (read-only)."""
+        import mdtraj as md
+        if self._mdtraj_topology is None:
+            self._mdtraj_topology = md.Topology.from_openmm(self._topology)
+        return self._mdtraj_topology
 
     @property
     def analytical_properties(self):

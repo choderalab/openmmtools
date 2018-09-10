@@ -1,4 +1,4 @@
-.. _testsystems::
+.. _testsystems:
 
 Test Systems
 ============
