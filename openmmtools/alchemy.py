@@ -215,7 +215,7 @@ class AlchemicalState(object):
         self._initialize(region_name, **kwargs)
 
     @classmethod
-    def from_system(cls, system, region_name = None):
+    def from_system(cls, system, region_name=None):
         """Constructor reading the state from an alchemical system.
 
         Parameters
@@ -236,35 +236,34 @@ class AlchemicalState(object):
 
         """
         alchemical_parameters = {}
-        for force, parameter_name, parameter_ids, is_pair in cls._get_system_lambda_parameters(
+        for force, parameter_name, parameter_id in cls._get_system_lambda_parameters(
                 system, other_parameters={_UPDATE_ALCHEMICAL_CHARGES_PARAMETER}):
+            is_pair = False
+            if isinstance(force, openmm.CustomNonbondedForce):
+                force, parameter_name, parameter_ids, is_pair = cls._find_pair(force, parameter_name, parameter_id)
             if is_pair:
                 for index, parameter_id in enumerate(parameter_ids):
                     parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
+                    if parameter_name[index] in alchemical_parameters:
+                            if alchemical_parameters[parameter_name[index]] != parameter_value:
+                                err_msg = ('Parameter {} has been found in the force {} with two values: '
+                                           '{} and {}').format(parameter_name[index], force.__class__.__name__,
+                                                           parameter_value, alchemical_parameters[parameter_name[index]])
+                                raise AlchemicalStateError(err_msg)
+                            else:
+                                alchemical_parameters[parameter_name[index]] = parameter_value
+            else:
+                    parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
                     # Check that we haven't already found
                     # the parameter with a different value.
-                    if parameter_name[index] in alchemical_parameters:
-                        if alchemical_parameters[parameter_name[index]] != parameter_value:
+                    if parameter_name in alchemical_parameters:
+                        if alchemical_parameters[parameter_name] != parameter_value:
                             err_msg = ('Parameter {} has been found in the force {} with two values: '
-                                       '{} and {}').format(parameter_name[index], force.__class__.__name__,
-                                                       parameter_value, alchemical_parameters[parameter_name[index]])
+                                       '{} and {}').format(parameter_name, force.__class__.__name__,
+                                                           parameter_value, alchemical_parameters[parameter_name])
                             raise AlchemicalStateError(err_msg)
                     else:
-                        alchemical_parameters[parameter_name[index]] = parameter_value
-            else:
-                parameter_value = force.getGlobalParameterDefaultValue(parameter_ids)
-                # Check that we haven't already found
-                # the parameter with a different value.
-                #if region_name in parameter_name:
-                if parameter_name in alchemical_parameters:
-                    if alchemical_parameters[parameter_name] != parameter_value:
-                        err_msg = ('Parameter {} has been found in the force {} with two values: '
-                                   '{} and {}').format(parameter_name, force.__class__.__name__,
-                                                       parameter_value, alchemical_parameters[parameter_name])
-                        raise AlchemicalStateError(err_msg)
-                else:
-                    alchemical_parameters[parameter_name] = parameter_value
-
+                        alchemical_parameters[parameter_name] = parameter_value
 
         # Handle the update parameters flag.
         update_alchemical_charges = bool(alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER,
@@ -505,18 +504,20 @@ class AlchemicalState(object):
         has_lambda_electrostatics_changed = False
         context_parameters = context.getParameters()
         system = context.getSystem()
-        for force, parameter_name, parameter_ids, is_pair in self._get_system_lambda_parameters(system):
+        for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
+            is_pair = False
+            #Check if sterics or electrosatics have a pair
+            if isinstance(force, openmm.CustomNonbondedForce):
+                force, parameter_name, parameter_ids, is_pair = self._find_pair(force, parameter_name, parameter_id)
             if is_pair:
                 for index, parameter_id in enumerate(parameter_ids):
                     parameter_value = getattr(self, parameter_name[index])
                     if parameter_value == None:
                         if parameter_name[index] in context_parameters:
-                            err_msg = 'The system parameter {} is not defined in this state.'
-                            raise AlchemicalStateError(err_msg.format(parameter_name[index]))
+                            err_msg = 'Context has parameter {} which is undefined region {} in this state'
+                            raise AlchemicalStateError(err_msg.format(parameter_name[index], self.region_name))
                         continue
                     try:
-                        # Shouldn't need to check if lambda electrostatcis has changed
-                        # as MultiRegion will not be used with PME before OpenMM7.3
                         context.setParameter(parameter_name[index], parameter_value)
                     except Exception:
                         err_msg = 'Could not find parameter {} in context'
@@ -525,7 +526,7 @@ class AlchemicalState(object):
                 parameter_value = getattr(self, parameter_name)
                 if parameter_value == None:
                     if parameter_name in context_parameters:
-                        err_msg = 'The system parameter {} is not defined in this state.'
+                        err_msg = 'Context has parameter {} which is undefined in this state'
                         raise AlchemicalStateError(err_msg.format(parameter_name))
                     continue
                 try:
@@ -533,7 +534,6 @@ class AlchemicalState(object):
                     # This avoids us to loop through the System forces if we don't need to
                     # set the NonbondedForce charges.
                     if 'electrostatics' in parameter_name:
-                        elec_region = parameter_name
                         old_parameter_value = context_parameters[parameter_name]
                         has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
                                                              parameter_value != old_parameter_value)
@@ -550,11 +550,7 @@ class AlchemicalState(object):
             return
 
         # Find exact PME treatment key force objects.
-        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem(), region_name)
-        if original_charges_force != None:
-            lambda_electrostatics = getattr(self, elec_region)
-        else:
-            lambda_electrostatics = None
+        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem())
 
         # Quick checks for compatibility.
         context_charge_update = bool(context_parameters[_UPDATE_ALCHEMICAL_CHARGES_PARAMETER])
@@ -563,7 +559,7 @@ class AlchemicalState(object):
             raise AlchemicalStateError(err_msg)
 
         # Write NonbondedForce charges
-        self._set_exact_pme_charges(original_charges_force, nonbonded_force, lambda_electrostatics)
+        self._set_exact_pme_charges(original_charges_force, nonbonded_force)
         nonbonded_force.updateParametersInContext(context)
 
     def _standardize_system(self, system, set_lambda_electrostatics=False):
@@ -731,16 +727,18 @@ class AlchemicalState(object):
         """
         has_lambda_electrostatics_changed = False
         parameters_applied = set()
-        for force, parameter_name, parameter_ids, is_pair in self._get_system_lambda_parameters(system):
+        for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
+            is_pair = False
+            #Check if sterics or electrosatics have a pair
+            if isinstance(force, openmm.CustomNonbondedForce):
+                force, parameter_name, parameter_ids, is_pair = self._find_pair(force, parameter_name, parameter_id)
             if is_pair:
                 for index, parameter_id in enumerate(parameter_ids):
                     parameter_value = getattr(self, parameter_name[index])
                     if parameter_value == None:
-                        err_msg = 'The system parameter {} is not defined in this state.'
-                        raise AlchemicalStateError(err_msg.format(parameter_name[index]))
+                        err_msg = 'The system parameter {0} is not defined in region {1}'
+                        raise AlchemicalStateError(err_msg.format(parameter_name[index], self.region_name))
                     else:
-                        # Shouldn't need to check if lambda electrostatcis has changed
-                        # as MultiRegion will not be used with PME before OpenMM7.3
                         parameters_applied.add(parameter_name[index])
                         force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
             else:
@@ -753,18 +751,11 @@ class AlchemicalState(object):
                     # This avoids us to loop through the System forces if we don't need to
                     # set the NonbondedForce charges.
                     if 'electrostatics' in parameter_name:
-                        old_parameter_value = force.getGlobalParameterDefaultValue(parameter_ids)
-                        has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
+                            old_parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
+                            has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
                                                              parameter_value != old_parameter_value)
                     parameters_applied.add(parameter_name)
-                    force.setGlobalParameterDefaultValue(parameter_ids, parameter_value)
-
-        # Check that we set all the defined parameters.
-        for parameter_name in self._get_supported_parameters():
-            if (self._parameters[parameter_name] is not None and
-                    parameter_name not in parameters_applied):
-                err_msg = 'Could not find parameter {} in the system'
-                raise AlchemicalStateError(err_msg.format(parameter_name))
+                    force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
 
         # Nothing else to do if we don't need to modify the exact PME forces.
         if not (has_lambda_electrostatics_changed or set_update_charges_flag):
@@ -793,6 +784,44 @@ class AlchemicalState(object):
             original_charges_force.setGlobalParameterDefaultValue(parameter_idx, 0)
 
     @classmethod
+    def _find_pair(cls, force, parameter_name, parameter_id):
+
+        """
+        Determine if this force is part of a pair.
+        If is pair.
+        :return: name and force id of pairs
+        """
+
+        pair_name = []
+        pair_id = []
+        parameter_types = ['sterics', 'electrostatics']
+        n_global_parameters = force.getNumGlobalParameters()
+
+        for type in parameter_types:
+            if type in parameter_name:
+                parameter_type = type
+
+        #might need protect electrostatics and sterics from being region names for this to be robust.
+        for parameter_id_j in range(n_global_parameters):
+            parameter_name_j = force.getGlobalParameterName(parameter_id_j)
+            if parameter_type in parameter_name_j:
+                pair_name += [parameter_name_j]
+                pair_id += [parameter_id_j]
+
+        if len(pair_name) == 1:
+            #found only its self
+            return force, parameter_name, parameter_id, False
+
+        elif len(pair_name) == 2:
+            #found its self and pair
+            return force, pair_name, pair_id, True
+
+        else:
+            #this code should be unreachable
+            ValueError('Have found neither std force or pair of forces')
+
+
+    @classmethod
     def _get_supported_parameters(cls):
         """Return a set of the supported alchemical parameters.
 
@@ -809,16 +838,14 @@ class AlchemicalState(object):
     @classmethod
     def _get_system_lambda_parameters(cls, system, other_parameters=frozenset()):
         """Yields the supported lambda parameters in the system.
-
         Yields
         ------
         A tuple force, parameter_name, parameter_index for each supported
         lambda parameter.
-
         """
-
         supported_parameters = cls._get_supported_parameters()
         searched_parameters = supported_parameters.union(other_parameters)
+
         # Retrieve all the forces with global supported parameters.
         for force_index in range(system.getNumForces()):
             force = system.getForce(force_index)
@@ -826,31 +853,10 @@ class AlchemicalState(object):
                 n_global_parameters = force.getNumGlobalParameters()
             except AttributeError:
                 continue
-
-            pair_name = []
-            pair_id = []
-            for parameter_id_i in range(n_global_parameters):
-                parameter_name_i = force.getGlobalParameterName(parameter_id_i)
-                if parameter_name_i in searched_parameters:
-                    parameter_type = parameter_name_i.split('_')[1]
-                    for parameter_id_j in range(parameter_id_i, n_global_parameters):
-                        parameter_name_j = force.getGlobalParameterName(parameter_id_j)
-                        if parameter_type in parameter_name_j:
-                            pair_name += [parameter_name_j]
-                            pair_id += [parameter_id_j]
-
-                    if len(pair_name) == 1:
-                        yield force, parameter_name_i, parameter_id_i, False
-                        break
-                    elif len(pair_name) == 2:
-                        yield force, pair_name, pair_id, True
-                        break
-                    else:
-                        ValueError('Have found neither std force or pair of forces')
-
-
-
-
+            for parameter_id in range(n_global_parameters):
+                parameter_name = force.getGlobalParameterName(parameter_id)
+                if parameter_name in searched_parameters:
+                    yield force, parameter_name, parameter_id
 
     def _set_alchemical_parameters(self, new_value, exclusions):
         """Set all defined parameters to the given value.
@@ -1630,7 +1636,7 @@ class AbsoluteAlchemicalFactory(object):
                             #Add to alchemical
                             custom_force.addTorsion(particle1, particle2, particle3, particle4, [periodicity, phase, k])
                     else:
-                        #add to standard
+                        #Add to standard
                         force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
                 alchemical_forces.update({'lambda_torsions{}'.format(alchemical_region.region_name): [custom_force]})
             else:
@@ -1977,33 +1983,32 @@ class AbsoluteAlchemicalFactory(object):
         # TODO Try using a single, common "reff" effective softcore distance for both Lennard-Jones and Coulomb.
         forces_by_lambda = {}
         all_alchemical_atoms = []
-        populated_region_idxs = []
-        tmp = []
-        for region_idx, alchemical_region in enumerate(alchemical_regions):
+        populated_region_ids = []
+        non_pairs = []
+        for region_id, alchemical_region in enumerate(alchemical_regions):
             if not len(alchemical_region.alchemical_atoms) == 0:
-                tmp.append((region_idx, region_idx))
-                populated_region_idxs.append(region_idx)
+                non_pairs.append((region_id, region_id))
+                populated_region_ids.append(region_id)
             for atom in alchemical_region.alchemical_atoms:
                 all_alchemical_atoms.append(atom)
         # Don't create a force if there are no alchemical atoms.
         if len(all_alchemical_atoms) == 0:
             return {'': [copy.deepcopy(reference_force)]}
 
-        num_regions = len(populated_region_idxs)
+        pairs = (list(itertools.combinations(populated_region_ids, 2)))
 
-        pairs = (list(itertools.combinations(populated_region_idxs, 2)))
-        pairs = pairs + tmp
-
+        #region_permus is all permutations of alchemical regions so we can deal with interactions between
+        # alchemical regions (pairs). And the standard inteactions of the individual alchemical regions (non_pairs)
+        #with themselves (aa) and the non-alcemical regions (na)
+        region_permus = pairs + non_pairs
 
         # --------------------------------------------------
         # Determine energy expression for all custom forces
         # --------------------------------------------------
         nonbonded_force = copy.deepcopy(reference_force)
-        for pair in pairs:
-
-
-            alchemical_region_0 = alchemical_regions[pair[0]]
-            alchemical_region_1 = alchemical_regions[pair[1]]
+        for region_ids in region_permus:
+            alchemical_region_0 = alchemical_regions[region_ids[0]]
+            alchemical_region_1 = alchemical_regions[region_ids[1]]
 
             if alchemical_region_0.alchemical_atoms == alchemical_region_1.alchemical_atoms:
                 region_names = [alchemical_region_0.region_name]
@@ -2038,7 +2043,7 @@ class AbsoluteAlchemicalFactory(object):
                     raise ValueError('Consistent exceptions are' + err_msg)
                 if (alchemical_region.softcore_beta, alchemical_region.softcore_d, alchemical_region.softcore_e) != (0, 1, 1):
                     raise ValueError('Softcore electrostatics is' + err_msg)
-                if num_regions >> 1:
+                if len(populated_region_ids) >> 1:
                     raise ValueError('Multiple alchemical regions is' + err_msg)
 
             energy_expressions = self._get_electrostatics_energy_expressions(reference_force, region_names)
@@ -2076,8 +2081,6 @@ class AbsoluteAlchemicalFactory(object):
         # na_electrostatics_custom_bond_force      | electrostatics exceptions non-alchemical/alchemical   |
         # --------------------------------------------------------------------------------------------------
 
-
-
             def create_force(force_cls, energy_expression, lambda_variable_name, is_lambda_controlled):
                 """Shortcut to create a lambda-controlled custom forces."""
                 if is_lambda_controlled:
@@ -2103,8 +2106,6 @@ class AbsoluteAlchemicalFactory(object):
                 aa_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
                                                              ['lambda_sterics{}'.format(region_names[0])], alchemical_region.annihilate_sterics)
                 all_sterics_custom_nonbonded_forces = [na_sterics_custom_nonbonded_force, aa_sterics_custom_nonbonded_force]
-
-
 
 
             # Add parameters and configure CustomNonbondedForces to match reference force
