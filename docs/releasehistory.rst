@@ -1,8 +1,8 @@
 Release History
-===============
+***************
 
-0.16.0 - GlobalParameterState class, SamplerState reads CVs
-============================================================
+0.16.0 - Py2 deprecated, GlobalParameterState class, SamplerState reads CVs
+===========================================================================
 
 New features
 ------------
@@ -15,6 +15,16 @@ New features
   control global variables (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
 - Allow restraint force classes to be controlled by a parameter other than ``lambda_restraints``. This will enable
   multi-restraints simulations (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
+
+Enhancements
+------------
+- Global variables of integrators are now automatically copied over the integrator returned by ``ContextCache.get_context``.
+  It is possible to specify exception through ``ContextCache.INCOMPATIBLE_INTEGRATOR_ATTRIBUTES`` (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
+
+Others
+------
+- Integrator ``MCMCMove``s now attempt to recover from NaN automatically by default (with ``n_restart_attempts`` set to
+  4) (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
 
 Deprecated
 ----------
@@ -66,6 +76,7 @@ Enhancements
   not work around the NaN's. This is a slow step relative to just resetting positions, but better than simulation
   crashing.
 
+
 0.13.3 - Critical Bugfix to SamplerState Context Manipulation
 =============================================================
 
@@ -104,8 +115,8 @@ Added bit operators ``and`` and ``or`` to ``math_eval`` (`#301 <https://github.c
 
 
 
-OpenMMTools 0.13.0
-==================
+0.13.0 - Alternative reaction field models, Langevin splitting MCMCMove
+=======================================================================
 
 New Features
 ------------
@@ -128,7 +139,6 @@ Bug Fixes
 
 0.12.1 - Add virtual sites support in alchemy
 =============================================
-
 
 - Fixed AbsoluteAlchemicalFactory treatment of virtual sites that were previously ignored
   (`#259 <https://github.com/choderalab/openmmtools/issues/259>`_).
@@ -159,15 +169,15 @@ Bug fixes
   integrator (`#252 <https://github.com/choderalab/openmmtools/issues/252>`_)
 
 
-Hotfix 0.11.2
-=============
+0.11.2 - Bugfix release
+=======================
 
-Hotfix in fringe Python2/3 compatibility issue when using old style serialization systems in Python 2
+- Hotfix in fringe Python2/3 compatibility issue when using old style serialization systems in Python 2
 
 
 
-Release 0.11.1: Optimizations
-=============================
+0.11.1 - Optimizations
+======================
 
 - Adds Drew-Dickerson DNA dodecamer test system (`#223 <https://github.com/choderalab/openmmtools/issues/223>`_)
 - Bugfix and optimization to ``ContextCache`` (`#235 <https://github.com/choderalab/openmmtools/issues/235>`_)
@@ -176,10 +186,11 @@ Release 0.11.1: Optimizations
 - Backwards compatible with uncompressed serialized ``ThermodynamicStates``
 
 
-0.11.0
-======
+0.11.0 - Conda forge installation
+=================================
 
-New Features:
+New Features
+------------
 
 - ``LangevinIntegrator`` now sets ``measure_heat=False`` by default for increased performance
   (`#211 <https://github.com/choderalab/openmmtools/issues/211>`_)
@@ -191,8 +202,8 @@ New Features:
 
 
 
-Release 0.10.0 - Optimizations of ThermodynamicState, renamed AlchemicalFactory
-===============================================================================
+0.10.0 - Optimizations of ThermodynamicState, renamed AlchemicalFactory
+=======================================================================
 
 - BREAKS API: Renamed AlchemicalFactory to AbsoluteAlchemicalFactory
   (`#206 <https://github.com/choderalab/openmmtools/issues/206>`_)
@@ -211,8 +222,8 @@ Release 0.10.0 - Optimizations of ThermodynamicState, renamed AlchemicalFactory
   `#187 <https://github.com/choderalab/openmmtools/issues/187>`_)
 
 
-Release 0.9.4 - Nonequilibrium integrators overhaul
-===================================================
+0.9.4 - Nonequilibrium integrators overhaul
+===========================================
 
 Major changes
 -------------

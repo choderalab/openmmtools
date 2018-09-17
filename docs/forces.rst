@@ -1,4 +1,4 @@
-.. _forces::
+.. _forces:
 
 Forces
 ======

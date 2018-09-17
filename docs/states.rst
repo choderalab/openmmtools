@@ -1,4 +1,4 @@
-.. _states::
+.. _states:
 
 Thermodynamic and Sampler States
 ================================
