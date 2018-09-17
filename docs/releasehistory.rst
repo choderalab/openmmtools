@@ -1,6 +1,29 @@
 Release History
 ***************
 
+0.17.0 - Development
+====================
+
+New features
+------------
+
+- ``RadiallySymmetricRestraintForce`` and all subclasses are now a ``CustomCVForce`` subclass wrapping their
+  respective ``CustomBondForce`` and ``CustomCentroidBondForce`` objects. This breaks backwards compatibility, but
+  enables tracking the restraint distances through the new ``SamplerSate`` collective variable features.
+
+Compatibility Warnings
+----------------------
+- ``RadiallySymmetricRestraintForce``'s conversion to ``CustomCVForce``'s break the backwards compatibility with older
+  codes which implement subclasses of it. The largest change is how the Energy Function is implemented, and subclass
+  hierarchy. E.g. All these classes are now ``CustomCVForce``'s instead of ``CustomBondForce`` and
+  ``CustomCentroidBondForce`` objects.
+
+     - This affects ``RadiallySymmetricRestraintForce``,
+       ``RadiallySymmetricCentroidRestraintForce``, ``RadiallySymmetricBondRestraintForce``,
+       ``HarmonicRestraintForceMixIn``, ``HarmonicRestraintForce``, ``HarmonicRestraintBondForce``,
+       ``FlatBottomRestraintForceMixIn``, ``FlatBottomRestraintForce``, and ``FlatBottomRestraintBondForce``.
+
+
 0.16.0 - Py2 deprecated, GlobalParameterState class, SamplerState reads CVs
 ===========================================================================
 
@@ -76,7 +99,6 @@ Enhancements
   not work around the NaN's. This is a slow step relative to just resetting positions, but better than simulation
   crashing.
 
-
 0.13.3 - Critical Bugfix to SamplerState Context Manipulation
 =============================================================
 
@@ -115,8 +137,8 @@ Added bit operators ``and`` and ``or`` to ``math_eval`` (`#301 <https://github.c
 
 
 
-0.13.0 - Alternative reaction field models, Langevin splitting MCMCMove
-=======================================================================
+OpenMMTools 0.13.0
+==================
 
 New Features
 ------------
@@ -139,6 +161,7 @@ Bug Fixes
 
 0.12.1 - Add virtual sites support in alchemy
 =============================================
+
 
 - Fixed AbsoluteAlchemicalFactory treatment of virtual sites that were previously ignored
   (`#259 <https://github.com/choderalab/openmmtools/issues/259>`_).
@@ -169,15 +192,15 @@ Bug fixes
   integrator (`#252 <https://github.com/choderalab/openmmtools/issues/252>`_)
 
 
-0.11.2 - Bugfix release
-=======================
+Hotfix 0.11.2
+=============
 
-- Hotfix in fringe Python2/3 compatibility issue when using old style serialization systems in Python 2
+Hotfix in fringe Python2/3 compatibility issue when using old style serialization systems in Python 2
 
 
 
-0.11.1 - Optimizations
-======================
+Release 0.11.1: Optimizations
+=============================
 
 - Adds Drew-Dickerson DNA dodecamer test system (`#223 <https://github.com/choderalab/openmmtools/issues/223>`_)
 - Bugfix and optimization to ``ContextCache`` (`#235 <https://github.com/choderalab/openmmtools/issues/235>`_)
@@ -186,11 +209,10 @@ Bug fixes
 - Backwards compatible with uncompressed serialized ``ThermodynamicStates``
 
 
-0.11.0 - Conda forge installation
-=================================
+0.11.0
+======
 
-New Features
-------------
+New Features:
 
 - ``LangevinIntegrator`` now sets ``measure_heat=False`` by default for increased performance
   (`#211 <https://github.com/choderalab/openmmtools/issues/211>`_)
@@ -202,8 +224,8 @@ New Features
 
 
 
-0.10.0 - Optimizations of ThermodynamicState, renamed AlchemicalFactory
-=======================================================================
+Release 0.10.0 - Optimizations of ThermodynamicState, renamed AlchemicalFactory
+===============================================================================
 
 - BREAKS API: Renamed AlchemicalFactory to AbsoluteAlchemicalFactory
   (`#206 <https://github.com/choderalab/openmmtools/issues/206>`_)
@@ -222,8 +244,8 @@ New Features
   `#187 <https://github.com/choderalab/openmmtools/issues/187>`_)
 
 
-0.9.4 - Nonequilibrium integrators overhaul
-===========================================
+Release 0.9.4 - Nonequilibrium integrators overhaul
+===================================================
 
 Major changes
 -------------
