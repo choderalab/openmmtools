@@ -27,26 +27,19 @@ requirements:
     - numpy
     - scipy
     - six
-    - openmm >=7.2
+    - openmm
     - parmed
     - mdtraj
-    - pyyaml
-    # NetCDF4 on windows conda has DLL issues, so pin libnetcdf. Remove this later
     - netcdf4
-#    - netcdf4 # [not win]
-#    - netcdf4 ==1.4.0=py*_0 # [win]
-#    - libnetcdf ==4.6.1=vc14_2 # [win]
-#    - hdf5 ==1.10.1=vc14_2 # [win]
-#    - blosc ==1.14.0=h6538335* # [win]
+    - pyyaml
 
 
 test:
   requires:
     - nose
     - pymbar
-# Until the NetCDF issues are resolved, actual test runs are subject to run_test.[bat,sh]
-#  imports:
-#    - openmmtools
+  imports:
+    - openmmtools
 
 about:
   home: https://github.com/choderalab/openmmtools
