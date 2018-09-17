@@ -27,7 +27,7 @@ requirements:
     - numpy
     - scipy
     - six
-    - openmm
+    - openmm >=7.2
     - parmed
     - mdtraj
     - netcdf4
@@ -38,8 +38,9 @@ test:
   requires:
     - nose
     - pymbar
-  imports:
-    - openmmtools
+# Until the NetCDF issues are resolved, actual test runs are subject to run_test.[bat,sh] (9/16/2018)
+#  imports:
+#    - openmmtools
 
 about:
   home: https://github.com/choderalab/openmmtools

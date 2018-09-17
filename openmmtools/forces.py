@@ -237,11 +237,15 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
     and :func:`restrained_atom_indices2` (with their setters) that return
     the indices of the restrained atoms.
 
-    You will also have to implement :func:`_create_bond`, which should add the
-    bond using the correct function/signature.
+    You will also have to implement :func:`_create_bond`, which should add
+    the bond using the correct function/signature.
 
     Optionally, you can implement :func:`distance_at_energy` if an
     analytical expression for distance(potential_energy) exists.
+
+    If you subclass this, and plan on adding additional global parameters,
+    you need to invoke this class ``super().__init__`` first as the
+    ``controlling_parameter_name`` must be the first global variable.
 
     Parameters
     ----------
@@ -269,7 +273,6 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
                  restrained_atom_indices2, controlling_parameter_name,
                  *args, **kwargs):
         super(RadiallySymmetricRestraintForce, self).__init__(*args, **kwargs)
-        self._controlling_parameter_name = controlling_parameter_name
 
         # Unzip bond parameters names and values from dict.
         assert len(restraint_parameters) == 1 or isinstance(restraint_parameters, collections.OrderedDict)
@@ -278,8 +281,13 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         # Let the subclass initialize its bond.
         self._create_bond(parameter_values, restrained_atom_indices1, restrained_atom_indices2)
 
-        # Add parameters.
-        self.addGlobalParameter(self._controlling_parameter_name, 1.0)
+        # Add parameters. First global parameter is _restorable_force__class_hash
+        # from the RestorableOpenMMObject class.
+        err_msg = ('The force should have a single global parameter at this point. '
+                   'This is likely because the subclass called addGlobalParameter '
+                   'before calling super().__init__')
+        assert self.getNumGlobalParameters() == 1, err_msg
+        self.addGlobalParameter(controlling_parameter_name, 1.0)
         for parameter in parameter_names:
             self.addPerBondParameter(parameter)
 
@@ -329,7 +337,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
     @property
     def controlling_parameter_name(self):
         """str: The name of the global parameter controlling the energy function (read-only)."""
-        return self._controlling_parameter_name
+        return self.getGlobalParameterName(1)
 
     def distance_at_energy(self, potential_energy):
         """Compute the distance at which the potential energy is ``potential_energy``.
