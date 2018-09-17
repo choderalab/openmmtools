@@ -50,7 +50,7 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
         Setting it to `False` speeds up the function execution but modifies
         the `reference_system` object.
     shifted : bool, optional, default=False
-        If `True`, a shited reaction-field will be used.
+        If `True`, a shifted reaction-field will be used.
 
     Returns
     -------

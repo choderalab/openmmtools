@@ -1,8 +1,8 @@
 Release History
 ***************
 
-0.15.1 - Development
-====================
+0.16.0 - Py2 deprecated, GlobalParameterState class, SamplerState reads CVs
+===========================================================================
 
 New features
 ------------
@@ -11,6 +11,10 @@ New features
   (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
 - ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only
   recommended for advanced users (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
+- Added the new class ``states.GlobalParameterState`` designed to simplify the implementation of composable states that
+  control global variables (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
+- Allow restraint force classes to be controlled by a parameter other than ``lambda_restraints``. This will enable
+  multi-restraints simulations (`#363 <https://github.com/choderalab/openmmtools/pull/363>`_).
 
 Enhancements
 ------------
@@ -21,6 +25,14 @@ Others
 ------
 - Integrator ``MCMCMove``s now attempt to recover from NaN automatically by default (with ``n_restart_attempts`` set to
   4) (`#364 <https://github.com/choderalab/openmmtools/pull/364>`_).
+
+Deprecated
+----------
+- Python2 is officially deprecated. Support will be dropped in future versions.
+- Deprecated the signature of ``IComposableState._on_setattr`` to fix a bug where the objects were temporarily left in
+  an inconsistent state when an exception was raised and caught.
+- Deprecated ``update_alchemical_charges`` in ``AlchemicalState`` in anticipation of the new implementation of the
+  exact PME that will be based on the ``NonbondedForce`` offsets rather than ``updateParametersInContext()``.
 
 
 0.15.0 - Restraint forces

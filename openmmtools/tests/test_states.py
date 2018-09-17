@@ -964,10 +964,7 @@ class TestSamplerState(object):
         assert sliced_sampler_state.potential_energy is None
 
     def test_collective_variable(self):
-        """Test that CV calculation is working (If on OpenMM >=7.3)"""
-        # TODO: Remove the if statement and require OpenMM 7.3 once 7.3 is actually released
-        if not hasattr(openmm, "CustomCVForce"):
-            return
+        """Test that CV calculation is working"""
         # Setup the CV tests if we have a late enough OpenMM
         # alanine_explicit_cv = copy.deepcopy(self.alanine_explicit)
         system_cv = self.alanine_explicit_state.system
@@ -1308,6 +1305,582 @@ def test_uncompressed_thermodynamic_state_serialization():
     ThermodynamicState._standard_system_cache = {}
     deserialized_state = utils.deserialize(uncompressed_serialization)
     assert are_pickle_equal(state, deserialized_state)
+
+
+# =============================================================================
+# TEST GLOBAL PARAMETER STATE
+# =============================================================================
+
+_GLOBAL_PARAMETER_STANDARD_VALUE = 1.0
+
+
+class ParameterStateExample(GlobalParameterState):
+    standard_value = _GLOBAL_PARAMETER_STANDARD_VALUE
+    lambda_bonds = GlobalParameterState.GlobalParameter('lambda_bonds', standard_value)
+    gamma = GlobalParameterState.GlobalParameter('gamma', standard_value)
+
+    def set_defined_parameters(self, value):
+        for parameter_name, parameter_value in self._parameters.items():
+            if parameter_value is not None:
+                self._parameters[parameter_name] = value
+
+
+class TestGlobalParameterState(object):
+    """Test GlobalParameterState stand-alone functionality.
+
+    The compatibility with CompoundThermodynamicState is tested in the next
+    test suite.
+    """
+
+    @classmethod
+    def setup_class(cls):
+        """Create test systems and shared objects."""
+        # Define a diatomic molecule System with two custom forces
+        # using the simple version and the suffix'ed version.
+        r0 = 0.15*unit.nanometers
+
+        # Make sure that there is a force without defining a parameter.
+        cls.parameters_default_values = {
+            'lambda_bonds': 1.0,
+            'gamma': 2.0,
+            'lambda_bonds_mysuffix': 0.5,
+            'gamma_mysuffix': None,
+        }
+
+        r0_nanometers = r0.value_in_unit(unit.nanometers)  # Shortcut in OpenMM units.
+        system = openmm.System()
+        system.addParticle(40.0*unit.amu)
+        system.addParticle(40.0*unit.amu)
+        custom_force = openmm.CustomBondForce('lambda_bonds^gamma*60000*(r-{})^2;'.format(r0_nanometers))
+        custom_force.addGlobalParameter('lambda_bonds', cls.parameters_default_values['lambda_bonds'])
+        custom_force.addGlobalParameter('gamma', cls.parameters_default_values['gamma'])
+        custom_force.addBond(0, 1, [])
+        system.addForce(custom_force)
+        custom_force_suffix = openmm.CustomBondForce('lambda_bonds_mysuffix*20000*(r-{})^2;'.format(r0_nanometers))
+        custom_force_suffix.addGlobalParameter('lambda_bonds_mysuffix', cls.parameters_default_values['lambda_bonds_mysuffix'])
+        custom_force_suffix.addBond(0, 1, [])
+        system.addForce(custom_force_suffix)
+
+        # Create a thermodynamic and sampler states.
+        cls.diatomic_molecule_ts = ThermodynamicState(system, temperature=300.0*unit.kelvin)
+        pos1 = [0.0, 0.0, 0.0]
+        pos2 = [0.0, 0.0, r0_nanometers]
+        cls.diatomic_molecule_ss = SamplerState(positions=np.array([pos1, pos2]) * unit.nanometers)
+
+        # Create few incompatible systems for testing. An incompatible state
+        # has a different set of defined global parameters.
+        cls.incompatible_systems = [system]
+
+        # System without suffixed or non-suffixed parameters.
+        for i in range(2):
+            cls.incompatible_systems.append(copy.deepcopy(system))
+            cls.incompatible_systems[i+1].removeForce(i)
+
+        # System with both lambda_bonds_suffix and gamma_bond_suffix defined (instead of only the former).
+        cls.incompatible_systems.append(copy.deepcopy(system))
+        custom_force = copy.deepcopy(cls.incompatible_systems[-1].getForce(1))
+        energy_function = custom_force.getEnergyFunction()
+        energy_function = energy_function.replace('lambda_bonds_mysuffix', 'lambda_bonds_mysuffix^gamma_mysuffix')
+        custom_force.setEnergyFunction(energy_function)
+        custom_force.addGlobalParameter('gamma_mysuffix', cls.parameters_default_values['gamma'])
+        cls.incompatible_systems[-1].addForce(custom_force)
+
+    def read_system_state(self, system):
+        states = []
+        for suffix in [None, 'mysuffix']:
+            try:
+                states.append(ParameterStateExample.from_system(system, parameters_name_suffix=suffix))
+            except GlobalParameterError:
+                continue
+        return states
+
+    @staticmethod
+    def test_constructor_parameters():
+        """Test GlobalParameterState constructor behave as expected."""
+        class MyState(GlobalParameterState):
+            lambda_angles = GlobalParameterState.GlobalParameter('lambda_angles', standard_value=1.0)
+            lambda_sterics = GlobalParameterState.GlobalParameter('lambda_sterics', standard_value=1.0)
+
+        # Raise an exception if parameter is not recognized.
+        with nose.tools.assert_raises_regexp(GlobalParameterError, 'Unknown parameters'):
+            MyState(lambda_steric=1.0)  # Typo.
+
+        # Properties are initialized correctly.
+        test_cases = [{},
+                      {'lambda_angles': 1.0},
+                      {'lambda_sterics': 0.5, 'lambda_angles': 0.5},
+                      {'parameters_name_suffix': 'suffix'},
+                      {'parameters_name_suffix': 'suffix', 'lambda_angles': 1.0},
+                      {'parameters_name_suffix': 'suffix', 'lambda_sterics': 0.5, 'lambda_angles': 0.5}]
+
+        for test_kwargs in test_cases:
+            state = MyState(**test_kwargs)
+
+            # Check which parameters are defined/undefined in the constructed state.
+            for parameter in MyState._get_controlled_parameters():
+                # Store whether parameter is defined before appending the suffix.
+                is_defined = parameter in test_kwargs
+
+                # The "unsuffixed" parameter should not be controlled by the state.
+                if 'parameters_name_suffix' in test_kwargs:
+                    with nose.tools.assert_raises_regexp(AttributeError, 'state does not control'):
+                        getattr(state, parameter)
+                    # The state exposes a "suffixed" version of the parameter.
+                    state_attribute = parameter + '_' + test_kwargs['parameters_name_suffix']
+                else:
+                    state_attribute = parameter
+
+                # Check if parameter should is defined or undefined (i.e. set to None) as expected.
+                err_msg = 'Parameter: {} (Test case: {})'.format(parameter, test_kwargs)
+                if is_defined:
+                    assert getattr(state, state_attribute) == test_kwargs[parameter], err_msg
+                else:
+                    assert getattr(state, state_attribute) is None, err_msg
+
+    def test_from_system_constructor(self):
+        """Test GlobalParameterState.from_system constructor."""
+        # A system exposing no global parameters controlled by the state raises an error.
+        with nose.tools.assert_raises_regexp(GlobalParameterError, 'no global parameters'):
+            GlobalParameterState.from_system(openmm.System())
+
+        system = self.diatomic_molecule_ts.system
+        state = ParameterStateExample.from_system(system)
+        state_suffix = ParameterStateExample.from_system(system, parameters_name_suffix='mysuffix')
+
+        for parameter_name, parameter_value in self.parameters_default_values.items():
+            if 'suffix' in parameter_name:
+                controlling_state = state_suffix
+                noncontrolling_state = state
+            else:
+                controlling_state = state
+                noncontrolling_state = state_suffix
+
+            err_msg = '{}: {}'.format(parameter_name, parameter_value)
+            assert getattr(controlling_state, parameter_name) == parameter_value, err_msg
+            with nose.tools.assert_raises(AttributeError):
+                getattr(noncontrolling_state, parameter_name), parameter_name
+
+    def test_parameter_validator(self):
+        """Test GlobalParameterState constructor behave as expected."""
+
+        class MyState(GlobalParameterState):
+            lambda_bonds = GlobalParameterState.GlobalParameter('lambda_bonds', standard_value=1.0)
+
+            @lambda_bonds.validator
+            def lambda_bonds(self, instance, new_value):
+                if not (0.0 <= new_value <= 1.0):
+                    raise ValueError('lambda_bonds must be between 0.0 and 1.0')
+                return new_value
+
+        # Create system with incorrect initial parameter.
+        system = self.diatomic_molecule_ts.system
+        system.getForce(0).setGlobalParameterDefaultValue(0, 2.0)  # lambda_bonds
+        system.getForce(1).setGlobalParameterDefaultValue(0, -1.0)  # lambda_bonds_mysuffix
+
+        for suffix in [None, 'mysuffix']:
+            # Raise an exception on init.
+            with nose.tools.assert_raises_regexp(ValueError, 'must be between'):
+                MyState(parameters_name_suffix=suffix, lambda_bonds=-1.0)
+            with nose.tools.assert_raises_regexp(ValueError, 'must be between'):
+                MyState.from_system(system, parameters_name_suffix=suffix)
+
+            # Raise an exception when properties are set.
+            state = MyState(parameters_name_suffix=suffix, lambda_bonds=1.0)
+            parameter_name = 'lambda_bonds' if suffix is None else 'lambda_bonds_' + suffix
+            with nose.tools.assert_raises_regexp(ValueError, 'must be between'):
+                setattr(state, parameter_name, 5.0)
+
+    def test_equality_operator(self):
+        """Test equality operator between GlobalParameterStates."""
+        state1 = ParameterStateExample(lambda_bonds=1.0)
+        state2 = ParameterStateExample(lambda_bonds=1.0)
+        state3 = ParameterStateExample(lambda_bonds=0.9)
+        state4 = ParameterStateExample(lambda_bonds=0.9, gamma=1.0)
+        state5 = ParameterStateExample(lambda_bonds=0.9, parameters_name_suffix='suffix')
+        state6 = ParameterStateExample(parameters_name_suffix='suffix', lambda_bonds=0.9, gamma=1.0)
+        assert state1 == state2
+        assert state2 != state3
+        assert state3 != state4
+        assert state3 != state5
+        assert state4 != state6
+        assert state5 != state6
+        assert state6 == state6
+
+        # States that control more variables are not equal.
+        class MyState(ParameterStateExample):
+            extra_parameter = GlobalParameterState.GlobalParameter('extra_parameter', standard_value=1.0)
+        state7 = MyState(lambda_bonds=0.9)
+        assert state3 != state7
+
+    def test_apply_to_system(self):
+        """Test method GlobalParameterState.apply_to_system()."""
+        system = self.diatomic_molecule_ts.system
+        state = ParameterStateExample.from_system(system)
+        state_suffix = ParameterStateExample.from_system(system, parameters_name_suffix='mysuffix')
+
+        expected_system_values = copy.deepcopy(self.parameters_default_values)
+
+        def check_system_values():
+            state, state_suffix = self.read_system_state(system)
+            for parameter_name, parameter_value in expected_system_values.items():
+                err_msg = 'parameter: {}, expected_value: {}'.format(parameter_name, parameter_value)
+                if 'suffix' in parameter_name:
+                    assert getattr(state_suffix, parameter_name) == parameter_value, err_msg
+                else:
+                    assert getattr(state, parameter_name) == parameter_value, err_msg
+
+        # Test precondition: all parameters have the expected default value.
+        check_system_values()
+
+        # apply_to_system() modifies the state.
+        state.lambda_bonds /= 2
+        expected_system_values['lambda_bonds'] /= 2
+        state_suffix.lambda_bonds_mysuffix /= 2
+        expected_system_values['lambda_bonds_mysuffix'] /= 2
+        for s in [state, state_suffix]:
+            s.apply_to_system(system)
+        check_system_values()
+
+        # Raise an error if an extra parameter is defined in the system.
+        state.gamma = None
+        err_msg = 'The system parameter gamma is not defined in this state.'
+        with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+            state.apply_to_system(system)
+
+        # Raise an error if an extra parameter is defined in the state.
+        state_suffix.gamma_mysuffix = 2.0
+        err_msg = 'Could not find global parameter gamma_mysuffix in the system.'
+        with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+            state_suffix.apply_to_system(system)
+
+    def test_check_system_consistency(self):
+        """Test method GlobalParameterState.check_system_consistency()."""
+        system = self.diatomic_molecule_ts.get_system(remove_thermostat=True)
+
+        def check_not_consistency(states):
+            for s in states:
+                with nose.tools.assert_raises_regexp(GlobalParameterError, 'Consistency check failed'):
+                    s.check_system_consistency(system)
+
+        # A system is consistent with itself.
+        state, state_suffix = self.read_system_state(system)
+        for s in [state, state_suffix]:
+            s.check_system_consistency(system)
+
+        # Raise error if System defines global parameters that are undefined in the state.
+        state, state_suffix = self.read_system_state(system)
+        state.gamma = None
+        state_suffix.lambda_bonds_mysuffix = None
+        check_not_consistency([state, state_suffix])
+
+        # Raise error if state defines global parameters that are undefined in the System.
+        state, state_suffix = self.read_system_state(system)
+        state_suffix.gamma_mysuffix = 1.0
+        check_not_consistency([state_suffix])
+
+        # Raise error if system has different lambda values.
+        state, state_suffix = self.read_system_state(system)
+        state.lambda_bonds /= 2
+        state_suffix.lambda_bonds_mysuffix /=2
+        check_not_consistency([state, state_suffix])
+
+    def test_apply_to_context(self):
+        """Test method GlobalParameterState.apply_to_context."""
+        system = self.diatomic_molecule_ts.system
+        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        context = self.diatomic_molecule_ts.create_context(integrator)
+
+        def check_not_applicable(states, error, context):
+            for s in states:
+                with nose.tools.assert_raises_regexp(GlobalParameterError, error):
+                    s.apply_to_context(context)
+
+        # Raise error if the Context defines global parameters that are undefined in the state.
+        state, state_suffix = self.read_system_state(system)
+        state.lambda_bonds = None
+        state_suffix.lambda_bonds_mysuffix = None
+        check_not_applicable([state, state_suffix], 'undefined in this state', context)
+
+        # Raise error if the state defines global parameters that are undefined in the Context.
+        state, state_suffix = self.read_system_state(system)
+        state_suffix.gamma_mysuffix = 2.0
+        check_not_applicable([state_suffix], 'Could not find parameter', context)
+
+        # Test-precondition: Context parameters are different than the value we'll test.
+        tested_value = 0.2
+        for parameter_value in context.getParameters().values():
+            assert parameter_value != tested_value
+
+        # Correctly sets Context's parameters.
+        state, state_suffix = self.read_system_state(system)
+        state.lambda_bonds = tested_value
+        state.gamma = tested_value
+        state_suffix.lambda_bonds_mysuffix = tested_value
+        for s in [state, state_suffix]:
+            s.apply_to_context(context)
+            for parameter_name, parameter_value in context.getParameters().items():
+                if parameter_name in s._parameters:
+                    assert parameter_value == tested_value
+        del context
+
+    def test_standardize_system(self):
+        """Test method GlobalParameterState.standardize_system."""
+        system = self.diatomic_molecule_ts.system
+        standard_value = _GLOBAL_PARAMETER_STANDARD_VALUE  # Shortcut.
+
+        def check_is_standard(states, is_standard):
+            for s in states:
+                for parameter_name in s._get_controlled_parameters(s._parameters_name_suffix):
+                    parameter_value = getattr(s, parameter_name)
+                    err_msg = 'Parameter: {}; Value: {};'.format(parameter_name, parameter_value)
+                    if parameter_value is not None:
+                        assert (parameter_value  == standard_value) is is_standard, err_msg
+
+        # Test pre-condition: The system is not in the standard state.
+        system.getForce(0).setGlobalParameterDefaultValue(0, 0.9)
+        states = self.read_system_state(system)
+        check_is_standard(states, is_standard=False)
+
+        # Check that _standardize_system() sets all parameters to the standard value.
+        for state in states:
+            state._standardize_system(system)
+        states_standard = self.read_system_state(system)
+        check_is_standard(states_standard, is_standard=True)
+
+    def test_find_force_groups_to_update(self):
+        """Test method GlobalParameterState._find_force_groups_to_update."""
+        system = self.diatomic_molecule_ts.system
+        integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+        # Test cases are (force_group, force_group_suffix)
+        test_cases = [(0, 0), (1, 5), (9, 4)]
+
+        for force_groups in test_cases:
+            for i, force_group in enumerate(force_groups):
+                system.getForce(i).setForceGroup(force_group)
+            states = self.read_system_state(system)
+            context = openmm.Context(system, copy.deepcopy(integrator))
+
+            # No force group should be updated if we don't change the global parameter.
+            for state, force_group in zip(states, force_groups):
+                assert state._find_force_groups_to_update(context, state, memo={}) == set()
+
+                # Change the lambdas one by one and check that the method
+                # recognizes that the force group energy must be updated.
+                current_state = copy.deepcopy(state)
+                for parameter_name in state._get_controlled_parameters(state._parameters_name_suffix):
+                    # Check that the system defines the global variable.
+                    parameter_value = getattr(state, parameter_name)
+                    if parameter_value is None:
+                        continue
+
+                    # Change the current state.
+                    setattr(current_state, parameter_name, parameter_value / 2)
+                    assert state._find_force_groups_to_update(context, current_state, memo={}) == {force_group}
+                    setattr(current_state, parameter_name, parameter_value)  # Reset current state.
+            del context
+
+    # ---------------------------------------------------
+    # Integration tests with CompoundThermodynamicStates
+    # ---------------------------------------------------
+
+    def test_constructor_compound_state(self):
+        """The GlobalParameterState is set on construction of the CompoundState."""
+        system = self.diatomic_molecule_ts.system
+
+        # Create a system state different than the initial.
+        composable_states = self.read_system_state(system)
+        for state in composable_states:
+            state.set_defined_parameters(0.222)
+
+        # CompoundThermodynamicState set the system state in the constructor.
+        compound_state = CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
+        new_system_states = self.read_system_state(compound_state.system)
+        for state, new_state in zip(composable_states, new_system_states):
+            assert state == new_state
+
+        # Trying to set in the constructor undefined global parameters raise an exception.
+        composable_states[1].gamma_mysuffix = 2.0
+        err_msg = 'Could not find global parameter gamma_mysuffix in the system.'
+        with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+            CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
+
+    def test_global_parameters_compound_state(self):
+        """Global parameters setters/getters work in the CompoundState system."""
+        composable_states = self.read_system_state(self.diatomic_molecule_ts.system)
+        for state in composable_states:
+            state.set_defined_parameters(0.222)
+        compound_state = CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
+
+        # Defined properties can be assigned and read, unless they are undefined.
+        for parameter_name, default_value in self.parameters_default_values.items():
+            if default_value is None:
+                assert getattr(compound_state, parameter_name) is None
+                # If undefined, setting the property should raise an error.
+                err_msg = 'Cannot set the parameter gamma_mysuffix in the system'
+                with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+                    setattr(compound_state, parameter_name, 2.0)
+                continue
+
+            # Defined parameters should be gettable and settables.
+            assert getattr(compound_state, parameter_name) == 0.222
+            setattr(compound_state, parameter_name, 0.5)
+            assert getattr(compound_state, parameter_name) == 0.5
+
+        # System global variables are updated correctly
+        system_states = self.read_system_state(compound_state.system)
+        for state in system_states:
+            for parameter_name in state._parameters:
+                assert getattr(state, parameter_name) == getattr(compound_state, parameter_name)
+
+    def test_set_system_compound_state(self):
+        """Setting inconsistent system in compound state raise errors."""
+        system = self.diatomic_molecule_ts.system
+        composable_states = self.read_system_state(system)
+        compound_state = CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
+
+        for parameter_name, default_value in self.parameters_default_values.items():
+            if default_value is None:
+                continue
+            elif 'suffix' in parameter_name:
+                original_state = composable_states[1]
+            else:
+                original_state = composable_states[0]
+
+            # We create an incompatible state with the parameter set to a different value.
+            incompatible_state = copy.deepcopy(original_state)
+            original_value = getattr(incompatible_state, parameter_name)
+            setattr(incompatible_state, parameter_name, original_value/2)
+            incompatible_state.apply_to_system(system)
+
+            # Setting an inconsistent system raise an error.
+            with nose.tools.assert_raises_regexp(GlobalParameterError, parameter_name):
+                compound_state.system = system
+
+            # Same for set_system when called with default arguments.
+            with nose.tools.assert_raises_regexp(GlobalParameterError, parameter_name):
+                compound_state.set_system(system)
+
+            # This doesn't happen if we fix the state.
+            compound_state.set_system(system, fix_state=True)
+            new_state = incompatible_state.from_system(compound_state.system, original_state._parameters_name_suffix)
+            assert new_state == original_state, (str(new_state), str(incompatible_state))
+
+            # Restore old value in system, and test next parameter.
+            original_state.apply_to_system(system)
+
+    def test_compatibility_compound_state(self):
+        """Compatibility between states is handled correctly in compound state."""
+        incompatible_systems = copy.deepcopy(self.incompatible_systems)
+
+        # Build all compound states.
+        compound_states = []
+        for system in incompatible_systems:
+            thermodynamic_state = ThermodynamicState(system, temperature=300*unit.kelvin)
+            composable_states = self.read_system_state(system)
+            compound_states.append(CompoundThermodynamicState(thermodynamic_state, composable_states))
+
+        # Build all contexts for testing.
+        integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+        contexts = [s.create_context(copy.deepcopy(integrator)) for s in compound_states]
+
+        for state_idx, (compound_state, context) in enumerate(zip(compound_states, contexts)):
+            # The state is compatible with itself.
+            assert compound_state.is_state_compatible(compound_state)
+            assert compound_state.is_context_compatible(context)
+
+            # Changing the values of the parameters do not affect
+            # compatibility (only defined/undefined parameters do).
+            altered_compound_state = copy.deepcopy(compound_state)
+            for parameter_name in ['gamma', 'lambda_bonds_mysuffix']:
+                try:
+                    new_value = getattr(compound_state, parameter_name) / 2
+                    setattr(altered_compound_state, parameter_name, new_value)
+                except AttributeError:
+                    continue
+            assert altered_compound_state.is_state_compatible(compound_state)
+            assert altered_compound_state.is_context_compatible(context)
+
+            # All other states are incompatible. Test only those that we
+            # haven't tested yet, but test transitivity.
+            for incompatible_state_idx in range(state_idx+1, len(compound_states)):
+                print(state_idx, incompatible_state_idx)
+                incompatible_state = compound_states[incompatible_state_idx]
+                incompatible_context = contexts[incompatible_state_idx]
+                assert not compound_state.is_state_compatible(incompatible_state)
+                assert not incompatible_state.is_state_compatible(compound_state)
+                assert not compound_state.is_context_compatible(incompatible_context)
+                assert not incompatible_state.is_context_compatible(context)
+
+    def test_reduced_potential_compound_state(self):
+        """Test CompoundThermodynamicState.reduced_potential_at_states() method.
+
+        Computing the reduced potential singularly and with the class
+        method should give the same result.
+        """
+        positions = copy.deepcopy(self.diatomic_molecule_ss.positions)
+        # Build a mixed collection of compatible and incompatible thermodynamic states.
+        thermodynamic_states = [
+            ThermodynamicState(self.incompatible_systems[0], temperature=300*unit.kelvin),
+            ThermodynamicState(self.incompatible_systems[-1], temperature=300*unit.kelvin)
+        ]
+
+        compound_states = []
+        for ts_idx, ts in enumerate(thermodynamic_states):
+            compound_state = CompoundThermodynamicState(ts, self.read_system_state(ts.system))
+            for state in [dict(lambda_bonds=1.0, gamma=1.0, lambda_bonds_mysuffix=1.0, gamma_mysuffix=1.0),
+                          dict(lambda_bonds=0.5, gamma=1.0, lambda_bonds_mysuffix=1.0, gamma_mysuffix=1.0),
+                          dict(lambda_bonds=0.5, gamma=1.0, lambda_bonds_mysuffix=1.0, gamma_mysuffix=0.5),
+                          dict(lambda_bonds=0.1, gamma=0.5, lambda_bonds_mysuffix=0.2, gamma_mysuffix=0.5)]:
+                for parameter_name, parameter_value in state.items():
+                    try:
+                        setattr(compound_state, parameter_name, parameter_value)
+                    except GlobalParameterError:
+                        continue
+                compound_states.append(copy.deepcopy(compound_state))
+
+        # Group thermodynamic states by compatibility.
+        compatible_groups, _ = group_by_compatibility(compound_states)
+        assert len(compatible_groups) == 2
+
+        # Compute the reduced potentials.
+        expected_energies = []
+        obtained_energies = []
+        for compatible_group in compatible_groups:
+            # Create context.
+            integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
+            context = compatible_group[0].create_context(integrator)
+            context.setPositions(positions)
+
+            # Compute with single-state method.
+            for state in compatible_group:
+                state.apply_to_context(context)
+                expected_energies.append(state.reduced_potential(context))
+
+            # Compute with multi-state method.
+            compatible_energies = ThermodynamicState.reduced_potential_at_states(context, compatible_group)
+
+            # The first and the last state must be equal.
+            assert np.isclose(compatible_energies[0], compatible_energies[-1])
+            obtained_energies.extend(compatible_energies)
+
+        assert np.allclose(np.array(expected_energies), np.array(obtained_energies))
+
+    def test_serialization(self):
+        """Test GlobalParameterState serialization alone and in a compound state."""
+        composable_states = self.read_system_state(self.diatomic_molecule_ts.system)
+
+        # Test serialization/deserialization of GlobalParameterState.
+        for state in composable_states:
+            serialization = utils.serialize(state)
+            deserialized_state = utils.deserialize(serialization)
+            are_pickle_equal(state, deserialized_state)
+
+        # Test serialization/deserialization of GlobalParameterState in CompoundState.
+        compound_state = CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
+        serialization = utils.serialize(compound_state)
+        deserialized_state = utils.deserialize(serialization)
+        are_pickle_equal(compound_state, deserialized_state)
+
 
 def test_create_thermodynamic_state_protocol():
     """Test the method for efficiently creating a list of thermoydamic states."""

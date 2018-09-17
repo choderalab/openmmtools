@@ -237,11 +237,15 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
     and :func:`restrained_atom_indices2` (with their setters) that return
     the indices of the restrained atoms.
 
-    You will also have to implement :func:`_create_bond`, which should add the
-    bond using the correct function/signature.
+    You will also have to implement :func:`_create_bond`, which should add
+    the bond using the correct function/signature.
 
     Optionally, you can implement :func:`distance_at_energy` if an
     analytical expression for distance(potential_energy) exists.
+
+    If you subclass this, and plan on adding additional global parameters,
+    you need to invoke this class ``super().__init__`` first as the
+    ``controlling_parameter_name`` must be the first global variable.
 
     Parameters
     ----------
@@ -254,13 +258,20 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         The indices of the first group of atoms to restrain.
     restrained_atom_indices2 : iterable of int
         The indices of the second group of atoms to restrain.
+    controlling_parameter_name : str
+        The name of the global parameter controlling the energy function.
     *args, **kwargs
         Parameters to pass to the super constructor.
+
+    Attributes
+    ----------
+    controlling_parameter_name
 
     """
 
     def __init__(self, restraint_parameters, restrained_atom_indices1,
-                 restrained_atom_indices2, *args, **kwargs):
+                 restrained_atom_indices2, controlling_parameter_name,
+                 *args, **kwargs):
         super(RadiallySymmetricRestraintForce, self).__init__(*args, **kwargs)
 
         # Unzip bond parameters names and values from dict.
@@ -270,8 +281,13 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         # Let the subclass initialize its bond.
         self._create_bond(parameter_values, restrained_atom_indices1, restrained_atom_indices2)
 
-        # Add parameters.
-        self.addGlobalParameter('lambda_restraints', 1.0)
+        # Add parameters. First global parameter is _restorable_force__class_hash
+        # from the RestorableOpenMMObject class.
+        err_msg = ('The force should have a single global parameter at this point. '
+                   'This is likely because the subclass called addGlobalParameter '
+                   'before calling super().__init__')
+        assert self.getNumGlobalParameters() == 1, err_msg
+        self.addGlobalParameter(controlling_parameter_name, 1.0)
         for parameter in parameter_names:
             self.addPerBondParameter(parameter)
 
@@ -317,6 +333,11 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         restraint_parameters = [(self.getPerBondParameterName(parameter_idx), parameter_value)
                                 for parameter_idx, parameter_value in enumerate(parameter_values)]
         return collections.OrderedDict(restraint_parameters)
+
+    @property
+    def controlling_parameter_name(self):
+        """str: The name of the global parameter controlling the energy function (read-only)."""
+        return self.getGlobalParameterName(1)
 
     def distance_at_energy(self, potential_energy):
         """Compute the distance at which the potential energy is ``potential_energy``.
@@ -650,7 +671,8 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
 
     The restraint is applied between the centers of mass of two groups
     of atoms. The restraint strength is controlled by a global context
-    parameter called 'lambda_restraints'.
+    parameter whose name is passed on construction through the optional
+    argument ``controlling_parameter_name``.
 
     With OpenCL, only on 64bit platforms are supported.
 
@@ -658,8 +680,8 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
     ----------
     energy_function : str
         The energy function to pass to ``CustomCentroidBondForce``. The
-        global parameter 'lambda_restraint' will be prepended to this
-        expression.
+        name of the controlling global parameter  will be prepended to
+        this expression.
     restraint_parameters : OrderedDict
         An ordered dictionary containing the bond parameters in the form
         parameter_name: parameter_value. The order is important to make
@@ -669,23 +691,28 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
         The indices of the first group of atoms to restrain.
     restrained_atom_indices2 : iterable of int
         The indices of the second group of atoms to restrain.
+    controlling_parameter_name : str, optional
+        The name of the global parameter controlling the energy function.
+        The default value is 'lambda_restraints'.
 
     Attributes
     ----------
     restraint_parameters
     restrained_atom_indices1
     restrained_atom_indices2
+    controlling_parameter_name
 
     """
 
     def __init__(self, energy_function, restraint_parameters,
-                 restrained_atom_indices1, restrained_atom_indices2):
+                 restrained_atom_indices1, restrained_atom_indices2,
+                 controlling_parameter_name='lambda_restraints'):
         # Initialize CustomCentroidBondForce.
-        energy_function = 'lambda_restraints * ' + energy_function
+        energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
         custom_centroid_bond_force_args = [2, energy_function]
         super(RadiallySymmetricCentroidRestraintForce, self).__init__(
             restraint_parameters, restrained_atom_indices1, restrained_atom_indices2,
-            *custom_centroid_bond_force_args)
+            controlling_parameter_name, *custom_centroid_bond_force_args)
 
     @property
     def restrained_atom_indices1(self):
@@ -726,12 +753,14 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
     """
 
     def __init__(self, energy_function, restraint_parameters,
-                 restrained_atom_index1, restrained_atom_index2):
+                 restrained_atom_index1, restrained_atom_index2,
+                 controlling_parameter_name='lambda_restraints'):
         # Initialize CustomBondForce.
         energy_function = energy_function.replace('distance(g1,g2)', 'r')
-        energy_function = 'lambda_restraints * ' + energy_function
-        super(RadiallySymmetricBondRestraintForce, self).__init__(restraint_parameters,
-                 [restrained_atom_index1], [restrained_atom_index2], energy_function)
+        energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
+        super(RadiallySymmetricBondRestraintForce, self).__init__(
+            restraint_parameters, [restrained_atom_index1], [restrained_atom_index2],
+            controlling_parameter_name, energy_function)
 
     # -------------------------------------------------------------------------
     # Public properties.
@@ -832,12 +861,11 @@ class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
 
     The energy expression of the restraint is given by
 
-       ``E = lambda_restraints * (K/2)*r^2``
+       ``E = controlling_parameter * (K/2)*r^2``
 
     where `K` is the spring constant, `r` is the distance between the
-    two group centroids, and `lambda_restraints` is a scale factor that
-    can be used to control the strength of the restraint. You can control
-    ``lambda_restraints`` through :class:`RestraintState` class.
+    two group centroids, and `controlling_parameter` is a scale factor that
+    can be used to control the strength of the restraint.
 
     With OpenCL, only on 64bit platforms are supported.
 
@@ -850,6 +878,9 @@ class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
         The indices of the first group of atoms to restrain.
     restrained_atom_indices2 : iterable of int
         The indices of the second group of atoms to restrain.
+    controlling_parameter_name : str, optional
+        The name of the global parameter controlling the energy function.
+        The default value is 'lambda_restraints'.
 
     Attributes
     ----------
@@ -857,6 +888,7 @@ class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
     restrained_atom_indices1
     restrained_atom_indices2
     restraint_parameters
+    controlling_parameter_name
 
     """
     # All the methods are provided by the mix-ins.
@@ -879,6 +911,9 @@ class HarmonicRestraintBondForce(HarmonicRestraintForceMixIn,
         The index of the first atom to restrain.
     restrained_atom_index2 : int
         The index of the second atom to restrain.
+    controlling_parameter_name : str, optional
+        The name of the global parameter controlling the energy function.
+        The default value is 'lambda_restraints'.
 
     Attributes
     ----------
@@ -886,6 +921,7 @@ class HarmonicRestraintBondForce(HarmonicRestraintForceMixIn,
     restrained_atom_indices1
     restrained_atom_indices2
     restraint_parameters
+    controlling_parameter_name
 
     """
     # All the methods are provided by the mix-ins.
@@ -986,14 +1022,13 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
 
     More precisely, the energy expression of the restraint is given by
 
-        ``E = lambda_restraints * step(r-r0) * (K/2)*(r-r0)^2``
+        ``E = controlling_parameter * step(r-r0) * (K/2)*(r-r0)^2``
 
     where ``K`` is the spring constant, ``r`` is the distance between the
     restrained atoms, ``r0`` is another parameter defining the distance
-    at which the restraint is imposed, and ``lambda_restraints``
+    at which the restraint is imposed, and ``controlling_parameter``
     is a scale factor that can be used to control the strength of the
-    restraint. You can control ``lambda_restraints`` through the class
-    :class:`RestraintState`.
+    restraint.
 
     With OpenCL, only on 64bit platforms are supported.
 
@@ -1009,6 +1044,9 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
         The indices of the first group of atoms to restrain.
     restrained_atom_indices2 : iterable of int
         The indices of the second group of atoms to restrain.
+    controlling_parameter_name : str, optional
+        The name of the global parameter controlling the energy function.
+        The default value is 'lambda_restraints'.
 
     Attributes
     ----------
@@ -1017,6 +1055,7 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
     restrained_atom_indices1
     restrained_atom_indices2
     restraint_parameters
+    controlling_parameter_name
 
     """
     # All the methods are provided by the mix-ins.
@@ -1042,6 +1081,9 @@ class FlatBottomRestraintBondForce(FlatBottomRestraintForceMixIn,
         The index of the first group of atoms to restrain.
     restrained_atom_index2 : int
         The index of the second group of atoms to restrain.
+    controlling_parameter_name : str, optional
+        The name of the global parameter controlling the energy function.
+        The default value is 'lambda_restraints'.
 
     Attributes
     ----------
@@ -1050,6 +1092,7 @@ class FlatBottomRestraintBondForce(FlatBottomRestraintForceMixIn,
     restrained_atom_indices1
     restrained_atom_indices2
     restraint_parameters
+    controlling_parameter_name
 
     """
     # All the methods are provided by the mix-ins.

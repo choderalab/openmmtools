@@ -117,7 +117,7 @@ class AlchemicalState(object):
     lambda_torsions : float, optional
         Scaling factor for alchemically-softened torsions (default is 1.0).
     update_alchemical_charges : bool, optional
-        If True, ``lambda_electrostatics`` changes in alchemical systems
+        If False, ``lambda_electrostatics`` changes in alchemical systems
         that use exact treatment of PME electrostatics will be considered
         incompatible. This means that a new ``Context`` will be required
         for each `lambda_electrostatics`` state.
@@ -211,6 +211,12 @@ class AlchemicalState(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, **kwargs):
+        if 'update_alchemical_charges' in kwargs:
+            # TODO Drop support for the parameter and remove deprecation warning from 0.17 on
+            # TODO after implementing new way for exact PME based on the NonbondedForce offsets.
+            import warnings
+            warnings.warn('The update_alchemical_charges in AlchemicalState.__init__ has been '
+                          'deprecated, and future versions of openmmtools may not support it.')
         self._initialize(**kwargs)
 
     @classmethod
@@ -251,16 +257,19 @@ class AlchemicalState(object):
                 alchemical_parameters[parameter_name] = parameter_value
 
         # Handle the update parameters flag.
-        update_alchemical_charges = bool(alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER,
-                                                                   cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT))
+        update_alchemical_charges = alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER, None)
 
         # Check that the system is alchemical.
         if len(alchemical_parameters) == 0:
             raise AlchemicalStateError('System has no lambda parameters.')
 
+        # Avoid passing update_alchemical_charges if not necessary to not raise deprecation warning.
+        if (update_alchemical_charges is not None and
+                    update_alchemical_charges != cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT):
+            alchemical_parameters['update_alchemical_charges'] = bool(update_alchemical_charges)
+
         # Create and return the AlchemicalState.
-        return AlchemicalState(update_alchemical_charges=update_alchemical_charges,
-                               **alchemical_parameters)
+        return AlchemicalState(**alchemical_parameters)
 
     # -------------------------------------------------------------------------
     # Lambda properties
@@ -392,7 +401,8 @@ class AlchemicalState(object):
         parameters = serialization['parameters']
         alchemical_variables = serialization['alchemical_variables']
         # New attribute in OpenMMTools 0.14.0.
-        update_alchemical_charges = serialization.get('update_alchemical_charges', True)
+        update_alchemical_charges = serialization.get('update_alchemical_charges',
+                                                      self._UPDATE_ALCHEMICAL_CHARGES_DEFAULT)
         alchemical_functions = dict()
 
         # Temporarily store alchemical functions.
@@ -554,7 +564,7 @@ class AlchemicalState(object):
         # states with different settings must be incompatible.
         alchemical_state._apply_to_system(system, set_update_charges_flag=False)
 
-    def _on_setattr(self, standard_system, attribute_name):
+    def _on_setattr(self, standard_system, attribute_name, old_attribute_value):
         """Check if the standard system needs changes after a state attribute is set.
 
         Parameters
@@ -563,6 +573,8 @@ class AlchemicalState(object):
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
+        old_attribute_value : float
+            The value of the attribute retrieved before being set.
 
         Returns
         -------
