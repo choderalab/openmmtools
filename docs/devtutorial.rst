@@ -1,7 +1,7 @@
 .. _devtutorial:
 
-Advanced features and developer's tutorial (WIP)
-************************************************
+Advanced features and developer's tutorial
+******************************************
 
 This tutorial describes more advanced features that can be useful for people developing their software using or extending
 OpenMMTools.

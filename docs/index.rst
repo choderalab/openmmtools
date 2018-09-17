@@ -42,7 +42,7 @@ You can go through the :ref:`getting started tutorial <gettingstarted>` for an o
 
    installation
    gettingstarted
-   Developer's guide (in construction) <devtutorial>
+   Developer's guide <devtutorial>
    releasehistory
 
 Modules

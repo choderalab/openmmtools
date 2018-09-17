@@ -3,12 +3,11 @@ channels:
     - omnia
 dependencies:
     - python
-    - cython
+    - setuptools
+    - openmm >=7.2
     - numpy
     - scipy
-    - setuptools
     - six
-    - openmm
     - parmed
     - numpydoc
     - netCDF4
