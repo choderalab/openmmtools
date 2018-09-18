@@ -691,7 +691,7 @@ class AlchemicalState(object):
 
     _UPDATE_ALCHEMICAL_CHARGES_DEFAULT = True
 
-    def _initialize(self, region_name = None , update_alchemical_charges=_UPDATE_ALCHEMICAL_CHARGES_DEFAULT,
+    def _initialize(self, region_name=None , update_alchemical_charges=_UPDATE_ALCHEMICAL_CHARGES_DEFAULT,
                     **kwargs):
         self.region_name = region_name
         """Initialize the alchemical state."""
