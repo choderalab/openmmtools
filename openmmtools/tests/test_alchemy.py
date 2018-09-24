@@ -162,17 +162,33 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
 
     if exceptions:  # Turn off exceptions
         force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
+
+        # Exceptions.
         for exception_index in range(nonbonded_force.getNumExceptions()):
             iatom, jatom, charge, sigma, epsilon = nonbonded_force.getExceptionParameters(exception_index)
             if iatom in only_atoms or jatom in only_atoms:
                 nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
                                                        charge_coeff*charge, sigma, epsilon_coeff*epsilon)
-    else:  # Turn off particle interactions
+
+        # Offset exceptions.
+        for offset_index in range(nonbonded_force.getNumExceptionParameterOffsets()):
+            (parameter, exception_index, chargeprod_scale,
+                sigma_scale, epsilon_scale) = nonbonded_force.getExceptionParameterOffset(offset_index)
+            iatom, jatom, _, _, _ = nonbonded_force.getExceptionParameters(exception_index)
+            if iatom in only_atoms or jatom in only_atoms:
+                nonbonded_force.setExceptionParameterOffset(offset_index, parameter, exception_index,
+                                                            charge_coeff*chargeprod_scale, sigma_scale,
+                                                            epsilon_coeff*epsilon_scale)
+
+    else:
+        # Turn off particle interactions
         for force in system.getForces():
             # Handle only a Nonbonded and a CustomNonbonded (for RF).
             if not (isinstance(force, openmm.CustomNonbondedForce) and 'lambda' not in force.getEnergyFunction() or
                         isinstance(force, openmm.NonbondedForce)):
                 continue
+
+            # Particle interactions.
             for particle_index in range(force.getNumParticles()):
                 if particle_index in only_atoms:
                     # Convert tuple parameters to list to allow changes.
@@ -183,6 +199,17 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
                     except TypeError:  # NonbondedForce
                         parameters[2] *= epsilon_coeff  # epsilon
                         force.setParticleParameters(particle_index, *parameters)
+
+            # Offset particle interactions.
+            if isinstance(force, openmm.NonbondedForce):
+                for offset_index in range(force.getNumParticleParameterOffsets()):
+                    (parameter, particle_index, charge_scale,
+                        sigma_scale, epsilon_scale) = force.getParticleParameterOffset(offset_index)
+                    if particle_index in only_atoms:
+                        force.setParticleParameterOffset(offset_index, parameter, particle_index,
+                                                         charge_coeff*charge_scale, sigma_scale,
+                                                         epsilon_coeff*epsilon_scale)
+
 
 
 def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
@@ -401,12 +428,13 @@ def compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions
 
 def is_alchemical_pme_treatment_exact(alchemical_system):
     """Return True if the given alchemical system models PME exactly."""
-    # If exact PME is here, there is a CustomNonbondedForce storing
-    # the original charges that does not contribute to the energy.
-    for force in alchemical_system.getForces():
-        if (isinstance(force, openmm.CustomNonbondedForce) and
-                    force.getEnergyFunction() == '0.0;' and
-                    force.getGlobalParameterName(0) == 'lambda_electrostatics'):
+    # If exact PME is here, the NonbondedForce defines a
+    # lambda_electrostatics variable.
+    _, nonbonded_force = forces.find_forces(alchemical_system, openmm.NonbondedForce,
+                                            only_one=True)
+    for parameter_idx in range(nonbonded_force.getNumGlobalParameters()):
+        parameter_name = nonbonded_force.getGlobalParameterName(parameter_idx)
+        if parameter_name == 'lambda_electrostatics':
             return True
     return False
 
@@ -492,10 +520,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     is_exact_pme = is_alchemical_pme_treatment_exact(alchemical_system)
 
     # Find nonbonded method
-    for nonbonded_force in reference_system.getForces():
-        if isinstance(nonbonded_force, openmm.NonbondedForce):
-            nonbonded_method = nonbonded_force.getNonbondedMethod()
-            break
+    _, nonbonded_force = forces.find_forces(reference_system, openmm.NonbondedForce, only_one=True)
+    nonbonded_method = nonbonded_force.getNonbondedMethod()
 
     # Get energy components of reference system's nonbonded force
     print("Dissecting reference system's nonbonded force")
@@ -523,17 +549,21 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     alchemical_state.set_alchemical_parameters(1.0)
     energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
                                                                         positions, platform=GLOBAL_ALCHEMY_PLATFORM)
+
+    # Sterics particle and exception interactions are always modeled with a custom force.
     na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics']
     aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics']
+    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions']
+    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions']
+
+    # With exact treatment of PME, we use the NonbondedForce offset for electrostatics.
     try:
         na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics']
         aa_custom_particle_electro = energy_components['alchemically modified NonbondedForce for alchemical/alchemical electrostatics']
+        na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions']
+        aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions']
     except KeyError:
         assert is_exact_pme
-    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions']
-    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions']
-    na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions']
-    aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions']
 
     # Test that all NonbondedForce contributions match
     # -------------------------------------------------
@@ -550,8 +580,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
         assert_almost_equal(unmod_na_particle_electro, 0.0 * energy_unit, err_msg)
         assert_almost_equal(unmod_aa_reciprocal_energy, 0.0 * energy_unit, err_msg)
         assert_almost_equal(unmod_na_reciprocal_energy, 0.0 * energy_unit, err_msg)
-    assert_almost_equal(unmod_aa_exception_electro, 0.0 * energy_unit, err_msg)
-    assert_almost_equal(unmod_na_exception_electro, 0.0 * energy_unit, err_msg)
+        assert_almost_equal(unmod_aa_exception_electro, 0.0 * energy_unit, err_msg)
+        assert_almost_equal(unmod_na_exception_electro, 0.0 * energy_unit, err_msg)
 
     # Check sterics interactions match
     assert_almost_equal(nn_particle_sterics, unmod_nn_particle_sterics,
@@ -572,50 +602,56 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
                         'Non-alchemical/non-alchemical atoms particle electrostatics')
     assert_almost_equal(nn_exception_electro, unmod_nn_exception_electro,
                         'Non-alchemical/non-alchemical atoms exceptions electrostatics')
-    if nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+    # With exact treatment of PME, the electrostatics of alchemical-alchemical
+    # atoms is modeled with NonbondedForce offsets.
+    if is_exact_pme:
         # Reciprocal space.
-        if is_exact_pme:
-            assert_almost_equal(aa_reciprocal_energy, unmod_aa_reciprocal_energy,
-                                'Alchemical/alchemical atoms reciprocal space energy')
-            assert_almost_equal(na_reciprocal_energy, unmod_na_reciprocal_energy,
-                                'Non-alchemical/alchemical atoms reciprocal space energy')
-        assert_almost_equal(nn_reciprocal_energy, unmod_nn_reciprocal_energy,
-                            'Non-alchemical/non-alchemical atoms reciprocal space energy')
-
+        assert_almost_equal(aa_reciprocal_energy, unmod_aa_reciprocal_energy,
+                            'Alchemical/alchemical atoms reciprocal space energy')
+        assert_almost_equal(na_reciprocal_energy, unmod_na_reciprocal_energy,
+                            'Non-alchemical/alchemical atoms reciprocal space energy')
         # Direct space.
-        if is_exact_pme:
-            assert_almost_equal(unmod_aa_particle_electro, aa_particle_electro,
-                                'Alchemical/alchemical atoms particle electrostatics')
-            assert_almost_equal(unmod_na_particle_electro, na_particle_electro,
-                                'Non-alchemical/alchemical atoms particle electrostatics')
-        else:
-            # Get direct space correction due to reciprocal space exceptions
-            aa_correction, na_correction = compute_direct_space_correction(nonbonded_force,
-                                                                           alchemical_regions.alchemical_atoms,
-                                                                           positions)
-            aa_particle_electro += aa_correction
-            na_particle_electro += na_correction
-
-            # Check direct space energy
-            assert_almost_equal(aa_particle_electro, aa_custom_particle_electro,
-                                'Alchemical/alchemical atoms particle electrostatics')
-            assert_almost_equal(na_particle_electro, na_custom_particle_electro,
-                                'Non-alchemical/alchemical atoms particle electrostatics')
+        assert_almost_equal(aa_particle_electro, unmod_aa_particle_electro,
+                            'Alchemical/alchemical atoms particle electrostatics')
+        assert_almost_equal(na_particle_electro, unmod_na_particle_electro,
+                            'Non-alchemical/alchemical atoms particle electrostatics')
+        # Exceptions.
+        assert_almost_equal(aa_exception_electro, unmod_aa_exception_electro,
+                            'Alchemical/alchemical atoms exceptions electrostatics')
+        assert_almost_equal(na_exception_electro, unmod_na_exception_electro,
+                            'Non-alchemical/alchemical atoms exceptions electrostatics')
+    # With direct space PME, the custom forces model only the
+    # direct space of alchemical-alchemical interactions.
     else:
-        # Reciprocal space energy should be null in this case
-        assert nn_reciprocal_energy == unmod_nn_reciprocal_energy == 0.0 * energy_unit
-        assert aa_reciprocal_energy == unmod_aa_reciprocal_energy == 0.0 * energy_unit
-        assert na_reciprocal_energy == unmod_na_reciprocal_energy == 0.0 * energy_unit
+        # Get direct space correction due to reciprocal space exceptions
+        aa_correction, na_correction = compute_direct_space_correction(nonbonded_force,
+                                                                       alchemical_regions.alchemical_atoms,
+                                                                       positions)
+        aa_particle_electro += aa_correction
+        na_particle_electro += na_correction
 
         # Check direct space energy
         assert_almost_equal(aa_particle_electro, aa_custom_particle_electro,
                             'Alchemical/alchemical atoms particle electrostatics')
         assert_almost_equal(na_particle_electro, na_custom_particle_electro,
                             'Non-alchemical/alchemical atoms particle electrostatics')
-    assert_almost_equal(aa_exception_electro, aa_custom_exception_electro,
-                        'Alchemical/alchemical atoms exceptions electrostatics')
-    assert_almost_equal(na_exception_electro, na_custom_exception_electro,
-                        'Non-alchemical/alchemical atoms exceptions electrostatics')
+        # Check exceptions.
+        assert_almost_equal(aa_exception_electro, aa_custom_exception_electro,
+                            'Alchemical/alchemical atoms exceptions electrostatics')
+        assert_almost_equal(na_exception_electro, na_custom_exception_electro,
+                            'Non-alchemical/alchemical atoms exceptions electrostatics')
+
+    # With Ewald methods, the NonbondedForce should always hold the
+    # reciprocal space energy of nonalchemical-nonalchemical atoms.
+    if nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+        # Reciprocal space.
+        assert_almost_equal(nn_reciprocal_energy, unmod_nn_reciprocal_energy,
+                            'Non-alchemical/non-alchemical atoms reciprocal space energy')
+    else:
+        # Reciprocal space energy should be null in this case
+        assert nn_reciprocal_energy == unmod_nn_reciprocal_energy == 0.0 * energy_unit
+        assert aa_reciprocal_energy == unmod_aa_reciprocal_energy == 0.0 * energy_unit
+        assert na_reciprocal_energy == unmod_na_reciprocal_energy == 0.0 * energy_unit
 
     # Check forces other than nonbonded
     # ----------------------------------
@@ -669,24 +705,25 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
 
     # Check that non-alchemical/alchemical particle interactions and 1,4 exceptions have been annihilated
     assert_zero_energy('alchemically modified BondForce for non-alchemical/alchemical sterics exceptions')
-    assert_zero_energy('alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions')
     assert_zero_energy('alchemically modified NonbondedForce for non-alchemical/alchemical sterics')
-    try:
+    if is_exact_pme:
+        assert 'alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics' not in energy_components
+        assert 'alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions' not in energy_components
+    else:
         assert_zero_energy('alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics')
-    except KeyError:
-        assert_zero_energy('CustomNonbondedForce holding alchemical atoms unmodified charges')
-        assert is_exact_pme
+        assert_zero_energy('alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions')
 
     # Check that alchemical/alchemical particle interactions and 1,4 exceptions have been annihilated
     if alchemical_regions.annihilate_sterics:
         assert_zero_energy('alchemically modified NonbondedForce for alchemical/alchemical sterics')
         assert_zero_energy('alchemically modified BondForce for alchemical/alchemical sterics exceptions')
     if alchemical_regions.annihilate_electrostatics:
-        try:
+        if is_exact_pme:
+            assert 'alchemically modified NonbondedForce for alchemical/alchemical electrostatics' not in energy_components
+            assert 'alchemically modified BondForce for alchemical/alchemical electrostatics exceptions' not in energy_components
+        else:
             assert_zero_energy('alchemically modified NonbondedForce for alchemical/alchemical electrostatics')
-        except KeyError:
-            assert is_exact_pme
-        assert_zero_energy('alchemically modified BondForce for alchemical/alchemical electrostatics exceptions')
+            assert_zero_energy('alchemically modified BondForce for alchemical/alchemical electrostatics exceptions')
 
     # Check valence terms
     for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']:
