@@ -1606,18 +1606,23 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
-        all_alchemical_torsions = []
+        alchemical_forces = {}
+        all_alchemical_torsions = set()
+
         for alchemical_region in alchemical_regions:
-            for torsion in alchemical_region.alchemical_torsions:
-                all_alchemical_torsions.append(torsion)
+            all_alchemical_torsions.update(alchemical_region.alchemical_torsions)
         if len(all_alchemical_torsions) == 0:
             return {'': [copy.deepcopy(reference_force)]}
 
-        alchemical_forces = {}
+        force = openmm.PeriodicTorsionForce()
+        force.setForceGroup(reference_force.getForceGroup())
+        for torsion_index in range(reference_force.getNumTorsions()):
+            if torsion_index not in all_alchemical_torsions:
+                particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(torsion_index)
+                force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
+
         for alchemical_region in alchemical_regions:
             if not len(alchemical_region.alchemical_torsions) == 0:
-                force = openmm.PeriodicTorsionForce()
-                force.setForceGroup(reference_force.getForceGroup())
                 # Create CustomTorsionForce to handle alchemically modified torsions.
                 energy_function = "lambda_torsions{}*k*(1+cos(periodicity*theta-phase))".format(alchemical_region.region_name)
                 custom_force = openmm.CustomTorsionForce(energy_function)
@@ -1626,20 +1631,13 @@ class AbsoluteAlchemicalFactory(object):
                 custom_force.addPerTorsionParameter('phase')
                 custom_force.addPerTorsionParameter('k')
                 # Process reference torsions.
-                for torsion_index in range(reference_force.getNumTorsions()):
+                for torsion_index in sorted(alchemical_region.alchemical_torsions):
                     # Retrieve parameters.
                     particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(torsion_index)
                     # Create torsions.
-                    if torsion_index in all_alchemical_torsions:
-                        if torsion_index in alchemical_region.alchemical_torsions:
-                            #Add to alchemical
-                            custom_force.addTorsion(particle1, particle2, particle3, particle4, [periodicity, phase, k])
-                    else:
-                        #Add to standard
-                        force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
+                    custom_force.addTorsion(particle1, particle2, particle3, particle4, [periodicity, phase, k])
                 alchemical_forces.update({'lambda_torsions{}'.format(alchemical_region.region_name): [custom_force]})
-            else:
-                pass
+
         alchemical_forces.update({'': [force]})
         return alchemical_forces
 
@@ -1665,18 +1663,23 @@ class AbsoluteAlchemicalFactory(object):
             in alchemical_region.
 
         """
-        all_alchemical_angles = []
+        alchemical_forces = {}
+        all_alchemical_angles = set()
+
         for alchemical_region in alchemical_regions:
-            for angle in alchemical_region.alchemical_angles:
-                all_alchemical_angles.append(angle)
+            all_alchemical_angles.update(alchemical_region.alchemical_angles)
         if len(all_alchemical_angles) == 0:
             return {'': [copy.deepcopy(reference_force)]}
 
-        alchemical_forces = {}
+        force = openmm.HarmonicAngleForce()
+        force.setForceGroup(reference_force.getForceGroup())
+        for angle_index in range(reference_force.getNumAngles()):
+            if angle_index not in all_alchemical_angles:
+                [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
+                force.addAngle(particle1, particle2, particle3, theta0, K)
+
         for alchemical_region in alchemical_regions:
             if not len(alchemical_region.alchemical_angles) == 0:
-                force = openmm.HarmonicAngleForce()
-                force.setForceGroup(reference_force.getForceGroup())
                 # Create CustomAngleForce to handle alchemically modified angles.
                 energy_function = "lambda_angles{}*(K/2)*(theta-theta0)^2;".format(alchemical_region.region_name)
                 custom_force = openmm.CustomAngleForce(energy_function)
@@ -1684,19 +1687,11 @@ class AbsoluteAlchemicalFactory(object):
                 custom_force.addPerAngleParameter('theta0')
                 custom_force.addPerAngleParameter('K')
                 # Process reference angles.
-                for angle_index in range(reference_force.getNumAngles()):
-                    # Retrieve parameters.
+                for angle_index in sorted(alchemical_region.alchemical_angles):
                     [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
-                    if angle_index in all_alchemical_angles:
-                        if angle_index in alchemical_region.alchemical_angles:
-                            # Add alchemical
-                            custom_force.addAngle(particle1, particle2, particle3, [theta0, K])
-                    else:
-                        # Standard angle.
-                        force.addAngle(particle1, particle2, particle3, theta0, K)
+                    custom_force.addAngle(particle1, particle2, particle3, [theta0, K])
                 alchemical_forces.update({'lambda_bonds{}'.format(alchemical_region.region_name): [custom_force]})
-            else:
-                pass
+
         alchemical_forces.update({'': [force]})
         return alchemical_forces
 
@@ -1724,19 +1719,24 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         # Don't create a force if there are no alchemical bonds.
-        all_alchemical_bonds = []
+        alchemical_forces = {}
+        all_alchemical_bonds = set()
+
         for alchemical_region in alchemical_regions:
-            for bond in alchemical_region.alchemical_bonds:
-                all_alchemical_bonds.append(bond)
+               all_alchemical_bonds.update(alchemical_region.alchemical_bonds)
         if len(all_alchemical_bonds) == 0:
             return {'': [copy.deepcopy(reference_force)]}
 
-        alchemical_forces = {}
+        force = openmm.HarmonicBondForce()
+        force.setForceGroup(reference_force.getForceGroup())
+        for bond_index in range(reference_force.getNumBonds()):
+            if bond_index not in all_alchemical_bonds:
+                [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
+                force.addBond(particle1, particle2, theta0, K)
+
         for alchemical_region in alchemical_regions:
             if not len(alchemical_region.alchemical_bonds) == 0:
                 # Define force here so that it is over writen saving only one copy.
-                force = openmm.HarmonicBondForce()
-                force.setForceGroup(reference_force.getForceGroup())
                 # Create CustomBondForce to handle alchemically modified bonds.
                 energy_function = "lambda_bonds{}*(K/2)*(r-r0)^2;".format(alchemical_region.region_name)
                 custom_force = openmm.CustomBondForce(energy_function)
@@ -1744,20 +1744,11 @@ class AbsoluteAlchemicalFactory(object):
                 custom_force.addPerBondParameter('r0')
                 custom_force.addPerBondParameter('K')
                 # Process reference bonds.
-                for bond_index in range(reference_force.getNumBonds()):
-                    # Retrieve parameters.
+                for bond_index in sorted(alchemical_region.alchemical_bonds):
                     [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
-                    if bond_index in all_alchemical_bonds:
-                        if bond_index in alchemical_region.alchemical_bonds:
-                            # add alchemical
-                            custom_force.addBond(particle1, particle2, [theta0, K])
-                    else:
-                        # Add to standard force
-                        force.addBond(particle1, particle2, theta0, K)
-
+                    custom_force.addBond(particle1, particle2, [theta0, K])
                 alchemical_forces.update({'lambda_bonds{}'.format(alchemical_region.region_name): [custom_force]})
-            else:
-                pass
+
         alchemical_forces.update({'': [force]})
         return alchemical_forces
 
