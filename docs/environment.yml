@@ -9,6 +9,7 @@ dependencies:
     - scipy
     - six
     - parmed
+    - mdtraj
     - numpydoc
     - netCDF4
     - pyyaml
