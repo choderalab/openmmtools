@@ -14,6 +14,7 @@ requirements:
     - python
     - setuptools
     - openmm >=7.2
+    - lxml
 
   run:
     - python
@@ -25,6 +26,7 @@ requirements:
     - mdtraj
     - netcdf4
     - pyyaml
+    - lxml
 
 
 test:
