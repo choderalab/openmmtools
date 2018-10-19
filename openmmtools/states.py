@@ -2408,7 +2408,7 @@ class IComposableState(utils.SubhookedABCMeta):
         pass
 
     @abc.abstractmethod
-    def _on_setattr(self, standard_system, attribute_name, old_attribute_value):
+    def _on_setattr(self, standard_system, attribute_name, old_composable_state):
         """Check if standard system needs to be updated after a state attribute is set.
 
         This callback function is called after an attribute is set (i.e.
@@ -2422,8 +2422,8 @@ class IComposableState(utils.SubhookedABCMeta):
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
-        old_attribute_value : float
-            The value of the attribute retrieved before being set.
+        old_composable_state : IComposableState
+            A copy of the composable state before the attribute was set.
 
         Returns
         -------
@@ -2662,9 +2662,9 @@ class CompoundThermodynamicState(ThermodynamicState):
     def __getattr__(self, name):
         def setter_decorator(func, composable_state):
             def _setter_decorator(*args, **kwargs):
-                old_value = getattr(composable_state, name)
+                old_state = copy.deepcopy(composable_state)
                 func(*args, **kwargs)
-                self._on_setattr_callback(composable_state, name, old_value)
+                self._on_setattr_callback(composable_state, name, old_state)
             return _setter_decorator
 
         # Called only if the attribute couldn't be found in __dict__.
@@ -2701,12 +2701,13 @@ class CompoundThermodynamicState(ThermodynamicState):
         else:
             for s in self._composable_states:
                 try:
-                    old_value = getattr(s, name)
+                    getattr(s, name)
                 except AttributeError:
                     pass
                 else:
+                    old_state = copy.deepcopy(s)
                     s.__setattr__(name, value)
-                    self._on_setattr_callback(s, name, old_value)
+                    self._on_setattr_callback(s, name, old_state)
                     return
 
             # No attribute found. This is monkey patching.
@@ -2762,16 +2763,16 @@ class CompoundThermodynamicState(ThermodynamicState):
         for composable_state in self._composable_states:
             composable_state._standardize_system(system)
 
-    def _on_setattr_callback(self, composable_state, attribute_name, old_attribute_value):
+    def _on_setattr_callback(self, composable_state, attribute_name, old_composable_state):
         """Updates the standard system (and hash) after __setattr__."""
         try:
-            change_standard_system = composable_state._on_setattr(self._standard_system, attribute_name, old_attribute_value)
+            change_standard_system = composable_state._on_setattr(self._standard_system, attribute_name, old_composable_state)
         except TypeError:
             change_standard_system = composable_state._on_setattr(self._standard_system, attribute_name)
             # TODO Drop support for the old signature and remove deprecation warning from 0.17 on.
             import warnings
             old_signature = '_on_setattr(self, standard_system, attribute_name)'
-            new_signature = old_signature[:-1] + ', old_attribute_value)'
+            new_signature = old_signature[:-1] + ', old_composable_state)'
             warnings.warn('The signature IComposableState.{} has been deprecated, '
                           'and future versions of openmmtools will support only the '
                           'new one: {}.'.format(old_signature, new_signature))
@@ -3238,7 +3239,7 @@ class GlobalParameterState(object):
         # Standardize the system.
         standard_state.apply_to_system(system)
 
-    def _on_setattr(self, standard_system, attribute_name, old_attribute_value):
+    def _on_setattr(self, standard_system, attribute_name, old_composable_state):
         """Check if the standard system needs changes after a state attribute is set.
 
         Parameters
@@ -3247,8 +3248,8 @@ class GlobalParameterState(object):
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
-        old_attribute_value : float
-            The value of the attribute retrieved before being set.
+        old_composable_state : IComposableState
+            A copy of the composable state before the attribute was set.
 
         Returns
         -------
@@ -3259,10 +3260,9 @@ class GlobalParameterState(object):
         """
         # There are no attributes that can be set that can alter the standard system,
         # but if a parameter goes from defined to undefined, we should raise an error.
-        old_standard_state = self.from_system(standard_system, self._parameters_name_suffix)
-        old_standard_attribute = getattr(old_standard_state, attribute_name)
+        old_attribute_value = getattr(old_composable_state, attribute_name)
         new_attribute_value = getattr(self, attribute_name)
-        if (old_standard_attribute is None) != (new_attribute_value is None):
+        if (old_attribute_value is None) != (new_attribute_value is None):
             # Set back old value to maintain a consistent state in case the exception is catched.
             setattr(self, attribute_name, old_attribute_value)
             err_msg = 'Cannot set the parameter {} in the system from {} to {}'.format(
@@ -3461,7 +3461,6 @@ class GlobalParameterState(object):
         # Update parameters with constructor arguments.
         for parameter_name, value in kwargs.items():
             setattr(self, parameter_name, value)
-
 
 
 if __name__ == '__main__':
