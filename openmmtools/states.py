@@ -2828,6 +2828,48 @@ class GlobalParameterError(ComposableStateError):
     pass
 
 
+class GlobalParameterFunction(object):
+    """A function of global parameters.
+
+    All the functions supported by ``openmmtools.utils.math_eval``
+    are supported.
+
+    Parameters
+    ----------
+    expression : str
+        A mathematical expression involving global parameters.
+
+    See Also
+    --------
+    openmmtools.utils.math_eval
+
+    Examples
+    --------
+    >>> class MyComposableState(GlobalParameterState):
+    ...     gamma = GlobalParameterState.GlobalParameter('gamma', standard_value=1.0)
+    ...     lambda_angles = GlobalParameterState.GlobalParameter('lambda_angles', standard_value=1.0)
+    ...
+    >>> composable_state = MyComposableState(gamma=1.0, lambda_angles=0.5)
+    >>> composable_state.set_function_variable('lambda', 0.5)
+    >>> composable_state.set_function_variable('lambda2', 1.0)
+    >>> composable_state.gamma = GlobalParameterFunction('lambda**2')
+    >>> composable_state.gamma
+    0.25
+    >>> composable_state.lambda_angles = GlobalParameterFunction('(lambda + lambda2) / 2')
+    >>> composable_state.lambda_angles
+    0.75
+    >>> composable_state.set_function_variable('lambda2', 0.5)
+    >>> composable_state.lambda_angles
+    0.5
+
+    """
+    def __init__(self, expression):
+        self._expression = expression
+
+    def __call__(self, variables):
+        return utils.math_eval(self._expression, variables)
+
+
 class GlobalParameterState(object):
     """A composable state controlling one or more OpenMM ``Force``'s global parameters.
 
@@ -2840,6 +2882,11 @@ class GlobalParameterState(object):
     controlled by the same state. Conversely, multiple ``Force``s can use
     the same global parameter (i.e. with the same name) controlled by the
     state object.
+
+    It is possible to enslave the global parameters to one or more arbitrary
+    variables entering a mathematical expression through the use of
+    ``GlobalParameterFunction``. Global parameters that are associated to a
+    global parameter function are validated on get rather than on set.
 
     Parameters
     ----------
@@ -2859,6 +2906,10 @@ class GlobalParameterState(object):
     first positional argument, so it is possible to overwrite ``__init__``
     and rename ``parameters_name_suffix`` as long as it is the first parameter
     of the constructor.
+
+    See Also
+    --------
+    GlobalParameterFunction
 
     Examples
     --------
@@ -2940,6 +2991,19 @@ class GlobalParameterState(object):
     >>> compound_state.lambda_bonds = 1.0
     >>> compound_state.apply_to_context(context)
     >>> context.getParameter('lambda_bonds')
+    1.0
+
+    You can express enslave global parameters to a mathematical expression
+    involving arbitrary variables.
+
+    >>> compound_state.set_function_variable('lambda', 1.0)
+    >>> compound_state.lambda_bonds = GlobalParameterFunction('2*(lambda - 0.5) * step(lambda - 0.5)')
+    >>> for l in [0.0, 0.5, 0.75, 1.0]:
+    ...     compound_state.set_function_variable('lambda', l)
+    ...     print(compound_state.lambda_sterics)
+    0.0
+    0.0
+    0.5
     1.0
 
     If you need to control similar forces with the same state object,
@@ -3035,6 +3099,55 @@ class GlobalParameterState(object):
         return state
 
     # -------------------------------------------------------------------------
+    # Function variables
+    # -------------------------------------------------------------------------
+
+    def get_function_variable(self, variable_name):
+        """Return the value of the function variable.
+
+        Function variables are _not_ global parameters but rather variables
+        entering mathematical expressions specified with ``GlobalParameterFunction``,
+        which can be use to enslave global parameter to arbitrary variables.
+
+        Parameters
+        ----------
+        variable_name : str
+            The name of the function variable.
+
+        Returns
+        -------
+        variable_value : float
+            The value of the function variable.
+
+        """
+        try:
+            variable_value = self._function_variables[variable_name]
+        except KeyError:
+            raise GlobalParameterError('Unknown function variable {}'.format(variable_name))
+        return variable_value
+
+    def set_function_variable(self, variable_name, new_value):
+        """Set the value of the function variable.
+
+        Function variables are _not_ global parameters but rather variables
+        entering mathematical expressions specified with ``GlobalParameterFunction``,
+        which can be use to enslave global parameter to arbitrary variables.
+
+        Parameters
+        ----------
+        variable_name : str
+            The name of the function variable.
+        new_value : float
+            The new value for the variable.
+
+        """
+        forbidden_variable_names = set(self._parameters)
+        if variable_name in forbidden_variable_names:
+            raise GlobalParameterError('Cannot have an function variable with the same name '
+                                       'of the predefined global parameter {}.'.format(variable_name))
+        self._function_variables[variable_name] = new_value
+
+    # -------------------------------------------------------------------------
     # Operators
     # -------------------------------------------------------------------------
 
@@ -3102,14 +3215,11 @@ class GlobalParameterState(object):
 
         def __get__(self, instance, owner_class=None):
             self._check_controlled(instance)
-            return instance._parameters[self.parameter_name]
+            return instance._get_global_parameter_value(self.parameter_name, self)
 
         def __set__(self, instance, new_value):
             self._check_controlled(instance)
-            # Validate the value if requested.
-            if self.validator_func is not None:
-                new_value = self.validator_func(self, instance, new_value)
-            instance._parameters[self.parameter_name] = new_value
+            instance._set_global_parameter_value(self.parameter_name, new_value, self)
 
         def validator(self, validator):
             return self.__class__(self.parameter_name, self.standard_value, validator)
@@ -3276,10 +3386,14 @@ class GlobalParameterState(object):
         old_attribute_value = getattr(old_composable_state, attribute_name)
         new_attribute_value = getattr(self, attribute_name)
         if (old_attribute_value is None) != (new_attribute_value is None):
-            # Set back old value to maintain a consistent state in case the exception is catched.
-            setattr(self, attribute_name, old_attribute_value)
             err_msg = 'Cannot set the parameter {} in the system from {} to {}'.format(
                 attribute_name, old_attribute_value, new_attribute_value)
+            # Set back old value to maintain a consistent state in case the exception
+            # is catched. If this attribute was associated to a GlobalParameterFunction,
+            # we need to retrieve the original function object before setting.
+            old_attribute_value = old_composable_state._get_global_parameter_value(attribute_name,
+                                                                                   resolve_function=None)
+            setattr(self, attribute_name, old_attribute_value)
             raise GlobalParameterError(err_msg)
         return False
 
@@ -3365,12 +3479,113 @@ class GlobalParameterState(object):
                                  if isinstance(descriptor, cls.GlobalParameter)}
         return controlled_parameters
 
+    def _validate_global_parameter(self, parameter_name, parameter_value, descriptor=None):
+        """Return the validated parameter value using the descriptor validator.
+
+        Parameters
+        ----------
+        parameter_name : str
+            Parameter name (with eventual suffix) to validate.
+        parameter_value : float
+            Parameter value to validate. If a GlobalParameterFunction is associated
+            to the parameter, this must be evaluated before calling this.
+        descriptor : GlobalParameterState.GlobalParameter, optional
+            If None, the functions automatically looks for the descriptor associated
+            to this parameter and calls its validator (if any). This search is
+            skipped if this argument is provided.
+
+        Returns
+        -------
+        validated_value : float
+            The validated value.
+
+        Raises
+        ------
+        KeyError
+            If parameter_name is not controlled by this state.
+        """
+        if descriptor is None:
+            # Get the descriptors of all controlled parameters.
+            controlled_parameters = self._get_controlled_parameters(self._parameters_name_suffix)
+            # Call validator, before setting the parameter. This raises KeyError.
+            descriptor = controlled_parameters[parameter_name]
+        if descriptor.validator_func is not None:
+            parameter_value = descriptor.validator_func(descriptor, self, parameter_value)
+        return parameter_value
+
+    def _get_global_parameter_value(self, parameter_name, descriptor=None, resolve_function=True):
+        """Retrieve the current value of a global parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+            Parameter name (with eventual suffix) to validate.
+        descriptor : GlobalParameterState.GlobalParameter, optional
+            If None, and the parameter is associated to a GlobalParameterFunction,
+            the functions automatically looks for the descriptor associated to this
+            parameter and calls its validator (if any). This search is skipped if
+            this argument is provided. Default is None.
+        resolve_function : bool, optional
+            If False and the parameter is associated to a GlobalParameterFunction,
+            the function is not evaluated (and its result is not validated), and
+            the GlobalParameterFunction object is returned instead. Default is True.
+
+        Returns
+        -------
+        parameter_value : float
+            The parameter value.
+
+        Raises
+        ------
+        KeyError
+            If parameter_name is not controlled by this state.
+        """
+        parameter_value = self._parameters[parameter_name]
+        if resolve_function and isinstance(parameter_value, GlobalParameterFunction):
+            parameter_value = parameter_value(self._function_variables)
+            # If the value is generated through a mathematical expression,
+            # we validate the value after the expression is evaluated rather
+            # than on setting.
+            parameter_value = self._validate_global_parameter(parameter_name, parameter_value, descriptor)
+        return parameter_value
+
+    def _set_global_parameter_value(self, parameter_name, new_value, descriptor=None):
+        """Set the value of a global parameter.
+
+        Parameters
+        ----------
+        parameter_name : str
+            Parameter name (with eventual suffix) to validate.
+        new_value : float or GlobalParameterFunction
+            The new parameter value.
+        descriptor : GlobalParameterState.GlobalParameter, optional
+            If None, and the parameter is not a GlobalParameterFunction, the functions
+            automatically looks for the descriptor associated to this parameter and
+            calls its validator (if any). This search is skipped if this argument is
+            provided.
+
+        Raises
+        ------
+        KeyError
+            If parameter_name is not controlled by this state.
+
+        """
+        # Check if the parameter is defined and raise KeyError otherwise.
+        if parameter_name not in self._parameters:
+            raise KeyError(parameter_name)
+        # If the value is generated through a mathematical expression,
+        # we validate the value after the expression is evaluated rather
+        # than on setting.
+        if not isinstance(new_value, GlobalParameterFunction):
+            new_value = self._validate_global_parameter(parameter_name, new_value, descriptor)
+        self._parameters[parameter_name] = new_value
+
     def __getattr__(self, key):
         """Handles global parameters with a suffix."""
         # __getattr__ is called only if the item is not found in the
         # usual ways, so we don't need to handle GlobalParameter here.
         try:
-            parameter_value = self._parameters[key]
+            parameter_value = self._get_global_parameter_value(key)
         except KeyError:
             # Parameter not found, fall back to normal behavior.
             parameter_value = super(GlobalParameterState, self).__getattribute__(key)
@@ -3381,13 +3596,11 @@ class GlobalParameterState(object):
         # Check if the object has been initialized and we can
         # start resolving dynamically suffixed parameters.
         if '_parameters_name_suffix' in self.__dict__ and self._parameters_name_suffix is not None:
-            controlled_parameters = self._get_controlled_parameters(self._parameters_name_suffix)
-            if key in controlled_parameters:
-                # Call validator, before setting the parameter.
-                descriptor = controlled_parameters[key]
-                if descriptor.validator_func is not None:
-                    value = descriptor.validator_func(descriptor, self, value)
-                self._parameters[key] = value
+            try:
+                self._set_global_parameter_value(key, value)
+            except KeyError:
+                pass
+            else:
                 return
         # This is not a "suffixed" parameter. Fallback to normal behavior.
         super(GlobalParameterState, self).__setattr__(key, value)
@@ -3420,6 +3633,7 @@ class GlobalParameterState(object):
         """Return a dictionary representation of the state."""
         serialization = dict(
             parameters={},
+            function_variables=self._function_variables.copy(),
             parameters_name_suffix=self._parameters_name_suffix
         )
         # Copy parameters. We serialize the parameters with their original name
@@ -3429,16 +3643,40 @@ class GlobalParameterState(object):
         else:
             suffix = '_' + self._parameters_name_suffix
         for parameter_name in self._get_controlled_parameters():
-            serialization['parameters'][parameter_name] = getattr(self, parameter_name + suffix)
+            parameter_value = self._parameters[parameter_name + suffix]
+            # Convert global parameter function into string expressions.
+            if isinstance(parameter_value, GlobalParameterFunction):
+                parameter_value = parameter_value._expression
+            serialization['parameters'][parameter_name] = parameter_value
         return serialization
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
         parameters = serialization['parameters']
-        # parameters_name_suffix is optional for backwards compatibility since openmmtools 0.16.
-        parameters_name_suffix = serialization.get('parameters_name_suffix')
-        # Initialize the state.
+        # parameters_name_suffix is optional for backwards compatibility since openmmtools 0.16.0.
+        parameters_name_suffix = serialization.get('parameters_name_suffix', None)
+        # Global parameter functions has been added in openmmtools 0.17.0.
+        function_variables = serialization.get('function_variables', {})
+
+        # Temporarily store global parameter functions.
+        global_parameter_functions = {}
+        for parameter_name, value in parameters.items():
+            if isinstance(value, str):
+                global_parameter_functions[parameter_name] = value
+                parameters[parameter_name] = None
+
+        # Initialize parameters and add all function variables.
         self._initialize(parameters_name_suffix=parameters_name_suffix, **parameters)
+        for variable_name, value in function_variables.items():
+            self.set_function_variable(variable_name, value)
+
+        # Add global parameter functions.
+        if parameters_name_suffix is not None:
+            parameters_name_suffix = '_' + parameters_name_suffix
+        else:
+            parameters_name_suffix = ''
+        for parameter_name, expression in global_parameter_functions.items():
+            setattr(self, parameter_name + parameters_name_suffix, GlobalParameterFunction(expression))
 
     # -------------------------------------------------------------------------
     # Internal usage: Initialization
@@ -3451,6 +3689,7 @@ class GlobalParameterState(object):
         Controlled parameters that are not passed are left undefined (i.e. are
         set to None).
         """
+        self._function_variables = {}
         # Get controlled parameters from introspection.
         controlled_parameters = set(self._get_controlled_parameters())
 
@@ -3460,10 +3699,6 @@ class GlobalParameterState(object):
             err_msg = "Unknown parameters {}".format(unknown_parameters)
             raise GlobalParameterError(err_msg)
 
-        # This signals to __setattr__ that we can start resolving dynamically
-        # suffixed parameters so it should be the last assignment.
-        self._parameters_name_suffix = parameters_name_suffix
-
         # Append suffix to parameters before storing them internally.
         if parameters_name_suffix is not None:
             kwargs = {key + '_' + parameters_name_suffix: value for key, value in kwargs.items()}
@@ -3471,6 +3706,11 @@ class GlobalParameterState(object):
 
         # Default value for all parameters is None.
         self._parameters = dict.fromkeys(controlled_parameters, None)
+
+        # This signals to __setattr__ that we can start resolving dynamically
+        # suffixed parameters so it should be the last direct assignment.
+        self._parameters_name_suffix = parameters_name_suffix
+
         # Update parameters with constructor arguments.
         for parameter_name, value in kwargs.items():
             setattr(self, parameter_name, value)
