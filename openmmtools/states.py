@@ -2723,7 +2723,7 @@ class CompoundThermodynamicState(ThermodynamicState):
                     self._on_setattr_callback(s, name, old_state)
 
             # No attribute found. This is monkey patching.
-            if old_state is not None:
+            if old_state is None:
                 super(CompoundThermodynamicState, self).__setattr__(name, value)
 
     def __getstate__(self, **kwargs):
