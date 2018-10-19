@@ -1056,7 +1056,7 @@ class TestCompoundThermodynamicState(object):
         def apply_to_context(self, context):
             context.setParameter('dummy_parameter', self.dummy_parameter)
 
-        def _on_setattr(self, standard_system, attribute_name):
+        def _on_setattr(self, standard_system, attribute_name, old_dummy_state):
             return False
 
         def _find_force_groups_to_update(self, context, current_context_state, memo):
@@ -1146,7 +1146,7 @@ class TestCompoundThermodynamicState(object):
 
     def test_property_forwarding(self):
         """Forward properties to IComposableStates and update system."""
-        dummy_state = self.DummyState(self.dummy_parameter + 1.0)
+        dummy_state = self.DummyState(self.dummy_parameter + 1)
         thermodynamic_state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
         compound_state = CompoundThermodynamicState(thermodynamic_state, [dummy_state])
 
@@ -1163,6 +1163,13 @@ class TestCompoundThermodynamicState(object):
             compound_state.temp
         compound_state.temp = 0
         assert 'temp' in compound_state.__dict__
+
+        # If there are multiple composable states setting two different
+        # values for the same attribute, an exception is raise.
+        dummy_state2 = self.DummyState(dummy_state.dummy_parameter + 1)
+        compound_state = CompoundThermodynamicState(thermodynamic_state, [dummy_state, dummy_state2])
+        with nose.tools.assert_raises(RuntimeError):
+            compound_state.dummy_parameter
 
     def test_set_system(self):
         """CompoundThermodynamicState.system and set_system method."""
@@ -1679,6 +1686,31 @@ class TestGlobalParameterState(object):
                     setattr(current_state, parameter_name, parameter_value)  # Reset current state.
             del context
 
+    def test_global_parameters_functions(self):
+        """Test function variables and global parameter functions work correctly."""
+        system = copy.deepcopy(self.diatomic_molecule_ts.system)
+        state = ParameterStateExample.from_system(system)
+
+        # Add two function variables to the state.
+        state.set_function_variable('lambda', 1.0)
+        state.set_function_variable('lambda2', 0.5)
+        assert state.get_function_variable('lambda') == 1.0
+        assert state.get_function_variable('lambda2') == 0.5
+
+        # Cannot call an function variable as a supported parameter.
+        with nose.tools.assert_raises(GlobalParameterError):
+            state.set_function_variable('lambda_bonds', 0.5)
+
+        # Assign string global parameter functions to parameters.
+        state.lambda_bonds = GlobalParameterFunction('lambda')
+        state.gamma = GlobalParameterFunction('(lambda + lambda2) / 2.0')
+        assert state.lambda_bonds == 1.0
+        assert state.gamma == 0.75
+
+        # Setting function variables updates global parameter as well.
+        state.set_function_variable('lambda2', 0)
+        assert state.gamma == 0.5
+
     # ---------------------------------------------------
     # Integration tests with CompoundThermodynamicStates
     # ---------------------------------------------------
@@ -1731,6 +1763,22 @@ class TestGlobalParameterState(object):
         for state in system_states:
             for parameter_name in state._parameters:
                 assert getattr(state, parameter_name) == getattr(compound_state, parameter_name)
+
+        # Same for global parameter function variables.
+        compound_state.set_function_variable('lambda', 0.25)
+        defined_parameters = {name for name, value in self.parameters_default_values.items()
+                              if value is not None}
+        for parameter_name in defined_parameters:
+            setattr(compound_state, parameter_name, GlobalParameterFunction('lambda'))
+            parameter_value = getattr(compound_state, parameter_name)
+            assert parameter_value == 0.25, '{}, {}'.format(parameter_name, parameter_value)
+
+        system_states = self.read_system_state(compound_state.system)
+        for state in system_states:
+            for parameter_name in state._parameters:
+                if parameter_name in defined_parameters:
+                    parameter_value = getattr(compound_state, parameter_name)
+                    assert parameter_value == 0.25, '{}, {}'.format(parameter_name, parameter_value)
 
     def test_set_system_compound_state(self):
         """Setting inconsistent system in compound state raise errors."""
@@ -1868,6 +1916,10 @@ class TestGlobalParameterState(object):
     def test_serialization(self):
         """Test GlobalParameterState serialization alone and in a compound state."""
         composable_states = self.read_system_state(self.diatomic_molecule_ts.system)
+
+        # Add a global parameter function to test if they are serialized correctly.
+        composable_states[0].set_function_variable('lambda', 0.5)
+        composable_states[0].gamma = GlobalParameterFunction('lambda**2')
 
         # Test serialization/deserialization of GlobalParameterState.
         for state in composable_states:
