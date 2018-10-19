@@ -2690,6 +2690,10 @@ class CompoundThermodynamicState(ThermodynamicState):
                 # setter to a single function.
                 attr = setter_decorator(attrs, composable_states)
             else:
+                if len(attrs) > 1 and not all(np.isclose(attrs[0], a) for a in attrs[1:]):
+                    raise RuntimeError('The composable states of {} expose the same '
+                                       'attribute with different values: {}'.format(
+                        self.__class__.__name__, set(attrs)))
                 attr = attrs[0]
             return attr
 
@@ -3362,7 +3366,7 @@ class GlobalParameterState(object):
         # Standardize the system.
         standard_state.apply_to_system(system)
 
-    def _on_setattr(self, standard_system, attribute_name, old_composable_state):
+    def _on_setattr(self, standard_system, attribute_name, old_global_parameter_state):
         """Check if the standard system needs changes after a state attribute is set.
 
         Parameters
@@ -3371,7 +3375,7 @@ class GlobalParameterState(object):
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
-        old_composable_state : IComposableState
+        old_global_parameter_state : GlobalParameterState
             A copy of the composable state before the attribute was set.
 
         Returns
@@ -3383,7 +3387,7 @@ class GlobalParameterState(object):
         """
         # There are no attributes that can be set that can alter the standard system,
         # but if a parameter goes from defined to undefined, we should raise an error.
-        old_attribute_value = getattr(old_composable_state, attribute_name)
+        old_attribute_value = getattr(old_global_parameter_state, attribute_name)
         new_attribute_value = getattr(self, attribute_name)
         if (old_attribute_value is None) != (new_attribute_value is None):
             err_msg = 'Cannot set the parameter {} in the system from {} to {}'.format(
@@ -3391,8 +3395,8 @@ class GlobalParameterState(object):
             # Set back old value to maintain a consistent state in case the exception
             # is catched. If this attribute was associated to a GlobalParameterFunction,
             # we need to retrieve the original function object before setting.
-            old_attribute_value = old_composable_state._get_global_parameter_value(attribute_name,
-                                                                                   resolve_function=None)
+            old_attribute_value = old_global_parameter_state._get_global_parameter_value(
+                attribute_name, resolve_function=None)
             setattr(self, attribute_name, old_attribute_value)
             raise GlobalParameterError(err_msg)
         return False
