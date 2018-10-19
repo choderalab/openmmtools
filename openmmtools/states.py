@@ -2660,26 +2660,38 @@ class CompoundThermodynamicState(ThermodynamicState):
             s.apply_to_context(context)
 
     def __getattr__(self, name):
-        def setter_decorator(func, composable_state):
+        def setter_decorator(funcs, composable_states):
             def _setter_decorator(*args, **kwargs):
-                old_state = copy.deepcopy(composable_state)
-                func(*args, **kwargs)
-                self._on_setattr_callback(composable_state, name, old_state)
+                for func, composable_state in zip(funcs, composable_states):
+                    old_state = copy.deepcopy(composable_state)
+                    func(*args, **kwargs)
+                    self._on_setattr_callback(composable_state, name, old_state)
             return _setter_decorator
 
         # Called only if the attribute couldn't be found in __dict__.
         # In this case we fall back to composable state, in the given order.
+        attrs = []
+        composable_states = []
         for s in self._composable_states:
             try:
                 attr = getattr(s, name)
             except AttributeError:
                 pass
             else:
-                if name.startswith('set_'):
-                    # Decorate the setter so that _on_setattr is called
-                    # after the attribute is modified.
-                    attr = setter_decorator(attr, s)
-                return attr
+                attrs.append(attr)
+                composable_states.append(s)
+
+        if len(attrs) > 0:
+            # If this is a setter, we need to set the attribute in all states
+            # and ensure that the callback is called in each of them.
+            if name.startswith('set_'):
+                # Decorate the setter so that _on_setattr is called after the
+                # attribute is modified. This also reduces the calls to multiple
+                # setter to a single function.
+                attr = setter_decorator(attrs, composable_states)
+            else:
+                attr = attrs[0]
+            return attr
 
         # Attribute not found, fall back to normal behavior.
         return super(CompoundThermodynamicState, self).__getattribute__(name)
@@ -2699,6 +2711,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # Update composable states attributes. This catches also normal
         # attributes besides properties and methods.
         else:
+            old_state = None
             for s in self._composable_states:
                 try:
                     getattr(s, name)
@@ -2708,10 +2721,10 @@ class CompoundThermodynamicState(ThermodynamicState):
                     old_state = copy.deepcopy(s)
                     s.__setattr__(name, value)
                     self._on_setattr_callback(s, name, old_state)
-                    return
 
             # No attribute found. This is monkey patching.
-            super(CompoundThermodynamicState, self).__setattr__(name, value)
+            if old_state is not None:
+                super(CompoundThermodynamicState, self).__setattr__(name, value)
 
     def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
