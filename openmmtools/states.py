@@ -3156,6 +3156,10 @@ class GlobalParameterState(object):
             err_msg = ('Cannot have an function variable with the same name '
                        'of the predefined global parameter {}.'.format(variable_name))
             raise self._GLOBAL_PARAMETER_ERROR(err_msg)
+        # Check that the new value is a scalar,
+        if not (np.isreal(new_value) and np.isscalar(new_value)):
+            err_msg = 'Only integers and floats can be assigned to a function variable.'
+            raise self._GLOBAL_PARAMETER_ERROR(err_msg)
         self._function_variables[variable_name] = new_value
 
     # -------------------------------------------------------------------------
