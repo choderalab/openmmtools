@@ -3046,6 +3046,10 @@ class GlobalParameterState(object):
 
     """
 
+    # This constant can be overwritten by inheriting classes to
+    # raise a custom exception class when an error is encountered.
+     _GLOBAL_PARAMETER_ERROR = GlobalParameterError
+
     def __init__(self, parameters_name_suffix=None, **kwargs):
         self._initialize(parameters_name_suffix=parameters_name_suffix, **kwargs)
 
@@ -3086,13 +3090,14 @@ class GlobalParameterState(object):
                     err_msg = ('Parameter {} has been found twice (Force {}) with two values: '
                                '{} and {}').format(parameter_name, force.__class__.__name__,
                                                    parameter_value, state_parameters[parameter_name])
-                    raise GlobalParameterError(err_msg)
+                    raise cls._GLOBAL_PARAMETER_ERROR(err_msg)
             else:
                 state_parameters[parameter_name] = parameter_value
 
         # Check that the system can be controlled by this state..
         if len(state_parameters) == 0:
-            raise GlobalParameterError('System has no global parameters controlled by this state.')
+            err_msg = 'System has no global parameters controlled by this state.'
+            raise cls._GLOBAL_PARAMETER_ERROR(err_msg)
 
         # Create and return the GlobalParameterState. The constructor of
         # GlobalParameterState takes the parameters without the suffix so
@@ -3127,7 +3132,8 @@ class GlobalParameterState(object):
         try:
             variable_value = self._function_variables[variable_name]
         except KeyError:
-            raise GlobalParameterError('Unknown function variable {}'.format(variable_name))
+            err_msg = 'Unknown function variable {}'.format(variable_name)
+            raise self._GLOBAL_PARAMETER_ERROR(err_msg)
         return variable_value
 
     def set_function_variable(self, variable_name, new_value):
@@ -3147,8 +3153,9 @@ class GlobalParameterState(object):
         """
         forbidden_variable_names = set(self._parameters)
         if variable_name in forbidden_variable_names:
-            raise GlobalParameterError('Cannot have an function variable with the same name '
-                                       'of the predefined global parameter {}.'.format(variable_name))
+            err_msg = ('Cannot have an function variable with the same name '
+                       'of the predefined global parameter {}.'.format(variable_name))
+            raise self._GLOBAL_PARAMETER_ERROR(err_msg)
         self._function_variables[variable_name] = new_value
 
     # -------------------------------------------------------------------------
@@ -3236,8 +3243,9 @@ class GlobalParameterState(object):
             """
             if instance._parameters_name_suffix is not None:
                 suffixed_parameter_name = self.parameter_name + '_' + instance._parameters_name_suffix
-                err_msg = 'This state does not control {} but {}.'
-                raise AttributeError(err_msg.format(self.parameter_name, suffixed_parameter_name))
+                err_msg = 'This state does not control {} but {}.'.format(
+                    self.parameter_name, suffixed_parameter_name)
+                raise instance._GLOBAL_PARAMETER_ERROR(err_msg)
 
     # -------------------------------------------------------------------------
     # Internal usage: IComposableState interface
@@ -3264,7 +3272,7 @@ class GlobalParameterState(object):
             parameter_value = getattr(self, parameter_name)
             if parameter_value is None:
                 err_msg = 'The system parameter {} is not defined in this state.'
-                raise GlobalParameterError(err_msg.format(parameter_name))
+                raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
             else:
                 parameters_applied.add(parameter_name)
                 force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
@@ -3274,7 +3282,7 @@ class GlobalParameterState(object):
             if (self._parameters[parameter_name] is not None and
                     parameter_name not in parameters_applied):
                 err_msg = 'Could not find global parameter {} in the system.'
-                raise GlobalParameterError(err_msg.format(parameter_name))
+                raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
 
     def check_system_consistency(self, system):
         """Check if the system is in this state.
@@ -3301,7 +3309,7 @@ class GlobalParameterState(object):
                        '\tSystem parameters {}\n'
                        '\t{} parameters {}')
             class_name = self.__class__.__name__
-            raise GlobalParameterError(err_msg.format(system_state, class_name, self))
+            raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(system_state, class_name, self))
 
     def apply_to_context(self, context):
         """Put the Context into this state.
@@ -3326,13 +3334,13 @@ class GlobalParameterState(object):
                 # Check that Context does not have this parameter.
                 if parameter_name in context_parameters:
                     err_msg = 'Context has parameter {} which is undefined in this state.'
-                    raise GlobalParameterError(err_msg.format(parameter_name))
+                    raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
                 continue
             try:
                 context.setParameter(parameter_name, parameter_value)
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
-                raise GlobalParameterError(err_msg.format(parameter_name))
+                raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
 
     def _standardize_system(self, system):
         """Standardize the given system.
@@ -3398,7 +3406,7 @@ class GlobalParameterState(object):
             old_attribute_value = old_global_parameter_state._get_global_parameter_value(
                 attribute_name, resolve_function=None)
             setattr(self, attribute_name, old_attribute_value)
-            raise GlobalParameterError(err_msg)
+            raise self._GLOBAL_PARAMETER_ERROR(err_msg)
         return False
 
     def _find_force_groups_to_update(self, context, current_context_state, memo):
@@ -3701,7 +3709,7 @@ class GlobalParameterState(object):
         unknown_parameters = set(kwargs) - controlled_parameters
         if len(unknown_parameters) > 0:
             err_msg = "Unknown parameters {}".format(unknown_parameters)
-            raise GlobalParameterError(err_msg)
+            raise self._GLOBAL_PARAMETER_ERROR(err_msg)
 
         # Append suffix to parameters before storing them internally.
         if parameters_name_suffix is not None:
