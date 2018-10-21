@@ -3048,7 +3048,7 @@ class GlobalParameterState(object):
 
     # This constant can be overwritten by inheriting classes to
     # raise a custom exception class when an error is encountered.
-     _GLOBAL_PARAMETER_ERROR = GlobalParameterError
+    _GLOBAL_PARAMETER_ERROR = GlobalParameterError
 
     def __init__(self, parameters_name_suffix=None, **kwargs):
         self._initialize(parameters_name_suffix=parameters_name_suffix, **kwargs)
