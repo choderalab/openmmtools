@@ -49,23 +49,15 @@ logger = logging.getLogger(__name__)
 
 
 # =============================================================================
-# INTERNAL-USAGE CONSTANTS
-# =============================================================================
-
-_UPDATE_ALCHEMICAL_CHARGES_PARAMETER = '_update_alchemical_charges'
-_UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX = 1
-
-
-# =============================================================================
 # ALCHEMICAL STATE
 # =============================================================================
 
-class AlchemicalStateError(states.ComposableStateError):
+class AlchemicalStateError(states.GlobalParameterError):
     """Error raised by an AlchemicalState."""
     pass
 
 
-class AlchemicalFunction(object):
+class AlchemicalFunction(states.GlobalParameterFunction):
     """A function of alchemical variables.
 
     Parameters
@@ -86,14 +78,11 @@ class AlchemicalFunction(object):
     0.75
 
     """
-    def __init__(self, expression):
-        self._expression = expression
-
-    def __call__(self, variables):
-        return utils.math_eval(self._expression, variables)
+    # This class just provides an alternative name to GlobalParameterFunction.
+    pass
 
 
-class AlchemicalState(object):
+class AlchemicalState(states.GlobalParameterState):
     """Represent an alchemical state.
 
     The alchemical parameters modify the Hamiltonian and affect the
@@ -104,6 +93,10 @@ class AlchemicalState(object):
 
     Parameters
     ----------
+    parameters_name_suffix : str, optional
+        If specified, the state will control a modified version of the global
+        parameters with the name ``parameter_name + '_' + parameters_name_suffix``.
+        When this is the case, the normal parameters are not accessible.
     lambda_sterics : float, optional
         Scaling factor for ligand sterics (Lennard-Jones and Halgren)
         interactions (default is 1.0).
@@ -116,11 +109,6 @@ class AlchemicalState(object):
         Scaling factor for alchemically-softened angles (default is 1.0).
     lambda_torsions : float, optional
         Scaling factor for alchemically-softened torsions (default is 1.0).
-    update_alchemical_charges : bool, optional
-        If False, ``lambda_electrostatics`` changes in alchemical systems
-        that use exact treatment of PME electrostatics will be considered
-        incompatible. This means that a new ``Context`` will be required
-        for each `lambda_electrostatics`` state.
 
     Attributes
     ----------
@@ -129,7 +117,6 @@ class AlchemicalState(object):
     lambda_bonds
     lambda_angles
     lambda_torsions
-    update_alchemical_charges
 
     Examples
     --------
@@ -203,30 +190,32 @@ class AlchemicalState(object):
     1.0
     1.0
 
-
     """
 
+    _GLOBAL_PARAMETER_ERROR = AlchemicalStateError
+
     # -------------------------------------------------------------------------
-    # Constructors
+    # Lambda properties
     # -------------------------------------------------------------------------
 
-    def __init__(self, **kwargs):
-        if 'update_alchemical_charges' in kwargs:
-            # TODO Drop support for the parameter and remove deprecation warning from 0.17 on
-            # TODO after implementing new way for exact PME based on the NonbondedForce offsets.
-            import warnings
-            warnings.warn('The update_alchemical_charges in AlchemicalState.__init__ has been '
-                          'deprecated, and future versions of openmmtools may not support it.')
-        self._initialize(**kwargs)
+    lambda_sterics = states.GlobalParameterState.GlobalParameter('lambda_sterics', standard_value=1.0)
+    lambda_electrostatics = states.GlobalParameterState.GlobalParameter('lambda_electrostatics', standard_value=1.0)
+    lambda_bonds = states.GlobalParameterState.GlobalParameter('lambda_bonds', standard_value=1.0)
+    lambda_angles = states.GlobalParameterState.GlobalParameter('lambda_angles', standard_value=1.0)
+    lambda_torsions = states.GlobalParameterState.GlobalParameter('lambda_torsions', standard_value=1.0)
 
     @classmethod
-    def from_system(cls, system):
+    def from_system(cls, system, **kwargs):
         """Constructor reading the state from an alchemical system.
 
         Parameters
         ----------
         system : simtk.openmm.System
             An alchemically modified system in a defined alchemical state.
+        parameters_name_suffix : str, optional
+            If specified, the state will search for a modified
+            version of the alchemical parameters with the name
+            ``parameter_name + '_' + parameters_name_suffix``.
 
         Returns
         -------
@@ -240,71 +229,11 @@ class AlchemicalState(object):
             if the system has no lambda parameters.
 
         """
-        alchemical_parameters = {}
-        for force, parameter_name, parameter_id in cls._get_system_lambda_parameters(
-                system, other_parameters={_UPDATE_ALCHEMICAL_CHARGES_PARAMETER}):
-            parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
-
-            # Check that we haven't already found
-            # the parameter with a different value.
-            if parameter_name in alchemical_parameters:
-                if alchemical_parameters[parameter_name] != parameter_value:
-                    err_msg = ('Parameter {} has been found in the force {} with two values: '
-                               '{} and {}').format(parameter_name, force.__class__.__name__,
-                                                   parameter_value, alchemical_parameters[parameter_name])
-                    raise AlchemicalStateError(err_msg)
-            else:
-                alchemical_parameters[parameter_name] = parameter_value
-
-        # Handle the update parameters flag.
-        update_alchemical_charges = alchemical_parameters.pop(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER, None)
-
-        # Check that the system is alchemical.
-        if len(alchemical_parameters) == 0:
-            raise AlchemicalStateError('System has no lambda parameters.')
-
-        # Avoid passing update_alchemical_charges if not necessary to not raise deprecation warning.
-        if (update_alchemical_charges is not None and
-                    update_alchemical_charges != cls._UPDATE_ALCHEMICAL_CHARGES_DEFAULT):
-            alchemical_parameters['update_alchemical_charges'] = bool(update_alchemical_charges)
-
-        # Create and return the AlchemicalState.
-        return AlchemicalState(**alchemical_parameters)
-
-    # -------------------------------------------------------------------------
-    # Lambda properties
-    # -------------------------------------------------------------------------
-
-    # Lambda properties. The set of supported parameters is dynamically
-    # discovered by _get_supported_parameters() based on this list. We
-    # list them explicitly to preserve auto-completion and prevent silent
-    # bugs due to monkey-patching.
-    class _LambdaProperty(object):
-        """Descriptor of a lambda parameter."""
-        def __init__(self, parameter_name):
-            self._parameter_name = parameter_name
-
-        def __get__(self, instance, owner_class=None):
-            parameter_value = instance._parameters[self._parameter_name]
-            if isinstance(parameter_value, AlchemicalFunction):
-                parameter_value = parameter_value(instance._alchemical_variables)
-            assert parameter_value is None or 0.0 <= parameter_value <= 1.0, '{}: {}'.format(
-                self._parameter_name, parameter_value)
-            return parameter_value
-
-        def __set__(self, instance, new_value):
-            assert (new_value is None or isinstance(new_value, AlchemicalFunction) or
-                    0.0 <= new_value <= 1.0)
-            instance._parameters[self._parameter_name] = new_value
-
-    lambda_sterics = _LambdaProperty('lambda_sterics')
-    lambda_electrostatics = _LambdaProperty('lambda_electrostatics')
-    lambda_bonds = _LambdaProperty('lambda_bonds')
-    lambda_angles = _LambdaProperty('lambda_angles')
-    lambda_torsions = _LambdaProperty('lambda_torsions')
+        # The function is redefined here only to provide more specific documentation for this method.
+        super().from_system(system, **kwargs)
 
     def set_alchemical_parameters(self, new_value):
-        """Set all defined parameters to the given value.
+        """Set all defined lambda parameters to the given value.
 
         The undefined parameters (i.e. those being set to None) remain
         undefined.
@@ -315,111 +244,52 @@ class AlchemicalState(object):
             The new value for all defined parameters.
 
         """
-        self._set_alchemical_parameters(new_value, exclusions=frozenset())
+        for parameter_name in self._parameters:
+            if self._parameters[parameter_name] is not None:
+                setattr(self, parameter_name, new_value)
 
     # -------------------------------------------------------------------------
-    # Alchemical variables
+    # Function variables
     # -------------------------------------------------------------------------
 
-    def get_alchemical_variable(self, variable_name):
-        """Return the value of the alchemical parameter.
+    def get_function_variable(self, variable_name):
+        """Return the value of the function variable.
+
+        Function variables are variables entering mathematical expressions
+        specified with ``AlchemicalFunction``, which can be use to enslave
+        a lambda parameter to arbitrary variables.
 
         Parameters
         ----------
         variable_name : str
-            The name of the alchemical variable.
+            The name of the function variable.
 
         Returns
         -------
         variable_value : float
-            The value of the alchemical variable.
+            The value of the function variable.
 
         """
-        try:
-            variable_value = self._alchemical_variables[variable_name]
-        except KeyError:
-            raise AlchemicalStateError('Unknown alchemical variable {}'.format(variable_name))
-        return variable_value
+        # The function is redefined here only to provide more specific documentation for this method.
+        super().get_function_variable(variable_name)
 
-    def set_alchemical_variable(self, variable_name, new_value):
-        """Set the value of the alchemical variable.
+    def set_function_variable(self, variable_name, new_value):
+        """Set the value of the function variable.
+
+        Function variables are variables entering mathematical expressions
+        specified with ``AlchemicalFunction``, which can be use to enslave
+        a lambda parameter to arbitrary variables.
 
         Parameters
         ----------
         variable_name : str
-            The name of the alchemical variable.
+            The name of the function variable.
         new_value : float
             The new value for the variable.
 
         """
-        forbidden_variable_names = set(self._parameters)
-        forbidden_variable_names.add(_UPDATE_ALCHEMICAL_CHARGES_PARAMETER)
-        if variable_name in forbidden_variable_names:
-            raise AlchemicalStateError('Cannot have an alchemical variable with the same name '
-                                       'of the predefined alchemical parameter {}.'.format(variable_name))
-        self._alchemical_variables[variable_name] = new_value
-
-    # -------------------------------------------------------------------------
-    # Operators
-    # -------------------------------------------------------------------------
-
-    def __eq__(self, other):
-        is_equal = True
-        for parameter_name in self._parameters:
-            self_value = getattr(self, parameter_name)
-            other_value = getattr(other, parameter_name)
-            is_equal = is_equal and self_value == other_value
-        return is_equal
-
-    def __ne__(self, other):
-        # TODO: we can safely remove this when dropping support for Python 2
-        return not self == other
-
-    def __str__(self):
-        return str(self._parameters)
-
-    def __getstate__(self):
-        """Return a dictionary representation of the state."""
-        serialization = dict(
-            parameters={},
-            alchemical_variables={},
-            update_alchemical_charges=self.update_alchemical_charges
-        )
-
-        # Copy parameters and convert AlchemicalFunctions to string expressions.
-        for parameter_class in ['parameters', 'alchemical_variables']:
-            parameters = getattr(self, '_' + parameter_class)
-            for parameter, value in parameters.items():
-                if isinstance(value, AlchemicalFunction):
-                    serialization[parameter_class][parameter] = value._expression
-                else:
-                    serialization[parameter_class][parameter] = value
-        return serialization
-
-    def __setstate__(self, serialization):
-        """Set the state from a dictionary representation."""
-        parameters = serialization['parameters']
-        alchemical_variables = serialization['alchemical_variables']
-        # New attribute in OpenMMTools 0.14.0.
-        update_alchemical_charges = serialization.get('update_alchemical_charges',
-                                                      self._UPDATE_ALCHEMICAL_CHARGES_DEFAULT)
-        alchemical_functions = dict()
-
-        # Temporarily store alchemical functions.
-        for parameter_name, value in parameters.items():
-            if isinstance(value, str):
-                alchemical_functions[parameter_name] = value
-                parameters[parameter_name] = None
-
-        # Initialize parameters and add all alchemical variables.
-        self._initialize(update_alchemical_charges=update_alchemical_charges,
-                         **parameters)
-        for variable_name, value in alchemical_variables.items():
-            self.set_alchemical_variable(variable_name, value)
-
-        # Add back alchemical functions.
-        for parameter_name, expression in alchemical_functions.items():
-            setattr(self, parameter_name, AlchemicalFunction(expression))
+        # The function is redefined here only to provide more specific documentation for this method.
+        super().set_function_variable(variable_name, new_value)
 
     # -------------------------------------------------------------------------
     # IComposableState interface
@@ -439,7 +309,8 @@ class AlchemicalState(object):
             If the system does not have the required lambda global variables.
 
         """
-        self._apply_to_system(system, set_update_charges_flag=True)
+        # The function is redefined here only to provide more specific documentation for this method.
+        super().apply_to_system(system)
 
     def check_system_consistency(self, system):
         """Check if the system is in this alchemical state.
@@ -458,14 +329,8 @@ class AlchemicalState(object):
             If the system is not consistent with this state.
 
         """
-        system_alchemical_state = AlchemicalState.from_system(system)
-
-        # Check if parameters are all the same.
-        if self != system_alchemical_state:
-            err_msg = ('Consistency check failed:\n'
-                       '\tSystem parameters          {}\n'
-                       '\tAlchemicalState parameters {}')
-            raise AlchemicalStateError(err_msg.format(self, system_alchemical_state))
+        # The function is redefined here only to provide more specific documentation for this method.
+        super().check_system_consistency(system)
 
     def apply_to_context(self, context):
         """Put the Context into this AlchemicalState.
@@ -481,359 +346,8 @@ class AlchemicalState(object):
             If the context does not have the required lambda global variables.
 
         """
-        has_lambda_electrostatics_changed = False
-        context_parameters = context.getParameters()
-
-        # Set lambda parameters in Context.
-        for parameter_name in self._parameters:
-            parameter_value = getattr(self, parameter_name)
-            if parameter_value is None:
-                # Check that Context does not have this parameter.
-                if parameter_name in context_parameters:
-                    err_msg = 'Context has parameter {} which is undefined in this state'
-                    raise AlchemicalStateError(err_msg.format(parameter_name))
-                continue
-            try:
-                # If lambda_electrostatics, first check if we're changing it for later.
-                # This avoids us to loop through the System forces if we don't need to
-                # set the NonbondedForce charges.
-                if parameter_name == 'lambda_electrostatics':
-                    old_parameter_value = context_parameters[parameter_name]
-                    has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
-                                                         parameter_value != old_parameter_value)
-                context.setParameter(parameter_name, parameter_value)
-            except Exception:
-                err_msg = 'Could not find parameter {} in context'
-                raise AlchemicalStateError(err_msg.format(parameter_name))
-
-        # Handle lambda_electrostatics changes with exact PME electrostatic treatment.
-        # If the context doesn't use exact PME electrostatics, or if lambda_electrostatics
-        # hasn't changed, we don't need to do anything.
-        if (_UPDATE_ALCHEMICAL_CHARGES_PARAMETER not in context_parameters or
-                not has_lambda_electrostatics_changed):
-            return
-
-        # Find exact PME treatment key force objects.
-        original_charges_force, nonbonded_force = self._find_exact_pme_forces(context.getSystem())
-
-        # Quick checks for compatibility.
-        context_charge_update = bool(context_parameters[_UPDATE_ALCHEMICAL_CHARGES_PARAMETER])
-        if not (context_charge_update and self.update_alchemical_charges):
-            err_msg = 'Attempted to set the alchemical state of an incompatible Context.'
-            raise AlchemicalStateError(err_msg)
-
-        # Write NonbondedForce charges
-        self._set_exact_pme_charges(original_charges_force, nonbonded_force)
-        nonbonded_force.updateParametersInContext(context)
-
-    def _standardize_system(self, system, set_lambda_electrostatics=False):
-        """Standardize the given system.
-
-        Set all global lambda parameters of the system to 1.0.
-
-        Parameters
-        ----------
-        system : simtk.openmm.System
-            The system to standardize.
-        set_lambda_electrostatics : bool, optional
-            Whether to set the lambda electrostatics of this system or not.
-
-        Raises
-        ------
-        AlchemicalStateError
-            If the system is not consistent with this state.
-
-        """
-        alchemical_state = AlchemicalState.from_system(system)
-        # If this system uses exact PME treatment and update_alchemical_charges
-        # is enabled, we don't want to set lambda_electrostatics.
-        if self.update_alchemical_charges:
-            exclusions = frozenset()
-        else:
-            original_charges_force = alchemical_state._find_exact_pme_forces(system, original_charges_only=True)
-            if original_charges_force is not None:
-                exclusions = {'lambda_electrostatics'}
-            else:
-                exclusions = frozenset()
-        alchemical_state._set_alchemical_parameters(1.0, exclusions=exclusions)
-
-        if set_lambda_electrostatics:
-            alchemical_state.lambda_electrostatics = self.lambda_electrostatics
-
-        # We don't want to overwrite the update_alchemical_charges flag as
-        # states with different settings must be incompatible.
-        alchemical_state._apply_to_system(system, set_update_charges_flag=False)
-
-    def _on_setattr(self, standard_system, attribute_name, old_attribute_value):
-        """Check if the standard system needs changes after a state attribute is set.
-
-        Parameters
-        ----------
-        standard_system : simtk.openmm.System
-            The standard system before setting the attribute.
-        attribute_name : str
-            The name of the attribute that has just been set or retrieved.
-        old_attribute_value : float
-            The value of the attribute retrieved before being set.
-
-        Returns
-        -------
-        need_changes : bool
-            True if the standard system has to be updated, False if no change
-            occurred.
-
-        """
-        need_changes = False
-
-        # The standard_system changes with update_alchemical_charges
-        # if the system uses exact PME treatment.
-        if attribute_name == 'update_alchemical_charges':
-            original_charges_force = self._find_exact_pme_forces(standard_system, original_charges_only=True)
-            if original_charges_force is not None:
-                old_update_charge_parameter = bool(original_charges_force.getGlobalParameterDefaultValue(
-                    _UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX))
-                need_changes = old_update_charge_parameter != self.update_alchemical_charges
-
-        # If we are not allowed to update_alchemical_charges is off and
-        # we change lambda_electrostatics we also change the compatibility.
-        elif self.update_alchemical_charges is False and attribute_name == 'lambda_electrostatics':
-            # Look for old value of lambda_electrostatics.
-            for force, parameter_name, parameter_idx in self._get_system_lambda_parameters(standard_system):
-                if parameter_name == 'lambda_electrostatics':
-                    break
-            old_lambda_electrostatics = force.getGlobalParameterDefaultValue(parameter_idx)
-            need_changes = old_lambda_electrostatics != self.lambda_electrostatics
-
-        return need_changes
-
-    def _find_force_groups_to_update(self, context, current_context_state, memo):
-        """Find the force groups whose energy must be recomputed after applying self.
-
-        Parameters
-        ----------
-        context : Context
-            The context, currently in `current_context_state`, that will
-            be moved to this state.
-        current_context_state : ThermodynamicState
-            The full thermodynamic state of the given context. This is
-            guaranteed to be compatible with self.
-        memo : dict
-            A dictionary that can be used by the state for memoization
-            to speed up consecutive calls on the same context.
-
-        Returns
-        -------
-        force_groups_to_update : set of int
-            The indices of the force groups whose energy must be computed
-            again after applying this state, assuming the context to be in
-            `current_context_state`.
-        """
-        # Cache information about system force groups.
-        if len(memo) == 0:
-            parameters_found = set()
-            system = context.getSystem()
-            for force, parameter_name, _ in self._get_system_lambda_parameters(system):
-                if parameter_name not in parameters_found:
-                    parameters_found.add(parameter_name)
-                    # Keep track of valid lambdas only.
-                    if self._parameters[parameter_name] is not None:
-                        memo[parameter_name] = force.getForceGroup()
-                    # Break the loop if we have found all the parameters.
-                    if len(parameters_found) == len(self._parameters):
-                        break
-
-        # Find lambda parameters that will change.
-        force_groups_to_update = set()
-        for parameter_name, force_group in memo.items():
-            self_parameter_value = getattr(self, parameter_name)
-            current_parameter_value = getattr(current_context_state, parameter_name)
-            if self_parameter_value != current_parameter_value:
-                force_groups_to_update.add(force_group)
-        return force_groups_to_update
-
-    # -------------------------------------------------------------------------
-    # Internal-usage
-    # -------------------------------------------------------------------------
-
-    _UPDATE_ALCHEMICAL_CHARGES_DEFAULT = True
-
-    def _initialize(self, update_alchemical_charges=_UPDATE_ALCHEMICAL_CHARGES_DEFAULT,
-                    **kwargs):
-        """Initialize the alchemical state."""
-        self._alchemical_variables = {}
-        self.update_alchemical_charges = update_alchemical_charges
-
-        # Get supported parameters from properties introspection.
-        supported_parameters = self._get_supported_parameters()
-
-        # Check for unknown parameters
-        unknown_parameters = set(kwargs) - supported_parameters
-        if len(unknown_parameters) > 0:
-            err_msg = "Unknown parameters {}".format(unknown_parameters)
-            raise AlchemicalStateError(err_msg)
-
-        # Default value for all parameters is None.
-        self._parameters = dict.fromkeys(supported_parameters, None)
-
-        # Update parameters with constructor arguments. Calling
-        # the properties perform type check on the values.
-        for parameter_name, value in kwargs.items():
-            setattr(self, parameter_name, value)
-
-    def _apply_to_system(self, system, set_update_charges_flag):
-        """Set the alchemical state of the system to this.
-
-        Raises
-        ------
-        AlchemicalStateError
-            If the system does not have the required lambda global variables.
-
-        """
-        has_lambda_electrostatics_changed = False
-        parameters_applied = set()
-        for force, parameter_name, parameter_id in self._get_system_lambda_parameters(system):
-            parameter_value = getattr(self, parameter_name)
-            if parameter_value is None:
-                err_msg = 'The system parameter {} is not defined in this state.'
-                raise AlchemicalStateError(err_msg.format(parameter_name))
-            else:
-                # If lambda_electrostatics, first check if we're changing it for later.
-                # This avoids us to loop through the System forces if we don't need to
-                # set the NonbondedForce charges.
-                if parameter_name == 'lambda_electrostatics':
-                    old_parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
-                    has_lambda_electrostatics_changed = (has_lambda_electrostatics_changed or
-                                                         parameter_value != old_parameter_value)
-                parameters_applied.add(parameter_name)
-                force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
-
-        # Check that we set all the defined parameters.
-        for parameter_name in self._get_supported_parameters():
-            if (self._parameters[parameter_name] is not None and
-                    parameter_name not in parameters_applied):
-                err_msg = 'Could not find parameter {} in the system'
-                raise AlchemicalStateError(err_msg.format(parameter_name))
-
-        # Nothing else to do if we don't need to modify the exact PME forces.
-        if not (has_lambda_electrostatics_changed or set_update_charges_flag):
-            return
-
-        # Loop through system and retrieve exact PME forces.
-        original_charges_force, nonbonded_force = self._find_exact_pme_forces(system)
-
-        # Write NonbondedForce charges if PME is treated exactly.
-        if has_lambda_electrostatics_changed:
-            self._set_exact_pme_charges(original_charges_force, nonbonded_force)
-
-        # Flag if updateParametersInContext is allowed.
-        if set_update_charges_flag:
-            self._set_force_update_charge_parameter(original_charges_force)
-
-    def _set_force_update_charge_parameter(self, original_charges_force):
-        """Set the global parameter that controls the charges updates."""
-        if original_charges_force is None:
-            return
-
-        parameter_idx = _UPDATE_ALCHEMICAL_CHARGES_PARAMETER_IDX  # Shortcut.
-        if self.update_alchemical_charges:
-            original_charges_force.setGlobalParameterDefaultValue(parameter_idx, 1)
-        else:
-            original_charges_force.setGlobalParameterDefaultValue(parameter_idx, 0)
-
-    @classmethod
-    def _get_supported_parameters(cls):
-        """Return a set of the supported alchemical parameters.
-
-        This is based on the exposed properties. This ways we keep autocompletion
-        working and avoid silent bugs due to possible monkey patching caused by
-        a typo in the name of the variable.
-
-        """
-        # TODO just use inspect.getmembers when dropping Python 2
-        supported_parameters = {name for name, value in cls.__dict__.items()
-                                if isinstance(value, cls._LambdaProperty)}
-        return supported_parameters
-
-    @classmethod
-    def _get_system_lambda_parameters(cls, system, other_parameters=frozenset()):
-        """Yields the supported lambda parameters in the system.
-
-        Yields
-        ------
-        A tuple force, parameter_name, parameter_index for each supported
-        lambda parameter.
-
-        """
-        supported_parameters = cls._get_supported_parameters()
-        searched_parameters = supported_parameters.union(other_parameters)
-
-        # Retrieve all the forces with global supported parameters.
-        for force_index in range(system.getNumForces()):
-            force = system.getForce(force_index)
-            try:
-                n_global_parameters = force.getNumGlobalParameters()
-            except AttributeError:
-                continue
-            for parameter_id in range(n_global_parameters):
-                parameter_name = force.getGlobalParameterName(parameter_id)
-                if parameter_name in searched_parameters:
-                    yield force, parameter_name, parameter_id
-
-    def _set_alchemical_parameters(self, new_value, exclusions):
-        """Set all defined parameters to the given value.
-
-        The undefined parameters (i.e. those being set to None) remain
-        undefined.
-
-        Parameters
-        ----------
-        new_value : float
-            The new value for all defined parameters.
-        exclusions : set
-            The lambda parameters not to set.
-
-        """
-        for parameter_name in self._parameters:
-            if parameter_name not in exclusions and self._parameters[parameter_name] is not None:
-                setattr(self, parameter_name, new_value)
-
-    @classmethod
-    def _find_exact_pme_forces(cls, system, original_charges_only=False):
-        """Return the NonbondedForce and the CustomNonbondedForce with the original charges."""
-        original_charges_force = None
-        nonbonded_force = None
-        n_found = 0
-        for force_idx, force in enumerate(system.getForces()):
-            if (isinstance(force, openmm.CustomNonbondedForce) and
-                        force.getEnergyFunction() == '0.0;' and
-                        force.getGlobalParameterName(0) == 'lambda_electrostatics'):
-                original_charges_force = force
-                if original_charges_only:
-                    break
-                n_found += 1
-            elif isinstance(force, openmm.NonbondedForce):
-                nonbonded_force = force
-                n_found += 1
-            if n_found == 2:
-                break
-        if original_charges_only:
-            return original_charges_force
-        return original_charges_force, nonbonded_force
-
-    def _set_exact_pme_charges(self, original_charges_force, nonbonded_force):
-        """Set the NonbondedForce charges from the original value and lambda_electrostatics."""
-        # If we don't treat PME exactly, we don't need to set the charges.
-        if original_charges_force is None:
-            return
-
-        # Set alchemical atoms charges.
-        lambda_electrostatics = self.lambda_electrostatics
-        _, alchemical_atoms = original_charges_force.getInteractionGroupParameters(0)
-        for atom_idx in alchemical_atoms:
-            charge, sigma, epsilon = nonbonded_force.getParticleParameters(atom_idx)
-            original_charge = original_charges_force.getParticleParameters(atom_idx)[0]
-            charge = lambda_electrostatics * original_charge
-            nonbonded_force.setParticleParameters(atom_idx, charge, sigma, epsilon)
+        # The function is redefined here only to provide more specific documentation for this method.
+        super().apply_to_context(context)
 
 
 # =============================================================================
