@@ -3249,7 +3249,7 @@ class GlobalParameterState(object):
                 suffixed_parameter_name = self.parameter_name + '_' + instance._parameters_name_suffix
                 err_msg = 'This state does not control {} but {}.'.format(
                     self.parameter_name, suffixed_parameter_name)
-                raise instance._GLOBAL_PARAMETER_ERROR(err_msg)
+                raise AttributeError(err_msg)
 
     # -------------------------------------------------------------------------
     # Internal usage: IComposableState interface
