@@ -305,6 +305,46 @@ class AlchemicalState(states.GlobalParameterState):
         # The function is redefined here only to provide more specific documentation for this method.
         super().set_function_variable(variable_name, new_value)
 
+    def get_alchemical_variable(self, variable_name):
+        """Return the value of the alchemical parameter.
+
+        .. warning:
+            This is deprecated. Use ``get_function_variable`` instead.
+
+        Parameters
+        ----------
+        variable_name : str
+            The name of the alchemical variable.
+
+        Returns
+        -------
+        variable_value : float
+            The value of the alchemical variable.
+        """
+        import warnings
+        warnings.warn('AlchemicalState.get_alchemical_variable is deprecated. '
+                      'Use AlchemicalState.get_function_variable instead.')
+        return super().get_function_variable(variable_name)
+
+    def set_alchemical_variable(self, variable_name, new_value):
+        """Set the value of the alchemical variable.
+
+        .. warning:
+            This is deprecated. Use ``set_function_variable`` instead.
+
+        Parameters
+        ----------
+        variable_name : str
+            The name of the alchemical variable.
+        new_value : float
+            The new value for the variable.
+
+        """
+        import warnings
+        warnings.warn('AlchemicalState.get_alchemical_variable is deprecated. '
+                      'Use AlchemicalState.get_function_variable instead.')
+        super().set_function_variable(variable_name, new_value)
+
     # -------------------------------------------------------------------------
     # IComposableState interface
     # -------------------------------------------------------------------------
