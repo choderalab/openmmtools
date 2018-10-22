@@ -205,7 +205,7 @@ class AlchemicalState(states.GlobalParameterState):
     lambda_torsions = states.GlobalParameterState.GlobalParameter('lambda_torsions', standard_value=1.0)
 
     @classmethod
-    def from_system(cls, system, **kwargs):
+    def from_system(cls, system, *args, **kwargs):
         """Constructor reading the state from an alchemical system.
 
         Parameters
@@ -230,7 +230,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         """
         # The function is redefined here only to provide more specific documentation for this method.
-        super().from_system(system, **kwargs)
+        return super().from_system(system, *args, **kwargs)
 
     def set_alchemical_parameters(self, new_value):
         """Set all defined lambda parameters to the given value.
@@ -271,7 +271,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         """
         # The function is redefined here only to provide more specific documentation for this method.
-        super().get_function_variable(variable_name)
+        return super().get_function_variable(variable_name)
 
     def set_function_variable(self, variable_name, new_value):
         """Set the value of the function variable.
