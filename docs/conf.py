@@ -99,7 +99,7 @@ todo_include_todos = True
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    'logo' : 'images/logo.jpg',
+    'logo' : 'images/logo.png',
     "logo_name": 'true',
     'page_width': 'auto',
     'github_button': 'true',
