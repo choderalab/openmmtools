@@ -813,7 +813,8 @@ def check_split_force_groups(system):
     lambdas_by_force_group = {}
 
     # Separate forces groups by lambda parameters that AlchemicalState supports.
-    for force, lambda_name, _ in AlchemicalState._get_system_lambda_parameters(system):
+    for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
+            system, parameters_name_suffix=None):
         force_group = force.getForceGroup()
         try:
             force_groups_by_lambda[lambda_name].add(force_group)
@@ -829,7 +830,7 @@ def check_split_force_groups(system):
 
     # There are as many alchemical force groups as not-None lambda variables.
     alchemical_state = AlchemicalState.from_system(system)
-    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_supported_parameters()
+    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters()
                      if getattr(alchemical_state, lambda_name) is not None}
     assert valid_lambdas == set(force_groups_by_lambda.keys())
 
@@ -1592,16 +1593,6 @@ class TestAlchemicalState(object):
                                       'lambda_angles', 'lambda_torsions'})
         ]
 
-    def _check_exact_pme_charges(self, alchemical_system, lambda_electrostatics):
-        """Check that the NonbondedForce charges are correct."""
-        original_charges_force, nonbonded_force = AlchemicalState._find_exact_pme_forces(alchemical_system)
-        _, alchemical_atoms = original_charges_force.getInteractionGroupParameters(0)
-        for atom_idx in alchemical_atoms:
-            charge, _, _= nonbonded_force.getParticleParameters(atom_idx)
-            original_charge = original_charges_force.getParticleParameters(atom_idx)[0] * unit.elementary_charge
-            err_msg = '{}, {}'.format(charge, original_charge * lambda_electrostatics)
-            assert charge == original_charge * lambda_electrostatics, err_msg
-
     @staticmethod
     def test_constructor():
         """Test AlchemicalState constructor behave as expected."""
@@ -1615,7 +1606,7 @@ class TestAlchemicalState(object):
                       {'lambda_electrostatics': 1.0}]
         for test_kwargs in test_cases:
             alchemical_state = AlchemicalState(**test_kwargs)
-            for parameter in AlchemicalState._get_supported_parameters():
+            for parameter in AlchemicalState._get_controlled_parameters():
                 if parameter in test_kwargs:
                     assert getattr(alchemical_state, parameter) == test_kwargs[parameter]
                 else:
@@ -1631,7 +1622,7 @@ class TestAlchemicalState(object):
         # and all the others must be None.
         for state, defined_lambdas in self.test_cases:
             alchemical_state = AlchemicalState.from_system(state.system)
-            for parameter in AlchemicalState._get_supported_parameters():
+            for parameter in AlchemicalState._get_controlled_parameters():
                 property_value = getattr(alchemical_state, parameter)
                 if parameter in defined_lambdas:
                     assert property_value == 1.0, '{}: {}'.format(parameter, property_value)
@@ -1689,21 +1680,6 @@ class TestAlchemicalState(object):
             with nose.tools.assert_raises(AlchemicalStateError):
                 alchemical_state.apply_to_system(state.system)
 
-    def test_apply_to_system_exact_pme(self):
-        """Test that NonbondedForce charges are set correctly by apply_to_system."""
-        # Do not modify cached test cases.
-        test_system = copy.deepcopy(self.alanine_state_exact_pme).system
-        alchemical_state = AlchemicalState.from_system(test_system)
-
-        # The default lambda electrostatics should be 1.0
-        self._check_exact_pme_charges(test_system, lambda_electrostatics=1.0)
-
-        # Change the value.
-        for lambda_electrostatics in [0.5, 0.0]:
-            alchemical_state.lambda_electrostatics = lambda_electrostatics
-            alchemical_state.apply_to_system(test_system)
-            self._check_exact_pme_charges(test_system, lambda_electrostatics)
-
     def test_check_system_consistency(self):
         """Test method AlchemicalState.check_system_consistency()."""
         # A system is consistent with itself.
@@ -1741,53 +1717,21 @@ class TestAlchemicalState(object):
             alchemical_state.apply_to_context(context)
 
         # Correctly sets Context's parameters.
-        alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
-        context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
-        alchemical_state.set_alchemical_parameters(0.5)
-        alchemical_state.apply_to_context(context)
-        for parameter_name, parameter_value in context.getParameters().items():
-            if parameter_name in alchemical_state._parameters:
-                assert parameter_value == 0.5
-        del context
-
-        def compute_electrostatic_energy(lambda_electrostatics, context):
-            alchemical_state.lambda_electrostatics = lambda_electrostatics
+        for state in [self.full_alanine_state, self.alanine_state_exact_pme]:
+            alchemical_state = AlchemicalState.from_system(state.system)
+            context = state.create_context(copy.deepcopy(integrator))
+            alchemical_state.set_alchemical_parameters(0.5)
             alchemical_state.apply_to_context(context)
-            return context.getState(getEnergy=True).getPotentialEnergy()
-
-        # For exact treatment of PME electrostatics, check that
-        # the charges of the Context's System are correctly set.
-        alchemical_state = AlchemicalState.from_system(self.alanine_state_exact_pme.system)
-        context = self.alanine_state_exact_pme.create_context(copy.deepcopy(integrator))
-        alchemical_state.lambda_electrostatics = 0.5
-        alchemical_state.apply_to_context(context)
-        self._check_exact_pme_charges(context.getSystem(), lambda_electrostatics=0.5)
-
-        # The only way to check that the charges of the NonbondedForce
-        # have been updated is to compare the energies.
-        positions = self.alanine_test_system.positions
-        reference_system = copy.deepcopy(self.alanine_test_system.system)
-        context.setPositions(positions)
-        alchemical_energy_1 = compute_electrostatic_energy(1.0, context)
-        alchemical_energy_0 = compute_electrostatic_energy(0.0, context)
-        del context
-
-        reference_energy_1 = compute_energy(reference_system, positions)
-        turn_off_nonbonded(reference_system, electrostatics=True,
-                           only_atoms=self.alanine_alchemical_atoms)
-        turn_off_nonbonded(reference_system, electrostatics=True, exceptions=True,
-                           only_atoms=self.alanine_alchemical_atoms)
-        reference_energy_0 = compute_energy(reference_system, positions)
-        assert_almost_equal(reference_energy_1 - reference_energy_0,
-                            alchemical_energy_1 - alchemical_energy_0,
-                            'Exact PME treatment electrostatics')
+            for parameter_name, parameter_value in context.getParameters().items():
+                if parameter_name in alchemical_state._parameters:
+                    assert parameter_value == 0.5
+            del context
 
     def test_standardize_system(self):
         """Test method AlchemicalState.standardize_system."""
-        test_cases = [(self.full_alanine_state, False),
-                      (self.alanine_state_exact_pme, True)]
+        test_cases = [self.full_alanine_state, self.alanine_state_exact_pme]
 
-        for state, check_charges in test_cases:
+        for state in test_cases:
             # First create a non-standard system.
             system = copy.deepcopy(state.system)
             alchemical_state = AlchemicalState.from_system(system)
@@ -1796,8 +1740,6 @@ class TestAlchemicalState(object):
 
             # Test pre-condition: The state of the System has been changed.
             assert AlchemicalState.from_system(system).lambda_electrostatics == 0.5
-            if check_charges:
-                self._check_exact_pme_charges(system, lambda_electrostatics=0.5)
 
             # Check that _standardize_system() sets all parameters back to 1.0.
             alchemical_state._standardize_system(system)
@@ -1818,7 +1760,8 @@ class TestAlchemicalState(object):
 
             # Each lambda should be separated in its own force group.
             expected_force_groups = {}
-            for force, lambda_name, _ in AlchemicalState._get_system_lambda_parameters(system):
+            for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
+                    system, parameters_name_suffix=None):
                 expected_force_groups[lambda_name] = force.getForceGroup()
 
             integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
@@ -1829,7 +1772,7 @@ class TestAlchemicalState(object):
 
             # Change the lambdas one by one and check that the method
             # recognize that the force group energy must be updated.
-            for lambda_name in AlchemicalState._get_supported_parameters():
+            for lambda_name in AlchemicalState._get_controlled_parameters():
                 # Check that the system defines the global variable.
                 if getattr(alchemical_state, lambda_name) is None:
                     continue
@@ -1847,14 +1790,14 @@ class TestAlchemicalState(object):
         alchemical_state = AlchemicalState.from_system(system)
 
         # Add two alchemical variables to the state.
-        alchemical_state.set_alchemical_variable('lambda', 1.0)
-        alchemical_state.set_alchemical_variable('lambda2', 0.5)
-        assert alchemical_state.get_alchemical_variable('lambda') == 1.0
-        assert alchemical_state.get_alchemical_variable('lambda2') == 0.5
+        alchemical_state.set_function_variable('lambda', 1.0)
+        alchemical_state.set_function_variable('lambda2', 0.5)
+        assert alchemical_state.get_function_variable('lambda') == 1.0
+        assert alchemical_state.get_function_variable('lambda2') == 0.5
 
         # Cannot call an alchemical variable as a supported parameter.
         with nose.tools.assert_raises(AlchemicalStateError):
-            alchemical_state.set_alchemical_variable('lambda_sterics', 0.5)
+            alchemical_state.set_function_variable('lambda_sterics', 0.5)
 
         # Assign string alchemical functions to parameters.
         alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
@@ -1863,7 +1806,7 @@ class TestAlchemicalState(object):
         assert alchemical_state.lambda_electrostatics == 0.75
 
         # Setting alchemical variables updates alchemical parameter as well.
-        alchemical_state.set_alchemical_variable('lambda2', 0)
+        alchemical_state.set_function_variable('lambda2', 0)
         assert alchemical_state.lambda_electrostatics == 0.5
 
     # ---------------------------------------------------
@@ -1915,7 +1858,7 @@ class TestAlchemicalState(object):
                 assert getattr(system_alchemical_state, parameter_name) == 1.0
 
             # Same for alchemical variables setters.
-            compound_state.set_alchemical_variable('lambda', 0.25)
+            compound_state.set_function_variable('lambda', 0.25)
             for parameter_name in defined_lambdas:
                 setattr(compound_state, parameter_name, AlchemicalFunction('lambda'))
             system_alchemical_state = AlchemicalState.from_system(compound_state.system)
@@ -1995,63 +1938,6 @@ class TestAlchemicalState(object):
         assert state1.is_context_compatible(context_state2) is is_compatible
         del context_state2
 
-    def test_incompatibility_nonbonded_force(self):
-        """Test the optional electrostatics incompatibility with exact PME."""
-        alanine_state = copy.deepcopy(self.alanine_state)
-        alanine_state_exact_pme = copy.deepcopy(self.alanine_state_exact_pme)
-        alchemical_state = AlchemicalState.from_system(alanine_state_exact_pme.system)
-        alchemical_state.update_alchemical_charges = False
-        compound_state = states.CompoundThermodynamicState(copy.deepcopy(alanine_state_exact_pme),
-                                                           [alchemical_state])
-        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        context = compound_state.create_context(copy.deepcopy(integrator))
-
-        # Test incompatibility.
-        # ----------------------
-
-        # Check that changes in lambda_electrostatics are not compatible.
-        compound_state_incompatible1 = copy.deepcopy(compound_state)
-        compound_state_incompatible1.lambda_electrostatics = 0.0
-
-        # States with non-exact PME treatment are incompatible
-        # even with same lambda_electrostatics.
-        compound_state_incompatible2 = states.CompoundThermodynamicState(
-            thermodynamic_state=copy.deepcopy(alanine_state),
-            composable_states=[AlchemicalState.from_system(alanine_state.system)]
-        )
-        # States with exact PME treatment but with
-        # update_alchemical_charges=True are incompatible.
-        compound_state_incompatible3 = states.CompoundThermodynamicState(
-            thermodynamic_state=copy.deepcopy(alanine_state_exact_pme),
-            composable_states=[AlchemicalState.from_system(alanine_state_exact_pme.system)]
-        )
-        # Switching update_alchemical_charges in the
-        # compound state works correctly.
-        compound_state_incompatible4 = copy.deepcopy(compound_state)
-        compound_state_incompatible4.update_alchemical_charges = True
-
-        compound_state_incompatible5 = copy.deepcopy(compound_state)
-        compound_state_incompatible5.update_alchemical_charges = True
-        compound_state_incompatible5.lambda_electrostatics = 0.5
-        compound_state_incompatible5.update_alchemical_charges = False
-
-        for incompatible_state in [compound_state_incompatible1, compound_state_incompatible2,
-                                   compound_state_incompatible3, compound_state_incompatible4,
-                                   compound_state_incompatible5]:
-            self._check_compatibility(compound_state, incompatible_state, context, is_compatible=False)
-
-        # Test compatibility.
-        # ----------------------
-
-        # Check that states with lambda_electrostatics are
-        # compatible even if other lambda variables change.
-        alchemical_state_compatible = copy.deepcopy(alchemical_state)
-        alchemical_state_compatible.lambda_sterics = 0.0
-        compound_state_compatible = states.CompoundThermodynamicState(copy.deepcopy(alanine_state_exact_pme),
-                                                                      [alchemical_state_compatible])
-        self._check_compatibility(compound_state, compound_state_compatible, context, is_compatible=True)
-
-
     def test_method_reduced_potential_compound_state(self):
         """Test CompoundThermodynamicState.reduced_potential_at_states() method.
 
@@ -2107,9 +1993,8 @@ class TestAlchemicalState(object):
     def test_serialization(self):
         """Test AlchemicalState serialization alone and in a compound state."""
         alchemical_state = AlchemicalState(lambda_electrostatics=0.5, lambda_angles=None)
-        alchemical_state.set_alchemical_variable('lambda', 0.0)
+        alchemical_state.set_function_variable('lambda', 0.0)
         alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
-        alchemical_state.update_alchemical_charges = not AlchemicalState._UPDATE_ALCHEMICAL_CHARGES_DEFAULT
 
         # Test serialization/deserialization of AlchemicalState.
         serialization = utils.serialize(alchemical_state)
