@@ -198,11 +198,25 @@ class AlchemicalState(states.GlobalParameterState):
     # Lambda properties
     # -------------------------------------------------------------------------
 
-    lambda_sterics = states.GlobalParameterState.GlobalParameter('lambda_sterics', standard_value=1.0)
-    lambda_electrostatics = states.GlobalParameterState.GlobalParameter('lambda_electrostatics', standard_value=1.0)
-    lambda_bonds = states.GlobalParameterState.GlobalParameter('lambda_bonds', standard_value=1.0)
-    lambda_angles = states.GlobalParameterState.GlobalParameter('lambda_angles', standard_value=1.0)
-    lambda_torsions = states.GlobalParameterState.GlobalParameter('lambda_torsions', standard_value=1.0)
+    class _LambdaParameter(states.GlobalParameterState.GlobalParameter):
+        """A global parameter in the interval [0, 1] with standard value 1."""
+
+        def __init__(self, parameter_name):
+            super().__init__(parameter_name, standard_value=1.0, validator=self.lambda_validator)
+
+        @staticmethod
+        def lambda_validator(self, instance, parameter_value):
+            if parameter_value is None:
+                return parameter_value
+            if not (0.0 <= parameter_value <= 1.0):
+                raise ValueError('{} must be between 0 and 1.'.format(self.parameter_name))
+            return float(parameter_value)
+
+    lambda_sterics = _LambdaParameter('lambda_sterics')
+    lambda_electrostatics = _LambdaParameter('lambda_electrostatics')
+    lambda_bonds = _LambdaParameter('lambda_bonds')
+    lambda_angles = _LambdaParameter('lambda_angles')
+    lambda_torsions = _LambdaParameter('lambda_torsions')
 
     @classmethod
     def from_system(cls, system, *args, **kwargs):
