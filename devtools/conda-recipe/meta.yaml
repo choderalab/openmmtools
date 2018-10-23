@@ -13,14 +13,14 @@ requirements:
   build:
     - python
     - setuptools
-    - openmm >=7.4
+    - openmm ==7.4
 
   run:
     - python
     - numpy
     - scipy
     - six
-    - openmm >=7.4
+    - openmm ==7.4
     - parmed
     - mdtraj
     - netcdf4
