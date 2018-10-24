@@ -3002,7 +3002,7 @@ class GlobalParameterState(object):
 
     >>> compound_state.set_function_variable('lambda', 1.0)
     >>> compound_state.lambda_bonds = GlobalParameterFunction('2*(lambda - 0.5) * step(lambda - 0.5)')
-    >>> for l in [0.0, 0.5, 0.75, 1.0]:
+    >>> for l in [0.1, 0.5, 0.75, 1.0]:
     ...     compound_state.set_function_variable('lambda', l)
     ...     print(compound_state.lambda_bonds)
     0.0
