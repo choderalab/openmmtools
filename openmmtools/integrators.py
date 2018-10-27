@@ -1177,18 +1177,12 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.setGlobalVariableByName('naccept', 0)
             self.setGlobalVariableByName('nreject', 0)
 
-    def reset_steps(self):
-        """Reset step counter.
-        """
-        self.setGlobalVariableByName('step', 0)
-
     def reset(self):
         """Reset all statistics (heat, shadow work, acceptance rates, step).
         """
         self.reset_heat()
         self.reset_shadow_work()
         self.reset_ghmc_statistics()
-        self.reset_steps()
 
     def _get_energy_with_units(self, variable_name, dimensionless=False):
         """Retrive an energy/work quantity and return as unit-bearing or dimensionless quantity.
@@ -1744,6 +1738,19 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         dispatch_table['H'] = (self._add_alchemical_perturbation_step, False)
         return dispatch_table
 
+    def reset(self):
+        """Reset all statistics, alchemical parameters, and work.
+        """
+        # Reset statistics
+        super(AlchemicalNonequilibriumLangevinIntegrator, self).reset()
+        # Trigger update of all context parameters only by running one integrator cycle with step = -1
+        self.setGlobalVariableByName('step', -1)
+        self.step(1)
+
+    def _register_step_types(self):
+        super(AlchemicalNonequilibriumLangevinIntegrator, self)._register_step_types()
+        self._register_step_type('H', self._add_alchemical_perturbation_step)
+
     def _add_global_variables(self):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
         total steps in the protocol.
@@ -1801,7 +1808,6 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         """
         Override the base class to insert reset steps around the integrator.
         """
-
         # First step: Constrain positions and velocities and reset work accumulators and alchemical integrators
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
@@ -1819,10 +1825,18 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
             self.endBlock()
         else:
             #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
+            self.beginIfBlock("step >= 0")
             self.beginIfBlock("step < nsteps")
             super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
+            self.endBlock()
+
+        # Reset step
+        self.beginIfBlock('step = -1')
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step() # sets step to 0
+        self.endBlock()
 
     def _add_alchemical_reset_step(self):
         """
@@ -1855,6 +1869,8 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
         super(ExternalPerturbationLangevinIntegrator, self).__init__(*args, **kwargs)
 
     def reset(self):
+        """Reset all statistics.
+        """
         super(ExternalPerturbationLangevinIntegrator, self).reset()
         self.setGlobalVariableByName('step', 0)
 

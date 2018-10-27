@@ -656,7 +656,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
 
     #max deviation from the calculated free energy
     NSIGMA_MAX = 6
-    n_iterations = 100  # number of forward and reverse protocols
+    n_iterations = 200  # number of forward and reverse protocols
 
     # These are the alchemical functions that will be used to control the system
     temperature = 298.0 * unit.kelvin
@@ -672,8 +672,10 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     parameters = dict()
     parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, 2 * sigma)
     parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 1 * kT)
-    forward_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
-    reverse_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
+    alchemical_functions = {
+        'forward' : { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
+        'reverse' : { name : '(1-lambda)*%f + lambda*%f' % (value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
+        }
 
     # Create harmonic oscillator testsystem
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
@@ -685,83 +687,68 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     thinning = 5 * 20 # 5 periods
 
     # Collect forward and reverse work values
-    w_f = np.zeros([n_iterations], np.float64)
-    w_r = np.zeros([n_iterations], np.float64)
+    directions = ['forward', 'reverse']
+    work = { direction : np.zeros([n_iterations], np.float64) for direction in directions }
     platform = openmm.Platform.getPlatformByName("Reference")
-    for direction in ['forward', 'reverse']:
+    for direction in directions:
         positions = testsystem.positions
-        for iteration in range(n_iterations):
-            # Generate equilibrium sample
-            equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
-            equilibrium_context = openmm.Context(system, equilibrium_integrator, platform)
-            for (name, value) in parameters.items():
-                if direction == 'forward':
-                    equilibrium_context.setParameter(name, value[0].value_in_unit_system(unit.md_unit_system))
-                else:
-                    equilibrium_context.setParameter(name, value[1].value_in_unit_system(unit.md_unit_system))
-            equilibrium_context.setPositions(positions)
-            equilibrium_integrator.step(thinning)
-            positions = equilibrium_context.getState(getPositions=True).getPositions(asNumpy=True)
-            del equilibrium_context, equilibrium_integrator
-            # Generate nonequilibrium work sample
-            if direction == 'forward':
-                alchemical_functions = forward_functions
-            else:
-                alchemical_functions = reverse_functions
-            nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
-                                                                                   alchemical_functions=alchemical_functions, splitting=splitting, nsteps_neq=nsteps,
-                                                                                   measure_shadow_work=True)
-            nonequilibrium_context = openmm.Context(system, nonequilibrium_integrator, platform)
-            nonequilibrium_context.setPositions(positions)
-            if nsteps == 0:
-                nonequilibrium_integrator.step(1) # need to execute at least one step
-            else:
-                nonequilibrium_integrator.step(nsteps)
-            if direction == 'forward':
-                w_f[iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
-            else:
-                w_r[iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
-            del nonequilibrium_context, nonequilibrium_integrator
 
-    dF, ddF = pymbar.BAR(w_f, w_r)
+        # Create equilibrium and nonequilibrium integrators
+        equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
+        nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
+                                                                       alchemical_functions=alchemical_functions[direction], splitting=splitting, nsteps_neq=nsteps,
+                                                                       measure_shadow_work=True)
+
+        # Create compound integrator
+        compound_integrator = openmm.CompoundIntegrator()
+        compound_integrator.addIntegrator(equilibrium_integrator)
+        compound_integrator.addIntegrator(nonequilibrium_integrator)
+
+        # Create Context
+        context = openmm.Context(system, compound_integrator, platform)
+        context.setPositions(positions)
+
+        # Collect work samples
+        for iteration in range(n_iterations):
+            #
+            # Generate equilibrium sample
+            #
+
+            compound_integrator.setCurrentIntegrator(0)
+            equilibrium_integrator.reset()
+            compound_integrator.step(thinning)
+
+            #
+            # Generate nonequilibrium work sample
+            #
+
+            compound_integrator.setCurrentIntegrator(1)
+            nonequilibrium_integrator.reset()
+
+            # Check initial conditions after reset
+            current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
+            assert current_lambda == 0.0, 'initial lambda should be 0.0 (was %f)' % current_lambda
+            current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
+            assert current_step == 0.0, 'initial step should be 0 (was %f)' % current_step
+
+            compound_integrator.step(max(1, nsteps)) # need to execute at least one step
+            work[direction][iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
+
+            # Check final conditions before reset
+            current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
+            assert current_lambda == 1.0, 'final lambda should be 1.0 (was %f)' % current_lambda
+            current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
+            assert int(current_step) == max(1,nsteps), 'final step should be %d (was %f)' % (max(1,nsteps), current_step)
+            nonequilibrium_integrator.reset()
+
+        # Clean up
+        del context
+
+    dF, ddF = pymbar.BAR(work['forward'], work['reverse'])
     nsigma = np.abs(dF - dF_analytical) / ddF
     print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
-
-def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
-    """Perform a nonequilibrium switching protocol
-
-    Parameters
-    ----------
-    init_x : simtk.openmm.Quantity of size [natoms,3] with units compatible with angstroms
-        Initial positions
-    alchemical_integrator : AlchemicalNonequilibriumLangevinIntegrator
-        Integrator to use for switching
-    alchemical_ctx : simtk.openmm.Context
-        Context to use for alchemical switching.
-    temperature : simtk.unit.Quantity, optional, default=298*kelvin
-        Temperature to initialize simulation with
-
-    Returns
-    -------
-    protocol_work : float
-        Work performed by protocol
-    """
-    # Get number of NCMC steps
-    nsteps = alchemical_integrator.getGlobalVariableByName("nsteps")
-    # Set positions and velocities
-    alchemical_ctx.setPositions(init_x)
-    alchemical_ctx.setVelocitiesToTemperature(temperature)
-    # Reset the integrator
-    alchemical_integrator.reset_integrator()
-    if (nsteps == 0):
-        # We still need to take one step if nsteps == 0
-        alchemical_integrator.step(1)
-    else:
-        alchemical_integrator.step(nsteps)
-    # Get the protocol work in dimensionless units (kT)
-    return alchemical_integrator.getGlobalVariableByName("protocol_work") # in kT
 
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
