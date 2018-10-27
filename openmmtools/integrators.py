@@ -1868,7 +1868,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
         self.addComputeGlobal("perturbed_pe", "energy")
         # Assumes no perturbation is done before doing the initial MD step.
         self.beginIfBlock("step < 1")
-        self.addComputeGlobal("step", "1")
+        self.addComputeGlobal("step", "step + 1")
         self.addComputeGlobal("unperturbed_pe", "energy")
         self.addComputeGlobal("protocol_work", "0.0")
         self.endBlock()
