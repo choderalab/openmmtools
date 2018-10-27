@@ -445,6 +445,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             integrator.step(5)
             # Reseting the protocol work inside the integrator
             integrator.reset_protocol_work()
+            integrator.reset()
             external_protocol_work, integrator_protocol_work = self.run_ncmc(context, integrator, temperature, nsteps, parameter_name, parameter_initial, parameter_final)
             assert abs(external_protocol_work - integrator_protocol_work) < 1.E-5
 
