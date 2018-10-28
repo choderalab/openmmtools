@@ -1856,19 +1856,19 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
 
     def reset(self):
         super(ExternalPerturbationLangevinIntegrator, self).reset()
-        self.setGlobalVariableByName('first_step', 0)
+        self.setGlobalVariableByName('step', 0)
 
     def _add_global_variables(self):
         super(ExternalPerturbationLangevinIntegrator, self)._add_global_variables()
         self.addGlobalVariable("perturbed_pe", 0)
         self.addGlobalVariable("unperturbed_pe", 0)
-        self.addGlobalVariable("first_step", 0)
+        self.addGlobalVariable("step", 0)
 
     def _add_integrator_steps(self):
         self.addComputeGlobal("perturbed_pe", "energy")
         # Assumes no perturbation is done before doing the initial MD step.
-        self.beginIfBlock("first_step < 1")
-        self.addComputeGlobal("first_step", "1")
+        self.beginIfBlock("step < 1")
+        self.addComputeGlobal("step", "step + 1")
         self.addComputeGlobal("unperturbed_pe", "energy")
         self.addComputeGlobal("protocol_work", "0.0")
         self.endBlock()
