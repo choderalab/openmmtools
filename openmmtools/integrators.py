@@ -585,6 +585,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Create a velocity Verlet integrator with Nosé-Hoover chain thermostat.
 
+    >>> system = testsystems.WaterBox()
     >>> timestep = 1.0 * unit.femtoseconds
     >>> temperature = 300 * unit.kelvin
     >>> chain_length = 10
@@ -592,7 +593,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
     >>> num_mts = 5
     >>> num_yoshidasuzuki = 5
 
-    >>> integrator = NoseHooverChainVelocityVerletIntegrator(temperature, collision_frequency, timestep, chain_length, num_mts, num_yoshidasuzuki)
+    >>> integrator = NoseHooverChainVelocityVerletIntegrator(system, temperature, collision_frequency, timestep, chain_length, num_mts, num_yoshidasuzuki)
 
     Notes
     ------
@@ -601,7 +602,8 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Useful tests of the NHC integrator can be performed by monitoring the instantaneous temperature during the simulation and confirming that conserved energy is constant to about 1 part in 10^5.  The instantanous temperature and particle kinetic and potential energies can already be extracted from a snapshot, for example see the OpenMM StateDataReporter implementation for more details.  This integrator also provides heat bath energies (kJ/mol) through the following mechanism:
 
-    >>> integrator = NoseHooverChainVelocityVerletIntegrator()
+    >>> system = testsystems.WaterBox()
+    >>> integrator = NoseHooverChainVelocityVerletIntegrator(system)
     >>> heat_bath_kinetic_energy = integrator.getGlobalVariableByName('bathKE')
     >>> heat_bath_potential_energy = integrator.getGlobalVariableByName('bathPE')
 
@@ -616,13 +618,16 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         5 : [ 0.2967324292201065,  0.2967324292201065, -0.1869297168804260, 0.2967324292201065, 0.2967324292201065 ]
     }
 
-    def __init__(self, temperature=298*unit.kelvin, collision_frequency=50/unit.picoseconds,
+    def __init__(self, system, temperature=298*unit.kelvin, collision_frequency=50/unit.picoseconds,
                  timestep=0.001*unit.picoseconds, chain_length=5, num_mts=5, num_yoshidasuzuki=5):
         """ Construct a velocity Verlet integrator with Nosé-Hoover chain thermostat implemented with massive collisions.
 
         Parameters:
         -----------
 
+        system: openmm.app.System instance
+            Only required to extract the system's number of degrees of freedom.
+                 
         temperature: unit.Quantity compatible with kelvin, default=298*unit.kelvin
             The target temperature for the thermostat.
 
@@ -674,10 +679,20 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         frequency = collision_frequency.value_in_unit(unit.picoseconds**-1)
         Q = kT/frequency**2
 
+        # Compute the number of degrees of freedom.
+        # same as in openmm.app.StateDataReporter._initializeConstants
+        dof = 0
+        for i in range(system.getNumParticles()):
+            if system.getParticleMass(i) > 0*unit.dalton:
+                dof += 3
+        dof -= system.getNumConstraints()
+        if any(type(system.getForce(i)) == mm.CMMotionRemover for i in range(system.getNumForces())):
+            dof -= 3
+
         #
         # Define global variables
         #
-        self.addGlobalVariable("ndf", 0)      # number of degrees of freedom
+        self.addGlobalVariable("ndf", dof)      # number of degrees of freedom
         self.addGlobalVariable("bathKE", 0.0) # Thermostat bath kinetic energy
         self.addGlobalVariable("bathPE", 0.0) # Thermostat bath potential energy
         self.addGlobalVariable("KE2", 0.0)    # Twice the kinetic energy
@@ -698,9 +713,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
             self.addGlobalVariable("Q{}".format(i), 0)             # Thermostat "masses" in ps^2 kJ/mol
         # The masses need the number of degrees of freedom, which is approximated here.  Need a
         # better solution eventually, to properly account for constraints, translations, etc.
-        self.addPerDofVariable("ones", 1.0)
         self.addPerDofVariable("x1", 0);
-        self.addComputeSum("ndf", "ones")
         if self.M:
             self.addComputeGlobal("Q0", "ndf*Q")
             for i in range(1, self.M):
@@ -720,6 +733,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         if self.M: self.propagateNHC()
         # Compute heat bath energies
         self.computeEnergies()
+
 
     def propagateNHC(self):
         """ Propagate the Nosé-Hoover chain """

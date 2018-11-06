@@ -187,34 +187,45 @@ def test_nose_hoover_integrator():
     """
     Test Nose-Hoover thermostat by ensuring that a short run
     conserves the system and bath energy to a reasonable tolerance.
-    The temperature could, in principle, be tested also but that would
-    require longer runs to guarantee stabilization.
-
+    Also test that the target temperature is rougly matched (+- 10 K).
     """
     temperature = 298*unit.kelvin
     testsystem = testsystems.WaterBox()
-    integrator = NoseHooverChainVelocityVerletIntegrator(temperature)
+    num_dof = 3*testsystem.system.getNumParticles() - testsystem.system.getNumConstraints()
+    integrator = NoseHooverChainVelocityVerletIntegrator(testsystem.system, temperature)
     # Create Context and initialize positions.
     context = openmm.Context(testsystem.system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
-    integrator.step(150) # Short equilibration
+    integrator.step(200) # Short equilibration
     energies = []
+    temperatures = []
     for n in range(100):
         integrator.step(1)
         state = context.getState(getEnergy=True)
-        KE = state.getKineticEnergy().value_in_unit(unit.kilojoules_per_mole)
+        # temperature
+        kinE = state.getKineticEnergy()
+        temp = (2.0 * kinE / (num_dof * unit.MOLAR_GAS_CONSTANT_R)).value_in_unit(unit.kelvin)
+        temperatures.append(temp)
+        # total energy
+        KE = kinE.value_in_unit(unit.kilojoules_per_mole)
         PE = state.getPotentialEnergy().value_in_unit(unit.kilojoules_per_mole)
         bathKE = integrator.getGlobalVariableByName('bathKE')
         bathPE = integrator.getGlobalVariableByName('bathPE')
         conserved = KE + PE + bathKE + bathPE
         energies.append(conserved)
+        
     # Compute maximum deviation from the mean for conserved energies
     meanenergies = np.mean(energies)
     maxdeviation = np.amax(np.abs(energies - meanenergies)/meanenergies)
     assert maxdeviation < 1e-3
-
-
+    
+    # Coarse check for target temperature
+    mean_temperature = np.mean(temperatures)
+    print(mean_temperature)
+    assert abs(mean_temperature - temperature.value_in_unit(unit.kelvin)) < 10.0
+    
+    
 def test_pretty_formatting():
     """
     Test pretty-printing and pretty-formatting of integrators.
