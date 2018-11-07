@@ -585,6 +585,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Create a velocity Verlet integrator with Nosé-Hoover chain thermostat.
 
+    >>> from openmmtools import testsystems
     >>> waterbox = testsystems.WaterBox()
     >>> system = waterbox.system
     >>> timestep = 1.0 * unit.femtoseconds
