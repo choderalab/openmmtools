@@ -1519,6 +1519,14 @@ class TestGlobalParameterState(object):
         state7 = MyState(lambda_bonds=0.9)
         assert state3 != state7
 
+        # States defined by global parameter functions are evaluated correctly.
+        state8 = copy.deepcopy(state1)
+        state8.set_function_variable('lambda1', state1.lambda_bonds*2.0)
+        state8.lambda_bonds = GlobalParameterFunction('lambda1 / 2')
+        assert state1 == state8
+        state8.set_function_variable('lambda1', state1.lambda_bonds)
+        assert state1 != state8
+
     def test_apply_to_system(self):
         """Test method GlobalParameterState.apply_to_system()."""
         system = self.diatomic_molecule_ts.system
