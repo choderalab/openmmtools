@@ -161,6 +161,8 @@ def test_stabilities():
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
             integrator = integrator_class()
+            # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+            # because it is being initialized without a system. That's OK.
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
                                            "integration steps of a {}.").format(integrator_name, test_name)
@@ -232,8 +234,10 @@ def test_pretty_formatting():
     """
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
-        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
 
         if hasattr(integrator, 'pretty_format'):
             # Check formatting as text
@@ -251,8 +255,11 @@ def test_update_context_state_calls():
     """
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
-        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
+
         num_force_update = 0
         for i in range(integrator.getNumComputations()):
             step_type, target, expr = integrator.getComputationStep(i)
@@ -616,6 +623,8 @@ def test_temperature_getter_setter():
         # If this is not a ThermostatedIntegrator, the interface should not be added.
         if integrator_name not in thermostated_integrators:
             integrator = integrator_class()
+            # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+            # because it is being initialized without a system. That's OK.
             assert ThermostatedIntegrator.is_thermostated(integrator) is False
             assert ThermostatedIntegrator.restore_interface(integrator) is False
             assert not hasattr(integrator, 'getTemperature')
@@ -625,6 +634,8 @@ def test_temperature_getter_setter():
         check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
                                                                   'getter of {}').format(integrator_name)
         integrator = integrator_class(temperature=temperature)
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
 
@@ -637,6 +648,8 @@ def test_temperature_getter_setter():
         check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
                                                                   'of {}').format(integrator_name)
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
         integrator = context.getIntegrator()
@@ -654,6 +667,8 @@ def test_restorable_integrator_copy():
     thermostated_integrators = get_all_custom_integrators(only_thermostated=True)
     for integrator_name, integrator_class in thermostated_integrators:
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
         integrator_copied = copy.deepcopy(integrator)
         assert isinstance(integrator_copied, integrator_class)
         assert set(integrator_copied.__dict__.keys()) == set(integrator.__dict__.keys())

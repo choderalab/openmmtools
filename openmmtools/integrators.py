@@ -585,7 +585,8 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Create a velocity Verlet integrator with Nosé-Hoover chain thermostat.
 
-    >>> system = testsystems.WaterBox()
+    >>> waterbox = testsystems.WaterBox()
+    >>> system = waterbox.system
     >>> timestep = 1.0 * unit.femtoseconds
     >>> temperature = 300 * unit.kelvin
     >>> chain_length = 10
@@ -602,7 +603,8 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
     Useful tests of the NHC integrator can be performed by monitoring the instantaneous temperature during the simulation and confirming that conserved energy is constant to about 1 part in 10^5.  The instantanous temperature and particle kinetic and potential energies can already be extracted from a snapshot, for example see the OpenMM StateDataReporter implementation for more details.  This integrator also provides heat bath energies (kJ/mol) through the following mechanism:
 
-    >>> system = testsystems.WaterBox()
+    >>> waterbox = testsystems.WaterBox()
+    >>> system = waterbox.system
     >>> integrator = NoseHooverChainVelocityVerletIntegrator(system)
     >>> heat_bath_kinetic_energy = integrator.getGlobalVariableByName('bathKE')
     >>> heat_bath_potential_energy = integrator.getGlobalVariableByName('bathPE')
@@ -618,7 +620,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         5 : [ 0.2967324292201065,  0.2967324292201065, -0.1869297168804260, 0.2967324292201065, 0.2967324292201065 ]
     }
 
-    def __init__(self, system, temperature=298*unit.kelvin, collision_frequency=50/unit.picoseconds,
+    def __init__(self, system=None, temperature=298*unit.kelvin, collision_frequency=50/unit.picoseconds,
                  timestep=0.001*unit.picoseconds, chain_length=5, num_mts=5, num_yoshidasuzuki=5):
         """ Construct a velocity Verlet integrator with Nosé-Hoover chain thermostat implemented with massive collisions.
 
@@ -626,7 +628,9 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         -----------
 
         system: openmm.app.System instance
-            Only required to extract the system's number of degrees of freedom.
+            Required to extract the system's number of degrees of freedom.
+            If the system is not passed to the constructor,
+            the temperature will converge to the wrong value.
                  
         temperature: unit.Quantity compatible with kelvin, default=298*unit.kelvin
             The target temperature for the thermostat.
@@ -679,20 +683,31 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         frequency = collision_frequency.value_in_unit(unit.picoseconds**-1)
         Q = kT/frequency**2
 
+        #
         # Compute the number of degrees of freedom.
-        # same as in openmm.app.StateDataReporter._initializeConstants
-        dof = 0
-        for i in range(system.getNumParticles()):
-            if system.getParticleMass(i) > 0*unit.dalton:
-                dof += 3
-        dof -= system.getNumConstraints()
-        if any(type(system.getForce(i)) == mm.CMMotionRemover for i in range(system.getNumForces())):
-            dof -= 3
+        #
+        if system is None:
+            print("SEVERE WARNING: The system was not passed to the NoseHooverChainVelocityVerletIntegrator. "
+                  "For systems with constraints, the simulation will run at the wrong temperature.")
+            # Fall back to old scheme, which only works for unconstrained systems
+            self.addGlobalVariable("ndf", 0)
+            self.addPerDofVariable("ones", 1.0)
+            self.addComputeSum("ndf", "ones")
+        else:
+            # same as in openmm.app.StateDataReporter._initializeConstants
+            dof = 0
+            for i in range(system.getNumParticles()):
+                if system.getParticleMass(i) > 0*unit.dalton:
+                    dof += 3
+            dof -= system.getNumConstraints()
+            if any(type(system.getForce(i)) == mm.CMMotionRemover for i in range(system.getNumForces())):
+                dof -= 3
+
+            self.addGlobalVariable("ndf", dof)      # number of degrees of freedom
 
         #
         # Define global variables
         #
-        self.addGlobalVariable("ndf", dof)      # number of degrees of freedom
         self.addGlobalVariable("bathKE", 0.0) # Thermostat bath kinetic energy
         self.addGlobalVariable("bathPE", 0.0) # Thermostat bath potential energy
         self.addGlobalVariable("KE2", 0.0)    # Twice the kinetic energy
