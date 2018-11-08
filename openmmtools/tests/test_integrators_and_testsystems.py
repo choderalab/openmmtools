@@ -91,7 +91,14 @@ def test_integrators_and_testsystems():
             continue
 
         for integrator_name, integrator_class in custom_integrators:
-            integrator = integrator_class()
+            if integrator_name == "NoseHooverChainVelocityVerletIntegrator":
+                # The system should be passed to the NoseHooverChainVelocityVerletIntegrator
+                # to extract the correct number of degrees of freedom from the system.
+                integrator = integrator_class(testsystem.system)
+            else:
+                integrator = integrator_class()
+
+            # because it is being initialized without a system. That's OK.
 
             # Create test.
             f = partial(check_combination, integrator, testsystem, platform)

@@ -161,6 +161,8 @@ def test_stabilities():
     for test_name, test in test_cases.items():
         for integrator_name, integrator_class in custom_integrators:
             integrator = integrator_class()
+            # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+            # because it is being initialized without a system. That's OK.
             integrator.__doc__ = integrator_name
             check_stability.description = ("Testing {} for stability over a short number of "
                                            "integration steps of a {}.").format(integrator_name, test_name)
@@ -187,42 +189,55 @@ def test_nose_hoover_integrator():
     """
     Test Nose-Hoover thermostat by ensuring that a short run
     conserves the system and bath energy to a reasonable tolerance.
-    The temperature could, in principle, be tested also but that would
-    require longer runs to guarantee stabilization.
-
+    Also test that the target temperature is rougly matched (+- 10 K).
     """
     temperature = 298*unit.kelvin
     testsystem = testsystems.WaterBox()
-    integrator = NoseHooverChainVelocityVerletIntegrator(temperature)
+    num_dof = 3*testsystem.system.getNumParticles() - testsystem.system.getNumConstraints()
+    integrator = NoseHooverChainVelocityVerletIntegrator(testsystem.system, temperature)
     # Create Context and initialize positions.
     context = openmm.Context(testsystem.system, integrator)
     context.setPositions(testsystem.positions)
     context.setVelocitiesToTemperature(temperature)
-    integrator.step(150) # Short equilibration
+    integrator.step(200) # Short equilibration
     energies = []
+    temperatures = []
     for n in range(100):
         integrator.step(1)
         state = context.getState(getEnergy=True)
-        KE = state.getKineticEnergy().value_in_unit(unit.kilojoules_per_mole)
+        # temperature
+        kinE = state.getKineticEnergy()
+        temp = (2.0 * kinE / (num_dof * unit.MOLAR_GAS_CONSTANT_R)).value_in_unit(unit.kelvin)
+        temperatures.append(temp)
+        # total energy
+        KE = kinE.value_in_unit(unit.kilojoules_per_mole)
         PE = state.getPotentialEnergy().value_in_unit(unit.kilojoules_per_mole)
         bathKE = integrator.getGlobalVariableByName('bathKE')
         bathPE = integrator.getGlobalVariableByName('bathPE')
         conserved = KE + PE + bathKE + bathPE
         energies.append(conserved)
+        
     # Compute maximum deviation from the mean for conserved energies
     meanenergies = np.mean(energies)
     maxdeviation = np.amax(np.abs(energies - meanenergies)/meanenergies)
     assert maxdeviation < 1e-3
-
-
+    
+    # Coarse check for target temperature
+    mean_temperature = np.mean(temperatures)
+    print(mean_temperature)
+    assert abs(mean_temperature - temperature.value_in_unit(unit.kelvin)) < 10.0
+    
+    
 def test_pretty_formatting():
     """
     Test pretty-printing and pretty-formatting of integrators.
     """
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
-        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
 
         if hasattr(integrator, 'pretty_format'):
             # Check formatting as text
@@ -240,8 +255,11 @@ def test_update_context_state_calls():
     """
     custom_integrators = get_all_custom_integrators()
     for integrator_name, integrator_class in custom_integrators:
-        # The NonequilibriumLangevinIntegrator requires an alchemical function.
+
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
+
         num_force_update = 0
         for i in range(integrator.getNumComputations()):
             step_type, target, expr = integrator.getComputationStep(i)
@@ -605,6 +623,8 @@ def test_temperature_getter_setter():
         # If this is not a ThermostatedIntegrator, the interface should not be added.
         if integrator_name not in thermostated_integrators:
             integrator = integrator_class()
+            # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+            # because it is being initialized without a system. That's OK.
             assert ThermostatedIntegrator.is_thermostated(integrator) is False
             assert ThermostatedIntegrator.restore_interface(integrator) is False
             assert not hasattr(integrator, 'getTemperature')
@@ -614,6 +634,8 @@ def test_temperature_getter_setter():
         check_integrator_temperature_getter_setter.description = ('Test temperature setter and '
                                                                   'getter of {}').format(integrator_name)
         integrator = integrator_class(temperature=temperature)
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
 
@@ -626,6 +648,8 @@ def test_temperature_getter_setter():
         check_integrator_temperature_getter_setter.description = ('Test temperature wrapper '
                                                                   'of {}').format(integrator_name)
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
         context = openmm.Context(test.system, integrator)
         context.setPositions(test.positions)
         integrator = context.getIntegrator()
@@ -643,6 +667,8 @@ def test_restorable_integrator_copy():
     thermostated_integrators = get_all_custom_integrators(only_thermostated=True)
     for integrator_name, integrator_class in thermostated_integrators:
         integrator = integrator_class()
+        # NoseHooverChainVelocityVerletIntegrator will print a severe warning here,
+        # because it is being initialized without a system. That's OK.
         integrator_copied = copy.deepcopy(integrator)
         assert isinstance(integrator_copied, integrator_class)
         assert set(integrator_copied.__dict__.keys()) == set(integrator.__dict__.keys())
