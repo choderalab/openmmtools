@@ -388,6 +388,10 @@ def compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions
     aa_correction = 0.0
     na_correction = 0.0
 
+    # Convert quantity positions into floats.
+    if isinstance(positions, unit.Quantity):
+        positions = positions.value_in_unit_system(unit.md_unit_system)
+
     # If there is no reciprocal space, the correction is 0.0
     if nonbonded_force.getNonbondedMethod() not in [openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME]:
         return aa_correction * energy_unit, na_correction * energy_unit
@@ -1288,7 +1292,7 @@ class TestAbsoluteAlchemicalFactory(object):
             for region_name, region in cls.test_regions.items():
                 if region_name in test_system_name:
                     break
-            assert region_name in test_system_name
+            assert region_name in test_system_name, test_system_name
 
             # Find nonbonded method.
             force_idx, nonbonded_force = forces.find_forces(test_system.system, openmm.NonbondedForce, only_one=True)
@@ -1541,6 +1545,7 @@ class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
     @classmethod
     def define_regions(cls):
         super(TestAbsoluteAlchemicalFactorySlow, cls).define_regions()
+        cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
         cls.test_regions['LysozymeImplicit'] = AlchemicalRegion(alchemical_atoms=range(2603, 2621))
         cls.test_regions['DHFRExplicit'] = AlchemicalRegion(alchemical_atoms=range(0, 2849))
         cls.test_regions['Src'] = AlchemicalRegion(alchemical_atoms=range(0, 21))
