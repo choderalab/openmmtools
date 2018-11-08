@@ -17,8 +17,8 @@ script:
   - source activate test
   # Add org channel
   - conda config --add channels ${ORGNAME}
-  # TODO: remove this when OpenMM 7.3 has been released.
-  - conda config --add channels omnia/label/dev
+  # TODO: remove this channel when OpenMM 7.3 has been released.
+  - conda config --add channels omnia/label/rc
   # Add omnia dev channels
   - if [ $DEVOMNIA ]; then conda config --add channels https://conda.anaconda.org/omnia/label/dev; fi
   # Add conda-forge channel back to top priority
