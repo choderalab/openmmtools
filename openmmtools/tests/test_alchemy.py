@@ -162,17 +162,33 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
 
     if exceptions:  # Turn off exceptions
         force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
+
+        # Exceptions.
         for exception_index in range(nonbonded_force.getNumExceptions()):
             iatom, jatom, charge, sigma, epsilon = nonbonded_force.getExceptionParameters(exception_index)
             if iatom in only_atoms or jatom in only_atoms:
                 nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
                                                        charge_coeff*charge, sigma, epsilon_coeff*epsilon)
-    else:  # Turn off particle interactions
+
+        # Offset exceptions.
+        for offset_index in range(nonbonded_force.getNumExceptionParameterOffsets()):
+            (parameter, exception_index, chargeprod_scale,
+                sigma_scale, epsilon_scale) = nonbonded_force.getExceptionParameterOffset(offset_index)
+            iatom, jatom, _, _, _ = nonbonded_force.getExceptionParameters(exception_index)
+            if iatom in only_atoms or jatom in only_atoms:
+                nonbonded_force.setExceptionParameterOffset(offset_index, parameter, exception_index,
+                                                            charge_coeff*chargeprod_scale, sigma_scale,
+                                                            epsilon_coeff*epsilon_scale)
+
+    else:
+        # Turn off particle interactions
         for force in system.getForces():
             # Handle only a Nonbonded and a CustomNonbonded (for RF).
             if not (isinstance(force, openmm.CustomNonbondedForce) and 'lambda' not in force.getEnergyFunction() or
                         isinstance(force, openmm.NonbondedForce)):
                 continue
+
+            # Particle interactions.
             for particle_index in range(force.getNumParticles()):
                 if particle_index in only_atoms:
                     # Convert tuple parameters to list to allow changes.
@@ -183,6 +199,17 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
                     except TypeError:  # NonbondedForce
                         parameters[2] *= epsilon_coeff  # epsilon
                         force.setParticleParameters(particle_index, *parameters)
+
+            # Offset particle interactions.
+            if isinstance(force, openmm.NonbondedForce):
+                for offset_index in range(force.getNumParticleParameterOffsets()):
+                    (parameter, particle_index, charge_scale,
+                        sigma_scale, epsilon_scale) = force.getParticleParameterOffset(offset_index)
+                    if particle_index in only_atoms:
+                        force.setParticleParameterOffset(offset_index, parameter, particle_index,
+                                                         charge_coeff*charge_scale, sigma_scale,
+                                                         epsilon_coeff*epsilon_scale)
+
 
 
 def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
@@ -361,6 +388,10 @@ def compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions
     aa_correction = 0.0
     na_correction = 0.0
 
+    # Convert quantity positions into floats.
+    if isinstance(positions, unit.Quantity):
+        positions = positions.value_in_unit_system(unit.md_unit_system)
+
     # If there is no reciprocal space, the correction is 0.0
     if nonbonded_force.getNonbondedMethod() not in [openmm.NonbondedForce.Ewald, openmm.NonbondedForce.PME]:
         return aa_correction * energy_unit, na_correction * energy_unit
@@ -401,12 +432,13 @@ def compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions
 
 def is_alchemical_pme_treatment_exact(alchemical_system):
     """Return True if the given alchemical system models PME exactly."""
-    # If exact PME is here, there is a CustomNonbondedForce storing
-    # the original charges that does not contribute to the energy.
-    for force in alchemical_system.getForces():
-        if (isinstance(force, openmm.CustomNonbondedForce) and
-                    force.getEnergyFunction() == '0.0;' and
-                    force.getGlobalParameterName(0) == 'lambda_electrostatics'):
+    # If exact PME is here, the NonbondedForce defines a
+    # lambda_electrostatics variable.
+    _, nonbonded_force = forces.find_forces(alchemical_system, openmm.NonbondedForce,
+                                            only_one=True)
+    for parameter_idx in range(nonbonded_force.getNumGlobalParameters()):
+        parameter_name = nonbonded_force.getGlobalParameterName(parameter_idx)
+        if parameter_name == 'lambda_electrostatics':
             return True
     return False
 
@@ -492,10 +524,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     is_exact_pme = is_alchemical_pme_treatment_exact(alchemical_system)
 
     # Find nonbonded method
-    for nonbonded_force in reference_system.getForces():
-        if isinstance(nonbonded_force, openmm.NonbondedForce):
-            nonbonded_method = nonbonded_force.getNonbondedMethod()
-            break
+    _, nonbonded_force = forces.find_forces(reference_system, openmm.NonbondedForce, only_one=True)
+    nonbonded_method = nonbonded_force.getNonbondedMethod()
 
     # Get energy components of reference system's nonbonded force
     print("Dissecting reference system's nonbonded force")
@@ -523,17 +553,21 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     alchemical_state.set_alchemical_parameters(1.0)
     energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
                                                                         positions, platform=GLOBAL_ALCHEMY_PLATFORM)
+
+    # Sterics particle and exception interactions are always modeled with a custom force.
     na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics']
     aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics']
+    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions']
+    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions']
+
+    # With exact treatment of PME, we use the NonbondedForce offset for electrostatics.
     try:
         na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics']
         aa_custom_particle_electro = energy_components['alchemically modified NonbondedForce for alchemical/alchemical electrostatics']
+        na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions']
+        aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions']
     except KeyError:
         assert is_exact_pme
-    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions']
-    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions']
-    na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions']
-    aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions']
 
     # Test that all NonbondedForce contributions match
     # -------------------------------------------------
@@ -550,8 +584,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
         assert_almost_equal(unmod_na_particle_electro, 0.0 * energy_unit, err_msg)
         assert_almost_equal(unmod_aa_reciprocal_energy, 0.0 * energy_unit, err_msg)
         assert_almost_equal(unmod_na_reciprocal_energy, 0.0 * energy_unit, err_msg)
-    assert_almost_equal(unmod_aa_exception_electro, 0.0 * energy_unit, err_msg)
-    assert_almost_equal(unmod_na_exception_electro, 0.0 * energy_unit, err_msg)
+        assert_almost_equal(unmod_aa_exception_electro, 0.0 * energy_unit, err_msg)
+        assert_almost_equal(unmod_na_exception_electro, 0.0 * energy_unit, err_msg)
 
     # Check sterics interactions match
     assert_almost_equal(nn_particle_sterics, unmod_nn_particle_sterics,
@@ -572,50 +606,56 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
                         'Non-alchemical/non-alchemical atoms particle electrostatics')
     assert_almost_equal(nn_exception_electro, unmod_nn_exception_electro,
                         'Non-alchemical/non-alchemical atoms exceptions electrostatics')
-    if nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+    # With exact treatment of PME, the electrostatics of alchemical-alchemical
+    # atoms is modeled with NonbondedForce offsets.
+    if is_exact_pme:
         # Reciprocal space.
-        if is_exact_pme:
-            assert_almost_equal(aa_reciprocal_energy, unmod_aa_reciprocal_energy,
-                                'Alchemical/alchemical atoms reciprocal space energy')
-            assert_almost_equal(na_reciprocal_energy, unmod_na_reciprocal_energy,
-                                'Non-alchemical/alchemical atoms reciprocal space energy')
-        assert_almost_equal(nn_reciprocal_energy, unmod_nn_reciprocal_energy,
-                            'Non-alchemical/non-alchemical atoms reciprocal space energy')
-
+        assert_almost_equal(aa_reciprocal_energy, unmod_aa_reciprocal_energy,
+                            'Alchemical/alchemical atoms reciprocal space energy')
+        assert_almost_equal(na_reciprocal_energy, unmod_na_reciprocal_energy,
+                            'Non-alchemical/alchemical atoms reciprocal space energy')
         # Direct space.
-        if is_exact_pme:
-            assert_almost_equal(unmod_aa_particle_electro, aa_particle_electro,
-                                'Alchemical/alchemical atoms particle electrostatics')
-            assert_almost_equal(unmod_na_particle_electro, na_particle_electro,
-                                'Non-alchemical/alchemical atoms particle electrostatics')
-        else:
-            # Get direct space correction due to reciprocal space exceptions
-            aa_correction, na_correction = compute_direct_space_correction(nonbonded_force,
-                                                                           alchemical_regions.alchemical_atoms,
-                                                                           positions)
-            aa_particle_electro += aa_correction
-            na_particle_electro += na_correction
-
-            # Check direct space energy
-            assert_almost_equal(aa_particle_electro, aa_custom_particle_electro,
-                                'Alchemical/alchemical atoms particle electrostatics')
-            assert_almost_equal(na_particle_electro, na_custom_particle_electro,
-                                'Non-alchemical/alchemical atoms particle electrostatics')
+        assert_almost_equal(aa_particle_electro, unmod_aa_particle_electro,
+                            'Alchemical/alchemical atoms particle electrostatics')
+        assert_almost_equal(na_particle_electro, unmod_na_particle_electro,
+                            'Non-alchemical/alchemical atoms particle electrostatics')
+        # Exceptions.
+        assert_almost_equal(aa_exception_electro, unmod_aa_exception_electro,
+                            'Alchemical/alchemical atoms exceptions electrostatics')
+        assert_almost_equal(na_exception_electro, unmod_na_exception_electro,
+                            'Non-alchemical/alchemical atoms exceptions electrostatics')
+    # With direct space PME, the custom forces model only the
+    # direct space of alchemical-alchemical interactions.
     else:
-        # Reciprocal space energy should be null in this case
-        assert nn_reciprocal_energy == unmod_nn_reciprocal_energy == 0.0 * energy_unit
-        assert aa_reciprocal_energy == unmod_aa_reciprocal_energy == 0.0 * energy_unit
-        assert na_reciprocal_energy == unmod_na_reciprocal_energy == 0.0 * energy_unit
+        # Get direct space correction due to reciprocal space exceptions
+        aa_correction, na_correction = compute_direct_space_correction(nonbonded_force,
+                                                                       alchemical_regions.alchemical_atoms,
+                                                                       positions)
+        aa_particle_electro += aa_correction
+        na_particle_electro += na_correction
 
         # Check direct space energy
         assert_almost_equal(aa_particle_electro, aa_custom_particle_electro,
                             'Alchemical/alchemical atoms particle electrostatics')
         assert_almost_equal(na_particle_electro, na_custom_particle_electro,
                             'Non-alchemical/alchemical atoms particle electrostatics')
-    assert_almost_equal(aa_exception_electro, aa_custom_exception_electro,
-                        'Alchemical/alchemical atoms exceptions electrostatics')
-    assert_almost_equal(na_exception_electro, na_custom_exception_electro,
-                        'Non-alchemical/alchemical atoms exceptions electrostatics')
+        # Check exceptions.
+        assert_almost_equal(aa_exception_electro, aa_custom_exception_electro,
+                            'Alchemical/alchemical atoms exceptions electrostatics')
+        assert_almost_equal(na_exception_electro, na_custom_exception_electro,
+                            'Non-alchemical/alchemical atoms exceptions electrostatics')
+
+    # With Ewald methods, the NonbondedForce should always hold the
+    # reciprocal space energy of nonalchemical-nonalchemical atoms.
+    if nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]:
+        # Reciprocal space.
+        assert_almost_equal(nn_reciprocal_energy, unmod_nn_reciprocal_energy,
+                            'Non-alchemical/non-alchemical atoms reciprocal space energy')
+    else:
+        # Reciprocal space energy should be null in this case
+        assert nn_reciprocal_energy == unmod_nn_reciprocal_energy == 0.0 * energy_unit
+        assert aa_reciprocal_energy == unmod_aa_reciprocal_energy == 0.0 * energy_unit
+        assert na_reciprocal_energy == unmod_na_reciprocal_energy == 0.0 * energy_unit
 
     # Check forces other than nonbonded
     # ----------------------------------
@@ -669,24 +709,25 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
 
     # Check that non-alchemical/alchemical particle interactions and 1,4 exceptions have been annihilated
     assert_zero_energy('alchemically modified BondForce for non-alchemical/alchemical sterics exceptions')
-    assert_zero_energy('alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions')
     assert_zero_energy('alchemically modified NonbondedForce for non-alchemical/alchemical sterics')
-    try:
+    if is_exact_pme:
+        assert 'alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics' not in energy_components
+        assert 'alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions' not in energy_components
+    else:
         assert_zero_energy('alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics')
-    except KeyError:
-        assert_zero_energy('CustomNonbondedForce holding alchemical atoms unmodified charges')
-        assert is_exact_pme
+        assert_zero_energy('alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions')
 
     # Check that alchemical/alchemical particle interactions and 1,4 exceptions have been annihilated
     if alchemical_regions.annihilate_sterics:
         assert_zero_energy('alchemically modified NonbondedForce for alchemical/alchemical sterics')
         assert_zero_energy('alchemically modified BondForce for alchemical/alchemical sterics exceptions')
     if alchemical_regions.annihilate_electrostatics:
-        try:
+        if is_exact_pme:
+            assert 'alchemically modified NonbondedForce for alchemical/alchemical electrostatics' not in energy_components
+            assert 'alchemically modified BondForce for alchemical/alchemical electrostatics exceptions' not in energy_components
+        else:
             assert_zero_energy('alchemically modified NonbondedForce for alchemical/alchemical electrostatics')
-        except KeyError:
-            assert is_exact_pme
-        assert_zero_energy('alchemically modified BondForce for alchemical/alchemical electrostatics exceptions')
+            assert_zero_energy('alchemically modified BondForce for alchemical/alchemical electrostatics exceptions')
 
     # Check valence terms
     for force_name in ['HarmonicBondForce', 'HarmonicAngleForce', 'PeriodicTorsionForce']:
@@ -776,7 +817,8 @@ def check_split_force_groups(system):
     lambdas_by_force_group = {}
 
     # Separate forces groups by lambda parameters that AlchemicalState supports.
-    for force, lambda_name, _ in AlchemicalState._get_system_lambda_parameters(system):
+    for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
+            system, parameters_name_suffix=None):
         force_group = force.getForceGroup()
         try:
             force_groups_by_lambda[lambda_name].add(force_group)
@@ -792,7 +834,7 @@ def check_split_force_groups(system):
 
     # There are as many alchemical force groups as not-None lambda variables.
     alchemical_state = AlchemicalState.from_system(system)
-    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_supported_parameters()
+    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters()
                      if getattr(alchemical_state, lambda_name) is not None}
     assert valid_lambdas == set(force_groups_by_lambda.keys())
 
@@ -1250,7 +1292,7 @@ class TestAbsoluteAlchemicalFactory(object):
             for region_name, region in cls.test_regions.items():
                 if region_name in test_system_name:
                     break
-            assert region_name in test_system_name
+            assert region_name in test_system_name, test_system_name
 
             # Find nonbonded method.
             force_idx, nonbonded_force = forces.find_forces(test_system.system, openmm.NonbondedForce, only_one=True)
@@ -1503,6 +1545,7 @@ class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
     @classmethod
     def define_regions(cls):
         super(TestAbsoluteAlchemicalFactorySlow, cls).define_regions()
+        cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
         cls.test_regions['LysozymeImplicit'] = AlchemicalRegion(alchemical_atoms=range(2603, 2621))
         cls.test_regions['DHFRExplicit'] = AlchemicalRegion(alchemical_atoms=range(0, 2849))
         cls.test_regions['Src'] = AlchemicalRegion(alchemical_atoms=range(0, 21))
@@ -1555,16 +1598,6 @@ class TestAlchemicalState(object):
                                       'lambda_angles', 'lambda_torsions'})
         ]
 
-    def _check_exact_pme_charges(self, alchemical_system, lambda_electrostatics):
-        """Check that the NonbondedForce charges are correct."""
-        original_charges_force, nonbonded_force = AlchemicalState._find_exact_pme_forces(alchemical_system)
-        _, alchemical_atoms = original_charges_force.getInteractionGroupParameters(0)
-        for atom_idx in alchemical_atoms:
-            charge, _, _= nonbonded_force.getParticleParameters(atom_idx)
-            original_charge = original_charges_force.getParticleParameters(atom_idx)[0] * unit.elementary_charge
-            err_msg = '{}, {}'.format(charge, original_charge * lambda_electrostatics)
-            assert charge == original_charge * lambda_electrostatics, err_msg
-
     @staticmethod
     def test_constructor():
         """Test AlchemicalState constructor behave as expected."""
@@ -1578,7 +1611,7 @@ class TestAlchemicalState(object):
                       {'lambda_electrostatics': 1.0}]
         for test_kwargs in test_cases:
             alchemical_state = AlchemicalState(**test_kwargs)
-            for parameter in AlchemicalState._get_supported_parameters():
+            for parameter in AlchemicalState._get_controlled_parameters():
                 if parameter in test_kwargs:
                     assert getattr(alchemical_state, parameter) == test_kwargs[parameter]
                 else:
@@ -1594,7 +1627,7 @@ class TestAlchemicalState(object):
         # and all the others must be None.
         for state, defined_lambdas in self.test_cases:
             alchemical_state = AlchemicalState.from_system(state.system)
-            for parameter in AlchemicalState._get_supported_parameters():
+            for parameter in AlchemicalState._get_controlled_parameters():
                 property_value = getattr(alchemical_state, parameter)
                 if parameter in defined_lambdas:
                     assert property_value == 1.0, '{}: {}'.format(parameter, property_value)
@@ -1652,21 +1685,6 @@ class TestAlchemicalState(object):
             with nose.tools.assert_raises(AlchemicalStateError):
                 alchemical_state.apply_to_system(state.system)
 
-    def test_apply_to_system_exact_pme(self):
-        """Test that NonbondedForce charges are set correctly by apply_to_system."""
-        # Do not modify cached test cases.
-        test_system = copy.deepcopy(self.alanine_state_exact_pme).system
-        alchemical_state = AlchemicalState.from_system(test_system)
-
-        # The default lambda electrostatics should be 1.0
-        self._check_exact_pme_charges(test_system, lambda_electrostatics=1.0)
-
-        # Change the value.
-        for lambda_electrostatics in [0.5, 0.0]:
-            alchemical_state.lambda_electrostatics = lambda_electrostatics
-            alchemical_state.apply_to_system(test_system)
-            self._check_exact_pme_charges(test_system, lambda_electrostatics)
-
     def test_check_system_consistency(self):
         """Test method AlchemicalState.check_system_consistency()."""
         # A system is consistent with itself.
@@ -1704,53 +1722,21 @@ class TestAlchemicalState(object):
             alchemical_state.apply_to_context(context)
 
         # Correctly sets Context's parameters.
-        alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
-        context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
-        alchemical_state.set_alchemical_parameters(0.5)
-        alchemical_state.apply_to_context(context)
-        for parameter_name, parameter_value in context.getParameters().items():
-            if parameter_name in alchemical_state._parameters:
-                assert parameter_value == 0.5
-        del context
-
-        def compute_electrostatic_energy(lambda_electrostatics, context):
-            alchemical_state.lambda_electrostatics = lambda_electrostatics
+        for state in [self.full_alanine_state, self.alanine_state_exact_pme]:
+            alchemical_state = AlchemicalState.from_system(state.system)
+            context = state.create_context(copy.deepcopy(integrator))
+            alchemical_state.set_alchemical_parameters(0.5)
             alchemical_state.apply_to_context(context)
-            return context.getState(getEnergy=True).getPotentialEnergy()
-
-        # For exact treatment of PME electrostatics, check that
-        # the charges of the Context's System are correctly set.
-        alchemical_state = AlchemicalState.from_system(self.alanine_state_exact_pme.system)
-        context = self.alanine_state_exact_pme.create_context(copy.deepcopy(integrator))
-        alchemical_state.lambda_electrostatics = 0.5
-        alchemical_state.apply_to_context(context)
-        self._check_exact_pme_charges(context.getSystem(), lambda_electrostatics=0.5)
-
-        # The only way to check that the charges of the NonbondedForce
-        # have been updated is to compare the energies.
-        positions = self.alanine_test_system.positions
-        reference_system = copy.deepcopy(self.alanine_test_system.system)
-        context.setPositions(positions)
-        alchemical_energy_1 = compute_electrostatic_energy(1.0, context)
-        alchemical_energy_0 = compute_electrostatic_energy(0.0, context)
-        del context
-
-        reference_energy_1 = compute_energy(reference_system, positions)
-        turn_off_nonbonded(reference_system, electrostatics=True,
-                           only_atoms=self.alanine_alchemical_atoms)
-        turn_off_nonbonded(reference_system, electrostatics=True, exceptions=True,
-                           only_atoms=self.alanine_alchemical_atoms)
-        reference_energy_0 = compute_energy(reference_system, positions)
-        assert_almost_equal(reference_energy_1 - reference_energy_0,
-                            alchemical_energy_1 - alchemical_energy_0,
-                            'Exact PME treatment electrostatics')
+            for parameter_name, parameter_value in context.getParameters().items():
+                if parameter_name in alchemical_state._parameters:
+                    assert parameter_value == 0.5
+            del context
 
     def test_standardize_system(self):
         """Test method AlchemicalState.standardize_system."""
-        test_cases = [(self.full_alanine_state, False),
-                      (self.alanine_state_exact_pme, True)]
+        test_cases = [self.full_alanine_state, self.alanine_state_exact_pme]
 
-        for state, check_charges in test_cases:
+        for state in test_cases:
             # First create a non-standard system.
             system = copy.deepcopy(state.system)
             alchemical_state = AlchemicalState.from_system(system)
@@ -1759,8 +1745,6 @@ class TestAlchemicalState(object):
 
             # Test pre-condition: The state of the System has been changed.
             assert AlchemicalState.from_system(system).lambda_electrostatics == 0.5
-            if check_charges:
-                self._check_exact_pme_charges(system, lambda_electrostatics=0.5)
 
             # Check that _standardize_system() sets all parameters back to 1.0.
             alchemical_state._standardize_system(system)
@@ -1781,7 +1765,8 @@ class TestAlchemicalState(object):
 
             # Each lambda should be separated in its own force group.
             expected_force_groups = {}
-            for force, lambda_name, _ in AlchemicalState._get_system_lambda_parameters(system):
+            for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
+                    system, parameters_name_suffix=None):
                 expected_force_groups[lambda_name] = force.getForceGroup()
 
             integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
@@ -1792,7 +1777,7 @@ class TestAlchemicalState(object):
 
             # Change the lambdas one by one and check that the method
             # recognize that the force group energy must be updated.
-            for lambda_name in AlchemicalState._get_supported_parameters():
+            for lambda_name in AlchemicalState._get_controlled_parameters():
                 # Check that the system defines the global variable.
                 if getattr(alchemical_state, lambda_name) is None:
                     continue
@@ -1810,14 +1795,14 @@ class TestAlchemicalState(object):
         alchemical_state = AlchemicalState.from_system(system)
 
         # Add two alchemical variables to the state.
-        alchemical_state.set_alchemical_variable('lambda', 1.0)
-        alchemical_state.set_alchemical_variable('lambda2', 0.5)
-        assert alchemical_state.get_alchemical_variable('lambda') == 1.0
-        assert alchemical_state.get_alchemical_variable('lambda2') == 0.5
+        alchemical_state.set_function_variable('lambda', 1.0)
+        alchemical_state.set_function_variable('lambda2', 0.5)
+        assert alchemical_state.get_function_variable('lambda') == 1.0
+        assert alchemical_state.get_function_variable('lambda2') == 0.5
 
         # Cannot call an alchemical variable as a supported parameter.
         with nose.tools.assert_raises(AlchemicalStateError):
-            alchemical_state.set_alchemical_variable('lambda_sterics', 0.5)
+            alchemical_state.set_function_variable('lambda_sterics', 0.5)
 
         # Assign string alchemical functions to parameters.
         alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
@@ -1826,7 +1811,7 @@ class TestAlchemicalState(object):
         assert alchemical_state.lambda_electrostatics == 0.75
 
         # Setting alchemical variables updates alchemical parameter as well.
-        alchemical_state.set_alchemical_variable('lambda2', 0)
+        alchemical_state.set_function_variable('lambda2', 0)
         assert alchemical_state.lambda_electrostatics == 0.5
 
     # ---------------------------------------------------
@@ -1878,7 +1863,7 @@ class TestAlchemicalState(object):
                 assert getattr(system_alchemical_state, parameter_name) == 1.0
 
             # Same for alchemical variables setters.
-            compound_state.set_alchemical_variable('lambda', 0.25)
+            compound_state.set_function_variable('lambda', 0.25)
             for parameter_name in defined_lambdas:
                 setattr(compound_state, parameter_name, AlchemicalFunction('lambda'))
             system_alchemical_state = AlchemicalState.from_system(compound_state.system)
@@ -1958,63 +1943,6 @@ class TestAlchemicalState(object):
         assert state1.is_context_compatible(context_state2) is is_compatible
         del context_state2
 
-    def test_incompatibility_nonbonded_force(self):
-        """Test the optional electrostatics incompatibility with exact PME."""
-        alanine_state = copy.deepcopy(self.alanine_state)
-        alanine_state_exact_pme = copy.deepcopy(self.alanine_state_exact_pme)
-        alchemical_state = AlchemicalState.from_system(alanine_state_exact_pme.system)
-        alchemical_state.update_alchemical_charges = False
-        compound_state = states.CompoundThermodynamicState(copy.deepcopy(alanine_state_exact_pme),
-                                                           [alchemical_state])
-        integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        context = compound_state.create_context(copy.deepcopy(integrator))
-
-        # Test incompatibility.
-        # ----------------------
-
-        # Check that changes in lambda_electrostatics are not compatible.
-        compound_state_incompatible1 = copy.deepcopy(compound_state)
-        compound_state_incompatible1.lambda_electrostatics = 0.0
-
-        # States with non-exact PME treatment are incompatible
-        # even with same lambda_electrostatics.
-        compound_state_incompatible2 = states.CompoundThermodynamicState(
-            thermodynamic_state=copy.deepcopy(alanine_state),
-            composable_states=[AlchemicalState.from_system(alanine_state.system)]
-        )
-        # States with exact PME treatment but with
-        # update_alchemical_charges=True are incompatible.
-        compound_state_incompatible3 = states.CompoundThermodynamicState(
-            thermodynamic_state=copy.deepcopy(alanine_state_exact_pme),
-            composable_states=[AlchemicalState.from_system(alanine_state_exact_pme.system)]
-        )
-        # Switching update_alchemical_charges in the
-        # compound state works correctly.
-        compound_state_incompatible4 = copy.deepcopy(compound_state)
-        compound_state_incompatible4.update_alchemical_charges = True
-
-        compound_state_incompatible5 = copy.deepcopy(compound_state)
-        compound_state_incompatible5.update_alchemical_charges = True
-        compound_state_incompatible5.lambda_electrostatics = 0.5
-        compound_state_incompatible5.update_alchemical_charges = False
-
-        for incompatible_state in [compound_state_incompatible1, compound_state_incompatible2,
-                                   compound_state_incompatible3, compound_state_incompatible4,
-                                   compound_state_incompatible5]:
-            self._check_compatibility(compound_state, incompatible_state, context, is_compatible=False)
-
-        # Test compatibility.
-        # ----------------------
-
-        # Check that states with lambda_electrostatics are
-        # compatible even if other lambda variables change.
-        alchemical_state_compatible = copy.deepcopy(alchemical_state)
-        alchemical_state_compatible.lambda_sterics = 0.0
-        compound_state_compatible = states.CompoundThermodynamicState(copy.deepcopy(alanine_state_exact_pme),
-                                                                      [alchemical_state_compatible])
-        self._check_compatibility(compound_state, compound_state_compatible, context, is_compatible=True)
-
-
     def test_method_reduced_potential_compound_state(self):
         """Test CompoundThermodynamicState.reduced_potential_at_states() method.
 
@@ -2070,9 +1998,8 @@ class TestAlchemicalState(object):
     def test_serialization(self):
         """Test AlchemicalState serialization alone and in a compound state."""
         alchemical_state = AlchemicalState(lambda_electrostatics=0.5, lambda_angles=None)
-        alchemical_state.set_alchemical_variable('lambda', 0.0)
+        alchemical_state.set_function_variable('lambda', 0.0)
         alchemical_state.lambda_sterics = AlchemicalFunction('lambda')
-        alchemical_state.update_alchemical_charges = not AlchemicalState._UPDATE_ALCHEMICAL_CHARGES_DEFAULT
 
         # Test serialization/deserialization of AlchemicalState.
         serialization = utils.serialize(alchemical_state)

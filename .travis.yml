@@ -17,6 +17,8 @@ script:
   - source activate test
   # Add org channel
   - conda config --add channels ${ORGNAME}
+  # TODO: remove this channel when OpenMM 7.3 has been released.
+  - conda config --add channels omnia/label/rc
   # Add omnia dev channels
   - if [ $DEVOMNIA ]; then conda config --add channels https://conda.anaconda.org/omnia/label/dev; fi
   # Add conda-forge channel back to top priority
@@ -34,8 +36,8 @@ script:
 
 env:
   matrix:
-    - python=2.7 CONDA_PY=27
     - python=3.5 CONDA_PY=35
+    # TODO: reactivate the devomnia when we switch back to official OpenMM release instead of dev.
     - python=3.5 CONDA_PY=35 DEVOMNIA=true
     - python=3.6 CONDA_PY=36
   global:

@@ -1,6 +1,30 @@
 Release History
 ***************
 
+0.17.0 - Removed Py2 support, faster exact PME treatment
+========================================================
+
+New features
+------------
+- Add ``GlobalParameterFunction`` that allows to enslave a ``GlobalParameter`` to an arbitrary function of controlling
+variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+
+Enhancements
+------------
+- New implementation of the exact PME handling that uses the parameter offset feature in OpenMM 7.3. This comes with a
+considerable speed improvement over the previous implementation (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+- It is now possible to have multiple composable states exposing the same attributes/getter/setter in a
+``CompoundThermodynamicState`` (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+
+Deprecated and API breaks
+-------------------------
+- Python 2, which was deprecated in 0.16.0, is now unsupported.
+- The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed
+since it doesn't make sense with the new parameter offset implementation.
+- The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been
+deprecated. Use ``AlchemicalState.get_alchemical_function`` and ``AlchemicalState.set_alchemical_function`` instead.
+
+
 0.16.0 - Py2 deprecated, GlobalParameterState class, SamplerState reads CVs
 ===========================================================================
 
