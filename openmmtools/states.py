@@ -3435,27 +3435,25 @@ class GlobalParameterState(object):
             `current_context_state`.
         """
         # Cache information about system force groups.
+        # We create a dictionary "memo" mapping parameter_name -> list of force groups to update.
         if len(memo) == 0:
-            parameters_found = set()
             system = context.getSystem()
             system_parameters = self._get_system_controlled_parameters(system, self._parameters_name_suffix)
             for force, parameter_name, _ in system_parameters:
-                if parameter_name not in parameters_found:
-                    parameters_found.add(parameter_name)
-                    # Keep track of valid parameters only.
-                    if self._parameters[parameter_name] is not None:
-                        memo[parameter_name] = force.getForceGroup()
-                    # Break the loop if we have found all the parameters.
-                    if len(parameters_found) == len(self._parameters):
-                        break
+                # Keep track of valid parameters only.
+                if self._parameters[parameter_name] is not None:
+                    try:
+                        memo[parameter_name].append(force.getForceGroup())
+                    except KeyError:
+                        memo[parameter_name] = [force.getForceGroup()]
 
         # Find lambda parameters that will change.
         force_groups_to_update = set()
-        for parameter_name, force_group in memo.items():
+        for parameter_name, force_groups in memo.items():
             self_parameter_value = getattr(self, parameter_name)
             current_parameter_value = getattr(current_context_state, parameter_name)
             if self_parameter_value != current_parameter_value:
-                force_groups_to_update.add(force_group)
+                force_groups_to_update.update(force_groups)
         return force_groups_to_update
 
     # -------------------------------------------------------------------------

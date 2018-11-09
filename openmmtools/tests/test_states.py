@@ -1358,11 +1358,13 @@ class TestGlobalParameterState(object):
         system = openmm.System()
         system.addParticle(40.0*unit.amu)
         system.addParticle(40.0*unit.amu)
+        # Add a force defining lambda_bonds and gamma global parameters.
         custom_force = openmm.CustomBondForce('lambda_bonds^gamma*60000*(r-{})^2;'.format(r0_nanometers))
         custom_force.addGlobalParameter('lambda_bonds', cls.parameters_default_values['lambda_bonds'])
         custom_force.addGlobalParameter('gamma', cls.parameters_default_values['gamma'])
         custom_force.addBond(0, 1, [])
         system.addForce(custom_force)
+        # Add a force defining the lambda_bonds_mysuffix global parameters.
         custom_force_suffix = openmm.CustomBondForce('lambda_bonds_mysuffix*20000*(r-{})^2;'.format(r0_nanometers))
         custom_force_suffix.addGlobalParameter('lambda_bonds_mysuffix', cls.parameters_default_values['lambda_bonds_mysuffix'])
         custom_force_suffix.addBond(0, 1, [])
@@ -1374,6 +1376,14 @@ class TestGlobalParameterState(object):
         pos2 = [0.0, 0.0, r0_nanometers]
         cls.diatomic_molecule_ss = SamplerState(positions=np.array([pos1, pos2]) * unit.nanometers)
 
+        # Create a system with a duplicate force to test handling forces
+        # defining the same parameters in different force groups.
+        custom_force = copy.deepcopy(custom_force_suffix)
+        custom_force.setForceGroup(30)
+        system_force_groups = copy.deepcopy(system)
+        system_force_groups.addForce(custom_force)
+        cls.diatomic_molecule_force_groups_ts = ThermodynamicState(system_force_groups, temperature=300.0*unit.kelvin)
+
         # Create few incompatible systems for testing. An incompatible state
         # has a different set of defined global parameters.
         cls.incompatible_systems = [system]
@@ -1382,6 +1392,9 @@ class TestGlobalParameterState(object):
         for i in range(2):
             cls.incompatible_systems.append(copy.deepcopy(system))
             cls.incompatible_systems[i+1].removeForce(i)
+
+        # System with the global parameters duplicated in two different force groups.
+        cls.incompatible_systems.append(copy.deepcopy(system_force_groups))
 
         # System with both lambda_bonds_suffix and gamma_bond_suffix defined (instead of only the former).
         cls.incompatible_systems.append(copy.deepcopy(system))
@@ -1664,19 +1677,23 @@ class TestGlobalParameterState(object):
 
     def test_find_force_groups_to_update(self):
         """Test method GlobalParameterState._find_force_groups_to_update."""
-        system = self.diatomic_molecule_ts.system
+        system = self.diatomic_molecule_force_groups_ts.system
         integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-        # Test cases are (force_group, force_group_suffix)
-        test_cases = [(0, 0), (1, 5), (9, 4)]
+        # Test cases are (force_groups, force_groups_suffix)
+        test_cases = [
+            ([0], [0, 0]),
+            ([1], [5, 5]),
+            ([9], [4, 2])
+        ]
 
-        for force_groups in test_cases:
-            for i, force_group in enumerate(force_groups):
+        for test_case in test_cases:
+            for i, force_group in enumerate(test_case[0] + test_case[1]):
                 system.getForce(i).setForceGroup(force_group)
             states = self.read_system_state(system)
             context = openmm.Context(system, copy.deepcopy(integrator))
 
             # No force group should be updated if we don't change the global parameter.
-            for state, force_group in zip(states, force_groups):
+            for state, force_groups in zip(states, test_case):
                 assert state._find_force_groups_to_update(context, state, memo={}) == set()
 
                 # Change the lambdas one by one and check that the method
@@ -1690,7 +1707,7 @@ class TestGlobalParameterState(object):
 
                     # Change the current state.
                     setattr(current_state, parameter_name, parameter_value / 2)
-                    assert state._find_force_groups_to_update(context, current_state, memo={}) == {force_group}
+                    assert state._find_force_groups_to_update(context, current_state, memo={}) == set(force_groups)
                     setattr(current_state, parameter_name, parameter_value)  # Reset current state.
             del context
 
@@ -1876,8 +1893,8 @@ class TestGlobalParameterState(object):
         positions = copy.deepcopy(self.diatomic_molecule_ss.positions)
         # Build a mixed collection of compatible and incompatible thermodynamic states.
         thermodynamic_states = [
-            ThermodynamicState(self.incompatible_systems[0], temperature=300*unit.kelvin),
-            ThermodynamicState(self.incompatible_systems[-1], temperature=300*unit.kelvin)
+            copy.deepcopy(self.diatomic_molecule_ts),
+            copy.deepcopy(self.diatomic_molecule_force_groups_ts)
         ]
 
         compound_states = []

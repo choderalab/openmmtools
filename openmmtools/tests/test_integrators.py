@@ -224,10 +224,9 @@ def test_nose_hoover_integrator():
     
     # Coarse check for target temperature
     mean_temperature = np.mean(temperatures)
-    print(mean_temperature)
-    assert abs(mean_temperature - temperature.value_in_unit(unit.kelvin)) < 10.0
-    
-    
+    assert abs(mean_temperature - temperature.value_in_unit(unit.kelvin)) < 10.0, mean_temperature
+
+
 def test_pretty_formatting():
     """
     Test pretty-printing and pretty-formatting of integrators.
