@@ -16,9 +16,17 @@ considerable speed improvement over the previous implementation (`#380 <https://
 - It is now possible to have multiple composable states exposing the same attributes/getter/setter in a
 ``CompoundThermodynamicState`` (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
 
+Bug fixes
+---------
+- Fixed a bug involving the ``NoseHooverChainVelocityVerletIntegrator`` with ``System`` with constraints. The constraints
+were not taken into account when calculating the number of degrees of freedom resulting in the temperature not converging
+to the target value. (`#384 <https://github.com/choderalab/openmmtools/pull/384>`_)
+- Fixed a bug affecting ``reduced_potential_at_states`` when computing the reduced potential of systems in different
+``AlchemicalState``s when the same alchemical parameter appeared in force objects split in different force groups. (`#385 <https://github.com/choderalab/openmmtools/pull/385>`_)
+
 Deprecated and API breaks
 -------------------------
-- Python 2, which was deprecated in 0.16.0, is now unsupported.
+- Python 2 is not supported anymore.
 - The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed
 since it doesn't make sense with the new parameter offset implementation.
 - The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been
