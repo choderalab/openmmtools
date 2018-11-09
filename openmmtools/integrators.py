@@ -630,8 +630,9 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
 
         system: openmm.app.System instance
             Required to extract the system's number of degrees of freedom.
-            If the system is not passed to the constructor,
-            the temperature will converge to the wrong value.
+            If the system is not passed to the constructor and has constraints
+            or a ``CMMotionRemover`` force, the temperature will converge to the
+            wrong value.
                  
         temperature: unit.Quantity compatible with kelvin, default=298*unit.kelvin
             The target temperature for the thermostat.
@@ -676,7 +677,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         if chain_length < 0:
             raise Exception("Nosé-Hoover chain length must be at least 0")
         if chain_length == 0:
-            print("WARNING: Nosé-Hoover chain length is 0; falling back to regular velocity verlet algorithm.")
+            logger.warning('Nosé-Hoover chain length is 0; falling back to regular velocity verlet algorithm.')
         self.M           = chain_length
 
         # Define the "mass" of the thermostat particles (multiply by ndf for particle 0)
@@ -688,8 +689,8 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         # Compute the number of degrees of freedom.
         #
         if system is None:
-            print("SEVERE WARNING: The system was not passed to the NoseHooverChainVelocityVerletIntegrator. "
-                  "For systems with constraints, the simulation will run at the wrong temperature.")
+            logger.warning('The system was not passed to the NoseHooverChainVelocityVerletIntegrator. '
+                           'For systems with constraints, the simulation will run at the wrong temperature.')
             # Fall back to old scheme, which only works for unconstrained systems
             self.addGlobalVariable("ndf", 0)
             self.addPerDofVariable("ones", 1.0)
@@ -749,7 +750,6 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
         if self.M: self.propagateNHC()
         # Compute heat bath energies
         self.computeEnergies()
-
 
     def propagateNHC(self):
         """ Propagate the Nosé-Hoover chain """
