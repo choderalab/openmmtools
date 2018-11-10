@@ -15,6 +15,8 @@ Enhancements
 ------------
 - New implementation of the exact PME handling that uses the parameter offset feature in OpenMM 7.3. This comes with a
 considerable speed improvement over the previous implementation (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+- Exact PME is now the default for the ``alchemical_pme_treatment`` parameter in the constructor of
+``AbsoluteAchemicalFactory`` (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
 - It is now possible to have multiple composable states exposing the same attributes/getter/setter in a
 ``CompoundThermodynamicState`` (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
 
