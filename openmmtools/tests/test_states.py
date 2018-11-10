@@ -963,6 +963,26 @@ class TestSamplerState(object):
         assert sliced_sampler_state.kinetic_energy is None
         assert sliced_sampler_state.potential_energy is None
 
+    def test_dict_representation(self):
+        """Setting the state of the object should work when ignoring velocities."""
+        alanine_vacuum_context = self.create_context(self.alanine_vacuum_state)
+        alanine_vacuum_context.setPositions(self.alanine_vacuum_positions)
+        alanine_vacuum_context.setVelocitiesToTemperature(300*unit.kelvin)
+
+        # Test precondition.
+        vacuum_sampler_state = SamplerState.from_context(alanine_vacuum_context)
+        old_velocities = vacuum_sampler_state.velocities
+        assert old_velocities is not None
+
+        # Get a dictionary representation without velocities.
+        serialization = vacuum_sampler_state.__getstate__(ignore_velocities=True)
+        assert serialization['velocities'] is None
+
+        # Do not overwrite velocities when setting a state.
+        serialization['velocities'] = np.random.rand(*vacuum_sampler_state.positions.shape) * unit.nanometer/unit.picosecond
+        vacuum_sampler_state.__setstate__(serialization, ignore_velocities=True)
+        assert np.all(vacuum_sampler_state.velocities == old_velocities)
+
     def test_collective_variable(self):
         """Test that CV calculation is working"""
         # Setup the CV tests if we have a late enough OpenMM
