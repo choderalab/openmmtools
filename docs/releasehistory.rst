@@ -8,11 +8,15 @@ New features
 ------------
 - Add ``GlobalParameterFunction`` that allows to enslave a ``GlobalParameter`` to an arbitrary function of controlling
 variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+- Allow to ignore velocities when building the dict representation of a ``SamplerState``. This can be useful for example
+to save bandwidth when sending a ``SamplerState`` over the network and velocities are not required (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
 
 Enhancements
 ------------
 - New implementation of the exact PME handling that uses the parameter offset feature in OpenMM 7.3. This comes with a
 considerable speed improvement over the previous implementation (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+- Exact PME is now the default for the ``alchemical_pme_treatment`` parameter in the constructor of
+``AbsoluteAchemicalFactory`` (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
 - It is now possible to have multiple composable states exposing the same attributes/getter/setter in a
 ``CompoundThermodynamicState`` (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
 

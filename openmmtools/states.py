@@ -2120,18 +2120,36 @@ class SamplerState(object):
         sampler_state._collective_variables = None
         return sampler_state
 
-    def __getstate__(self):
-        """Return a dictionary representation of the state."""
+    def __getstate__(self, ignore_velocities=False):
+        """Return a dictionary representation of the state.
+
+        Parameters
+        ----------
+        ignore_velocities : bool, optional
+            If True, velocities are not serialized. This can be useful for
+            example to save bandwidth when sending a ``SamplerState`` over
+            the network and velocities are not required (default is False).
+        """
+        velocities = None if ignore_velocities else self.velocities
         serialization = dict(
-            positions=self.positions, velocities=self.velocities,
+            positions=self.positions, velocities=velocities,
             box_vectors=self.box_vectors, potential_energy=self.potential_energy,
             kinetic_energy=self.kinetic_energy,
             collective_variables=self.collective_variables
         )
         return serialization
 
-    def __setstate__(self, serialization):
-        """Set the state from a dictionary representation."""
+    def __setstate__(self, serialization, ignore_velocities=False):
+        """Set the state from a dictionary representation.
+
+        Parameters
+        ----------
+        ignore_velocities : bool, optional
+            If True and the ``SamplerState`` has already velocities
+            defined, this does not overwrite the velocities.
+        """
+        if ignore_velocities and '_velocities' in self.__dict__:
+            serialization['velocities'] = self.velocities
         self._initialize(**serialization)
 
     # -------------------------------------------------------------------------

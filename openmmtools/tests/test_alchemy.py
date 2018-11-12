@@ -1278,7 +1278,8 @@ class TestAbsoluteAlchemicalFactory(object):
     def generate_cases(cls):
         """Generate all test cases in cls.test_cases combinatorially."""
         cls.test_cases = dict()
-        factory = AbsoluteAlchemicalFactory(alchemical_rf_treatment='switched')
+        direct_space_factory = AbsoluteAlchemicalFactory(alchemical_pme_treatment='direct-space',
+                                                         alchemical_rf_treatment='switched')
         exact_pme_factory = AbsoluteAlchemicalFactory(alchemical_pme_treatment='exact')
 
         # We generate all possible combinations of annihilate_sterics/electrostatics
@@ -1324,7 +1325,7 @@ class TestAbsoluteAlchemicalFactory(object):
                     test_case_name += ', modified softcore parameters'
 
                 # Pre-generate alchemical system.
-                alchemical_system = factory.create_alchemical_system(test_system.system, test_region)
+                alchemical_system = direct_space_factory.create_alchemical_system(test_system.system, test_region)
 
                 # Add test case.
                 cls.test_cases[test_case_name] = (test_system, alchemical_system, test_region)
@@ -1343,7 +1344,7 @@ class TestAbsoluteAlchemicalFactory(object):
             # of the reference system to allow comparisons.
             if nonbonded_method == openmm.NonbondedForce.CutoffPeriodic:
                 forcefactories.replace_reaction_field(test_system.system, return_copy=False,
-                                                      switch_width=factory.switch_width)
+                                                      switch_width=direct_space_factory.switch_width)
 
     def filter_cases(self, condition_func, max_number=None):
         """Return the list of test cases that satisfy condition_func(test_case_name)."""

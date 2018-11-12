@@ -616,7 +616,7 @@ class AbsoluteAlchemicalFactory(object):
     # -------------------------------------------------------------------------
 
     def __init__(self, consistent_exceptions=False, switch_width=1.0*unit.angstroms,
-                 alchemical_pme_treatment='direct-space', alchemical_rf_treatment='switched',
+                 alchemical_pme_treatment='exact', alchemical_rf_treatment='switched',
                  disable_alchemical_dispersion_correction=False, split_alchemical_forces=True):
 
         self.consistent_exceptions = consistent_exceptions
