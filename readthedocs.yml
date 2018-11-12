@@ -1,10 +1,13 @@
 conda:
-    file: docs/environment.yml
+  file: docs/environment.yml
 
 # The default for requirements_file is null, but for some reason we get an error with this message if it's not set:
 # "Problem parsing YAML configuration. Invalid "requirements_file": path docs/requirements.txt does not exist"
 requirements_file: null
 
+build:
+  image: latest
+
 python:
-    version: 3.5
-    setup_py_install: true
+  version: 3.6
+  setup_py_install: true
