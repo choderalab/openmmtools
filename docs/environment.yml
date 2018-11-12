@@ -1,10 +1,12 @@
 name: openmmtools
 channels:
+    - conda-forge
     - omnia
+    - omnia/label/rc
 dependencies:
     - python
     - setuptools
-    - openmm >=7.2
+    - openmm >=7.3
     - numpy
     - scipy
     - six
