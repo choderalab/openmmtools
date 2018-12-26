@@ -51,6 +51,8 @@ Clusters and simple fluids
     LennardJonesGrid
     CustomLennardJonesFluidMixture
     WCAFluid
+    DoubleWellDimer_WCAFluid
+    DoubleWellChain_WCAFluid
     TolueneVacuum
     TolueneImplicit
     TolueneImplicitHCT

@@ -192,3 +192,17 @@ def test_topology_all_testsystems():
         f = partial(check_topology, testsystem.system, testsystem.topology)
         f.description = "Testing topology for testsystem %s" % class_name
         yield f
+
+def test_dw_dimers_as_wca(self):
+    dimers = testsystems.DoubleWellDimer_WCAFluid(ndimers=0)
+    chain_1 = testsystems.DoubleWellChain_WCAFluid(nchained=1)
+    chain_0 = testsystems.DoubleWellChain_WCAFluid(nchained=0)
+    wca = testsystems.WCAFluid()
+    assert dimers.topology == wca.topology
+    assert chain_1.topology == wca.topology
+    assert chain_0.topology == wca.topology
+
+def test_dw_dimers_1_dimer(self):
+    dimers = testsystems.DoubleWellDimer_WCAFluid(ndimers=1)
+    chain = testsystems.DoubleWellChain_WCAFluid(nchained=2)
+    assert dimers.topollogy == chain.topology

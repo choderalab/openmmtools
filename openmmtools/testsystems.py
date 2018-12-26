@@ -2349,6 +2349,10 @@ class WCAFluid(TestSystem):
         self.system, self.positions = system, positions
 
 
+#=============================================================================================
+# Double Well Dimers in WCA Fluid
+#=============================================================================================
+
 class DoubleWellDimer_WCAFluid(WCAFluid):
 
     def __init__(self, ndimers=1, nparticles=216, density=0.96, mass=39.9 *
@@ -2491,6 +2495,10 @@ class DoubleWellDimer_WCAFluid(WCAFluid):
         for bond_idx in range(nbonds):
             yield (2 * bond_idx, 2 * bond_idx + 1)
 
+
+#=============================================================================================
+# Double Well Chain in WCA Fluid
+#=============================================================================================
 
 class DoubleWellChain_WCAFluid(DoubleWellDimer_WCAFluid):
     def __init__(self, nchained=3, nparticles=216, density=0.96, mass=39.9 *
