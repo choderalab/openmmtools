@@ -5,6 +5,7 @@ from simtk import openmm
 
 import os, os.path
 import logging
+from nose.tools import assert_raises
 
 from openmmtools import testsystems
 
@@ -222,3 +223,15 @@ def test_dw_systems_1_dimer():
     dimers = testsystems.DoubleWellDimer_WCAFluid(ndimers=1)
     chain = testsystems.DoubleWellChain_WCAFluid(nchained=2)
     assert _equiv_topology(dimers.topology, chain.topology)
+
+def test_double_well_dimer_errors():
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellDimer_WCAFluid(ndimers=-1)
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellDimer_WCAFluid(ndimers=6, nparticles=10)
+
+def test_double_well_chain_errors():
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellChain_WCAFluid(nchained=-1)
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellChain_WCAFluid(nchained=11, nparticles=10)
