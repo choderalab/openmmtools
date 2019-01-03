@@ -10,6 +10,8 @@ New features
 variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
 - Allow to ignore velocities when building the dict representation of a ``SamplerState``. This can be useful for example
 to save bandwidth when sending a ``SamplerState`` over the network and velocities are not required (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
+- Add ``DoubleWellDimer_WCAFluid`` and ``DoubleWellChain_WCAFluid`` test
+  systems (`#389 <https://github.com/choderalab/openmmtools/pull/389>`_).
 
 Enhancements
 ------------

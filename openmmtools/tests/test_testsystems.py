@@ -5,10 +5,23 @@ from simtk import openmm
 
 import os, os.path
 import logging
+from nose.tools import assert_raises
 
 from openmmtools import testsystems
 
 from functools import partial
+
+def _equiv_topology(top_1, top_2):
+    """Compare topologies using string reps of atoms and bonds"""
+    for (b1, b2) in zip(top_1.bonds(), top_2.bonds()):
+        if str(b1) != str(b2):
+            return False
+
+    for (a1, a2) in zip(top_1.atoms(), top_2.atoms()):
+        if str(a1) != str(a2):
+            return False
+
+    return True
 
 def get_all_subclasses(cls):
     """
@@ -96,7 +109,7 @@ fast_testsystems = [
     "LennardJonesFluid",
     "LennardJonesGrid",
     "CustomLennardJonesFluidMixture",
-    "WCAFluid",
+    "WCAFluid", "DoubleWellDimer_WCAFluid", "DoubleWellChain_WCAFluid",
     "IdealGas",
     "WaterBox", "FlexibleWaterBox", "FourSiteWaterBox", "FiveSiteWaterBox", "DischargedWaterBox", "DischargedWaterBoxHsites", "AlchemicalWaterBox",
     "AlanineDipeptideVacuum", "AlanineDipeptideImplicit",
@@ -192,3 +205,33 @@ def test_topology_all_testsystems():
         f = partial(check_topology, testsystem.system, testsystem.topology)
         f.description = "Testing topology for testsystem %s" % class_name
         yield f
+
+def test_dw_systems_as_wca():
+    # check that the double-well systems are equivalent to WCA fluid in
+    # certain limits
+    dimers = testsystems.DoubleWellDimer_WCAFluid(ndimers=0)
+    chain_1 = testsystems.DoubleWellChain_WCAFluid(nchained=1)
+    chain_0 = testsystems.DoubleWellChain_WCAFluid(nchained=0)
+    wca = testsystems.WCAFluid()
+    assert _equiv_topology(dimers.topology, wca.topology)
+    assert _equiv_topology(chain_1.topology, wca.topology)
+    assert _equiv_topology(chain_0.topology, wca.topology)
+
+def test_dw_systems_1_dimer():
+    # check that the double-well systems are equivalent when there's only
+    # one dimer pair
+    dimers = testsystems.DoubleWellDimer_WCAFluid(ndimers=1)
+    chain = testsystems.DoubleWellChain_WCAFluid(nchained=2)
+    assert _equiv_topology(dimers.topology, chain.topology)
+
+def test_double_well_dimer_errors():
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellDimer_WCAFluid(ndimers=-1)
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellDimer_WCAFluid(ndimers=6, nparticles=10)
+
+def test_double_well_chain_errors():
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellChain_WCAFluid(nchained=-1)
+    with assert_raises(ValueError) as context:
+        testsystems.DoubleWellChain_WCAFluid(nchained=11, nparticles=10)
