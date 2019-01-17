@@ -1750,11 +1750,11 @@ class SamplerState(object):
 
     Parameters
     ----------
-    positions : Nx3 simtk.unit.Quantity or list(simtk.openmm.Vec3)
+    positions : Nx3 simtk.unit.Quantity
         Position vectors for N particles (length units).
-    velocities : Nx3 simtk.unit.Quantity or list(simtk.openmm.Vec3), optional
+    velocities : Nx3 simtk.unit.Quantity, optional
         Velocity vectors for N particles (velocity units).
-    box_vectors : 3x3 simtk.unit.Quantity or list(simtk.openmm.Vec3) 
+    box_vectors : 3x3 simtk.unit.Quantity 
         Current box vectors (length units).
 
     Attributes
@@ -1836,7 +1836,7 @@ class SamplerState(object):
         self._potential_energy = None
         args = []
         for input in [positions, velocities, box_vectors]:
-            if isinstance(input, unit.Quantity) and isinstance(input._value, list):
+            if isinstance(input, unit.Quantity) and not isinstance(input._value, np.ndarray):
                 args.append(np.array(input/input.unit)*input.unit)
             else:
                args.append(copy.deepcopy(input))    
