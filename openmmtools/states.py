@@ -1750,11 +1750,11 @@ class SamplerState(object):
 
     Parameters
     ----------
-    positions : Nx3 simtk.unit.Quantity
+    positions : Nx3 simtk.unit.Quantity or list(simtk.openmm.Vec3)
         Position vectors for N particles (length units).
-    velocities : Nx3 simtk.unit.Quantity, optional
+    velocities : Nx3 simtk.unit.Quantity or list(simtk.openmm.Vec3), optional
         Velocity vectors for N particles (velocity units).
-    box_vectors : 3x3 simtk.unit.Quantity
+    box_vectors : 3x3 simtk.unit.Quantity or list(simtk.openmm.Vec3) 
         Current box vectors (length units).
 
     Attributes
@@ -1834,7 +1834,13 @@ class SamplerState(object):
         self._collective_variables = None
         self._kinetic_energy = None
         self._potential_energy = None
-        self._initialize(copy.deepcopy(positions), copy.deepcopy(velocities), copy.deepcopy(box_vectors))
+        args = []
+        for input in [positions, velocities, box_vectors]:
+            if isinstance(input, unit.Quantity) and isinstance(input._value, list):
+                args.append(np.array(input/input.unit)*input.unit)
+            else:
+               args.append(copy.deepcopy(input))    
+        self._initialize(*args)
 
     @classmethod
     def from_context(cls, context_state, ignore_collective_variables=False):
