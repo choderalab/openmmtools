@@ -23,7 +23,7 @@ import numpy as np
 from simtk import unit
 from simtk import openmm
 
-from openmmtools import integrators, testsystems
+from openmmtools import integrators, testsystems, hmc_integrators
 from openmmtools.integrators import (ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator,
                                      GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator)
 
@@ -61,6 +61,7 @@ def get_all_custom_integrators(only_thermostated=False):
         old_predicate = predicate  # Avoid infinite recursion.
         predicate = lambda x: old_predicate(x) and issubclass(x, integrators.ThermostatedIntegrator)
     custom_integrators = inspect.getmembers(integrators, predicate=predicate)
+    custom_integrators = custom_integrators + inspect.getmembers(hmc_integrators, predicate=predicate)
     return custom_integrators
 
 
@@ -703,10 +704,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     # Create harmonic oscillator testsystem
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
     system = testsystem.system
-    positions = testsystem.positions
 
     # Get equilibrium samples from initial and final states
-    burn_in = 5 * 20 # 5 periods
     thinning = 5 * 20 # 5 periods
 
     # Collect forward and reverse work values
@@ -754,7 +753,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemical_ctx, temperature=298 * unit.kelvin):
+def run_nonequilibrium_switching(init_x, alchemical_integrator, alchemical_ctx, temperature=298 * unit.kelvin):
     """Perform a nonequilibrium switching protocol
 
     Parameters
@@ -791,7 +790,34 @@ def run_nonequilibrium_switching(init_x, alchemical_integrator, nsteps, alchemic
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
         for nsteps in [0, 1, 10]:
-            run_alchemical_langevin_integrator(nsteps=nsteps)
+            run_alchemical_langevin_integrator(nsteps=nsteps, splitting=splitting)
+
+
+def test_xcghmc_integrator_stability():
+    """Loop over the various extra-chance parameters to test stability"""
+
+    test_case = testsystems.AlanineDipeptideVacuum()
+    test_name = test_case.__class__.__name__
+    from openmmtools.hmc_integrators import XCGHMCIntegrator
+
+    for extra_chances in [0, 1, 2]:
+        for steps_per_hmc in [1, 2]:
+            for steps_per_extra_hmc in [1, 2]:
+
+                integrator = XCGHMCIntegrator(extra_chances=extra_chances,
+                                              steps_per_hmc=steps_per_hmc,
+                                              steps_per_extra_hmc=steps_per_extra_hmc
+                                              )
+
+                check_stability.description = ("Testing XCGHMC (extra_chances={}, "
+                                               "steps_per_hmc={}, "
+                                               "steps_per_extra_hmc={}) "
+                                               "for stability over a short number of "
+                                               "integration steps of {}.").format(
+                    extra_chances, steps_per_hmc, steps_per_extra_hmc, test_name)
+
+                yield check_stability, integrator, test_case
+
 
 if __name__=="__main__":
     test_alchemical_langevin_integrator()
