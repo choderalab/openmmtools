@@ -45,7 +45,7 @@ from openmmtools.multistate.utils import SimulationNaNError
 
 from pymbar.utils import ParameterError
 
-from yank.fire import FIREMinimizationIntegrator
+from openmmtools.integrators import FIREMinimizationIntegrator
 
 logger = logging.getLogger(__name__)
 
@@ -1293,6 +1293,7 @@ class MultiStateSampler(object):
         final_energy = thermodynamic_state.reduced_potential(sampler_state)
         logger.debug('Replica {}/{}: final energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, final_energy))
+	# TODO if energy > 0, use slower openmm minimizer
 
         # Clean up the integrator
         del context
