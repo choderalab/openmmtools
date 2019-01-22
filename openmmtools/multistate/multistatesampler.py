@@ -1338,10 +1338,10 @@ class MultiStateSampler(object):
         sampler_state = self._sampler_states[replica_id]
 
         # Compute energy for all thermodynamic states.
-        for energies, states in [(energy_neighborhood_states, neighborhood_thermodynamic_states),
+        for energies, the_states in [(energy_neighborhood_states, neighborhood_thermodynamic_states),
                                  (energy_unsampled_states, self._unsampled_states)]:
             # Group thermodynamic states by compatibility.
-            compatible_groups, original_indices = states.group_by_compatibility(states)
+            compatible_groups, original_indices = states.group_by_compatibility(the_states)
 
             # Compute the reduced potentials of all the compatible states.
             for compatible_group, state_indices in zip(compatible_groups, original_indices):
