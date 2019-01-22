@@ -29,6 +29,7 @@ import openmmtools as mmtools
 from scipy.special import logsumexp
 
 from openmmtools import multistate, utils
+from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
 import mpiplus
 
 
@@ -671,7 +672,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self.log_weights = self.log_target_probabilities[:] - self._logZ[:]
 
 
-class SAMSAnalyzer(multistate.MultiStateSamplerAnalyzer):
+class SAMSAnalyzer(MultiStateSamplerAnalyzer):
     """
     The SAMSAnalyzer is the analyzer for a simulation generated from a SAMSSampler simulation.
 

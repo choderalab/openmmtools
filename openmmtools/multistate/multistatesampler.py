@@ -41,7 +41,7 @@ from simtk import unit, openmm
 
 from openmmtools import multistate, utils, states, mcmc, cache
 import mpiplus
-from yank.utils import SimulationNaNError
+from openmmtools.multistate.utils import SimulationNaNError
 
 from pymbar.utils import ParameterError
 
@@ -1405,7 +1405,7 @@ class MultiStateSampler(object):
         # MultiStateSampler never finished importing, its not in the name space which causes relative analyze import of
         # MultiStateSampler to crash as neither of them are the __main__ package.
         # https://stackoverflow.com/questions/6351805/cyclic-module-dependencies-and-relative-imports-in-python
-        from .multistateanalyzer import MultiStateSamplerAnalyzer
+        from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
 
         # Start the analysis
         bump_error_counter = False

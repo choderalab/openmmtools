@@ -37,6 +37,7 @@ import numpy as np
 import mdtraj as md
 
 from openmmtools import multistate, utils
+from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
 import mpiplus
 
 
@@ -214,7 +215,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                                             validate_function=_StoredProperty._repex_mixing_scheme_validator)
 
     _TITLE_TEMPLATE = ('Replica-exchange sampler simulation created using ReplicaExchangeSampler class '
-                       'of yank.multistate on {}')
+                       'of openmmtools.multistate on {}')
 
     def _pre_write_create(self, thermodynamic_states, sampler_states, *args, **kwargs):
         """Overwrite parent implementation to make sure the number of
@@ -360,7 +361,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         super()._display_citations(overwrite_global=overwrite_global, citation_stack=citation_stack)
 
 
-class ReplicaExchangeAnalyzer(multistate.MultiStateSamplerAnalyzer):
+class ReplicaExchangeAnalyzer(MultiStateSamplerAnalyzer):
 
     """
     The ReplicaExchangeAnalyzer is the analyzer for a simulation generated from a Replica Exchange sampler simulation,
