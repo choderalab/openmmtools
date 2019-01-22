@@ -25,6 +25,7 @@ requirements:
     - mdtraj
     - netcdf4
     - pyyaml
+    - mpiplus 
 
 
 test:
