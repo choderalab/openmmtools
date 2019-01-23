@@ -1026,8 +1026,6 @@ class MultiStateReporter(object):
         ...     reporter.write_dict('data', data)
         ...     reporter.read_dict('data')
         {'info': [1, 2, 3]}
-        ...     reporter.read_dict('data/info')
-        [1, 2, 3]
 
         """
         storage = 'analysis'

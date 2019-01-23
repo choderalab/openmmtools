@@ -84,13 +84,15 @@ class SAMSSampler(multistate.MultiStateSampler):
     >>> from simtk import unit
     >>> from openmmtools import testsystems, states, mcmc
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
+    >>> import os
+    >>> import tempfile
 
     Create thermodynamic states for parallel tempering with exponentially-spaced schedule:
 
     >>> n_replicas = 3  # Number of temperature replicas.
     >>> T_min = 298.0 * unit.kelvin  # Minimum temperature.
     >>> T_max = 600.0 * unit.kelvin  # Maximum temperature.
-    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(nreplicas-1)) - 1.0) / (math.e - 1.0)
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
     ...                 for i in range(n_replicas)]
     >>> thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
     ...                         for T in temperatures]
@@ -99,10 +101,10 @@ class SAMSSampler(multistate.MultiStateSampler):
 
     >>> move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
     >>> simulation = SAMSSampler(mcmc_moves=move, number_of_iterations=2,
-    >>>                          state_update_scheme='restricted-range-jump', locality=5,
-    >>>                          update_stages='two-stage', flatness_criteria='logZ-flatness', 
-    >>>                          flatness_threshold=0.2, weight_update_method='rao-blackwellized',
-    >>>                          adapt_target_probabilities=False)
+    ...                          state_update_scheme='global-jump', locality=5,
+    ...                          update_stages='two-stage', flatness_criteria='logZ-flatness', 
+    ...                          flatness_threshold=0.2, weight_update_method='rao-blackwellized',
+    ...                          adapt_target_probabilities=False)
 
 
     Create a single-replica SAMS simulation bound to a storage file and run:
@@ -110,8 +112,9 @@ class SAMSSampler(multistate.MultiStateSampler):
     >>> storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
     >>> reporter = multistate.MultiStateReporter(storage_path, checkpoint_interval=1)
     >>> simulation.create(thermodynamic_states=thermodynamic_states,
-    >>>                   sampler_states=[states.SamplerState(testsystem.positions)],
-    >>>                   storage=reporter)
+    ...                   sampler_states=[states.SamplerState(testsystem.positions)],
+    ...                   storage=reporter)
+    ...
     >>> simulation.run()  # This runs for a maximum of 2 iterations.
     >>> simulation.iteration
     2
@@ -124,6 +127,7 @@ class SAMSSampler(multistate.MultiStateSampler):
 
     >>> del simulation
     >>> simulation = SAMSSampler.from_storage(reporter)
+    ...
     >>> simulation.extend(n_iterations=1)
     >>> simulation.iteration
     3
@@ -133,9 +137,9 @@ class SAMSSampler(multistate.MultiStateSampler):
     run iteration.
 
     >>> reporter = multistate.MultiStateReporter(storage=storage_path, open_mode='r', checkpoint_interval=1)
-    >>> sampler_states = reporter.read_sampler_states(iteration=range(1, 4))
+    >>> sampler_states = reporter.read_sampler_states(iteration=3)
     >>> len(sampler_states)
-    3
+    1
     >>> sampler_states[-1].positions.shape  # Alanine dipeptide has 22 atoms.
     (22, 3)
 

@@ -2089,9 +2089,9 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
     Examples
     --------
     >>> from openmmtools import testsystems
+    >>> from simtk import openmm
     >>> t = testsystems.AlanineDipeptideVacuum()
     >>> system, positions = t.system, t.positions
-    Create a FIRE integrator with default parameters and minimize for 100 steps
     >>> integrator = FIREMinimizationIntegrator()
     >>> context = openmm.Context(system, integrator)
     >>> context.setPositions(positions)

@@ -59,6 +59,7 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
     >>> from openmmtools import testsystems, states, mcmc
     >>> import tempfile
     >>> testsystem = testsystems.AlanineDipeptideImplicit()
+    >>> import os
 
     Create thermodynamic states for parallel tempering with exponentially-spaced schedule.
 

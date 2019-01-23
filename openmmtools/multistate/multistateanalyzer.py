@@ -36,7 +36,6 @@ from pymbar import MBAR, timeseries
 
 from openmmtools import multistate, utils, forces
 
-from . import utils
 
 ABC = abc.ABC
 logger = logging.getLogger(__name__)

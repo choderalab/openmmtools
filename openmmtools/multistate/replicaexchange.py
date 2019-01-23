@@ -121,13 +121,15 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     >>> from simtk import unit
     >>> from openmmtools import testsystems, states, mcmc
     >>> testsystem = testsystems.AlanineDipeptideImplicit()
+    >>> import os
+    >>> import tempfile
 
     Create thermodynamic states for parallel tempering with exponentially-spaced schedule.
 
     >>> n_replicas = 3  # Number of temperature replicas.
     >>> T_min = 298.0 * unit.kelvin  # Minimum temperature.
     >>> T_max = 600.0 * unit.kelvin  # Maximum temperature.
-    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(nreplicas-1)) - 1.0) / (math.e - 1.0)
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
     ...                 for i in range(n_replicas)]
     >>> thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
     ...                         for T in temperatures]
@@ -142,8 +144,8 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     >>> storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
     >>> reporter = multistate.MultiStateReporter(storage_path, checkpoint_interval=1)
     >>> simulation.create(thermodynamic_states=thermodynamic_states,
-    >>>                   sampler_states=states.SamplerState(testsystem.positions),
-    >>>                   storage=reporter)
+    ...                   sampler_states=states.SamplerState(testsystem.positions),
+    ...                   storage=reporter)
     >>> simulation.run()  # This runs for a maximum of 2 iterations.
     >>> simulation.iteration
     2
@@ -165,10 +167,10 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     run iteration.
 
     >>> reporter = multistate.MultiStateReporter(storage=storage_path, open_mode='r', checkpoint_interval=1)
-    >>> sampler_states = reporter.read_sampler_states(iteration=range(1, 4))
+    >>> sampler_states = reporter.read_sampler_states(iteration=1)
     >>> len(sampler_states)
     3
-    >>> sampler_states[-1].positions.shape  # Alanine dipeptide has 22 atoms.
+    >>> sampler_states[0].positions.shape  # Alanine dipeptide has 22 atoms.
     (22, 3)
 
     Clean up.
@@ -269,7 +271,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
 
     def _mix_all_replicas_cython(self):
         """Exchange all replicas with Cython-accelerated code."""
-        from .mixing._mix_replicas import _mix_replicas_cython
+        from openmmtools.multistate.mixing._mix_replicas import _mix_replicas_cython
 
         replica_states = md.utils.ensure_type(self._replica_thermodynamic_states, np.int64, 1, "Replica States")
         u_kl = md.utils.ensure_type(self._energy_thermodynamic_states, np.float64, 2, "Reduced Potentials")
