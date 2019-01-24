@@ -14,10 +14,10 @@ This may be useful in, for example, experimenting with ways to reduce correlatio
 
 In all of these schemes, one or more **replicas** is simulated.
 Each iteration includes the following phases:
-* Allow replicas to switch thermodynamic states (optional)
-* Allow replicas to sample a new configuration using Markov chain Monte Carlo (MCMC)
-* Each replica computes the potential energy of the current configuration in multiple thermodynamic states
-* Data is written to disk
+| * Allow replicas to switch thermodynamic states (optional)
+| * Allow replicas to sample a new configuration using Markov chain Monte Carlo (MCMC)
+| * Each replica computes the potential energy of the current configuration in multiple thermodynamic states
+| * Data is written to disk
 
 Below, we describe some of the aspects of these samplers.
 
@@ -33,8 +33,8 @@ In this case, the MCMC scheme is used to propagate each replica by sampling from
    x_{k,n+1} \sim p(x | s_{k, n+1})
 
 An inclusive "neighborhood" of thermodynamic states around this specified state can be used to define which thermodynamic states the reduced potential should be computed for after each iteration.
-If all thermodynamic states are included in this neighborhood (the default), the MBAR scheme [CITE] can be used to optimally estimate free energies and uncertainties.
-If a restricted neighborhood is used (in order to reduce the amount of time spent in the energy evaluation stage), a variant of the L-WHAM (local weighted histogram analysis method) [CITE] is used to extract an estimate from all available information.
+If all thermodynamic states are included in this neighborhood (the default), the MBAR scheme :cite:`Shirts2008statistically` can be used to optimally estimate free energies and uncertainties.
+If a restricted neighborhood is used (in order to reduce the amount of time spent in the energy evaluation stage), a variant of the L-WHAM (local weighted histogram analysis method) :cite:`kumar1992weighted` is used to extract an estimate from all available information.
 
 ``ReplicaExchangeSampler``: Replica exchange among thermodynamic states
 -----------------------------------------------------------------------
