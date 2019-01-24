@@ -32,7 +32,7 @@ to the target value. (`#384 <https://github.com/choderalab/openmmtools/pull/384>
 
 Deprecated and API breaks
 -------------------------
-- Python 2 is not supported anymore.
+- Python 2 and 3.5 is not supported anymore.
 - The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed
 since it doesn't make sense with the new parameter offset implementation.
 - The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been
