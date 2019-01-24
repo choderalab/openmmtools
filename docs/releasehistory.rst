@@ -6,12 +6,9 @@ Release History
 
 New features
 ------------
-- Add ``GlobalParameterFunction`` that allows to enslave a ``GlobalParameter`` to an arbitrary function of controlling
-variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
-- Allow to ignore velocities when building the dict representation of a ``SamplerState``. This can be useful for example
-to save bandwidth when sending a ``SamplerState`` over the network and velocities are not required (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
-- Add ``DoubleWellDimer_WCAFluid`` and ``DoubleWellChain_WCAFluid`` test
-  systems (`#389 <https://github.com/choderalab/openmmtools/pull/389>`_).
+- Add ``GlobalParameterFunction`` that allows to enslave a ``GlobalParameter`` to an arbitrary function of controlling variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+- Allow to ignore velocities when building the dict representation of a ``SamplerState``. This can be useful for example to save bandwidth when sending a ``SamplerState`` over the network and velocities are not required (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
+- Add ``DoubleWellDimer_WCAFluid`` and ``DoubleWellChain_WCAFluid`` test systems (`#389 <https://github.com/choderalab/openmmtools/pull/389>`_).
 
 Enhancements
 ------------
@@ -24,19 +21,14 @@ considerable speed improvement over the previous implementation (`#380 <https://
 
 Bug fixes
 ---------
-- Fixed a bug involving the ``NoseHooverChainVelocityVerletIntegrator`` with ``System`` with constraints. The constraints
-were not taken into account when calculating the number of degrees of freedom resulting in the temperature not converging
-to the target value. (`#384 <https://github.com/choderalab/openmmtools/pull/384>`_)
-- Fixed a bug affecting ``reduced_potential_at_states`` when computing the reduced potential of systems in different
-``AlchemicalState``s when the same alchemical parameter appeared in force objects split in different force groups. (`#385 <https://github.com/choderalab/openmmtools/pull/385>`_)
+- Fixed a bug involving the ``NoseHooverChainVelocityVerletIntegrator`` with ``System`` with constraints. The constraints were not taken into account when calculating the number of degrees of freedom resulting in the temperature not converging to the target value. (`#384 <https://github.com/choderalab/openmmtools/pull/384>`_)
+- Fixed a bug affecting ``reduced_potential_at_states`` when computing the reduced potential of systems in different ``AlchemicalState``s when the same alchemical parameter appeared in force objects split in different force groups. (`#385 <https://github.com/choderalab/openmmtools/pull/385>`_)
 
 Deprecated and API breaks
 -------------------------
-- Python 2 is not supported anymore.
-- The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed
-since it doesn't make sense with the new parameter offset implementation.
-- The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been
-deprecated. Use ``AlchemicalState.get_alchemical_function`` and ``AlchemicalState.set_alchemical_function`` instead.
+- Python 2 and 3.5 is not supported anymore.
+- The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed since it doesn't make sense with the new parameter offset implementation.
+- The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been deprecated. Use ``AlchemicalState.get_alchemical_function`` and ``AlchemicalState.set_alchemical_function`` instead.
 
 
 0.16.0 - Py2 deprecated, GlobalParameterState class, SamplerState reads CVs
