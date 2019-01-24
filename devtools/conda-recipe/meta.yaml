@@ -28,6 +28,7 @@ requirements:
     - pyyaml
     - mpiplus 
     - cython
+    - sphinxcontrib-bibtex
 
 test:
   requires:

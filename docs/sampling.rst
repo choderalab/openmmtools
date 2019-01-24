@@ -14,10 +14,10 @@ This may be useful in, for example, experimenting with ways to reduce correlatio
 
 In all of these schemes, one or more **replicas** is simulated.
 Each iteration includes the following phases:
-| * Allow replicas to switch thermodynamic states (optional)
-| * Allow replicas to sample a new configuration using Markov chain Monte Carlo (MCMC)
-| * Each replica computes the potential energy of the current configuration in multiple thermodynamic states
-| * Data is written to disk
+ * Allow replicas to switch thermodynamic states (optional)
+ * Allow replicas to sample a new configuration using Markov chain Monte Carlo (MCMC)
+ * Each replica computes the potential energy of the current configuration in multiple thermodynamic states
+ * Data is written to disk
 
 Below, we describe some of the aspects of these samplers.
 
