@@ -16,3 +16,4 @@ dependencies:
     - numpydoc
     - netCDF4
     - pyyaml
+    - sphinxcontrib-bibtex
