@@ -6,6 +6,7 @@ channels:
 dependencies:
     - python
     - setuptools
+    - cython
     - openmm >=7.3
     - numpy
     - scipy
