@@ -271,6 +271,7 @@ class MultiStateReporter(object):
                                                              mode, version=netcdf_format)
         # Without set_auto_mask(False) np.inf are read as masked.
         self._storage_analysis.set_auto_mask(False)
+        self._storage_analysis.set_always_mask(False)
 
         # The analysis netcdf file holds a reference UUID so that we can check
         # that the secondary netcdf files (currently only the checkpoint
@@ -312,6 +313,10 @@ class MultiStateReporter(object):
 
             # Initialize dataset, if needed.
             self._initialize_storage_file(self._storage_checkpoint, 'checkpoint', convention)
+
+            # Without set_auto_mask(False) np.inf are read as masked.
+            self._storage_checkpoint.set_auto_mask(False)
+            self._storage_checkpoint.set_always_mask(False)
 
         # Further checkpoint interval checks.
         # -----------------------------------
@@ -418,7 +423,7 @@ class MultiStateReporter(object):
     def __del__(self):
         """Synchronize and close the storage."""
         self.close()
-        
+
     def read_end_thermodynamic_states(self):
         """Read thermodynamic states at the ends of the protocol."
 
