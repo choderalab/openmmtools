@@ -1,7 +1,7 @@
-.. _sampling:
+.. _multistate:
 
-Sampling from multiple alchemical (or other thermodynamic) states
-=================================================================
+Sampling from multiple thermodynamic states
+===========================================
 
 ``openmmtools`` provides several schemes for sampling from multiple thermodynamic states within a single calculation:
 
@@ -100,3 +100,46 @@ The behavior of this first stage can be controlled by setting two parameters:
 
 * ``gamma0`` controls the initial rate of weight adaptation. By default, this is 1.0, but can be set larger (e.g., 10.0) if the free energy differences between states are much larger.
 * ``flatness_threshold`` controls the number of (fractional) visits to each thermodynamic state that must be accumulated before the asymptotically optimal weight adaptation scheme is used.
+
+Multistate Samplers
+-------------------
+
+.. currentmodule:: openmmtools.multistate
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    MultiStateSampler
+    MultiStateSamplerAnalyzer
+
+    ReplicaExchangeSampler
+    ReplicaExchangeAnalyzer
+
+    ParallelTemperingSampler
+    ParallelTemperingAnalyzer
+
+    SAMSSampler
+    SAMSAnalyzer
+
+Multistate Reporters
+--------------------
+
+.. currentmodule:: openmmtools.multistate
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    MultiStateReporter
+
+Analysis of multiple thermodynamic transformations
+--------------------------------------------------
+
+    MultiPhaseAnalyzer
+
+Miscellaneous support classes
+-----------------------------
+
+    ObservablesRegistry
+    CachedProperty
+    InsufficientData
+    PhaseAnalyzer
