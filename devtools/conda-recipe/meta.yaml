@@ -13,7 +13,7 @@ requirements:
   build:
     - python
     - setuptools
-    - openmm ==7.3
+    - openmm >=7.3
     - cython
 
   run:
@@ -21,13 +21,12 @@ requirements:
     - numpy
     - scipy
     - six
-    - openmm ==7.3
+    - openmm >=7.3
     - parmed
     - mdtraj
     - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
     - libnetcdf >=4.6.2 # workaround for libssl issues
     - pyyaml
-    - mpiplus
     - cython
     - sphinxcontrib-bibtex
     - mpiplus
