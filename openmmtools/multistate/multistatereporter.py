@@ -355,11 +355,9 @@ class MultiStateReporter(object):
         If the file is not found and catch_io_error is True, None is returned.
         """
         # Catch eventual errors n_attempts - 1 times.
-        dataset = None
-        attempt = 0
-        while (not dataset) and (attempt < n_attempts-1):
+        for attempt in range(n_attempts-1):
             try:
-                dataset = netcdf.Dataset(*args, **kwargs)
+                return netcdf.Dataset(*args, **kwargs)
             except IOError as e:
                 # If the file does not exist, it doesn't make sense to try again.
                 if catch_io_error:
@@ -371,10 +369,10 @@ class MultiStateReporter(object):
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
                              'in {} seconds'.format(i+1, n_attempts, sleep_time))
                 time.sleep(sleep_time)
-        # Last attempt finally raises any error.
-        dataset = netcdf.Dataset(*args, **kwargs)
 
-        return dataset
+
+        # Last attempt finally raises any error.
+        return netcdf.Dataset(*args, **kwargs)
 
     def _initialize_storage_file(self, ncfile, nc_name, convention):
         """Helper function to initialize dimensions and global attributes.
