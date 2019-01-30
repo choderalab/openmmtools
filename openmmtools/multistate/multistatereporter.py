@@ -417,11 +417,8 @@ class MultiStateReporter(object):
 
     def __del__(self):
         """Synchronize and close the storage."""
-        for storage in self._storage:
-            if storage is not None:
-                self.close()
-                break
-
+        self.close()
+        
     def read_end_thermodynamic_states(self):
         """Read thermodynamic states at the ends of the protocol."
 
