@@ -334,6 +334,7 @@ class MultiStateReporter(object):
                 ncvar_analysis_particles.long_name = ("analysis_particle_indices[analysis_particles] is the indices of "
                                                       "the particles with extra information stored about them in the"
                                                       "analysis file.")
+
             # Now handle the "variable does exist but does not match the provided ones"
             # Although redundant if it was just created, its an easy check to make
             stored_analysis_particles = self._storage_analysis.variables['analysis_particle_indices'][:]
@@ -341,10 +342,6 @@ class MultiStateReporter(object):
                 logger.debug("analysis_particle_indices != on-file analysis_particle_indices!"
                              "Using on file analysis indices of {}".format(stored_analysis_particles))
                 self._analysis_particle_indices = tuple(stored_analysis_particles.astype(int))
-
-            # Ensure we don't mask returned data
-            self._storage_analysis.set_auto_mask(False)
-            self._storage_analysis.set_always_mask(False)
 
     def _open_dataset_robustly(self, *args, n_attempts=5, sleep_time=2,
                                catch_io_error=False, io_error_warning=None,
@@ -377,11 +374,6 @@ class MultiStateReporter(object):
         # Last attempt finally raises any error.
         dataset = netcdf.Dataset(*args, **kwargs)
 
-        # Without set_auto_mask(False) np.inf are read as masked.
-        # Note that this does not affect variables created after this call.
-        dataset.set_auto_mask(False)
-        dataset.set_always_mask(False)
-
         return dataset
 
     def _initialize_storage_file(self, ncfile, nc_name, convention):
@@ -408,10 +400,6 @@ class MultiStateReporter(object):
             # Create and initialize the global variables
             nc_last_good_iter = ncfile.createVariable('last_iteration', int, 'scalar')
             nc_last_good_iter[0] = 0
-
-            # Ensure we don't mask returned data
-            ncfile.set_auto_mask(False)
-            ncfile.set_always_mask(False)
 
             return True
         else:
@@ -743,10 +731,6 @@ class MultiStateReporter(object):
             setattr(ncvar_states, "long_name", ("states[iteration][replica] is the thermodynamic state index "
                                                 "(0..n_states-1) of replica 'replica' of iteration 'iteration'."))
 
-            # Ensure we don't mask returned data
-            ncvar_states.set_auto_mask(False)
-            ncvar_states.set_always_mask(False)
-
         # Store thermodynamic states indices.
         self._storage_analysis.variables['states'][iteration, :] = state_indices[:]
 
@@ -896,10 +880,6 @@ class MultiStateReporter(object):
         if energy_unsampled_states.shape[1] > 0:
             self._storage_analysis.variables['unsampled_energies'][iteration, :, :] = energy_unsampled_states[:, :]
 
-        # Ensure we don't mask returned data
-        self._storage_analysis.set_auto_mask(False)
-        self._storage_analysis.set_always_mask(False)
-
 
     def read_mixing_statistics(self, iteration=slice(None)):
         """Retrieve the mixing statistics for the given iteration on the analysis file
@@ -978,10 +958,6 @@ class MultiStateReporter(object):
         self._storage_analysis.variables['accepted'][iteration, :, :] = n_accepted_matrix[:, :]
         self._storage_analysis.variables['proposed'][iteration, :, :] = n_proposed_matrix[:, :]
 
-        # Ensure we don't mask returned data
-        self._storage_analysis.set_auto_mask(False)
-        self._storage_analysis.set_always_mask(False)
-
     def read_timestamp(self, iteration=slice(None)):
         """Return the timestamp for the given iteration.
 
@@ -1018,10 +994,6 @@ class MultiStateReporter(object):
                 timestamp = storage.createVariable('timestamp', str, ('iteration',),
                                        zlib=False,
                                        chunksizes=(self._storage_chunks[storage_key],))
-
-                # Ensure we don't mask returned data
-                timestamp.set_auto_mask(False)
-                timestamp.set_always_mask(False)
 
         timestamp = time.ctime()
         self._storage_analysis.variables['timestamp'][iteration] = timestamp
@@ -1354,9 +1326,6 @@ class MultiStateReporter(object):
                                         dimensions=variable_parameters['dims'],
                                         chunksizes=variable_parameters['chunksizes'],
                                         zlib=False)
-            # Ensure we don't mask returned data
-            nc_var.set_auto_mask(False)
-            nc_var.set_always_mask(False)
 
         # Get the variable
         nc_var = storage[variable]
@@ -1609,10 +1578,6 @@ class MultiStateReporter(object):
                 setattr(ncvar_volumes, "long_name", ("volume[iteration][replica] is the box volume for replica "
                                                      "'replica' from iteration 'iteration-1'."))
 
-            # Ensure we don't mask returned data
-            dataset.set_auto_mask(False)
-            dataset.set_always_mask(False)
-
     def _write_sampler_states_to_given_file(self, sampler_states: list, iteration: int,
                                             storage_file='checkpoint', obey_checkpoint_interval=True):
         """
@@ -1786,10 +1751,6 @@ class MultiStateReporter(object):
             # Create variable.
             nc_variable = storage_nc.createVariable(path, variable_type,
                                                     dimension_name, zlib=True)
-
-            # Ensure we don't mask returned data
-            nc_variable.set_auto_mask(False)
-            nc_variable.set_always_mask(False)
 
         # Assign the value to the variable.
         if fixed_dimension:

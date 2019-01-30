@@ -1485,6 +1485,11 @@ class MultiStateSampler(object):
         if self._last_mbar_f_k is None:
             self._last_mbar_f_k = np.zeros([self.n_states], np.float64)
 
+        # DEBUG
+        if np.ma.is_masked(self._last_mbar_f_k):
+            print('self._last_mbar_f_k is masked:')
+            print(self._last_mbar_f_k)
+
         logZ = - self._last_mbar_f_k
 
         for (replica_index, state_index) in enumerate(self._replica_thermodynamic_states):
