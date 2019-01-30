@@ -36,6 +36,14 @@ An inclusive "neighborhood" of thermodynamic states around this specified state 
 If all thermodynamic states are included in this neighborhood (the default), the MBAR scheme :cite:`Shirts2008statistically` can be used to optimally estimate free energies and uncertainties.
 If a restricted neighborhood is used (in order to reduce the amount of time spent in the energy evaluation stage), a variant of the L-WHAM (local weighted histogram analysis method) :cite:`kumar1992weighted` is used to extract an estimate from all available information.
 
+.. currentmodule:: openmmtools.multistate
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    MultiStateSampler
+    MultiStateSamplerAnalyzer
+
 ``ReplicaExchangeSampler``: Replica exchange among thermodynamic states
 -----------------------------------------------------------------------
 
@@ -55,6 +63,14 @@ In the basic version of this scheme, a proposed swap of configurations between t
 where :math:`x` is the configuration of the subscripted states :math:`i` or :math:`j`, and :math:`u` is the reduced potential energy.
 While this scheme is typically carried out on neighboring states only, we also implement a much more efficient form of Gibbs sampling in which many swaps are attempted to generate an approximately uncorrelated sample of the state permutation over all :math:`K` :cite:`Chodera2011`.
 This speeds up mixing and reduces the total number of samples needed to produce uncorrelated samples.
+
+.. currentmodule:: openmmtools.multistate
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    ReplicaExchangeSampler
+    ReplicaExchangeAnalyzer
 
 ``SAMSSampler``: Self-adjusted mixture sampling
 -----------------------------------------------
@@ -101,25 +117,24 @@ The behavior of this first stage can be controlled by setting two parameters:
 * ``gamma0`` controls the initial rate of weight adaptation. By default, this is 1.0, but can be set larger (e.g., 10.0) if the free energy differences between states are much larger.
 * ``flatness_threshold`` controls the number of (fractional) visits to each thermodynamic state that must be accumulated before the asymptotically optimal weight adaptation scheme is used.
 
-Multistate Samplers
--------------------
+.. currentmodule:: openmmtools.multistate
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    SAMSSampler
+    SAMSAnalyzer
+
+Parallel tempering
+------------------
 
 .. currentmodule:: openmmtools.multistate
 .. autosummary::
     :nosignatures:
     :toctree: api/generated/
 
-    MultiStateSampler
-    MultiStateSamplerAnalyzer
-
-    ReplicaExchangeSampler
-    ReplicaExchangeAnalyzer
-
     ParallelTemperingSampler
     ParallelTemperingAnalyzer
-
-    SAMSSampler
-    SAMSAnalyzer
 
 Multistate Reporters
 --------------------
@@ -134,10 +149,20 @@ Multistate Reporters
 Analysis of multiple thermodynamic transformations
 --------------------------------------------------
 
+.. currentmodule:: openmmtools.multistate
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
     MultiPhaseAnalyzer
 
 Miscellaneous support classes
 -----------------------------
+
+.. currentmodule:: openmmtools.multistate.multistateanalyzer
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
 
     ObservablesRegistry
     CachedProperty
