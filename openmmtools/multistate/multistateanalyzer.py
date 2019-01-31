@@ -1395,7 +1395,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             has_log_weights = True
             log_weights = self.read_log_weights()
             f_l = - self.read_logZ(iteration=-1)  # use last (best) estimate of free energies
-
+            logger.debug("log_weights: {}".format(log_weights))
+            logger.debug("f_k: {}".format(f_l))
 
         u_n = np.zeros([n_iterations], np.float64)
         # Slice of all replicas, have to use this as : is too greedy
@@ -1406,21 +1407,14 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             u_n[iteration] = np.sum(energies[replicas_slice, states_slice, iteration])
 
             # Correct for potentially-changing log weights
-            try:
-                if has_log_weights:
-                    if np.ma.is_masked(f_l):
-                        log_sum = logsumexp(-f_l.compressed() + log_weights[~f_l.mask, iteration])
-                    else:
-                        log_sum = logsumexp(-f_l[:] + log_weights[:, iteration])
+            if has_log_weights:
+                if np.ma.is_masked(log_weights):
+                    log_sum = logsumexp(-f_l[:] + log_weights[:, iteration].compressed())
+                else:
+                    log_sum = logsumexp(-f_l[:] + log_weights[:, iteration])
 
-                    u_n[iteration] += - np.sum(log_weights[states_slice, iteration]) \
-                        + (n_replicas * log_sum)
-            except Exception as e:
-                # DEBUG
-                print(f_l)
-                print(f_l.mask)
-                print(log_weights)
-                raise e
+                u_n[iteration] += - np.sum(log_weights[states_slice, iteration]) \
+                    + (n_replicas * log_sum)
 
         logger.debug("Done.")
         return u_n
