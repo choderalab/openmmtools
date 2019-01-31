@@ -1409,13 +1409,13 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             try:
                 if has_log_weights:
                     if np.ma.is_masked(f_l):
-                        mask = f_l.mask
-                        log_sum = logsumexp(-f_l[mask] + log_weights[mask, iteration])
+                        log_sum = logsumexp(-f_l.compressed() + log_weights[~f_l.mask, iteration])
                     else:
                         log_sum = logsumexp(-f_l[:] + log_weights[:, iteration])
+
                     u_n[iteration] += - np.sum(log_weights[states_slice, iteration]) \
                         + (n_replicas * log_sum)
-            except Exception(e):
+            except Exception as e:
                 # DEBUG
                 print(f_l)
                 print(f_l.mask)
