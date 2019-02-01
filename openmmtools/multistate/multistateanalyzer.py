@@ -1408,6 +1408,12 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
             # Correct for potentially-changing log weights
             if has_log_weights:
+                # DEBUG
+                if np.ma.is_masked(log_weights):
+                    print(log_weights)
+                if np.ma.is_masked(f_l):
+                    print(f_l)
+
                 if np.ma.is_masked(log_weights):
                     log_sum = logsumexp(-f_l[:] + log_weights[:, iteration].compressed())
                 else:
