@@ -1351,7 +1351,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
     # MBAR creation.
     # -------------------------------------------------------------------------
 
-    def get_effective_energy_timeseries(self, energies=None, replica_state_indices=None):
+    def get_effective_energy_timeseries(self, energies=None, neighborhoods=None, replica_state_indices=None):
         """
         Generate the effective energy (negative log deviance) timeseries that is generated for this phase.
 
@@ -1366,6 +1366,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         energies : ndarray of shape (K,L,N), optional, Default: None
             Energies from replicas K, sampled states L, and iterations N.
             If provided, then states input_sampled_states must also be provided.
+        neighborhoods : list of list of int, optional, Default: None
+            neighborhoods[iteration] is the list of states in the neighborhood of the currently sampled state
         replica_state_indices : ndarray of shape (K,N), optional, Default: None
             Integer indices of each sampled state (matching L dimension in input_energy).
             that each replica K sampled every iteration N.
@@ -1380,7 +1382,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         """
         if energies is None and replica_state_indices is None:
             # Case where no input is provided
-            energies, _, _, replica_state_indices = self._read_energies(truncate_max_n_iterations=True)
+            energies, _, neighborhoods, replica_state_indices = self._read_energies(truncate_max_n_iterations=True)
         elif (energies is not None) != (replica_state_indices is not None):
             # XOR operator
             raise ValueError("If input_energy or input_sampled_states are provided, "
@@ -1408,19 +1410,11 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
             # Correct for potentially-changing log weights
             if has_log_weights:
-                # DEBUG
-                if np.ma.is_masked(log_weights):
-                    print(log_weights)
-                if np.ma.is_masked(f_l):
-                    print(f_l)
-
-                if np.ma.is_masked(log_weights):
-                    log_sum = logsumexp(-f_l[:] + log_weights[:, iteration].compressed())
-                else:
-                    log_sum = logsumexp(-f_l[:] + log_weights[:, iteration])
-
-                u_n[iteration] += - np.sum(log_weights[states_slice, iteration]) \
-                    + (n_replicas * log_sum)
+                for replica_index in range(n_replicas):
+                    state_index = replica_state_indices[replica_index, iteration]
+                    neighborhood = neighborhoods[state_index]
+                    u_n[iteration] += - log_weights[state_index, iteration] \
+                        + logsumexp(-f_l[neighborhood] + log_weights[neighborhood, iteration])
 
         logger.debug("Done.")
         return u_n
