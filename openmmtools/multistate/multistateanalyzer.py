@@ -1972,7 +1972,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         statistical_inefficiency : float
         n_uncorrelated_iterations : int
         """
-        u_n = self.get_effective_energy_timeseries(energies, replica_state_indices)
+        u_n = self.get_effective_energy_timeseries(energies=energies, replica_state_indices=replica_state_indices)
 
         # For SAMS, if there is a second-stage start time, use only the asymptotically optimal data
         t0 = 1 # discard minimization frame
