@@ -1,7 +1,7 @@
 .. _multistate:
 
-Sampling from multiple thermodynamic states
-===========================================
+Sampling multiple thermodynamic states
+======================================
 
 ``openmmtools`` provides several schemes for sampling from multiple thermodynamic states within a single calculation:
 

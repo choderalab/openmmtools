@@ -834,12 +834,25 @@ class PhaseAnalyzer(ABC):
         # TODO: should we keep it unified and always truncate to max_n_iterations?
         return self._read_energies(truncate_max_n_iterations=False)
 
-    def _read_energies(self, truncate_max_n_iterations):
+    def _read_energies(self, truncate_max_n_iterations=False):
         """
         Extract energies from the ncfile and order them by replica, state, iteration.
 
-        Optionally truncate the data to self.max_n_iterations.
+        Parameters
+        ----------
+        truncate_max_n_iterations : bool, optional, default=False
+            If True, will truncate the data to self.max_n_iterations.
 
+        Returns
+        -------
+        sampled_energy_matrix : numpy.ndarray with shape (n_replicas, n_states, n_iterations)
+            ``sampled_energy_matrix[replica, state, iteration]`` is the reduced potential of replica ``replica`` at sampled state ``state`` for iteration ``iteration``
+        unsampled_energy_matrix : numpy.ndarray with shape (n_replicas, n_states, n_iterations)
+            ``unsampled_energy_matrix[replica, state, iteration]`` is the reduced potential of replica i at unsampled state j for iteration ``iteration``
+        neighborhoods : numpy.ndarray with shape (n_replicas, n_states, n_iterations)
+            ``neighborhoods[replica, state, iteration]`` is 1 if the energy for replica ``replica`` at iteration ``iteration`` was computed for state ``state``, 0 otherwise
+        replica_state_indices : numpy.ndarray with shape (n_replicas, n_iterations)
+            ``replica_state_indices[replica, iteration]`` is the thermodynamic state index sampled by replica ``replica`` at iteration ``iteration``
         """
         logger.debug("Reading energies...")
         # reporter_energies is [energy_sampled_states, neighborhoods, energy_unsampled_states].
@@ -1412,7 +1425,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             if has_log_weights:
                 for replica_index in range(n_replicas):
                     state_index = replica_state_indices[replica_index, iteration]
-                    neighborhood = neighborhoods[state_index]
+                    neighborhood = neighborhoods[replica_index,:,iteration]
                     u_n[iteration] += - log_weights[state_index, iteration] \
                         + logsumexp(-f_l[neighborhood] + log_weights[neighborhood, iteration])
 
@@ -1439,9 +1452,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         energy_data = list(self._read_energies(truncate_max_n_iterations=True))
 
         # Use the cached information to generate the equilibration data.
-        sampled_energy_matrix, unsampled_energy_matrix, neighborhood, replicas_state_indices = energy_data
-        number_equilibrated, g_t, Neff_max = self._get_equilibration_data(sampled_energy_matrix,
-                                                                          replicas_state_indices)
+        sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = energy_data
+        number_equilibrated, g_t, Neff_max = self._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
 
         logger.debug("Assembling uncorrelated energies...")
 
@@ -1953,7 +1965,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         entropy_dict = self._computed_observables['entropy']
         return entropy_dict['value'], entropy_dict['error']
 
-    def _get_equilibration_data(self, energies=None, replica_state_indices=None):
+    def _get_equilibration_data(self, energies=None, neighborhoods=None, replica_state_indices=None):
         """Generate the equilibration data from best practices.
 
         Parameters
@@ -1961,6 +1973,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         energies : ndarray of shape (K,L,N), optional, Default: None
             Energies from replicas K, sampled states L, and iterations N.
             If provided, then replica_state_indices must also be provided.
+        neighborhoods : numpy.ndarray with shape (n_replicas, n_states, n_iterations)
+            ``neighborhoods[replica, state, iteration]`` is 1 if the energy for
+            replica ``replica`` at iteration ``iteration`` was computed for state ``state``,
+            0 otherwise
         replica_state_indices : ndarray of shape (K,N), optional, Default: None
             Integer indices of each sampled state (matching L dimension in input_energy).
             that each replica K sampled every iteration N.
@@ -1969,10 +1985,13 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         Returns
         -------
         n_equilibration_iterations : int
+            Number of equilibration iterations discarded
         statistical_inefficiency : float
-        n_uncorrelated_iterations : int
+            Statistical inefficiency of production iterations
+        n_uncorrelated_iterations : float
+            Effective number of uncorrelated iterations
         """
-        u_n = self.get_effective_energy_timeseries(energies=energies, replica_state_indices=replica_state_indices)
+        u_n = self.get_effective_energy_timeseries(energies=energies, neighborhoods=neighborhoods, replica_state_indices=replica_state_indices)
 
         # For SAMS, if there is a second-stage start time, use only the asymptotically optimal data
         t0 = 1 # discard minimization frame
@@ -1992,14 +2011,17 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:])
         n_effective_max = n_effective_i.max()
         i_max = n_effective_i.argmax()
-        n_equilibration = i_t[i_max]
+        n_equilibration = i_t[i_max] + t0 # account for initially discarded frames
         g_t = g_i[i_max]
-        equilibration_data = [n_equilibration, g_t, n_effective_max]
-        # Account for initially discarded frames
-        equilibration_data[0] += t0
-        self._equilibration_data = tuple(equilibration_data)
-        logger.debug('Equilibration data: {}'.format(equilibration_data))
-        return self._equilibration_data
+
+        # Store equilibration data
+        self._equilibration_data = tuple([n_equilibration, g_t, n_effective_max])
+        logger.debug('Equilibration data:')
+        logger.debug(' number of iterations discarded to equilibration : {}'.format(n_equilibration))
+        logger.debug(' statistical inefficiency of production region   : {}'.format(g_t))
+        logger.debug(' effective number of uncorrelated samples        : {}'.format(n_effective_max))
+
+        return n_equilibration, g_t, n_effective_max
 
     # -------------------------------------------------------------------------
     # Cached properties.
