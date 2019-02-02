@@ -102,7 +102,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     >>> move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
     >>> simulation = SAMSSampler(mcmc_moves=move, number_of_iterations=2,
     ...                          state_update_scheme='global-jump', locality=5,
-    ...                          update_stages='two-stage', flatness_criteria='logZ-flatness', 
+    ...                          update_stages='two-stage', flatness_criteria='logZ-flatness',
     ...                          flatness_threshold=0.2, weight_update_method='rao-blackwellized',
     ...                          adapt_target_probabilities=False)
 
@@ -201,7 +201,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             ``two-stage`` will use a heuristic first stage to achieve flat histograms before switching to the asymptotically optimal scheme
         flatness_criteria : string, optiona, default='logZ-flatness'
             Method of assessing when to switch to asymptotically optimal scheme
-             One of ['logZ-flatness','minimum-visits','histogram-flatness'] 
+             One of ['logZ-flatness','minimum-visits','histogram-flatness']
         flatness_threshold : float, optional, default=0.2
             Histogram relative flatness threshold to use for first stage of two-stage scheme.
         weight_update_method : str, optional, default='rao-blackwellized'
@@ -382,6 +382,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     @mpiplus.delayed_termination
     def _report_iteration_items(self):
         super(SAMSSampler, self)._report_iteration_items()
+
         self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, stage=self._stage, t0=self._t0)
         # Split into which states and how many samplers are in each state
         # Trying to do histogram[replica_thermo_states] += 1 does not correctly handle multiple

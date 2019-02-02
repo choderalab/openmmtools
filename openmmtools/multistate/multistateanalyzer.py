@@ -907,6 +907,7 @@ class PhaseAnalyzer(ABC):
         """
         log_weights = np.array(
             self._reporter.read_online_analysis_data(slice(None, None), 'log_weights')['log_weights'])
+
         log_weights = np.moveaxis(log_weights, 0, -1)
         return log_weights
 
@@ -934,6 +935,10 @@ class PhaseAnalyzer(ABC):
             else:
                 log_z = self._reporter.read_online_analysis_data(slice(0, None), "logZ")["logZ"]
             log_z = np.moveaxis(log_z, 0, -1)
+
+        # We don't want logZ to be a masked array
+        log_z = np.array(log_z)
+
         return log_z
 
     def get_effective_energy_timeseries(self, energies=None, replica_state_indices=None):
@@ -1423,11 +1428,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
             # Correct for potentially-changing log weights
             if has_log_weights:
-                for replica_index in range(n_replicas):
-                    state_index = replica_state_indices[replica_index, iteration]
-                    neighborhood = neighborhoods[replica_index,:,iteration]
-                    u_n[iteration] += - log_weights[state_index, iteration] \
-                        + logsumexp(-f_l[neighborhood] + log_weights[neighborhood, iteration])
+                u_n[iteration] += - log_weights[states_slice, iteration] \
+                    + logsumexp(-f_l[:] + log_weights[:, iteration])
 
         logger.debug("Done.")
         return u_n
