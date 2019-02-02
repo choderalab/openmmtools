@@ -1,6 +1,18 @@
 Release History
 ***************
 
+0.18.0 - Added multistate samplers
+==================================
+
+New features
+------------
+- Add a number of classes that can use MCMC to sample from multiple thermodynamic states:
+  - ``MultiStateSampler``: sample independently from multiple thermodynamic states
+  - ``ReplicaExchangeSampler``: replica exchange among thermodynamic states
+  - ``SAMSSampler``: self-adjusted mixture sampling (SAMS) sampling
+- All samplers can use MPI via the ``mpiplus <https://github.com/choderalab/mpiplus>`_ package
+
+
 0.17.0 - Removed Py2 support, faster exact PME treatment
 ========================================================
 
@@ -37,7 +49,7 @@ Deprecated and API breaks
 New features
 ------------
 - Add ability for ``SamplerState`` to access new `OpenMM Custom CV Force Variables
-  <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_ 
+  <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_
   (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
 - ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only
   recommended for advanced users (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
