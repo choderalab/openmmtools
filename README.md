@@ -19,10 +19,27 @@ Features include:
  - enhanced sampling methods, including replica-exchange (REMD) and self-adjusted mixture sampling (SAMS)
  - factories for generating [alchemically-modified](http://alchemistry.org) systems for absolute and relative free energy calculations
  - a suite of test systems for benchmarking, validation, and debugging
- - user-friendly storage interface layer to remove requirement that user know how to store all their data-types on disk 
+ - user-friendly storage interface layer to remove requirement that user know how to store all their data-types on disk
 
 See the [documentation](http://openmmtools.readthedocs.io) at [ReadTheDocs](http://openmmtools.readthedocs.io).
 
 #### License
 
-OpenMMTools is distributed under the MIT License.
+OpenMMTools is distributed under the [MIT License](https://opensource.org/licenses/MIT).
+
+#### Contributors
+
+A complete list of contributors can be found [here](https://github.com/choderalab/openmmtools/graphs/contributors)
+
+Major contributors include:
+
+* Andrea Rizzi `<andrea.rizzi@choderalab.org>` (WCMC)
+* John D. Chodera `<john.chodera@choderalab.org>` (MSKCC)
+* Levi N. Naden `<levi.naden@choderalab.org>` (MSKCC)
+* Patrick Grinaway `<patrick.grinaway@choderalab.org>` (MSKCC)
+* Kyle A. Beauchamp `<kyle.beauchamp@choderalab.org>` (MSKCC)
+* Josh Fass `<josh.fass@choderalab.org>` (MSKCC)
+* Bas Rustenburg `<bas.rustenburg@choderalab.org>` (MSKCC)
+* Gregory Ross `<greg.ross@choderalab.org>` (MSKCC)
+* David W.H. Swenson `<dwhs@hyperblazer.net>`
+* Hannah Bruce Macdonald `<hannah.brucemacdonald>` (MSKCC)

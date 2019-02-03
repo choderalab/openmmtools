@@ -56,7 +56,7 @@ Modules
   states
   cache
   mcmc
-  sampling
+  multistate
   alchemy
   forces
   forcefactories
