@@ -1754,7 +1754,7 @@ class SamplerState(object):
         Position vectors for N particles (length units).
     velocities : Nx3 simtk.unit.Quantity, optional
         Velocity vectors for N particles (velocity units).
-    box_vectors : 3x3 simtk.unit.Quantity 
+    box_vectors : 3x3 simtk.unit.Quantity
         Current box vectors (length units).
 
     Attributes
@@ -1805,7 +1805,7 @@ class SamplerState(object):
     >>> sampler_state.update_from_context(incompatible_context)
     Traceback (most recent call last):
     ...
-    SamplerStateError: Specified positions with inconsistent number of particles.
+    openmmtools.states.SamplerStateError: Specified positions with inconsistent number of particles.
 
     Create a new SamplerState instead
 
@@ -1839,7 +1839,7 @@ class SamplerState(object):
             if isinstance(input, unit.Quantity) and not isinstance(input._value, np.ndarray):
                 args.append(np.array(input/input.unit)*input.unit)
             else:
-               args.append(copy.deepcopy(input))    
+               args.append(copy.deepcopy(input))
         self._initialize(*args)
 
     @classmethod
@@ -3065,7 +3065,7 @@ class GlobalParameterState(object):
     >>> my_composable_state.apply_to_system(system)
     Traceback (most recent call last):
     ...
-    GlobalParameterError: Could not find global parameter gamma_mysuffix in the system.
+    openmmtools.states.GlobalParameterError: Could not find global parameter gamma_mysuffix in the system.
 
     """
 

@@ -137,7 +137,7 @@ class AlchemicalState(states.GlobalParameterState):
     >>> alchemical_state.apply_to_system(alanine_alchemical_system)
     Traceback (most recent call last):
     ...
-    AlchemicalStateError: The system parameter lambda_sterics is not defined in this state.
+    openmmtools.alchemy.AlchemicalStateError: The system parameter lambda_electrostatics is not defined in this state.
 
     Create an AlchemicalState that matches the parameters defined in
     the System.
