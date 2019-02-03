@@ -13,15 +13,15 @@ A batteries-included toolkit for the GPU-accelerated OpenMM molecular simulation
 
 Features include:
 
- - high-quality Langevin integrators, including [g-BAOAB](http://rspa.royalsocietypublishing.org/content/472/2189/20160138), [VVVR](http://pubs.acs.org/doi/abs/10.1021/jp411770f), and other splittings
- - nonequilibrium integrators for free energy calculations or [nonequilibrium candidate Monte Carlo (NCMC)](http://dx.doi.org/10.1073/pnas.1106094108)
- - an extensible Markov chain Monte Carlo (MCMC) framework for molecular simulations
+ - high-quality [Langevin integrators](https://openmmtools.readthedocs.io/en/stable/integrators.html#langevin-integrators), including [g-BAOAB](http://rspa.royalsocietypublishing.org/content/472/2189/20160138), [VVVR](http://pubs.acs.org/doi/abs/10.1021/jp411770f), and other splittings
+ - [nonequilibrium integrators](https://openmmtools.readthedocs.io/en/stable/integrators.html#nonequilibrium-integrators) for free energy calculations or [nonequilibrium candidate Monte Carlo (NCMC)](http://dx.doi.org/10.1073/pnas.1106094108)
+ - an extensible [Markov chain Monte Carlo (MCMC) framework](https://openmmtools.readthedocs.io/en/stable/mcmc.html) for molecular simulations
  - enhanced sampling methods, including replica-exchange (REMD) and self-adjusted mixture sampling (SAMS)
- - factories for generating [alchemically-modified](http://alchemistry.org) systems for absolute and relative free energy calculations
- - a suite of test systems for benchmarking, validation, and debugging
- - user-friendly storage interface layer to remove requirement that user know how to store all their data-types on disk
+ - [alchemical factories](https://openmmtools.readthedocs.io/en/stable/alchemy.html) for generating [alchemically-modified](http://alchemistry.org) systems for absolute and relative free energy calculations
+ - a suite of [test systems](https://openmmtools.readthedocs.io/en/stable/testsystems.html) for benchmarking, validation, and debugging
+ - user-friendly storage interface layer
 
-See the [documentation](http://openmmtools.readthedocs.io) at [ReadTheDocs](http://openmmtools.readthedocs.io).
+See the [full documentation](http://openmmtools.readthedocs.io) at [ReadTheDocs](http://openmmtools.readthedocs.io).
 
 #### License
 
