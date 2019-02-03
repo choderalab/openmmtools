@@ -21,11 +21,10 @@ cpdef long _mix_replicas_cython(long nswap_attempts, long nstates, long[:] repli
         log_P_accept = - (u_kl[i, jstate] + u_kl[j, istate]) + (u_kl[j, jstate] + u_kl[i, istate])
         Nij_proposed[istate, jstate] +=1
         Nij_proposed[jstate, istate] +=1
-        if(log_P_accept>=0 or drand48()<exp(log_P_accept)):            
+        if(log_P_accept>=0 or drand48()<exp(log_P_accept)):
             tmp_state = replica_states[i]
             replica_states[i] = replica_states[j]
             replica_states[j] = tmp_state
             Nij_accepted[istate,jstate] += 1
             Nij_accepted[jstate,istate] += 1
     return 0
-        

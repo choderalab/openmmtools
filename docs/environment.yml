@@ -15,8 +15,7 @@ dependencies:
     - numpydoc
     - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
     - libnetcdf >=4.6.2 # workaround for libssl issues
-    - pyyaml
-    - cython
     - sphinxcontrib-bibtex
     - mpiplus
+    - pymbar
     - pyyaml

@@ -30,6 +30,8 @@ requirements:
     - cython
     - sphinxcontrib-bibtex
     - mpiplus
+    - pymbar
+    - pyyaml
 
 test:
   requires:
