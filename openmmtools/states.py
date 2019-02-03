@@ -269,7 +269,7 @@ class ThermodynamicsError(Exception):
     >>> raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
     Traceback (most recent call last):
     ...
-    ThermodynamicsError: System has multiple barostats.
+    openmmtools.states.ThermodynamicsError: System has multiple barostats.
 
     """
 
@@ -329,7 +329,7 @@ class SamplerStateError(Exception):
     >>> raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
     Traceback (most recent call last):
     ...
-    SamplerStateError: Velocities have different length than positions.
+    openmmtools.states.SamplerStateError: Velocities have different length than positions.
 
     """
 
@@ -430,7 +430,7 @@ class ThermodynamicState(object):
     ...                            pressure=1.0*unit.atmosphere)
     Traceback (most recent call last):
     ...
-    ThermodynamicsError: Non-periodic systems cannot have a barostat.
+    openmmtools.states.ThermodynamicsError: Non-periodic systems cannot have a barostat.
 
     When temperature and/or pressure are not specified (i.e. they are
     None) ThermodynamicState tries to infer them from a thermostat or
@@ -439,7 +439,7 @@ class ThermodynamicState(object):
     >>> state = ThermodynamicState(system=waterbox)
     Traceback (most recent call last):
     ...
-    ThermodynamicsError: System does not have a thermostat specifying the temperature.
+    openmmtools.states.ThermodynamicsError: System does not have a thermostat specifying the temperature.
     >>> thermostat = openmm.AndersenThermostat(200.0*unit.kelvin, 1.0/unit.picosecond)
     >>> force_id = waterbox.addForce(thermostat)
     >>> state = ThermodynamicState(system=waterbox)
@@ -538,7 +538,7 @@ class ThermodynamicState(object):
         >>> state.system = alanine.system
         Traceback (most recent call last):
         ...
-        ThermodynamicsError: System does not have a thermostat specifying the temperature.
+        openmmtools.states.ThermodynamicsError: System does not have a thermostat specifying the temperature.
 
         We can fix both thermostat and barostat while setting the system.
         >>> state.set_system(alanine.system, fix_state=True)
@@ -812,7 +812,7 @@ class ThermodynamicState(object):
         >>> state.reduced_potential(incompatible_sampler_state)
         Traceback (most recent call last):
         ...
-        ThermodynamicsError: The sampler state has a different number of particles.
+        openmmtools.states.ThermodynamicsError: The sampler state has a different number of particles.
 
         In case a cached SamplerState containing the potential energy
         and the volume of the context is not available, the method
