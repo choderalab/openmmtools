@@ -29,7 +29,7 @@ OpenMMTools is distributed under the [MIT License](https://opensource.org/licens
 
 #### Contributors
 
-A complete list of contributors can be found [here](https://github.com/choderalab/openmmtools/graphs/contributors)
+A complete list of contributors can be found [here](https://github.com/choderalab/openmmtools/graphs/contributors).
 
 Major contributors include:
 
