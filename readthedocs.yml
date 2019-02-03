@@ -14,5 +14,7 @@ python:
 conda:
   environment: docs/environment.yml
 
-conda:
-  file: docs/environment.yml
+sphinx:
+  builder: html
+  configuration: docs/conf.py
+  fail_on_warning: false
