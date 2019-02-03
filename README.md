@@ -1,8 +1,8 @@
-[![Linux Build Status](https://travis-ci.org/choderalab/openmmtools.png?branch=master)](https://travis-ci.org/choderalab/openmmtools)
+[![Linux Build Status](https://travis-ci.org/choderalab/openmmtools.png?branch=master)](https://travis-ci.org/choderalab/openmmtools/branches)
 [![Windows Build status](https://ci.appveyor.com/api/projects/status/70knpvcgvmah2qin?svg=true)](https://ci.appveyor.com/project/jchodera/openmmtools)
 [![Anaconda Badge](https://anaconda.org/omnia/openmmtools/badges/version.svg)](https://anaconda.org/omnia/openmmtools)
 [![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
-[![ReadTheDocs Badge](https://readthedocs.org/projects/openmmtools/badge/?version=latest)](http://openmmtools.readthedocs.io/en/latest/?badge=latest)
+[![ReadTheDocs Badge](https://readthedocs.org/projects/openmmtools/badge/?version=0.17.0)](https://openmmtools.readthedocs.io/en/0.17.0/)
 [![Zenodo DOI Badge](https://zenodo.org/badge/25416166.svg)](https://zenodo.org/badge/latestdoi/25416166)
 
 ## OpenMMTools
