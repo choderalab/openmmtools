@@ -174,7 +174,49 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
     thermodynamic_state.system = system
 
 
+# ==================== CUSTOM LENNARD-JONES POTENTIALS AND SWITCHING FUNCTIONS ==========================
+
+"""
+Attributes
+----------
+LJ_POTENTIAL: str
+    OpenMM energy expression for a standard 6-12 LJ potential in terms of A and B:
+    "A/r^12 - B/r^6;"
+A_B_FROM_EPSILON_SIGMA: str
+    OpenMM energy expression for calculating A and B in the LJ potential from sigma and epsilon:
+    "A = 4.0*epsilon*sigma^12; B = 4.0*epsilon*sigma^6;"
+A_B_FROM_ACOEF_BCOEF: str
+    OpenMM energy expression for calculating A and B from the acoef and bcoef fields that
+    define NBFIXes in openmm.app.CharmmPsfFile.createSystem:
+    "A = acoef(type1, type2)^2; B = bcoef(type1, type2);"
+LORENTZ_BERTEHLOT_RULES: str
+    OpenMM energy expression for calculating sigma and epsilon by Lorentz-Berthelot mixing rules
+    (geometric mean for epsilon, arithmetic mean for sigma):
+    "epsilon=sqrt(epsilon1*epsilon2); sigma=0.5*(sigma1+sigma2)"
+CHARMM_VSWITCH_ENERGY_EXPRESSION: str
+    OpenMM energy expressions for the VSWITCH switching function that is used in CHARMM
+    (Steinbach and Brooks, JCC 15 (7), pp. 667-683, 1994):
+    "(cutoff^2 - r^2)^2 * (cutoff^2 + 2*r^2 - 3*switch^2) / (cutoff^2 - switch^2)^3"
+"""
+LJ_POTENTIAL = "A/r^12 - B/r^6;"
+A_B_FROM_EPSILON_SIGMA = "A = 4.0*epsilon*sigma^12; B = 4.0*epsilon*sigma^6;"
+A_B_FROM_ACOEF_BCOEF = "A = acoef(type1, type2)^2; B = bcoef(type1, type2);"
+LORENTZ_BERTHELOT_RULES = "epsilon=sqrt(epsilon1*epsilon2); sigma=0.5*(sigma1+sigma2)"
+CHARMM_VSWITCH_ENERGY_EXPRESSION = "(cutoff^2 - r^2)^2 * (cutoff^2 + 2*r^2 - 3*switch^2) / (cutoff^2 - switch^2)^3"
+
+
 def is_lj_active_in_nonbonded_force(nonbonded_force):
+    """Check if the LJ potential is defined in the openmm.NonbondedForce or if all terms are zero.
+
+    Parameters
+    ----------
+    nonbonded_force : openmm.NonbondedForce
+        The nonbonded force of a openmm.System.
+
+    Returns
+    -------
+    is_lj_active : bool
+    """
     for i in range(nonbonded_force.getNumParticles()):
         q, sig, eps = nonbonded_force.getParticleParameters(i)
         vdw = (eps.value_in_unit(unit.kilojoule_per_mole) * sig.value_in_unit(unit.nanometer))
@@ -184,11 +226,36 @@ def is_lj_active_in_nonbonded_force(nonbonded_force):
 
 
 def get_forces_that_define_vdw(system):
-    """Get all forces that define van der Waals interactions"""
+    """Get all forces that define van der Waals interactions.
+
+    Identifies all forces in the system that define van der Waals interactions. These include the LJ part
+    in the openmm.NonbondedForce; all openmm.CustomNonbondedForce and openmm.CustomBondForce instances that
+    have per-particle-parameters 'sigma' and 'epsilon'
+    (the bond forces are often used to define custom 1-4 interactions);
+    all openmm.CustomNonbondedForce instances that have a per-particle-parameter 'type'
+    and tabulated functions 'acoef' and 'bcoef' (these define NBFIXes in openmm.app.CharmmPsfFile.createSystem).
+
+    Parameters
+    ----------
+    system : openmm.System
+        An openmm.System.
+
+    Returns
+    -------
+    nonbonded_forces : list of openmm.NonbondedForce
+        This list is empty, if all Lennard-Jones interactions in the NonbondedForce are zero.
+        Otherwise it contains one element.
+    custom_nonbonded_forces : list of openmm.CustomNonbondedForce
+        A list of all custom nonbonded forces that define Lennard-Jones interactions.
+    nbfix_forces : list of openmm.CustomNonbondedForce
+        A list of all custom nonbonded forces that define NBFIXes (i.e. pair-specific Lennard-Jones interactions).
+    custom_bond_forces : list of openmm.CustomBondForce
+        A list of all custom bonded forces that define Lennard-Jones interactions (typically 1-4 interactions).
+    """
     nonbonded_forces = []
     custom_nonbonded_forces = []
     nbfix_forces = []
-    custom_bonded_forces = []
+    custom_bond_forces = []
     for force in system.getForces():
         # NONBONDED FORCES
         if isinstance(force, openmm.NonbondedForce):
@@ -202,10 +269,10 @@ def get_forces_that_define_vdw(system):
             tabulated_functions = [force.getTabulatedFunctionName(i)
                                    for i in range(force.getNumTabulatedFunctions())]
             if ("epsilon" in particle_parameters) and ("sigma" in particle_parameters):
-                custom_bonded_forces.append(force)
+                custom_bond_forces.append(force)
                 continue
-            if ("acoef" in tabulated_functions) and ("bcoef" in tabulated_functions)\
-                    and ("type" in particle_parameters):
+            if (("acoef" in tabulated_functions) and ("bcoef" in tabulated_functions)
+                    and ("type" in particle_parameters)):
                 nbfix_forces.append(force)
                 continue
         # CUSTOM BOND FORCES (TYPICALLY FOR 1-4 INTERACTIONS)
@@ -213,34 +280,75 @@ def get_forces_that_define_vdw(system):
             bond_parameters = [force.getBondParameters()
                                for i in range(force.getNumPerBondParameters())]
             if ("epsilon" in bond_parameters) and ("sigma" in bond_parameters):
-                custom_bonded_forces.append(force)
+                custom_bond_forces.append(force)
                 continue
 
-    return nonbonded_forces, custom_nonbonded_forces, nbfix_forces, custom_bonded_forces
+    return nonbonded_forces, custom_nonbonded_forces, nbfix_forces, custom_bond_forces
 
 
-LJ_POTENTIAL = "4*epsilon*((sigma/r)^12 - (sigma/r)^6);"
-LJ_POTENTIAL2 = "(a/r6)^2-b/r6; r6=r^6;a=acoef(type1, type2);b=bcoef(type1, type2)"
-LORENTZ_BERTHELOT_RULES = "epsilon=sqrt(epsilon1*epsilon2); sigma=0.5*(sigma1+sigma2)"
-CHARMM_VSWITCH_ENERGY_EXPRESSION = "(cutoff^2 - r^2)^2 * (cutoff^2 + 2*r^2 - 3*switch^2) / (cutoff^2 - switch^2)^3"
-CHARMM_VFSWITCH_ENERGY_EXPRESSION = ""
+def vdw_as_custom_forces(system, lj_potential=LJ_POTENTIAL+A_B_FROM_EPSILON_SIGMA,
+                         lj_nbfix_potential=LJ_POTENTIAL+A_B_FROM_ACOEF_BCOEF,
+                         mixing_rules=LORENTZ_BERTHELOT_RULES):
+    """Modify the system so that all Lennard-Jones interactions are defined in custom forces.
 
+    Sets all LJ parameters in the openmm.NonbondedForce to zero and adds them as custom forces to the system instead.
+    This allows modifying the functional form of the LJ potential, as well as incorporation of custom mixing rules and
+    switching functions.
 
-def separate_vdw_from_elec(system, lj_potential=LJ_POTENTIAL, mixing_rules=LORENTZ_BERTHELOT_RULES):
-    """
+    Parameters
+    ----------
+    system : openmm.System
+        The System instance to be modified.
+    lj_potential : str, optional, default=LJ_POTENTIAL+A_B_FROM_EPSILON_SIGMA
+        An energy expression that defines the Lennard-Jones potential in terms of parameters 'epsilon' and 'sigma'.
+        The interactions defined in instances of openmm.CustomNonbondedForce use the energy expression + mixing rules.
+        The interactions defined in instances of openmm.CustomBondForce use the energy expression without mixing rules.
+    lj_nbfix_potential : str, optional, default=LJ_POTENTIAL+A_B_FROM_ACOEF_BCOEF
+        An energy expression that defines the pair-specific Lennard-Jones potential in terms of the two atom types
+        'type1' and 'type2' and the tabulated functions 'acoef' and 'bcoef', where acoef=sqrt(A) and bcoef=B in
+        the Lennard-Jones potential U = A/r^12 - B/r^6. These expressions are used in the NBFIXes in
+        openmm.app.CharmmPsfFile.createSystem.
+    mixing_rules : str, optional, default=LORENTZ_BERTHELOT_RULES
+        An energy expression that defines the mixing rules used to obtain 'epsilon' and 'sigma' from per-particle
+        parameters 'epsilon1', 'sigma1', 'epsilon2', and 'sigma2'. Note that the mixing rules are not applied to the
+        the nbfix_forces and custom_bond_forces.
+
+    Returns
+    -------
+    custom_nonbonded_forces: list of openmm.CustomNonbondedForce
+        A list of all custom nonbonded forces that define Lennard-Jones interactions.
+    nbfix_forces: list of openmm.CustomNonbondedForce
+        A list of all custom nonbonded forces that define NBFIXes (i.e. pair-specific Lennard-Jones interactions).
+    custom_bond_forces: list of openmm.CustomBondForce
+        A list of all custom bonded forces that define Lennard-Jones interactions (typically 1-4 interactions).
+
+    Examples
+    --------
+
+    Replace the customary 6-12 potential by a 6-14 potential with multiplicative mixing rules.
+
+    >>> from openmmtools import testsystems
+    >>> lj_fluid = testsystems.LennardJonesFluid(nparticles=100)
+    >>> pot = "A/r^14 - B/r^6;" + A_B_FROM_EPSILON_SIGMA
+    >>> pot_nb = "A/r^14 - B/r^6;" + A_B_FROM_ACOEF_BCOEF
+    >>> mix = "sigma=sqrt(sigma1*sigma2); epsilon=sqrt(epsilon1*epsilon2)"
+    >>> _ = vdw_as_custom_forces(lj_fluid.system, lj_potential=pot, lj_nbfix_potential=pot_nb, mixing_rules=mix)
+    >>> # proceed with the modified system, e.g.:
+    >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond, 1.0*unit.femtosecond)
+    >>> context = openmm.Context(lj_fluid.system, integrator)
     """
 
     # get NonbondedForce
-    nb_forces, custom_nb_forces, nbfix_forces, custom_b_forces = get_forces_that_define_vdw(system)
+    nonbonded_forces, custom_nonbonded_forces, nbfix_forces, custom_bond_forces = get_forces_that_define_vdw(system)
 
-    for nb_force in nb_forces:
+    for nb_force in nonbonded_forces:
 
-        vdw = openmm.CustomNonbondedForce(lj_potential + mixing_rules)
+        vdw = openmm.CustomNonbondedForce("")  # Energy expressions are defined later
         vdw.addPerParticleParameter("sigma")
         vdw.addPerParticleParameter("epsilon")
 
         # 1-4 interactions
-        vdw14 = openmm.CustomBondForce(lj_potential)
+        vdw14 = openmm.CustomBondForce("")  # Energy expressions are defined later
         vdw14.addPerBondParameter("sigma")
         vdw14.addPerBondParameter("epsilon")
 
@@ -265,32 +373,53 @@ def separate_vdw_from_elec(system, lj_potential=LJ_POTENTIAL, mixing_rules=LOREN
         system.addForce(vdw)
         system.addForce(vdw14)
 
-        custom_nb_forces.append(vdw)
-        custom_b_forces.append(vdw14)
+        custom_nonbonded_forces.append(vdw)
+        custom_bond_forces.append(vdw14)
 
     # If vdW forces are defined in a CustomNonbondedForce, assert that they
     # electrostatics are not defined in the same CustomNonbondedForce
-    for custom_force in custom_nb_forces + nbfix_forces + custom_b_forces:
+    for custom_force in custom_nonbonded_forces + nbfix_forces + custom_bond_forces:
         global_parameters = [custom_force.getGlobalParameterName(i)
                              for i in range(custom_force.getNumGlobalParameters())]
         assert "q" not in global_parameters
 
-    return custom_nb_forces, nbfix_forces, custom_b_forces
+    # Define Energy Expressions
+    for custom_nb_force in custom_nonbonded_forces:
+        custom_nb_force.setEnergyFunction(lj_potential + mixing_rules)
+    for custom_b_force in custom_bond_forces:
+        custom_b_force.setEnergyFunction(lj_potential)
+    for nbfix_force in nbfix_forces:
+        nbfix_force.setEnergyFunction(lj_nbfix_potential)
+
+    return custom_nonbonded_forces, nbfix_forces, custom_bond_forces
 
 
-def apply_custom_switching_function(custom_nb_force, switch_distance, cutoff_distance,
+def apply_custom_switching_function(custom_force, switch_distance, cutoff_distance,
                                     switching_function=CHARMM_VSWITCH_ENERGY_EXPRESSION):
-    """Apply a custom switching function to a CustomNonbondedForce.
+    """Apply a custom switching function to a force.
 
-       Parameters
+    Switching functions bring the potential energy to zero between the switch distance and the cutoff distance.
+    The energy expression of the custom force, U(r), is changed to:
+    U_switched(r) = { U(r),         if r < switch ,
+                    { U(r) * S(r),  if switch <= r <= cutoff,
+                    { 0,            if r > cutoff,
+    where S(r) is the switching function.
+
+    Parameters
     ----------
-    thermodynamic_state : openmmtools.states.ThermodynamicState
-        The thermodynamic state with the system. This will be modified.
-    sampler_state : openmmtools.states.SamplerState
-        The sampler state with the positions.
-
+    custom_force : openmm.Force
+        A custom force, whose energy expression is defined in terms of the radius 'r'.
+        Could be an instance of openmm.CustomNonbondedForce or openmm.CustomBondForce.
+    switch_distance: unit.Quantity
+        The distance at which the switching begins.
+    cutoff_distance: unit.Quantity
+        The distance from where on the potential is zero.
+    switching_function: str, optional, default=CHARMM_VSWITCH_ENERGY_EXPRESSION
+        An OpenMM energy expression that defines the switching function. The switching function, S(r), is defined in
+        terms of three variables ('r', 'cutoff', 'switch'). It has to satisfy two conditions:
+        S(cutoff)=0 and S(switch)=1.
     """
-    energy_string = custom_nb_force.getEnergyFunction()
+    energy_string = custom_force.getEnergyFunction()
     energy_expressions = energy_string.split(';')
     energy_expressions = [
         "step(cutoff-r) * ( 1 + step(r-switch)*(switch_function-1) ) * energy_function",
@@ -298,19 +427,52 @@ def apply_custom_switching_function(custom_nb_force, switch_distance, cutoff_dis
         "energy_function=" + energy_expressions[0]
     ] + energy_expressions[1:]
 
-    custom_nb_force.setEnergyFunction("; ".join(energy_expressions))
-    if isinstance(custom_nb_force, openmm.CustomNonbondedForce):
-        custom_nb_force.setUseSwitchingFunction(False)  # switch off OpenMMs customary switching function
-    custom_nb_force.addGlobalParameter("cutoff", cutoff_distance)
-    custom_nb_force.addGlobalParameter("switch", switch_distance)
-
-    return custom_nb_force
+    custom_force.setEnergyFunction("; ".join(energy_expressions))
+    if isinstance(custom_force, openmm.CustomNonbondedForce):
+        custom_force.setUseSwitchingFunction(False)  # switch off OpenMMs customary switching function
+    custom_force.addGlobalParameter("cutoff", cutoff_distance)
+    custom_force.addGlobalParameter("switch", switch_distance)
 
 
 def use_custom_vdw_switching_function(system, switch_distance, cutoff_distance,
                                       switching_function=CHARMM_VSWITCH_ENERGY_EXPRESSION):
-    custom_nb_forces, nbfix_forces, custom_b_forces = separate_vdw_from_elec(
-        system, LJ_POTENTIAL, LORENTZ_BERTHELOT_RULES)
+    """Use a custom switching function for all Lennard-Jones interactions in the system.
+
+    U_switched(r) = { U(r),         if r < switch ,
+                    { U(r) * S(r),  if switch <= r <= cutoff,
+                    { 0,            if r > cutoff,
+    For a definition of what is considered a Lennard-Jones interactions, see the documentation of
+    get_forces_that_define_vdw.
+
+    Parameters
+    ----------
+    system: openmm.System
+        The System instance to be modified.
+    switch_distance: unit.Quantity
+        The distance at which the switching begins.
+    cutoff_distance: unit.Quantity
+        The distance from where on the potential is zero.
+    switching_function: str, optional, default=CHARMM_VSWITCH_ENERGY_EXPRESSION
+        An OpenMM energy expression that defines the switching function. The switching function, S(r), is defined in
+        terms of three variables ('r', 'cutoff', 'switch'). It has to satisfy two conditions:
+        S(cutoff)=0 and S(switch)=1.
+
+    Examples
+    --------
+
+    Use CHARMM's VSWITCH function, as defined in Steinbach and Brooks, JCC 15 (7), pp. 667-683, 1994.
+    (This is the default if the switching_function argument is not specified).
+
+    >>> from openmmtools import testsystems
+    >>> lj_fluid = testsystems.LennardJonesFluid(nparticles=100, cutoff=1.2*unit.nanometer)
+    >>> use_custom_vdw_switching_function(lj_fluid.system, switch_distance=1.0*unit.nanometer, cutoff_distance=1.2*unit.nanometer)
+    >>> # proceed with the modified system, e.g.:
+    >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond, 1.0*unit.femtosecond)
+    >>> context = openmm.Context(lj_fluid.system, integrator)
+    """
+    custom_nb_forces, nbfix_forces, custom_b_forces = vdw_as_custom_forces(
+        system, lj_potential=LJ_POTENTIAL+A_B_FROM_EPSILON_SIGMA,
+        lj_nbfix_potential=LJ_POTENTIAL+A_B_FROM_ACOEF_BCOEF, mixing_rules=LORENTZ_BERTHELOT_RULES)
     for custom_nb_force in custom_nb_forces:
         apply_custom_switching_function(custom_nb_force, switch_distance, cutoff_distance, switching_function)
     for nbfix_force in nbfix_forces:
@@ -322,45 +484,49 @@ def use_custom_vdw_switching_function(system, switch_distance, cutoff_distance,
 def use_vdw_with_charmm_force_switch(system, cutoff_distance, switch_distance):
     """Use the CHARMM force switching function for Lennard-Jones cutoffs.
 
-    Modifies the system's Lennard-Jones interactions. The LJ part of the NonbondedForce
-    object is replaced by a CustomNonbondedForce. Any other CustomNonbondedForce in the
-    system is
+    Modifies the system's Lennard-Jones interactions to use the force switching scheme by
+    Steinbach and Brooks, JCC 15 (7), pp. 667-683, 1994.
+    The force switch modifies the potential form of the LJ potential altogether and is therefore
+    a special case that is not easy to implement via the more general function use_custom_vdw_switching_function.
 
     Parameters
     ----------
-    thermodynamic_state : openmmtools.states.ThermodynamicState
-        The thermodynamic state with the system. This will be modified.
-    sampler_state : openmmtools.states.SamplerState
-        The sampler state with the positions.
-    topology : mdtraj.Topology or simtk.openmm.Topology
-        The topology of the system.
-    atoms_dsl : str
-        The MDTraj DSL string for selecting the atoms to restrain.
-    sigma : simtk.unit.Quantity, optional
-        Controls the strength of the restrain. The smaller, the tighter
-        (units of distance, default is 3.0*angstrom).
+    system: openmm.System
+        The System instance to be modified.
+    switch_distance: unit.Quantity
+        The distance at which the switching begins.
+    cutoff_distance: unit.Quantity
+        The distance from where on the potential is zero.
 
+    Examples
+    --------
+
+    >>> from openmmtools import testsystems
+    >>> lj_fluid = testsystems.LennardJonesFluid(nparticles=100, cutoff=1.2*unit.nanometer)
+    >>> use_vdw_with_charmm_force_switch(lj_fluid.system, switch_distance=1.0*unit.nanometer, cutoff_distance=1.2*unit.nanometer)
+    >>> # proceed with the modified system, e.g.:
+    >>> integrator = openmm.LangevinIntegrator(300*unit.kelvin, 5.0/unit.picosecond, 1.0*unit.femtosecond)
+    >>> context = openmm.Context(lj_fluid.system, integrator)
     """
     energy_string = (
-        "step(switch-r)         * (A*(r^(-12) + dv12) - B*(r^(-6) + dv6))"                           # if r <= switch: ...
-        "+ (1.0-step(switch-r)) * (k12*(r^(-6) - cutoff^(-6))^2 - k6*(r^(-3) - cutoff^(-3))^2);"     # else: ...
-        "k6      = B * cutoff^3/(cutoff^3 - switch^3);"
-        "k12     = A * cutoff^6/(cutoff^6 - switch^6);"
-        "dv6     = -1.0/(cutoff*switch)^3;"
-        "dv12    = -1.0/(cutoff*switch)^6;"
-        "A       = 4.0*epsilon*sigma^12;"
-        "B       = 4.0*epsilon*sigma^6;"
+        "r_leq_cutoff * (r_leq_switch * short_range + (1.0-r_leq_switch) * long_range);"
+        "long_range   = k12*(r^(-6) - cutoff^(-6))^2 - k6*(r^(-3) - cutoff^(-3))^2;"
+        "short_range  = A*(r^(-12) + dv12) - B*(r^(-6) + dv6);"
+        "r_leq_switch = step(switch-r);"
+        "r_leq_cutoff = step(cutoff-r);"
+        "k6           = B * cutoff^3/(cutoff^3 - switch^3);"
+        "k12          = A * cutoff^6/(cutoff^6 - switch^6);"
+        "dv6          = -1.0/(cutoff*switch)^3;"
+        "dv12         = -1.0/(cutoff*switch)^6;"
     )
-    custom_nb_forces, nbfix_forces, custom_b_forces = separate_vdw_from_elec(
-        system, lj_potential=energy_string, mixing_rules=LORENTZ_BERTHELOT_RULES)
+    custom_nb_forces, nbfix_forces, custom_b_forces = vdw_as_custom_forces(
+        system, lj_potential=energy_string+A_B_FROM_EPSILON_SIGMA,
+        lj_nbfix_potential=energy_string+A_B_FROM_ACOEF_BCOEF, mixing_rules=LORENTZ_BERTHELOT_RULES)
     for custom_nb_force in custom_nb_forces:
         custom_nb_force.setUseSwitchingFunction(False)  # switch off OpenMMs customary switching function
-    for nbfix_force in nbfix_forces:
-        nbfix_force.setEnergyFunction("")
     for custom_force in custom_nb_forces + nbfix_forces + custom_b_forces:
         custom_force.addGlobalParameter("cutoff", cutoff_distance)
         custom_force.addGlobalParameter("switch", switch_distance)
-
 
 
 if __name__ == '__main__':

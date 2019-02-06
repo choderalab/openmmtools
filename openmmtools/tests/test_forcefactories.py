@@ -199,6 +199,7 @@ def test_replace_reaction_field():
 
 
 class LJPairTestBox(testsystems.LennardJonesPair):
+    """A helper class to facilitate energy evaluations of a Lennard-Jones interaction."""
     def __init__(self, mass=1.0 * unit.atomic_mass_unit, epsilon=0.25*unit.kilojoule_per_mole,
                  sigma=0.5*unit.nanometer, box_size=100.0*unit.nanometer):
         super(LJPairTestBox, self).__init__(mass=mass, epsilon=epsilon, sigma=sigma)
@@ -222,6 +223,7 @@ class LJPairTestBox(testsystems.LennardJonesPair):
 
 
 def test_use_custom_switch_function():
+    """Test if custom switch function is effective."""
     # system without switch
     ljpair = LJPairTestBox(epsilon=0.0*unit.kilojoule_per_mole)
     custom_force = openmm.CustomNonbondedForce("1")
@@ -243,6 +245,7 @@ def test_use_custom_switch_function():
 
 
 def test_use_vdw_with_charmm_vswitch():
+    """Check Lennard-Jones switching using CHARMM's VSWITCH function."""
     ljpair = LJPairTestBox()
     assert is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
     use_custom_vdw_switching_function(ljpair.system, 1.0*unit.nanometer, 1.5*unit.nanometer)
@@ -270,11 +273,11 @@ def test_use_vdw_with_charmm_vswitch():
         return switch(r) * (4*epsilon*((sigma/r)**12 - (sigma/r)**6))
 
     for r in np.linspace(0.5, 2.0, 10, True):
-        assert abs(ljpair.get_energy(r) - lj_switch(r)) < 1e-8
+        assert abs(ljpair.get_energy(r) - lj_switch(r)) < 1e-7
 
 
 def test_use_vdw_with_charmm_force_switch():
-    """Check Lennard-Jones energy from CHARMM-like force switch scheme."""
+    """Check Lennard-Jones energy from CHARMM's force switching scheme."""
     cutoff = 1.5 #*unit.nanometer
     switch = 1.0 #*unit.nanometer
     ljpair = LJPairTestBox()
@@ -300,3 +303,6 @@ def test_use_vdw_with_charmm_force_switch():
 
     for r in np.linspace(0.8, 1.5, 200, True):
         assert abs(target_energy(r) - ljpair.get_energy(r)) < 1e-7
+
+
+#TODO: Testing on a system with 1-4's and NBFIXes
