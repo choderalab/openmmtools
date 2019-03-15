@@ -3671,7 +3671,7 @@ class HostGuestVacuum(TestSystem, _HostGuestBase):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3679,7 +3679,13 @@ class HostGuestVacuum(TestSystem, _HostGuestBase):
         crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        defaults = { 'implicitSolvent' : None,
+                     'constraints' : app.HBonds,
+                     'nonbondedMethod' : app.NoCutoff,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3795,7 +3801,7 @@ class HostGuestExplicit(TestSystem, _HostGuestBase):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+    def __init__(self, use_dispersion_correction=True, switch_width=DEFAULT_SWITCH_WIDTH, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3804,7 +3810,15 @@ class HostGuestExplicit(TestSystem, _HostGuestBase):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+
+        defaults = { 'constraints' : app.HBonds,
+                     'nonbondedCutoff' : DEFAULT_CUTOFF_DISTANCE,
+                     'nonbondedMethod' : app.PME,
+                     'ewaldErrorTolerance' : DEFAULT_EWALD_ERROR_TOLERANCE,
+                     'rigidWater' : rigid_water,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
