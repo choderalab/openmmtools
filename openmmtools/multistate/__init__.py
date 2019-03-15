@@ -69,7 +69,9 @@ from openmmtools.multistate.sams import SAMSSampler, SAMSAnalyzer
 from openmmtools.multistate.multistateanalyzer import *
 from openmmtools.multistate.utils import *
 
+# ==============================================================================
+# Warn that API is experimental
+# ==============================================================================
 
 import warnings
-
 warnings.warn('Warning: openmmtools.multistate API is experimental')
