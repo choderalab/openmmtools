@@ -40,11 +40,7 @@ env:
     - ORGNAME="omnia" # the name of the organization
     - PACKAGENAME="openmmtools" # the name of your package
     - OPENMM_CPU_THREADS="1" # only use one CPU thread for determinism
-    
+
 matrix:
   allow_failures:
   - env: python=3.7 CONDA_PY=37 DEVOMNIA=true
-
-after_success:
-  - echo "after_success"
-  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then source devtools/travis-ci/after_success.sh; fi
