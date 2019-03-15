@@ -50,13 +50,6 @@ from openmmtools.integrators import FIREMinimizationIntegrator
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
-# Warn that API is experimental
-# ==============================================================================
-
-import warnings
-warnings.warn('Warning: openmmtools.multistate API is experimental')
-
-# ==============================================================================
 # MULTISTATE SAMPLER
 # ==============================================================================
 
