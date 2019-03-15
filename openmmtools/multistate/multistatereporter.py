@@ -110,6 +110,11 @@ class MultiStateReporter(object):
     def __init__(self, storage, open_mode=None,
                  checkpoint_interval=50, checkpoint_storage=None,
                  analysis_particle_indices=()):
+
+        # Warn that API is experimental
+        import warnings
+        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+                 
         # Handle checkpointing
         if type(checkpoint_interval) != int:
             raise ValueError("checkpoint_interval must be an integer!")

@@ -1170,6 +1170,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     def __init__(self, *args, unbias_restraint=True, restraint_energy_cutoff='auto',
                  restraint_distance_cutoff='auto', **kwargs):
+        # Warn that API is experimental
+        import warnings
+        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+
         # super() calls clear() that initialize the cached variables.
         super().__init__(*args, **kwargs)
 
