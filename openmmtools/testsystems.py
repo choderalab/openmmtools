@@ -3636,6 +3636,8 @@ class TolueneImplicitGBn2(TolueneImplicit):
 #=============================================================================================
 
 class _HostGuestBase(object):
+    """Mixin to add ability to retrieve hosts and guests as OEMols.
+    """
 
     @property
     def oemols(self):
@@ -3801,7 +3803,7 @@ class HostGuestExplicit(TestSystem, _HostGuestBase):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, use_dispersion_correction=True, switch_width=DEFAULT_SWITCH_WIDTH, **kwargs):
+    def __init__(self, rigid_water=True, use_dispersion_correction=True, switch_width=DEFAULT_SWITCH_WIDTH, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3826,10 +3828,10 @@ class HostGuestExplicit(TestSystem, _HostGuestBase):
         # Set dispersion correction use.
         forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
-        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
 
         if switch_width is not None:
             forces['NonbondedForce'].setUseSwitchingFunction(True)
+            nonbondedCutoff = forces['NonbondedForce'].getCutoffDistance()
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
         # Read positions.
