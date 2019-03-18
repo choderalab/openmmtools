@@ -49,7 +49,6 @@ from openmmtools.integrators import FIREMinimizationIntegrator
 
 logger = logging.getLogger(__name__)
 
-
 # ==============================================================================
 # MULTISTATE SAMPLER
 # ==============================================================================
@@ -131,6 +130,7 @@ class MultiStateSampler(object):
 
     """
 
+
     # -------------------------------------------------------------------------
     # Constructors.
     # -------------------------------------------------------------------------
@@ -139,6 +139,11 @@ class MultiStateSampler(object):
                  online_analysis_interval=200, online_analysis_target_error=0.0,
                  online_analysis_minimum_iterations=200,
                  locality=None):
+
+        # Warn that API is experimental
+        import warnings
+        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+
         # These will be set on initialization. See function
         # create() for explanation of single variables.
         self._thermodynamic_states = None

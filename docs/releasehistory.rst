@@ -1,6 +1,19 @@
 Release History
 ***************
 
+0.19.0 -
+==================================
+
+New features
+------------
+- Improvements for ``HostGuest*`` classes
+  - add ``oemols``, ``host_oemol``, and ``guest_oemol`` properties to retrieve OpenEye Toolkit ``OEMol`` objects (requires toolkit license and installation)
+  - these classes can now accept overriding ``kwargs``ss
+
+Bugfixes
+--------
+- ``openmmtools.multistate`` experimental API warning is only issued when ``openmmtools.multistate`` is imported
+
 0.18.0 - Added multistate samplers
 ==================================
 
@@ -11,7 +24,6 @@ New features
   - ``ReplicaExchangeSampler``: replica exchange among thermodynamic states
   - ``SAMSSampler``: self-adjusted mixture sampling (SAMS) sampling
 - All samplers can use MPI via the ``mpiplus <https://github.com/choderalab/mpiplus>`_ package
-
 
 0.17.0 - Removed Py2 support, faster exact PME treatment
 ========================================================

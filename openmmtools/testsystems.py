@@ -69,6 +69,31 @@ DEFAULT_SWITCH_WIDTH = 1.5 * unit.angstroms # default switch width
 # SUBROUTINES
 #=============================================================================================
 
+def _read_oemol(filename):
+    """Retrieve a molecule from a file as an OpenEye OEMol.
+
+    This will raise an exception if the OpenEye toolkit is not installed or licensed.
+
+    Parameters
+    ----------
+    filename : str
+        Filename to read from, either absolute path or in data directory.
+
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        The molecule
+    """
+    if not os.path.exists(filename):
+        filename = get_data_filename(filename)
+
+    from openeye import oechem
+    ifs = oechem.oemolistream(filename)
+    mol = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, mol)
+    ifs.close()
+    return mol
+
 def unwrap_py2(func):
     """Unwrap a wrapped function.
     The function inspect.unwrap has been implemented only in Python 3.4. With
@@ -3610,7 +3635,26 @@ class TolueneImplicitGBn2(TolueneImplicit):
 # Host-guest in vacuum
 #=============================================================================================
 
-class HostGuestVacuum(TestSystem):
+class _HostGuestBase(object):
+    """Mixin to add ability to retrieve hosts and guests as OEMols.
+    """
+
+    @property
+    def oemols(self):
+        """List of OpenEye ``OEMol``s contained in the system."""
+        return [self.host_oemol, self.guest_oemol]
+
+    @property
+    def host_oemol(self):
+        """OpenEye ``OEMol`` for the host."""
+        return _read_oemol("data/cb7-b2/cb7_tripos.mol2")
+
+    @property
+    def guest_oemol(self):
+        """OpenEye ``OEMol`` for the guest."""
+        return _read_oemol("data/cb7-b2/b2_tripos.mol2")
+
+class HostGuestVacuum(TestSystem, _HostGuestBase):
 
     """CB7:B2 host-guest system in vacuum.
 
@@ -3629,7 +3673,7 @@ class HostGuestVacuum(TestSystem):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3637,7 +3681,13 @@ class HostGuestVacuum(TestSystem):
         crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        defaults = { 'implicitSolvent' : None,
+                     'constraints' : app.HBonds,
+                     'nonbondedMethod' : app.NoCutoff,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3652,7 +3702,7 @@ class HostGuestVacuum(TestSystem):
 # Host guest system in implicit solvent.
 #=============================================================================================
 
-class HostGuestImplicit(TestSystem):
+class HostGuestImplicit(TestSystem, _HostGuestBase):
 
     """CB7:B2 host-guest system implicit solvent.
 
@@ -3724,7 +3774,7 @@ class HostGuestImplicitGBn2(HostGuestImplicit):
 # Host-guest system in explicit solvent
 #=============================================================================================
 
-class HostGuestExplicit(TestSystem):
+class HostGuestExplicit(TestSystem, _HostGuestBase):
 
     """CB7:B2 host-guest system in TIP3P explicit solvent.
 
@@ -3753,7 +3803,7 @@ class HostGuestExplicit(TestSystem):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+    def __init__(self, rigid_water=True, use_dispersion_correction=True, switch_width=DEFAULT_SWITCH_WIDTH, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3762,7 +3812,15 @@ class HostGuestExplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+
+        defaults = { 'constraints' : app.HBonds,
+                     'nonbondedCutoff' : DEFAULT_CUTOFF_DISTANCE,
+                     'nonbondedMethod' : app.PME,
+                     'ewaldErrorTolerance' : DEFAULT_EWALD_ERROR_TOLERANCE,
+                     'rigidWater' : rigid_water,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3770,10 +3828,10 @@ class HostGuestExplicit(TestSystem):
         # Set dispersion correction use.
         forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
-        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
 
         if switch_width is not None:
             forces['NonbondedForce'].setUseSwitchingFunction(True)
+            nonbondedCutoff = forces['NonbondedForce'].getCutoffDistance()
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
         # Read positions.
