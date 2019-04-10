@@ -126,7 +126,7 @@ def handle_kwargs(func, defaults, input_kwargs):
 
     """
     # Get arguments that appear in function signature.
-    args, _, _, kwarg_defaults = inspect.getargspec(unwrap_py2(func))
+    args, _, _, kwarg_defaults, _, _, _ = inspect.getfullargspec(unwrap_py2(func))
     # Add defaults
     kwargs = { k : v for (k,v) in defaults.items() }
     # Override those that appear in args

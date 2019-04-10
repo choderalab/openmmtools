@@ -1129,7 +1129,7 @@ class MultiStateSampler(object):
         """
         options_to_report = dict()
         for c in inspect.getmro(cls):
-            parameter_names, _, _, defaults = inspect.getargspec(c.__init__)
+            parameter_names, _, _, defaults, _, _, _ = inspect.getfullargspec(c.__init__)
             if defaults:
                 class_options = {parameter_name: defaults[index] for (index, parameter_name) in
                                  enumerate(parameter_names[-len(defaults):])}
@@ -1144,7 +1144,7 @@ class MultiStateSampler(object):
         """
         options_to_report = dict()
         for cls in inspect.getmro(type(self)):
-            parameter_names, _, _, defaults = inspect.getargspec(cls.__init__)
+            parameter_names, _, _, defaults, _, _, _ = inspect.getfullargspec(cls.__init__)
             if defaults:
                 class_options = {parameter_name: getattr(self, '_' + parameter_name) for
                                  parameter_name in parameter_names[-len(defaults):]}
