@@ -13,6 +13,7 @@ New features
 Bugfixes
 --------
 - ``openmmtools.multistate`` experimental API warning is only issued when ``openmmtools.multistate`` is imported
+- ``AlchemicalNonequilibriumLangevinIntegrator.reset()`` now correctly resets the nonequilibrium work
 
 0.18.0 - Added multistate samplers
 ==================================

@@ -1881,18 +1881,22 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
 class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """
-    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work. An example of an
-    external perturbation could be changing the forcefield parameters via
+    Create a LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
 
-    > force.setParticleParameters(...)
-    > force.updateParametersInContext(context)
+
+    Examples
+    --------
+
+    An example of an external perturbation could be changing the forcefield parameters via
+
+    >>> force.setParticleParameters(...)
+    >>> force.updateParametersInContext(context)
 
     where force is an instance of openmm's force class. The externally performed protocol work is accumulated in the
-    "protocol_work" global variable. This variable can be re-initialized with
+    "protocol_work" global variable. This variable can be re-initialized by calling
 
-    > integrator.setGlobalVariableByName("first_step", 0)
+    >>> integrator.reset()
 
-    where integrator is an instance of ExternalPerturbationLangevinIntegrator.
     """
 
     def __init__(self, *args, **kwargs):
@@ -1902,6 +1906,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
         """Reset all statistics.
         """
         super(ExternalPerturbationLangevinIntegrator, self).reset()
+        # Setting 'step' to 0 will trigger the integrator to reset all statistics prior to the next step
         self.setGlobalVariableByName('step', 0)
 
     def _add_global_variables(self):
