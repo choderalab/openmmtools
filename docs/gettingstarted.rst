@@ -228,7 +228,7 @@ as a generic variable called ``lambda`` goes from ``1.0`` to ``0.0``.
 .. testcode::
 
     # Enslave lambda_sterics and lambda_electrostatics to a generic lambda variable.
-    alchemical_state.set_alchemical_variable('lambda', 1.0)
+    alchemical_state.set_function_variable('lambda', 1.0)
 
     # The functions here turn off first electrostatic and the steric interactions
     # in sequence as lambda goes from 1.0 to 0.0.
@@ -237,11 +237,11 @@ as a generic variable called ``lambda`` goes from ``1.0`` to ``0.0``.
     alchemical_state.lambda_electrostatics = alchemy.AlchemicalFunction(f_electrostatics)
     alchemical_state.lambda_sterics = alchemy.AlchemicalFunction(f_sterics)
 
-    alchemical_state.set_alchemical_variable('lambda', 0.75)
+    alchemical_state.set_function_variable('lambda', 0.75)
     assert alchemical_state.lambda_electrostatics == 0.5
     assert alchemical_state.lambda_sterics == 1.0
 
-    alchemical_state.set_alchemical_variable('lambda', 0.25)
+    alchemical_state.set_function_variable('lambda', 0.25)
     assert alchemical_state.lambda_electrostatics == 0.0
     assert alchemical_state.lambda_sterics == 0.5
 

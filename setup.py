@@ -3,14 +3,17 @@ Various Python tools for OpenMM.
 """
 from __future__ import print_function
 import sys
+import distutils.extension
 from setuptools import setup
 import os
 from os.path import relpath, join
 import subprocess
+from Cython.Build import cythonize
+
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.16.1"
+VERSION = "0.19.0"
 ISRELEASED = False
 __version__ = VERSION
 ########################
@@ -149,7 +152,8 @@ def check_dependencies():
 # SETUP
 ################################################################################
 
-extensions = []
+extensions = distutils.extension.Extension("openmmtools.multistate.mixing._mix_replicas",
+                                           ['./openmmtools/multistate/mixing/_mix_replicas.pyx'])
 
 write_version_py('openmmtools/version.py')
 
@@ -164,12 +168,12 @@ setup(
     url='https://github.com/choderalab/openmmtools',
     platforms=['Linux', 'Mac OS-X', 'Unix', 'Windows'],
     classifiers=CLASSIFIERS.splitlines(),
-    packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts', 'openmmtools.storage'],
+    packages=['openmmtools', 'openmmtools.tests', 'openmmtools.scripts', 'openmmtools.storage','openmmtools.multistate', 'openmmtools.multistate.mixing'],
     package_dir={'openmmtools': 'openmmtools'},
     package_data={'openmmtools': find_package_data('openmmtools/data', 'openmmtools')},
     zip_safe=False,
     scripts=[],
-    ext_modules=extensions,
+    ext_modules=cythonize(extensions),
     entry_points={'console_scripts': [
         'test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main',
         'benchmark-alchemy = openmmtools.tests.test_alchemy:benchmark_alchemy_from_pdb',

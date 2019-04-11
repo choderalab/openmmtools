@@ -25,6 +25,7 @@ install:
   - "SET PATH=%PYTHON%;%PYTHON%\\Scripts;%PATH%"
   - conda config --add channels omnia
   - conda config --add channels conda-forge
+  - conda config --add channels omnia/label/rc
 
 build: false
 

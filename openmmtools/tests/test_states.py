@@ -22,8 +22,22 @@ from openmmtools.states import *
 
 
 # =============================================================================
+# CONSTANTS
+# =============================================================================
+
+# We use CPU as OpenCL sometimes causes segfaults on Travis.
+DEFAULT_PLATFORM = openmm.Platform.getPlatformByName('CPU')
+DEFAULT_PLATFORM.setPropertyDefaultValue('DeterministicForces', 'true')
+
+
+# =============================================================================
 # UTILITY FUNCTIONS
 # =============================================================================
+
+def create_default_context(thermodynamic_state, integrator):
+    """Shortcut to create a context from the thermodynamic state using the DEFAULT_PLATFORM."""
+    return thermodynamic_state.create_context(integrator, DEFAULT_PLATFORM)
+
 
 def get_barostat_temperature(barostat):
     """Backward-compatibly get barostat's temperature"""
@@ -579,8 +593,8 @@ class TestThermodynamicState(object):
             friction = 5.0/unit.picosecond
             integrator1 = openmm.VerletIntegrator(time_step)
             integrator2 = openmm.LangevinIntegrator(state2.temperature, friction, time_step)
-            context1 = state1.create_context(integrator1)
-            context2 = state2.create_context(integrator2)
+            context1 = create_default_context(state1, integrator1)
+            context2 = create_default_context(state2, integrator2)
             assert state1.is_context_compatible(context2) is is_compatible
             assert state2.is_context_compatible(context1) is is_compatible
 
@@ -611,10 +625,10 @@ class TestThermodynamicState(object):
         state0 = ThermodynamicState(self.barostated_alanine, self.std_temperature)
 
         langevin_integrator = openmm.LangevinIntegrator(self.std_temperature, friction, time_step)
-        context = state0.create_context(langevin_integrator)
+        context = create_default_context(state0, langevin_integrator)
 
         verlet_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        thermostated_context = state0.create_context(verlet_integrator)
+        thermostated_context = create_default_context(state0, verlet_integrator)
 
         # Change context pressure.
         barostat = state0._find_barostat(context.getSystem())
@@ -670,7 +684,7 @@ class TestThermodynamicState(object):
         del thermostated_context, verlet_integrator
 
         verlet_integrator = openmm.VerletIntegrator(time_step)
-        nvt_context = state2.create_context(verlet_integrator)
+        nvt_context = create_default_context(state2, verlet_integrator)
         with nose.tools.assert_raises(ThermodynamicsError) as cm:
             state1.apply_to_context(nvt_context)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
@@ -682,7 +696,7 @@ class TestThermodynamicState(object):
         beta = 1.0 / (unit.MOLAR_GAS_CONSTANT_R * self.std_temperature)
         state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
         integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        context = state.create_context(integrator)
+        context = create_default_context(state, integrator)
         context.setPositions(self.alanine_positions)
         sampler_state = SamplerState.from_context(context)
 
@@ -733,7 +747,7 @@ class TestThermodynamicState(object):
         for compatible_group in compatible_groups:
             # Create context.
             integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-            context = compatible_group[0].create_context(integrator)
+            context = create_default_context(compatible_group[0], integrator)
             if len(compatible_group) == 2:
                 context.setPositions(self.alanine_positions)
             else:
@@ -794,7 +808,7 @@ class TestSamplerState(object):
     @staticmethod
     def create_context(thermodynamic_state):
         integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
-        return thermodynamic_state.create_context(integrator)
+        return thermodynamic_state.create_context(integrator, DEFAULT_PLATFORM)
 
     def test_inconsistent_n_particles(self):
         """Exception raised with inconsistent positions and velocities."""
@@ -963,6 +977,26 @@ class TestSamplerState(object):
         assert sliced_sampler_state.kinetic_energy is None
         assert sliced_sampler_state.potential_energy is None
 
+    def test_dict_representation(self):
+        """Setting the state of the object should work when ignoring velocities."""
+        alanine_vacuum_context = self.create_context(self.alanine_vacuum_state)
+        alanine_vacuum_context.setPositions(self.alanine_vacuum_positions)
+        alanine_vacuum_context.setVelocitiesToTemperature(300*unit.kelvin)
+
+        # Test precondition.
+        vacuum_sampler_state = SamplerState.from_context(alanine_vacuum_context)
+        old_velocities = vacuum_sampler_state.velocities
+        assert old_velocities is not None
+
+        # Get a dictionary representation without velocities.
+        serialization = vacuum_sampler_state.__getstate__(ignore_velocities=True)
+        assert serialization['velocities'] is None
+
+        # Do not overwrite velocities when setting a state.
+        serialization['velocities'] = np.random.rand(*vacuum_sampler_state.positions.shape) * unit.nanometer/unit.picosecond
+        vacuum_sampler_state.__setstate__(serialization, ignore_velocities=True)
+        assert np.all(vacuum_sampler_state.velocities == old_velocities)
+
     def test_collective_variable(self):
         """Test that CV calculation is working"""
         # Setup the CV tests if we have a late enough OpenMM
@@ -1056,7 +1090,7 @@ class TestCompoundThermodynamicState(object):
         def apply_to_context(self, context):
             context.setParameter('dummy_parameter', self.dummy_parameter)
 
-        def _on_setattr(self, standard_system, attribute_name):
+        def _on_setattr(self, standard_system, attribute_name, old_dummy_state):
             return False
 
         def _find_force_groups_to_update(self, context, current_context_state, memo):
@@ -1146,7 +1180,7 @@ class TestCompoundThermodynamicState(object):
 
     def test_property_forwarding(self):
         """Forward properties to IComposableStates and update system."""
-        dummy_state = self.DummyState(self.dummy_parameter + 1.0)
+        dummy_state = self.DummyState(self.dummy_parameter + 1)
         thermodynamic_state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
         compound_state = CompoundThermodynamicState(thermodynamic_state, [dummy_state])
 
@@ -1163,6 +1197,13 @@ class TestCompoundThermodynamicState(object):
             compound_state.temp
         compound_state.temp = 0
         assert 'temp' in compound_state.__dict__
+
+        # If there are multiple composable states setting two different
+        # values for the same attribute, an exception is raise.
+        dummy_state2 = self.DummyState(dummy_state.dummy_parameter + 1)
+        compound_state = CompoundThermodynamicState(thermodynamic_state, [dummy_state, dummy_state2])
+        with nose.tools.assert_raises(RuntimeError):
+            compound_state.dummy_parameter
 
     def test_set_system(self):
         """CompoundThermodynamicState.system and set_system method."""
@@ -1209,7 +1250,7 @@ class TestCompoundThermodynamicState(object):
         assert not compound_state.is_state_compatible(incompatible_state)
 
         integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-        context = incompatible_state.create_context(integrator)
+        context = create_default_context(incompatible_state, integrator)
         assert not compound_state.is_context_compatible(context)
 
     def test_method_apply_to_context(self):
@@ -1220,7 +1261,7 @@ class TestCompoundThermodynamicState(object):
         self.DummyState.set_dummy_parameter(thermodynamic_state.system, dummy_parameter)
 
         integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-        context = thermodynamic_state.create_context(integrator)
+        context = create_default_context(thermodynamic_state, integrator)
         barostat = ThermodynamicState._find_barostat(context.getSystem())
         assert context.getParameter('dummy_parameter') == dummy_parameter
         assert context.getParameter(barostat.Pressure()) == self.std_pressure / unit.bar
@@ -1237,7 +1278,7 @@ class TestCompoundThermodynamicState(object):
         alanine_explicit = copy.deepcopy(self.alanine_explicit)
         thermodynamic_state = ThermodynamicState(alanine_explicit, self.std_temperature)
         compound_state = CompoundThermodynamicState(thermodynamic_state, [self.dummy_state])
-        context = compound_state.create_context(openmm.VerletIntegrator(2.0*unit.femtoseconds))
+        context = create_default_context(compound_state, openmm.VerletIntegrator(2.0*unit.femtoseconds))
 
         # No force group should be updated if the two states are identical.
         assert compound_state._find_force_groups_to_update(context, compound_state, memo={}) == set()
@@ -1351,11 +1392,13 @@ class TestGlobalParameterState(object):
         system = openmm.System()
         system.addParticle(40.0*unit.amu)
         system.addParticle(40.0*unit.amu)
+        # Add a force defining lambda_bonds and gamma global parameters.
         custom_force = openmm.CustomBondForce('lambda_bonds^gamma*60000*(r-{})^2;'.format(r0_nanometers))
         custom_force.addGlobalParameter('lambda_bonds', cls.parameters_default_values['lambda_bonds'])
         custom_force.addGlobalParameter('gamma', cls.parameters_default_values['gamma'])
         custom_force.addBond(0, 1, [])
         system.addForce(custom_force)
+        # Add a force defining the lambda_bonds_mysuffix global parameters.
         custom_force_suffix = openmm.CustomBondForce('lambda_bonds_mysuffix*20000*(r-{})^2;'.format(r0_nanometers))
         custom_force_suffix.addGlobalParameter('lambda_bonds_mysuffix', cls.parameters_default_values['lambda_bonds_mysuffix'])
         custom_force_suffix.addBond(0, 1, [])
@@ -1367,6 +1410,14 @@ class TestGlobalParameterState(object):
         pos2 = [0.0, 0.0, r0_nanometers]
         cls.diatomic_molecule_ss = SamplerState(positions=np.array([pos1, pos2]) * unit.nanometers)
 
+        # Create a system with a duplicate force to test handling forces
+        # defining the same parameters in different force groups.
+        custom_force = copy.deepcopy(custom_force_suffix)
+        custom_force.setForceGroup(30)
+        system_force_groups = copy.deepcopy(system)
+        system_force_groups.addForce(custom_force)
+        cls.diatomic_molecule_force_groups_ts = ThermodynamicState(system_force_groups, temperature=300.0*unit.kelvin)
+
         # Create few incompatible systems for testing. An incompatible state
         # has a different set of defined global parameters.
         cls.incompatible_systems = [system]
@@ -1375,6 +1426,9 @@ class TestGlobalParameterState(object):
         for i in range(2):
             cls.incompatible_systems.append(copy.deepcopy(system))
             cls.incompatible_systems[i+1].removeForce(i)
+
+        # System with the global parameters duplicated in two different force groups.
+        cls.incompatible_systems.append(copy.deepcopy(system_force_groups))
 
         # System with both lambda_bonds_suffix and gamma_bond_suffix defined (instead of only the former).
         cls.incompatible_systems.append(copy.deepcopy(system))
@@ -1512,6 +1566,14 @@ class TestGlobalParameterState(object):
         state7 = MyState(lambda_bonds=0.9)
         assert state3 != state7
 
+        # States defined by global parameter functions are evaluated correctly.
+        state8 = copy.deepcopy(state1)
+        state8.set_function_variable('lambda1', state1.lambda_bonds*2.0)
+        state8.lambda_bonds = GlobalParameterFunction('lambda1 / 2')
+        assert state1 == state8
+        state8.set_function_variable('lambda1', state1.lambda_bonds)
+        assert state1 != state8
+
     def test_apply_to_system(self):
         """Test method GlobalParameterState.apply_to_system()."""
         system = self.diatomic_molecule_ts.system
@@ -1588,7 +1650,7 @@ class TestGlobalParameterState(object):
         """Test method GlobalParameterState.apply_to_context."""
         system = self.diatomic_molecule_ts.system
         integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
-        context = self.diatomic_molecule_ts.create_context(integrator)
+        context = create_default_context(self.diatomic_molecule_ts, integrator)
 
         def check_not_applicable(states, error, context):
             for s in states:
@@ -1649,19 +1711,23 @@ class TestGlobalParameterState(object):
 
     def test_find_force_groups_to_update(self):
         """Test method GlobalParameterState._find_force_groups_to_update."""
-        system = self.diatomic_molecule_ts.system
+        system = self.diatomic_molecule_force_groups_ts.system
         integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-        # Test cases are (force_group, force_group_suffix)
-        test_cases = [(0, 0), (1, 5), (9, 4)]
+        # Test cases are (force_groups, force_groups_suffix)
+        test_cases = [
+            ([0], [0, 0]),
+            ([1], [5, 5]),
+            ([9], [4, 2])
+        ]
 
-        for force_groups in test_cases:
-            for i, force_group in enumerate(force_groups):
+        for test_case in test_cases:
+            for i, force_group in enumerate(test_case[0] + test_case[1]):
                 system.getForce(i).setForceGroup(force_group)
             states = self.read_system_state(system)
             context = openmm.Context(system, copy.deepcopy(integrator))
 
             # No force group should be updated if we don't change the global parameter.
-            for state, force_group in zip(states, force_groups):
+            for state, force_groups in zip(states, test_case):
                 assert state._find_force_groups_to_update(context, state, memo={}) == set()
 
                 # Change the lambdas one by one and check that the method
@@ -1675,9 +1741,34 @@ class TestGlobalParameterState(object):
 
                     # Change the current state.
                     setattr(current_state, parameter_name, parameter_value / 2)
-                    assert state._find_force_groups_to_update(context, current_state, memo={}) == {force_group}
+                    assert state._find_force_groups_to_update(context, current_state, memo={}) == set(force_groups)
                     setattr(current_state, parameter_name, parameter_value)  # Reset current state.
             del context
+
+    def test_global_parameters_functions(self):
+        """Test function variables and global parameter functions work correctly."""
+        system = copy.deepcopy(self.diatomic_molecule_ts.system)
+        state = ParameterStateExample.from_system(system)
+
+        # Add two function variables to the state.
+        state.set_function_variable('lambda', 1.0)
+        state.set_function_variable('lambda2', 0.5)
+        assert state.get_function_variable('lambda') == 1.0
+        assert state.get_function_variable('lambda2') == 0.5
+
+        # Cannot call an function variable as a supported parameter.
+        with nose.tools.assert_raises(GlobalParameterError):
+            state.set_function_variable('lambda_bonds', 0.5)
+
+        # Assign string global parameter functions to parameters.
+        state.lambda_bonds = GlobalParameterFunction('lambda')
+        state.gamma = GlobalParameterFunction('(lambda + lambda2) / 2.0')
+        assert state.lambda_bonds == 1.0
+        assert state.gamma == 0.75
+
+        # Setting function variables updates global parameter as well.
+        state.set_function_variable('lambda2', 0)
+        assert state.gamma == 0.5
 
     # ---------------------------------------------------
     # Integration tests with CompoundThermodynamicStates
@@ -1732,6 +1823,22 @@ class TestGlobalParameterState(object):
             for parameter_name in state._parameters:
                 assert getattr(state, parameter_name) == getattr(compound_state, parameter_name)
 
+        # Same for global parameter function variables.
+        compound_state.set_function_variable('lambda', 0.25)
+        defined_parameters = {name for name, value in self.parameters_default_values.items()
+                              if value is not None}
+        for parameter_name in defined_parameters:
+            setattr(compound_state, parameter_name, GlobalParameterFunction('lambda'))
+            parameter_value = getattr(compound_state, parameter_name)
+            assert parameter_value == 0.25, '{}, {}'.format(parameter_name, parameter_value)
+
+        system_states = self.read_system_state(compound_state.system)
+        for state in system_states:
+            for parameter_name in state._parameters:
+                if parameter_name in defined_parameters:
+                    parameter_value = getattr(compound_state, parameter_name)
+                    assert parameter_value == 0.25, '{}, {}'.format(parameter_name, parameter_value)
+
     def test_set_system_compound_state(self):
         """Setting inconsistent system in compound state raise errors."""
         system = self.diatomic_molecule_ts.system
@@ -1781,7 +1888,7 @@ class TestGlobalParameterState(object):
 
         # Build all contexts for testing.
         integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-        contexts = [s.create_context(copy.deepcopy(integrator)) for s in compound_states]
+        contexts = [create_default_context(s, copy.deepcopy(integrator)) for s in compound_states]
 
         for state_idx, (compound_state, context) in enumerate(zip(compound_states, contexts)):
             # The state is compatible with itself.
@@ -1820,8 +1927,8 @@ class TestGlobalParameterState(object):
         positions = copy.deepcopy(self.diatomic_molecule_ss.positions)
         # Build a mixed collection of compatible and incompatible thermodynamic states.
         thermodynamic_states = [
-            ThermodynamicState(self.incompatible_systems[0], temperature=300*unit.kelvin),
-            ThermodynamicState(self.incompatible_systems[-1], temperature=300*unit.kelvin)
+            copy.deepcopy(self.diatomic_molecule_ts),
+            copy.deepcopy(self.diatomic_molecule_force_groups_ts)
         ]
 
         compound_states = []
@@ -1848,7 +1955,7 @@ class TestGlobalParameterState(object):
         for compatible_group in compatible_groups:
             # Create context.
             integrator = openmm.VerletIntegrator(2.0*unit.femtoseconds)
-            context = compatible_group[0].create_context(integrator)
+            context = create_default_context(compatible_group[0], integrator)
             context.setPositions(positions)
 
             # Compute with single-state method.
@@ -1868,6 +1975,10 @@ class TestGlobalParameterState(object):
     def test_serialization(self):
         """Test GlobalParameterState serialization alone and in a compound state."""
         composable_states = self.read_system_state(self.diatomic_molecule_ts.system)
+
+        # Add a global parameter function to test if they are serialized correctly.
+        composable_states[0].set_function_variable('lambda', 0.5)
+        composable_states[0].gamma = GlobalParameterFunction('lambda**2')
 
         # Test serialization/deserialization of GlobalParameterState.
         for state in composable_states:

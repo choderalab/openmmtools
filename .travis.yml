@@ -18,7 +18,7 @@ script:
   # Add org channel
   - conda config --add channels ${ORGNAME}
   # Add omnia dev channels
-  - if [ $DEVOMNIA ]; then conda config --add channels https://conda.anaconda.org/omnia/label/dev; fi
+  - if [ $DEVOMNIA ]; then conda config --add channels omnia-dev; fi
   # Add conda-forge channel back to top priority
   - conda config --add channels conda-forge
   # Build the recipe
@@ -27,29 +27,20 @@ script:
   - conda install --yes --quiet --use-local ${PACKAGENAME}-dev
   # Install testing dependencies. Without specifying the numpy version, numpy
   # is downgraded to 1.9 and we get a "libgfortran not found" issue.
-  - conda install --yes --quiet nose nose-timer pymbar "numpy>=1.11"
+  - conda install --yes --quiet nose nose-timer pymbar "numpy>=1.14"
   # Test the package
-  # TODO: remove the IGNORE_EXCEPTION_DETAIL when we drop Python2 support
-  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-timer --with-doctest --doctest-options="+IGNORE_EXCEPTION_DETAIL" -a '!slow' && cd ..
+  - cd devtools && nosetests $PACKAGENAME --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow' && cd ..
 
 env:
   matrix:
-    - python=2.7 CONDA_PY=27
-    - python=3.5 CONDA_PY=35
-    - python=3.5 CONDA_PY=35 DEVOMNIA=true
     - python=3.6 CONDA_PY=36
+    - python=3.7 CONDA_PY=37
+    - python=3.7 CONDA_PY=37 DEVOMNIA=true # allowed to fail
   global:
     - ORGNAME="omnia" # the name of the organization
     - PACKAGENAME="openmmtools" # the name of your package
     - OPENMM_CPU_THREADS="1" # only use one CPU thread for determinism
-    # encrypted BINSTAR_TOKEN for push of dev package to binstar
-    - secure: "DP5heLvW3wnHvw6d2tinSHcyAxe0EWEsoL4X3lrGC+BSSy3Fd60pb90zSibK/hcxzV7Cb/x4mC4C7KPgGZEXzvVFH/iF7tg2Yy41XgyuZ5vxacfXICdryoTAlGxrbwACvO/ak+OHEYTtkX3OyFM/f8zV0z7Shz/rOSbSvcEKmpQ="
 
 matrix:
   allow_failures:
-  - env: python=3.5 CONDA_PY=35 DEVOMNIA=true
-
-after_success:
-  - echo "after_success"
-  - if [ "$TRAVIS_SECURE_ENV_VARS" == true ]; then source devtools/travis-ci/after_success.sh; fi
-
+  - env: python=3.7 CONDA_PY=37 DEVOMNIA=true

@@ -273,13 +273,14 @@ def math_eval(expression, variables=None, functions=None):
                  }
 
     # Supported functions, not defined in math.
-    stock_functions = {'step': lambda x: 1 * (x >= 0),
+    extra_functions = {'step': lambda x: 1 * (x >= 0),
                        'step_hm': lambda x: 0.5 * (np.sign(x) + 1),
                        'sign': lambda x: np.sign(x)}
-    # Allow overwrite of stock_functions
+
+    # Allow overwrite of extra_functions.
     if functions is not None:
-        stock_functions.update(functions)
-    functions = stock_functions
+        extra_functions.update(functions)
+    functions = extra_functions
 
     def _math_eval(node):
         if isinstance(node, ast.Num):

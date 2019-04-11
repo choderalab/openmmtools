@@ -46,6 +46,7 @@ import os.path
 import numpy as np
 import numpy.random
 import itertools
+import copy
 import inspect
 
 import scipy
@@ -67,6 +68,31 @@ DEFAULT_SWITCH_WIDTH = 1.5 * unit.angstroms # default switch width
 #=============================================================================================
 # SUBROUTINES
 #=============================================================================================
+
+def _read_oemol(filename):
+    """Retrieve a molecule from a file as an OpenEye OEMol.
+
+    This will raise an exception if the OpenEye toolkit is not installed or licensed.
+
+    Parameters
+    ----------
+    filename : str
+        Filename to read from, either absolute path or in data directory.
+
+    Returns
+    -------
+    molecule : openeye.oechem.OEMol
+        The molecule
+    """
+    if not os.path.exists(filename):
+        filename = get_data_filename(filename)
+
+    from openeye import oechem
+    ifs = oechem.oemolistream(filename)
+    mol = oechem.OEGraphMol()
+    oechem.OEReadMolecule(ifs, mol)
+    ifs.close()
+    return mol
 
 def unwrap_py2(func):
     """Unwrap a wrapped function.
@@ -100,7 +126,7 @@ def handle_kwargs(func, defaults, input_kwargs):
 
     """
     # Get arguments that appear in function signature.
-    args, _, _, kwarg_defaults = inspect.getargspec(unwrap_py2(func))
+    args, _, _, kwarg_defaults, _, _, _ = inspect.getfullargspec(unwrap_py2(func))
     # Add defaults
     kwargs = { k : v for (k,v) in defaults.items() }
     # Override those that appear in args
@@ -2347,6 +2373,244 @@ class WCAFluid(TestSystem):
         # Store system.
         self.system, self.positions = system, positions
 
+
+#=============================================================================================
+# Double Well Dimers in WCA Fluid
+#=============================================================================================
+
+class DoubleWellDimer_WCAFluid(WCAFluid):
+
+    def __init__(self, ndimers=1, nparticles=216, density=0.96, mass=39.9 *
+                 unit.amu, epsilon = 120.0 * unit.kelvin * kB, sigma=3.4 *
+                 unit.angstrom, h=6.0 * 0.824 * 120 * unit.kelvin * kB,
+                 r0=2.**(1./6.) * 3.4 * unit.angstrom,
+                 w=0.3 * 3.4 * unit.angstrom, **kwargs):
+        """Cereate a double well dimer in a fluid of WCA particles.
+
+        This is commonly used as a test system for rare events. The
+        transition from condensed to extended within the double well dimer
+        is the rare event, and the WCA particles present a bath. This makes
+        for a somewhat more realistic system than trivial 2D models.
+
+        In this particular setup, we convert the WCA particles to a
+        user-selected number of dimers. This allows for simple examples of
+        multiple state systems as in [1]_.
+
+        Parameters
+        ----------
+        ndimers : int, optional, default = 1
+            Number of double-well dimers.
+        nparticles : int, optional, default = 216
+            Number of particles.
+        density : float, optional, default = 0.96
+            Reduced density, N sigma^3 / V.
+        mass : simtk.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
+            Particle mass.
+        epsilon : simtk.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
+            WCA well depth.
+        sigma : simtk.unit.Quantity, optional, default = 3.4 angstrom
+            WCA sigma.
+        h : simtk.unit.Quantity, optional, default = 593.28K * kB
+            Double well barrier height.
+        r0 : simtk.unit.Quantity, optional, default = 2^(1/6) * 3.4 angstrom
+            Double well "short" state distance for minimum energy.
+        w: simtk.unit.Quanity, optional, default = 1.02 angstrom
+            Double well width; "extended" state minimum energy distance is
+            r0 + 2w.
+
+        References
+        ----------
+        .. [1] D.W.H. Swenson and P.G. Bolhuis. J. Chem. Phys. **141**,
+           044101 (2014); https://doi.org/10.1063/1.4890037
+
+        Examples
+        --------
+
+        Create the default: a single double-well dimer in a WCA particle
+        bath.
+
+        >>> dw_dimer = DoubleWellDimer_WCAFluid()
+        >>> system, positions = dw_dimer.system, dw_dimer.positions
+
+        Create a system with 2 dimers in a system with 400 total particles.
+
+        >>> dw_dimer = DoubleWellDimer_WCAFluid(ndimers=2, nparticles=400)
+        >>> system, positions = dw_dimer.system, dw_dimer.positions
+
+        You can create up to nparticles/2 dimers, although large numbers are
+        not recommended.
+
+        >>> dw_dimer = DoubleWellChain_WCAFluid(ndimers=4, nparticles=8)
+        >>> system, positions = dw_dimer.system, dw_dimer.positions
+
+        Asking for 0 dimers is the same as asking for the WCAFluid.
+
+        >>> dw_dimer = DoubleWellChain_WCAFluid(ndimers=0)
+        >>> system, positions = dw_dimer.system, dw_dimer.positions
+        """
+        # note that we use ndimers here because that's more user-friendly;
+        # however it is better to think of this as nbonds
+        if not (0 <= ndimers <= self._max_bonds(nparticles)):
+            raise ValueError("Can't create %s bonds with %s particles" %
+                             (str(ndimers), str(nparticles)))
+        super(DoubleWellDimer_WCAFluid, self).__init__(nparticles, density,
+                                                       mass, epsilon, sigma,
+                                                       **kwargs)
+        # create the double well dimer force
+        self.dw_dimer = self._create_dw_dimer_force(force_group=1)
+        self.system.addForce(self.dw_dimer)
+        self.positions = self._reorder_positions(ndimers)
+        self.system, self.topology = self._add_double_wells(ndimers, h, r0, w)
+
+    def _create_dw_dimer_force(self, force_group=0):
+        dw_dimer = openmm.CustomBondForce("h*(1 - ((r-r0-w)/w)^2)^2")
+        dw_dimer.addPerBondParameter("h")
+        dw_dimer.addPerBondParameter("r0")
+        dw_dimer.addPerBondParameter("w")
+        dw_dimer.setForceGroup(force_group)
+        return dw_dimer
+
+    def _reorder_positions(self, ndimers):
+        import mdtraj as md  # TODO: would like to remove mdtraj dependence
+        def nearest_unused_particle(positions, openmm_topology, atom_index):
+            # by construction, all particles with atom index less than this
+            # one have been used already
+            n_atoms = openmm_topology.getNumAtoms()
+            atom_pairs = list(itertools.product(
+                [atom_index],
+                list(range(atom_index+1, n_atoms))
+            ))
+
+            # note that this ignores periodicity
+            traj = md.Trajectory(
+                xyz=positions.value_in_unit(unit.nanometer),
+                topology=md.Topology.from_openmm(openmm_topology)
+            )
+            dists = md.compute_distances(traj, atom_pairs)
+            min_pair = atom_pairs[dists.argmin()]
+            min_atom = min_pair[1]
+            return min_atom
+
+        positions = self.positions
+        for atom_A_idx, atom_B_idx in self._bond_pairs(ndimers):
+            nearest = nearest_unused_particle(positions, self.topology,
+                                              atom_A_idx)
+            # error w/out copy: unit.Quantity issue?
+            new_pos = copy.copy(positions)
+            new_pos[nearest], new_pos[atom_B_idx] = \
+                    positions[atom_B_idx], positions[nearest]
+
+        return positions
+
+    def _add_double_wells(self, ndimers, h, r0, w):
+        # create double-well dimer bonds; add to topology, too
+        atoms = list(self.topology.atoms())
+        for atom_A_idx, atom_B_idx in self._bond_pairs(ndimers):
+            self.dw_dimer.addBond(atom_A_idx, atom_B_idx, [h, r0, w])
+            self.topology.addBond(atoms[atom_A_idx], atoms[atom_B_idx],
+                                  type=app.topology.Single, order=1)
+
+        return self.system, self.topology
+
+    @staticmethod
+    def _max_bonds(nparticles):
+        return nparticles / 2
+
+    def _bond_pairs(self, nbonds):
+        for bond_idx in range(nbonds):
+            yield (2 * bond_idx, 2 * bond_idx + 1)
+
+
+#=============================================================================================
+# Double Well Chain in WCA Fluid
+#=============================================================================================
+
+class DoubleWellChain_WCAFluid(DoubleWellDimer_WCAFluid):
+    def __init__(self, nchained=3, nparticles=216, density=0.96, mass=39.9 *
+                 unit.amu, epsilon = 120.0 * unit.kelvin * kB,
+                 sigma=3.4 * unit.angstrom, h=6.0 * 0.824 * unit.kelvin * kB,
+                 r0=2.**(1./6.) * 3.4 * unit.angstrom,
+                 w=0.3 * 3.4 * unit.angstrom, **kwargs):
+        """Create a chain of double wells in a fluid of WCA particles.
+
+        This creates polymer chain linked by the double-well potential. This
+        was inspired by the trimer version used in [1]_. In the case
+        ``nchained=2``, this is the same as ``DoubleWellDimer_WCAFluid``
+        with ``ndimers=1``.
+
+        Parameters
+        ----------
+        nchained : int, optional, default = 3
+            Number of particles in the double-well polymer chain.
+        nparticles : int, optional, default = 216
+            Number of particles.
+        density : float, optional, default = 0.96
+            Reduced density, N sigma^3 / V.
+        mass : simtk.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
+            Particle mass.
+        epsilon : simtk.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
+            WCA well depth.
+        sigma : simtk.unit.Quantity, optional, default = 3.4 angstrom
+            WCA sigma.
+        h : simtk.unit.Quantity, optional, default = 593.28K * kB
+            Double well barrier height.
+        r0 : simtk.unit.Quantity, optional, default = 2^(1/6) * 3.4 angstrom
+            Double well "short" state distance for minimum energy.
+        w: simtk.unit.Quanity, optional, default = 1.02 angstrom
+            Double well width; "extended" state minimum energy distance is
+            r0 + 2w.
+
+        References
+        ----------
+        .. [1] J. Rogal and P.G. Bolhuis. J. Chem. Phys. **129**, 224107
+           (2008); https://doi.org/10.1063/1.3029696
+
+        Examples
+        --------
+
+        Create the default: a trimer with double-well bonds in a WCA
+        particle bath.
+
+        >>> dw_chain = DoubleWellChain_WCAFluid()
+        >>> system, positions = dw_chain.system, dw_chain.positions
+
+        Create a system with a chain of 4 particles in a system with 400
+        total particles.
+
+        >>> dw_chain = DoubleWellChain_WCAFluid(nchained=4, nparticles=400)
+        >>> system, positions = dw_chain.system, dw_chain.positions
+
+        You can create a chain with length up to nparticles, although large
+        fractions are likely to lead to nonsensical initial conditions
+        except for the smallest system sizes.
+
+        >>> dw_chain = DoubleWellChain_WCAFluid(nchained=8, nparticles=8)
+        >>> system, positions = dw_chain.system, dw_chain.positions
+
+        Asking for 0 in the chain or for 1 in the chain is the same as
+        asking for a WCAFluid.
+
+        >>> dw_chain = DoubleWellChain_WCAFluid(nchained=0)
+        >>> system, positions = dw_chain.system, dw_chain.positions
+        >>> dw_chain = DoubleWellChain_WCAFluid(nchained=1)
+        >>> system, positions = dw_chain.system, dw_chain.positions
+        """
+        nchained = 1 if nchained == 0 else nchained  # 0 is allowed input
+        # the number of bonds is nchained-1 here; ndimers in the dimer fluid
+        super(DoubleWellChain_WCAFluid, self).__init__(nchained - 1,
+                                                       nparticles, density,
+                                                       mass, epsilon,
+                                                       sigma, h, r0, w)
+
+    @staticmethod
+    def _max_bonds(nparticles):
+        return nparticles - 1
+
+    def _bond_pairs(self, nbonds):
+        for bond_idx in range(nbonds):
+            yield (bond_idx, bond_idx + 1)
+
+
 #=============================================================================================
 # Ideal gas
 #=============================================================================================
@@ -3371,7 +3635,26 @@ class TolueneImplicitGBn2(TolueneImplicit):
 # Host-guest in vacuum
 #=============================================================================================
 
-class HostGuestVacuum(TestSystem):
+class _HostGuestBase(object):
+    """Mixin to add ability to retrieve hosts and guests as OEMols.
+    """
+
+    @property
+    def oemols(self):
+        """List of OpenEye ``OEMol``s contained in the system."""
+        return [self.host_oemol, self.guest_oemol]
+
+    @property
+    def host_oemol(self):
+        """OpenEye ``OEMol`` for the host."""
+        return _read_oemol("data/cb7-b2/cb7_tripos.mol2")
+
+    @property
+    def guest_oemol(self):
+        """OpenEye ``OEMol`` for the guest."""
+        return _read_oemol("data/cb7-b2/b2_tripos.mol2")
+
+class HostGuestVacuum(TestSystem, _HostGuestBase):
 
     """CB7:B2 host-guest system in vacuum.
 
@@ -3390,7 +3673,7 @@ class HostGuestVacuum(TestSystem):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, hydrogenMass=None, **kwargs):
+    def __init__(self, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3398,7 +3681,13 @@ class HostGuestVacuum(TestSystem):
         crd_filename = get_data_filename("data/cb7-b2/complex-vacuum.inpcrd")
 
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(implicitSolvent=None, constraints=constraints, nonbondedCutoff=None, hydrogenMass=hydrogenMass)
+
+        defaults = { 'implicitSolvent' : None,
+                     'constraints' : app.HBonds,
+                     'nonbondedMethod' : app.NoCutoff,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3413,7 +3702,7 @@ class HostGuestVacuum(TestSystem):
 # Host guest system in implicit solvent.
 #=============================================================================================
 
-class HostGuestImplicit(TestSystem):
+class HostGuestImplicit(TestSystem, _HostGuestBase):
 
     """CB7:B2 host-guest system implicit solvent.
 
@@ -3485,7 +3774,7 @@ class HostGuestImplicitGBn2(HostGuestImplicit):
 # Host-guest system in explicit solvent
 #=============================================================================================
 
-class HostGuestExplicit(TestSystem):
+class HostGuestExplicit(TestSystem, _HostGuestBase):
 
     """CB7:B2 host-guest system in TIP3P explicit solvent.
 
@@ -3514,7 +3803,7 @@ class HostGuestExplicit(TestSystem):
     >>> (system, positions) = testsystem.system, testsystem.positions
     """
 
-    def __init__(self, constraints=app.HBonds, rigid_water=True, nonbondedCutoff=DEFAULT_CUTOFF_DISTANCE, use_dispersion_correction=True, nonbondedMethod=app.PME, hydrogenMass=None, switch_width=DEFAULT_SWITCH_WIDTH, ewaldErrorTolerance=DEFAULT_EWALD_ERROR_TOLERANCE, **kwargs):
+    def __init__(self, rigid_water=True, use_dispersion_correction=True, switch_width=DEFAULT_SWITCH_WIDTH, **kwargs):
 
         TestSystem.__init__(self, **kwargs)
 
@@ -3523,7 +3812,15 @@ class HostGuestExplicit(TestSystem):
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
-        system = prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
+
+        defaults = { 'constraints' : app.HBonds,
+                     'nonbondedCutoff' : DEFAULT_CUTOFF_DISTANCE,
+                     'nonbondedMethod' : app.PME,
+                     'ewaldErrorTolerance' : DEFAULT_EWALD_ERROR_TOLERANCE,
+                     'rigidWater' : rigid_water,
+                    }
+        create_system_kwargs = handle_kwargs(prmtop.createSystem, defaults, kwargs)
+        system = prmtop.createSystem(**create_system_kwargs)
 
         # Extract topology
         self.topology = prmtop.topology
@@ -3531,10 +3828,10 @@ class HostGuestExplicit(TestSystem):
         # Set dispersion correction use.
         forces = {system.getForce(index).__class__.__name__: system.getForce(index) for index in range(system.getNumForces())}
         forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
-        forces['NonbondedForce'].setEwaldErrorTolerance(ewaldErrorTolerance)
 
         if switch_width is not None:
             forces['NonbondedForce'].setUseSwitchingFunction(True)
+            nonbondedCutoff = forces['NonbondedForce'].getCutoffDistance()
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
         # Read positions.
