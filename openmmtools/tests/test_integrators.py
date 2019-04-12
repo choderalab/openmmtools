@@ -764,7 +764,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             nonequilibrium_integrator.reset()
 
             # Check initial conditions after reset
-            prin('get lambda')
+            print('get lambda')
             current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
             assert current_lambda == 0.0, 'initial lambda should be 0.0 (was %f)' % current_lambda
             print('get step')
