@@ -1110,6 +1110,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._gamma = gamma
 
         # Check if integrator is metropolized by checking for M step:
+        print('Checking for Metropolization') # DEBUG
         if splitting.find("{") > -1:
             self._metropolized_integrator = True
             # We need to measure shadow work if Metropolization is used
@@ -1121,6 +1122,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._measure_heat = measure_heat
         self._measure_shadow_work = measure_shadow_work
 
+        print('Parsing splitting...') # DEBUG
         ORV_counts, mts, force_group_nV = self._parse_splitting_string(splitting)
 
         # Record splitting.
@@ -1130,9 +1132,11 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._force_group_nV = force_group_nV
 
         # Create a new CustomIntegrator
+        print('Create CustomIntegrator...') # DEBUG
         super(LangevinIntegrator, self).__init__(temperature, timestep)
 
         # Initialize
+        print('Initialize') # DEBUG
         self.addPerDofVariable("sigma", 0)
 
         # Velocity mixing parameter: current velocity component
@@ -1146,13 +1150,17 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self.addPerDofVariable("x1", 0)
 
         # Set constraint tolerance
+        print('Set constraint tolerance...') # DEBUG
         self.setConstraintTolerance(constraint_tolerance)
 
         # Add global variables
+        print('Add globals...') # DEBUG
         self._add_global_variables()
 
         # Add integrator steps
+        print('Add integrator steps...') # DEBUG
         self._add_integrator_steps()
+        print('Done') # DEBUG
 
     @property
     def _step_dispatch_table(self):
@@ -1307,11 +1315,17 @@ class LangevinIntegrator(ThermostatedIntegrator):
         """Add the steps to the integrator--this can be overridden to place steps around the integration.
         """
         # Integrate
+        print('add update context state..') # DEBUG
         self.addUpdateContextState()
+        print('add compute temperature dependent constants...') # DEBUG
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
+        print('Adding substeps') #
         for i, step in enumerate(self._splitting.split()):
+            print(f'  adding {step}') # DEBUG
             self._substep_function(step)
+
+        print('Done adding substeps...') # DEBUG
 
     def _sanity_check(self, splitting):
         """Perform a basic sanity check on the splitting string to ensure that it makes sense.
@@ -1577,7 +1591,9 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
     """
 
     def __init__(self, *args, **kwargs):
+        print('super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs) start') # DEBUG
         super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
+        print('super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs) end') # DEBUG
 
     def _add_global_variables(self):
         super(NonequilibriumLangevinIntegrator, self)._add_global_variables()
@@ -1693,9 +1709,21 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create a nonequilibrium alchemical integrator
     >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
+    >>> nsteps_neq = 100 # number of steps in the switching trajectory where lambda is switched from 0 to 1
     >>> integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds,
-    ...                                                         alchemical_functions=alchemical_functions, splitting="O { V R H R V } O", nsteps_neq=100,
+    ...                                                         alchemical_functions=alchemical_functions, splitting="O { V R H R V } O", nsteps_neq=nsteps_neq,
     ...                                                         measure_shadow_work=True)
+    >>> # Create a Context
+    >>> context = openmm.Context(testsystem.system, integrator)
+    >>> # Run the whole switching trajectory
+    >>> context.setPositions(testsystem.positions)
+    >>> integrator.step(nsteps_neq)
+    >>> protocol_work = integrator.protocol_work # retrieve protocol work (excludes shadow work)
+    >>> total_work = integrator.total_work # retrieve total work (includes shadow worl)
+    >>> # Reset and run again
+    >>> context.setPositions(testsystem.positions)
+    >>> integrator.reset()
+    >>> integrator.step(nsteps_neq)
 
     Attributes
     ----------
@@ -1901,7 +1929,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create an external perturbation integrator
     >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
-    >>> context = Context(testsystem.system, integrator)
+    >>> context = openmm.Context(testsystem.system, integrator)
     >>> # Take a step
     >>> integrator.step(1)
     >>> # Perturb the system
