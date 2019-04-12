@@ -672,7 +672,6 @@ def test_restorable_integrator_copy():
         assert isinstance(integrator_copied, integrator_class)
         assert set(integrator_copied.__dict__.keys()) == set(integrator.__dict__.keys())
 
-
 def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     """Check that the AlchemicalLangevinSplittingIntegrator reproduces the analytical free energy difference for a harmonic oscillator deformation, using BAR.
     Up to 6*sigma is tolerated for error.
@@ -719,27 +718,19 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
         positions = testsystem.positions
 
         # Create equilibrium and nonequilibrium integrators
-        print('Creating GHMCIntegrator...') # DEBUG
         equilibrium_integrator = GHMCIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep)
-        print('Creating AlchemicalNonequilibriumLangevinIntegrator...') # DEBUG
         nonequilibrium_integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=temperature, collision_rate=collision_rate, timestep=timestep,
                                                                        alchemical_functions=alchemical_functions[direction], splitting=splitting, nsteps_neq=nsteps,
                                                                        measure_shadow_work=True)
 
         # Create compound integrator
-        print('Creating CompoundIntegrator...') # DEBUG
         compound_integrator = openmm.CompoundIntegrator()
-        print('Adding GHMCIntegrator...') # DEBUG
         compound_integrator.addIntegrator(equilibrium_integrator)
-        print('Adding AlchemicalNonequilibriumLangevinIntegrator')
         compound_integrator.addIntegrator(nonequilibrium_integrator)
 
         # Create Context
-        print('Creating Context...') # DEBUG
         context = openmm.Context(system, compound_integrator, platform)
-        print('Setting positions...') # DEBUG
         context.setPositions(positions)
-        print('Collecting work...')
 
         # Collect work samples
         for iteration in range(n_iterations):
@@ -747,50 +738,36 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
             # Generate equilibrium sample
             #
 
-            print('setCurrentIntegrator(0)')
             compound_integrator.setCurrentIntegrator(0)
-            print('reset')
             equilibrium_integrator.reset()
-            print('step')
             compound_integrator.step(thinning)
 
             #
             # Generate nonequilibrium work sample
             #
 
-            print('setCurrentIntegrator(1)')
             compound_integrator.setCurrentIntegrator(1)
-            print('reset')
             nonequilibrium_integrator.reset()
 
             # Check initial conditions after reset
-            print('get lambda')
             current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
             assert current_lambda == 0.0, 'initial lambda should be 0.0 (was %f)' % current_lambda
-            print('get step')
             current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
             assert current_step == 0.0, 'initial step should be 0 (was %f)' % current_step
 
-            print('step')
             compound_integrator.step(max(1, nsteps)) # need to execute at least one step
             work[direction][iteration] = nonequilibrium_integrator.get_total_work(dimensionless=True)
 
             # Check final conditions before reset
-            print('get lambda')
             current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
             assert current_lambda == 1.0, 'final lambda should be 1.0 (was %f)' % current_lambda
-            print('get step')
             current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
             assert int(current_step) == max(1,nsteps), 'final step should be %d (was %f)' % (max(1,nsteps), current_step)
             nonequilibrium_integrator.reset()
 
         # Clean up
-        print('del context')
         del context
-        print('iteration complete')
         del compound_integrator
-        del equilibrium_integrator
-        del nonequilibrium_integrator
 
     dF, ddF = pymbar.BAR(work['forward'], work['reverse'])
     nsigma = np.abs(dF - dF_analytical) / ddF
