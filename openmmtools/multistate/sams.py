@@ -174,6 +174,7 @@ class SAMSSampler(multistate.MultiStateSampler):
                  update_stages='two-stage',
                  flatness_criteria='logZ-flatness',
                  flatness_threshold=0.2,
+                 minimum_visits=10,
                  weight_update_method='rao-blackwellized',
                  adapt_target_probabilities=False,
                  gamma0=1.0,
@@ -204,6 +205,8 @@ class SAMSSampler(multistate.MultiStateSampler):
              One of ['logZ-flatness','minimum-visits','histogram-flatness']
         flatness_threshold : float, optional, default=0.2
             Histogram relative flatness threshold to use for first stage of two-stage scheme.
+        minimum_visits : int, optional, default=10
+            Minimum visits per states threshold to use for first stage of two-stage scheme.
         weight_update_method : str, optional, default='rao-blackwellized'
             Method to use for updating log weights in SAMS. One of ['optimal', 'rao-blackwellized']
             ``rao-blackwellized`` will update log free energy estimate for all states for which energies were computed
@@ -225,6 +228,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self.update_stages = update_stages
         self.flatness_criteria = flatness_criteria
         self.flatness_threshold = flatness_threshold
+        self.minimum_visits = minimum_visits
         self.weight_update_method = weight_update_method
         self.adapt_target_probabilities = adapt_target_probabilities
         self.gamma0 = gamma0
@@ -283,6 +287,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     update_stages = _StoredProperty('update_stages', validate_function=_StoredProperty._update_stages_validator)
     flatness_criteria = _StoredProperty('flatness_criteria', validate_function=_StoredProperty._flatness_criteria_validator)
     flatness_threshold = _StoredProperty('flatness_threshold', validate_function=None)
+    minimum_visits = _StoredProperty('minimum_visits', validate_function=None)
     weight_update_method = _StoredProperty('weight_update_method', validate_function=_StoredProperty._weight_update_method_validator)
     adapt_target_probabilities = _StoredProperty('adapt_target_probabilities', validate_function=_StoredProperty._adapt_target_probabilities_validator)
     gamma0 = _StoredProperty('gamma0', validate_function=None)
@@ -562,8 +567,6 @@ class SAMSSampler(multistate.MultiStateSampler):
         Determine which adaptation stage we're in by checking histogram flatness.
 
         """
-        # TODO: Make minimum_visits a user option
-        minimum_visits = 1
         N_k = self._state_histogram
         logger.debug('    state histogram counts ({} total): {}'.format(self._cached_state_histogram.sum(), self._cached_state_histogram))
         if (self.update_stages == 'two-stage') and (self._stage == 0):
