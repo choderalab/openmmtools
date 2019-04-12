@@ -234,11 +234,9 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
         """
         # First check if flag variable already exist.
-        try:
-            self.getGlobalVariableByName('has_kT_changed')
-        except Exception:
+        global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+        if not 'has_kT_changed' in global_variable_names:
             self.addGlobalVariable('has_kT_changed', 1)
-
 
         # Create if-block that conditionally update the per-DOF variables.
         self.beginIfBlock('has_kT_changed = 1')
@@ -265,9 +263,8 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         ThermostatedIntegrator, False otherwise.
 
         """
-        try:
-            integrator.getGlobalVariableByName('kT')
-        except Exception:
+        global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+        if not 'kT' in global_variable_names:
             return False
         return super(ThermostatedIntegrator, cls).is_restorable(integrator)
 
@@ -294,11 +291,8 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         # that may keep the stationary distribution at a certain
         # temperature without exposing getters and setters.
         if not restored:
-            try:
-                integrator.getGlobalVariableByName('kT')
-            except Exception:
-                pass
-            else:
+            global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+            if 'kT' in global_variable_names:
                 if not hasattr(integrator, 'getTemperature'):
                     logger.warning("The integrator {} has a global variable 'kT' variable "
                                    "but does not expose getter and setter for the temperature. "
