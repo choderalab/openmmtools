@@ -788,6 +788,9 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
         print('del context')
         del context
         print('iteration complete')
+        del compound_integrator
+        del equilibrium_integrator
+        del nonequilibrium_integrator
 
     dF, ddF = pymbar.BAR(work['forward'], work['reverse'])
     nsigma = np.abs(dF - dF_analytical) / ddF
