@@ -234,7 +234,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
         """
         # First check if flag variable already exist.
-        global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+        global_variable_names = set([ self.getGlobalVariableName(index) for index in range(self.getNumGlobalVariables()) ])
         if not 'has_kT_changed' in global_variable_names:
             self.addGlobalVariable('has_kT_changed', 1)
 
