@@ -239,6 +239,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         except Exception:
             self.addGlobalVariable('has_kT_changed', 1)
 
+
         # Create if-block that conditionally update the per-DOF variables.
         self.beginIfBlock('has_kT_changed = 1')
         for variable, expression in compute_per_dof.items():
@@ -1110,7 +1111,6 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._gamma = gamma
 
         # Check if integrator is metropolized by checking for M step:
-        print('Checking for Metropolization') # DEBUG
         if splitting.find("{") > -1:
             self._metropolized_integrator = True
             # We need to measure shadow work if Metropolization is used
@@ -1122,7 +1122,6 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._measure_heat = measure_heat
         self._measure_shadow_work = measure_shadow_work
 
-        print('Parsing splitting...') # DEBUG
         ORV_counts, mts, force_group_nV = self._parse_splitting_string(splitting)
 
         # Record splitting.
@@ -1132,11 +1131,9 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self._force_group_nV = force_group_nV
 
         # Create a new CustomIntegrator
-        print('Create CustomIntegrator...') # DEBUG
         super(LangevinIntegrator, self).__init__(temperature, timestep)
 
         # Initialize
-        print('Initialize') # DEBUG
         self.addPerDofVariable("sigma", 0)
 
         # Velocity mixing parameter: current velocity component
@@ -1150,17 +1147,13 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self.addPerDofVariable("x1", 0)
 
         # Set constraint tolerance
-        print('Set constraint tolerance...') # DEBUG
         self.setConstraintTolerance(constraint_tolerance)
 
         # Add global variables
-        print('Add globals...') # DEBUG
         self._add_global_variables()
 
         # Add integrator steps
-        print('Add integrator steps...') # DEBUG
         self._add_integrator_steps()
-        print('Done') # DEBUG
 
     @property
     def _step_dispatch_table(self):
@@ -1315,17 +1308,11 @@ class LangevinIntegrator(ThermostatedIntegrator):
         """Add the steps to the integrator--this can be overridden to place steps around the integration.
         """
         # Integrate
-        print('add update context state..') # DEBUG
         self.addUpdateContextState()
-        print('add compute temperature dependent constants...') # DEBUG
         self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"})
 
-        print('Adding substeps') #
         for i, step in enumerate(self._splitting.split()):
-            print(f'  adding {step}') # DEBUG
             self._substep_function(step)
-
-        print('Done adding substeps...') # DEBUG
 
     def _sanity_check(self, splitting):
         """Perform a basic sanity check on the splitting string to ensure that it makes sense.
@@ -1591,9 +1578,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
     """
 
     def __init__(self, *args, **kwargs):
-        print('super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs) start') # DEBUG
         super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
-        print('super(NonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs) end') # DEBUG
 
     def _add_global_variables(self):
         super(NonequilibriumLangevinIntegrator, self)._add_global_variables()
@@ -1813,10 +1798,6 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         # Trigger update of all context parameters only by running one integrator cycle with step = -1
         self.setGlobalVariableByName('step', -1)
         self.step(1)
-
-    def _register_step_types(self):
-        super(AlchemicalNonequilibriumLangevinIntegrator, self)._register_step_types()
-        self._register_step_type('H', self._add_alchemical_perturbation_step)
 
     def _add_global_variables(self):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
