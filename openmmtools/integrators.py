@@ -1689,9 +1689,10 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
     Create a nonequilibrium integrator to switch the center of a harmonic oscillator
 
     >>> # Create harmonic oscillator testsystem
+    >>> from openmmtools import testsystems
     >>> testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
     >>> # Create a nonequilibrium alchemical integrator
-    >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : lambda }
+    >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
     >>> integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds,
     ...                                                         alchemical_functions=alchemical_functions, splitting="O { V R H R V } O", nsteps_neq=100,
     ...                                                         measure_shadow_work=True)
@@ -1896,6 +1897,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     --------
 
     >>> # Create harmonic oscillator testsystem
+    >>> from openmmtools import testsystems
     >>> testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
     >>> # Create an external perturbation integrator
     >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
