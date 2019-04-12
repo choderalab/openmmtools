@@ -1590,6 +1590,9 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("protocol_work", "0.0")
 
     def reset_protocol_work(self):
+        """
+        Reset the protocol work.
+        """
         self.setGlobalVariableByName("protocol_work", 0)
 
     def get_protocol_work(self, dimensionless=False):
@@ -1610,6 +1613,8 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
     @property
     def protocol_work(self):
+        """Total protocol work in energy units.
+        """
         return self.get_protocol_work()
 
     def get_total_work(self, dimensionless=False):
@@ -1632,6 +1637,8 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
     @property
     def total_work(self):
+        """Total work (protocol work plus shadow work) in energy units.
+        """
         return self.get_total_work()
 
     def reset(self):

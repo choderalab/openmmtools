@@ -8,7 +8,7 @@ New features
 ------------
 - Improvements for ``HostGuest*`` classes
   - add ``oemols``, ``host_oemol``, and ``guest_oemol`` properties to retrieve OpenEye Toolkit ``OEMol`` objects (requires toolkit license and installation)
-  - these classes can now accept overriding ``kwargs``ss
+  - these classes can now accept overriding ``kwargs``
 
 Bugfixes
 --------
