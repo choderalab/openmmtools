@@ -109,10 +109,9 @@ def check_integrator_temperature(integrator, temperature, has_changed):
     assert np.isclose(integrator.getTemperature() / unit.kelvin, temperature)
     assert np.isclose(integrator.getGlobalVariableByName('kT'), kT.value_in_unit_system(unit.md_unit_system))
     assert np.isclose(integrator.kT.value_in_unit_system(unit.md_unit_system), kT.value_in_unit_system(unit.md_unit_system))
-    try:
+    has_kT_changed = False
+    if 'has_kT_changed' in integrator.global_variable_names:
         has_kT_changed = integrator.getGlobalVariableByName('has_kT_changed')
-    except Exception:
-        has_kT_changed = False
     if has_kT_changed is not False:
         assert has_kT_changed == has_changed
 

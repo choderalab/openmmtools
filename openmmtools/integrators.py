@@ -193,6 +193,11 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         super(ThermostatedIntegrator, self).__init__(*args, **kwargs)
         self.addGlobalVariable('kT', kB * temperature)  # thermal energy
 
+    @property
+    def global_variable_names(self):
+        """The set of global variable names defined for this integrator."""
+        return set([ self.getGlobalVariableName(index) for index in range(self.getNumGlobalVariables()) ])
+
     def getTemperature(self):
         """Return the temperature of the heat bath.
 
@@ -219,10 +224,8 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         self.setGlobalVariableByName('kT', kT)
 
         # Update the changed flag if it exist.
-        try:
+        if 'has_kT_changed' in self.global_variable_names:
             self.setGlobalVariableByName('has_kT_changed', 1)
-        except Exception:
-            pass
 
     def addComputeTemperatureDependentConstants(self, compute_per_dof):
         """Wrap the ComputePerDof into an if-block executed only when kT changes.
@@ -234,8 +237,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
         """
         # First check if flag variable already exist.
-        global_variable_names = set([ self.getGlobalVariableName(index) for index in range(self.getNumGlobalVariables()) ])
-        if not 'has_kT_changed' in global_variable_names:
+        if not 'has_kT_changed' in self.global_variable_names:
             self.addGlobalVariable('has_kT_changed', 1)
 
         # Create if-block that conditionally update the per-DOF variables.
