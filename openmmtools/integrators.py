@@ -293,12 +293,13 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         # that may keep the stationary distribution at a certain
         # temperature without exposing getters and setters.
         if not restored:
-            global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
-            if 'kT' in global_variable_names:
-                if not hasattr(integrator, 'getTemperature'):
-                    logger.warning("The integrator {} has a global variable 'kT' variable "
-                                   "but does not expose getter and setter for the temperature. "
-                                   "Consider inheriting from ThermostatedIntegrator.")
+            if hasattr(integrator, 'getGlobalVariableName'):
+                global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+                if 'kT' in global_variable_names:
+                    if not hasattr(integrator, 'getTemperature'):
+                        logger.warning("The integrator {} has a global variable 'kT' variable "
+                                       "but does not expose getter and setter for the temperature. "
+                                       "Consider inheriting from ThermostatedIntegrator.")
         return restored
 
     @property
