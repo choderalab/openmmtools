@@ -1673,6 +1673,8 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
                 b = sqrt(1 - e^(-2gamma dt))
                 R is i.i.d. standard normal
 
+        - H: Hamiltonian update step
+
     We can then construct integrators by solving each part for a certain timestep in sequence.
     (We can further split up the V step by force group, evaluating cheap but fast-fluctuating
     forces more frequently than expensive but slow-fluctuating forces. Since forces are only
@@ -1683,17 +1685,16 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
     Examples
     --------
-        - VVVR
-            splitting="O V R V O"
-        - BAOAB:
-            splitting="V R O R V"
-        - g-BAOAB, with K_r=3:
-            splitting="V R R R O R R R V"
-        - g-BAOAB with solvent-solute splitting, K_r=K_p=2:
-            splitting="V0 V1 R R O R R V1 R R O R R V1 V0"
-        - An NCMC algorithm with Metropolized integrator:
-            splitting="O { V R H R V } O"
 
+    Create a nonequilibrium integrator to switch the center of a harmonic oscillator
+
+    >>> # Create harmonic oscillator testsystem
+    >>> testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
+    >>> # Create a nonequilibrium alchemical integrator
+    >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : lambda }
+    >>> integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds,
+    ...                                                         alchemical_functions=alchemical_functions, splitting="O { V R H R V } O", nsteps_neq=100,
+    ...                                                         measure_shadow_work=True)
 
     Attributes
     ----------
@@ -1894,10 +1895,19 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     Examples
     --------
 
-    An example of an external perturbation could be changing the forcefield parameters via
-
-    >>> force.setParticleParameters(...)
-    >>> force.updateParametersInContext(context)
+    >>> # Create harmonic oscillator testsystem
+    >>> testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
+    >>> # Create an external perturbation integrator
+    >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
+    >>> context = Context(testsystem.system, integrator)
+    >>> # Take a step
+    >>> integrator.step(1)
+    >>> # Perturb the system
+    >>> context.setGlobalVariableByName('testsystems_HarmonicOscillator_x0', 0.1)
+    >>> # Take another step, integrating work
+    >>> integrator.step(1)
+    >>> # Retrieve the work
+    >>> protocol_work = integrator.protocol_work
 
     where force is an instance of openmm's force class. The externally performed protocol work is accumulated in the
     "protocol_work" global variable. This variable can be re-initialized by calling
