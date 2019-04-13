@@ -3104,6 +3104,10 @@ class GlobalParameterState(object):
         state_parameters = {}
         for force, parameter_name, parameter_id in cls._get_system_controlled_parameters(
                 system, parameters_name_suffix):
+
+            if parameter_id >= force.getNumGlobalParameters():
+                raise GlobalParameterStateError(f'Attempted to access system parameter {parameter_name} (id {parameter_id}) that does not exist in {force.__class__.__name__}')
+
             parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
 
             # Check that we haven't already found
@@ -3301,6 +3305,10 @@ class GlobalParameterState(object):
                 err_msg = 'The system parameter {} is not defined in this state.'
                 raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
             else:
+
+                if parameter_id >= force.getNumGlobalParameters():
+                    raise GlobalParameterStateError(f'Attempted to access system parameter {parameter_name} (id {parameter_id}) that does not exist in {force.__class__.__name__}')
+
                 parameters_applied.add(parameter_name)
                 force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
 
@@ -3363,11 +3371,13 @@ class GlobalParameterState(object):
                     err_msg = 'Context has parameter {} which is undefined in this state.'
                     raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
                 continue
+
             try:
                 context.setParameter(parameter_name, parameter_value)
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
                 raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
+
 
     def _standardize_system(self, system):
         """Standardize the given system.

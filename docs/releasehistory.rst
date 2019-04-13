@@ -1,18 +1,19 @@
 Release History
 ***************
 
-0.19.0 -
-==================================
+0.18.1 - Bugfix release
+=======================
 
 New features
 ------------
 - Improvements for ``HostGuest*`` classes
   - add ``oemols``, ``host_oemol``, and ``guest_oemol`` properties to retrieve OpenEye Toolkit ``OEMol`` objects (requires toolkit license and installation)
-  - these classes can now accept overriding ``kwargs``ss
+  - these classes can now accept overriding ``kwargs``
 
 Bugfixes
 --------
 - ``openmmtools.multistate`` experimental API warning is only issued when ``openmmtools.multistate`` is imported
+- ``AlchemicalNonequilibriumLangevinIntegrator.reset()`` now correctly resets the nonequilibrium work
 
 0.18.0 - Added multistate samplers
 ==================================

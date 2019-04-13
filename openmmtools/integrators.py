@@ -193,6 +193,11 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         super(ThermostatedIntegrator, self).__init__(*args, **kwargs)
         self.addGlobalVariable('kT', kB * temperature)  # thermal energy
 
+    @property
+    def global_variable_names(self):
+        """The set of global variable names defined for this integrator."""
+        return set([ self.getGlobalVariableName(index) for index in range(self.getNumGlobalVariables()) ])
+
     def getTemperature(self):
         """Return the temperature of the heat bath.
 
@@ -219,10 +224,8 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         self.setGlobalVariableByName('kT', kT)
 
         # Update the changed flag if it exist.
-        try:
+        if 'has_kT_changed' in self.global_variable_names:
             self.setGlobalVariableByName('has_kT_changed', 1)
-        except Exception:
-            pass
 
     def addComputeTemperatureDependentConstants(self, compute_per_dof):
         """Wrap the ComputePerDof into an if-block executed only when kT changes.
@@ -234,9 +237,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
         """
         # First check if flag variable already exist.
-        try:
-            self.getGlobalVariableByName('has_kT_changed')
-        except Exception:
+        if not 'has_kT_changed' in self.global_variable_names:
             self.addGlobalVariable('has_kT_changed', 1)
 
         # Create if-block that conditionally update the per-DOF variables.
@@ -264,9 +265,8 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         ThermostatedIntegrator, False otherwise.
 
         """
-        try:
-            integrator.getGlobalVariableByName('kT')
-        except Exception:
+        global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+        if not 'kT' in global_variable_names:
             return False
         return super(ThermostatedIntegrator, cls).is_restorable(integrator)
 
@@ -293,15 +293,13 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
         # that may keep the stationary distribution at a certain
         # temperature without exposing getters and setters.
         if not restored:
-            try:
-                integrator.getGlobalVariableByName('kT')
-            except Exception:
-                pass
-            else:
-                if not hasattr(integrator, 'getTemperature'):
-                    logger.warning("The integrator {} has a global variable 'kT' variable "
-                                   "but does not expose getter and setter for the temperature. "
-                                   "Consider inheriting from ThermostatedIntegrator.")
+            if hasattr(integrator, 'getGlobalVariableName'):
+                global_variable_names = set([ integrator.getGlobalVariableName(index) for index in range(integrator.getNumGlobalVariables()) ])
+                if 'kT' in global_variable_names:
+                    if not hasattr(integrator, 'getTemperature'):
+                        logger.warning("The integrator {} has a global variable 'kT' variable "
+                                       "but does not expose getter and setter for the temperature. "
+                                       "Consider inheriting from ThermostatedIntegrator.")
         return restored
 
     @property
@@ -633,7 +631,7 @@ class NoseHooverChainVelocityVerletIntegrator(ThermostatedIntegrator):
             If the system is not passed to the constructor and has constraints
             or a ``CMMotionRemover`` force, the temperature will converge to the
             wrong value.
-                 
+
         temperature: unit.Quantity compatible with kelvin, default=298*unit.kelvin
             The target temperature for the thermostat.
 
@@ -1207,18 +1205,12 @@ class LangevinIntegrator(ThermostatedIntegrator):
             self.setGlobalVariableByName('naccept', 0)
             self.setGlobalVariableByName('nreject', 0)
 
-    def reset_steps(self):
-        """Reset step counter.
-        """
-        self.setGlobalVariableByName('step', 0)
-
     def reset(self):
         """Reset all statistics (heat, shadow work, acceptance rates, step).
         """
         self.reset_heat()
         self.reset_shadow_work()
         self.reset_ghmc_statistics()
-        self.reset_steps()
 
     def _get_energy_with_units(self, variable_name, dimensionless=False):
         """Retrive an energy/work quantity and return as unit-bearing or dimensionless quantity.
@@ -1596,6 +1588,9 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         self.addComputeGlobal("protocol_work", "0.0")
 
     def reset_protocol_work(self):
+        """
+        Reset the protocol work.
+        """
         self.setGlobalVariableByName("protocol_work", 0)
 
     def get_protocol_work(self, dimensionless=False):
@@ -1616,6 +1611,8 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
     @property
     def protocol_work(self):
+        """Total protocol work in energy units.
+        """
         return self.get_protocol_work()
 
     def get_total_work(self, dimensionless=False):
@@ -1638,6 +1635,8 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
 
     @property
     def total_work(self):
+        """Total work (protocol work plus shadow work) in energy units.
+        """
         return self.get_total_work()
 
     def reset(self):
@@ -1672,6 +1671,8 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
                 b = sqrt(1 - e^(-2gamma dt))
                 R is i.i.d. standard normal
 
+        - H: Hamiltonian update step
+
     We can then construct integrators by solving each part for a certain timestep in sequence.
     (We can further split up the V step by force group, evaluating cheap but fast-fluctuating
     forces more frequently than expensive but slow-fluctuating forces. Since forces are only
@@ -1682,17 +1683,30 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
     Examples
     --------
-        - VVVR
-            splitting="O V R V O"
-        - BAOAB:
-            splitting="V R O R V"
-        - g-BAOAB, with K_r=3:
-            splitting="V R R R O R R R V"
-        - g-BAOAB with solvent-solute splitting, K_r=K_p=2:
-            splitting="V0 V1 R R O R R V1 R R O R R V1 V0"
-        - An NCMC algorithm with Metropolized integrator:
-            splitting="O { V R H R V } O"
 
+    Create a nonequilibrium integrator to switch the center of a harmonic oscillator
+
+    >>> # Create harmonic oscillator testsystem
+    >>> from openmmtools import testsystems
+    >>> from simtk import openmm, unit
+    >>> testsystem = testsystems.HarmonicOscillator()
+    >>> # Create a nonequilibrium alchemical integrator
+    >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
+    >>> nsteps_neq = 100 # number of steps in the switching trajectory where lambda is switched from 0 to 1
+    >>> integrator = AlchemicalNonequilibriumLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds,
+    ...                                                         alchemical_functions=alchemical_functions, splitting="O { V R H R V } O", nsteps_neq=nsteps_neq,
+    ...                                                         measure_shadow_work=True)
+    >>> # Create a Context
+    >>> context = openmm.Context(testsystem.system, integrator)
+    >>> # Run the whole switching trajectory
+    >>> context.setPositions(testsystem.positions)
+    >>> integrator.step(nsteps_neq)
+    >>> protocol_work = integrator.protocol_work # retrieve protocol work (excludes shadow work)
+    >>> total_work = integrator.total_work # retrieve total work (includes shadow worl)
+    >>> # Reset and run again
+    >>> context.setPositions(testsystem.positions)
+    >>> integrator.reset()
+    >>> integrator.step(nsteps_neq)
 
     Attributes
     ----------
@@ -1774,6 +1788,15 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         dispatch_table['H'] = (self._add_alchemical_perturbation_step, False)
         return dispatch_table
 
+    def reset(self):
+        """Reset all statistics, alchemical parameters, and work.
+        """
+        # Reset statistics
+        super(AlchemicalNonequilibriumLangevinIntegrator, self).reset()
+        # Trigger update of all context parameters only by running one integrator cycle with step = -1
+        self.setGlobalVariableByName('step', -1)
+        self.step(1)
+
     def _add_global_variables(self):
         """Add the appropriate global parameters to the CustomIntegrator. nsteps refers to the number of
         total steps in the protocol.
@@ -1831,7 +1854,6 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         """
         Override the base class to insert reset steps around the integrator.
         """
-
         # First step: Constrain positions and velocities and reset work accumulators and alchemical integrators
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
@@ -1849,10 +1871,18 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
             self.endBlock()
         else:
             #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
+            self.beginIfBlock("step >= 0")
             self.beginIfBlock("step < nsteps")
             super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
+            self.endBlock()
+
+        # Reset step
+        self.beginIfBlock('step = -1')
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step() # sets step to 0
+        self.endBlock()
 
     def _add_alchemical_reset_step(self):
         """
@@ -1867,25 +1897,44 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
 class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """
-    LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work. An example of an
-    external perturbation could be changing the forcefield parameters via
+    Create a LangevinSplittingIntegrator that accounts for external perturbations and tracks protocol work.
 
-    > force.setParticleParameters(...)
-    > force.updateParametersInContext(context)
+
+    Examples
+    --------
+
+    >>> # Create harmonic oscillator testsystem
+    >>> from openmmtools import testsystems
+    >>> from simtk import openmm, unit
+    >>> testsystem = testsystems.HarmonicOscillator()
+    >>> # Create an external perturbation integrator
+    >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
+    >>> context = openmm.Context(testsystem.system, integrator)
+    >>> context.setPositions(testsystem.positions)
+    >>> # Take a step
+    >>> integrator.step(1)
+    >>> # Perturb the system
+    >>> context.setParameter('testsystems_HarmonicOscillator_x0', 0.1)
+    >>> # Take another step, integrating work
+    >>> integrator.step(1)
+    >>> # Retrieve the work
+    >>> protocol_work = integrator.protocol_work
 
     where force is an instance of openmm's force class. The externally performed protocol work is accumulated in the
-    "protocol_work" global variable. This variable can be re-initialized with
+    "protocol_work" global variable. This variable can be re-initialized by calling
 
-    > integrator.setGlobalVariableByName("first_step", 0)
+    >>> integrator.reset()
 
-    where integrator is an instance of ExternalPerturbationLangevinIntegrator.
     """
 
     def __init__(self, *args, **kwargs):
         super(ExternalPerturbationLangevinIntegrator, self).__init__(*args, **kwargs)
 
     def reset(self):
+        """Reset all statistics.
+        """
         super(ExternalPerturbationLangevinIntegrator, self).reset()
+        # Setting 'step' to 0 will trigger the integrator to reset all statistics prior to the next step
         self.setGlobalVariableByName('step', 0)
 
     def _add_global_variables(self):
@@ -1898,7 +1947,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
         self.addComputeGlobal("perturbed_pe", "energy")
         # Assumes no perturbation is done before doing the initial MD step.
         self.beginIfBlock("step < 1")
-        self.addComputeGlobal("step", "step + 1")
+        self.addComputeGlobal("step", "1")
         self.addComputeGlobal("unperturbed_pe", "energy")
         self.addComputeGlobal("protocol_work", "0.0")
         self.endBlock()
