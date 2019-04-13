@@ -1910,6 +1910,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     >>> # Create an external perturbation integrator
     >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
     >>> context = openmm.Context(testsystem.system, integrator)
+    >>> context.setPositions(testsystem.positions)
     >>> # Take a step
     >>> integrator.step(1)
     >>> # Perturb the system
