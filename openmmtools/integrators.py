@@ -1688,6 +1688,7 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
     >>> # Create harmonic oscillator testsystem
     >>> from openmmtools import testsystems
+    >>> from simtk import openmm, unit
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create a nonequilibrium alchemical integrator
     >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
@@ -1904,6 +1905,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
 
     >>> # Create harmonic oscillator testsystem
     >>> from openmmtools import testsystems
+    >>> from simtk import openmm, unit
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create an external perturbation integrator
     >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
