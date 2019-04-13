@@ -1914,7 +1914,7 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     >>> # Take a step
     >>> integrator.step(1)
     >>> # Perturb the system
-    >>> context.setGlobalVariableByName('testsystems_HarmonicOscillator_x0', 0.1)
+    >>> context.setParameter('testsystems_HarmonicOscillator_x0', 0.1)
     >>> # Take another step, integrating work
     >>> integrator.step(1)
     >>> # Retrieve the work
