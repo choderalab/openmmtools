@@ -3372,10 +3372,9 @@ class GlobalParameterState(object):
                     raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
                 continue
 
-            context_parameter_names = set([ context.getParameterName(index) for index in range(context.getNumParameters()) ])
-            if parameter_name in context_parameter_names:
+            try:
                 context.setParameter(parameter_name, parameter_value)
-            else:
+            except Exception:
                 err_msg = 'Could not find parameter {} in context'
                 raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
 
