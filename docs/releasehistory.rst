@@ -1,8 +1,20 @@
 Release History
 ***************
 
+0.19.0
+======
+
+New features
+------------
+
+Bugfixes
+--------
+
+
 0.18.1 - Bugfix release
 =======================
+
+This is a minor bugfix release.
 
 New features
 ------------
