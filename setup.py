@@ -13,8 +13,8 @@ from Cython.Build import cythonize
 DOCLINES = __doc__.split("\n")
 
 ########################
-VERSION = "0.19.0"
-ISRELEASED = False
+VERSION = "0.18.1"
+ISRELEASED = True
 __version__ = VERSION
 ########################
 CLASSIFIERS = """\
