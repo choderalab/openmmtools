@@ -411,7 +411,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         super()._restore_sampler_from_reporter(reporter)
         self._cached_state_histogram = self._compute_state_histogram(reporter=reporter)
         logger.debug('Restored state histogram: {}'.format(self._cached_state_histogram))
-        data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0')
+        data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0','t1')
         self._logZ = data['logZ']
         self._stage = int(data['stage'][0])
         self._t0 = int(data['t0'][0])
