@@ -2149,8 +2149,10 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
         self.addPerDofVariable("x1", 0)
         self.addGlobalVariable("E0", 0) # old energy associated with x0
         self.addGlobalVariable("dE", 0)
+        self.addGlobalVariable("is_nan",0)
         self.addGlobalVariable("restart", 0)
         self.addGlobalVariable("delta_t", timestep.value_in_unit_system(unit.md_unit_system))
+        self.addGlobalVariable("dt_min", 1.0e-5*timestep.value_in_unit_system(unit.md_unit_system))
 
         # Update context state.
         self.addUpdateContextState()
@@ -2207,7 +2209,8 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
 
         # Back up if the energy went up, protecing against NaNs
         self.addComputeGlobal('restart', '1')
-        self.beginIfBlock('dE < 0')
+        self.addComputeGlobal('is_nan','step( exp(-dE)/kT - uniform)')
+        self.beginIfBlock('is_nan = 1')
         self.addComputeGlobal('restart', '0')
         self.endBlock()
         self.beginIfBlock('restart > 0')
@@ -2217,8 +2220,8 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
         self.endBlock()
 
         # If dt goes to zero, signal we've converged!
-        dt_min = 1.0e-5 * timestep
-        self.beginIfBlock('delta_t <= %f' % dt_min.value_in_unit_system(unit.md_unit_system))
+        self.beginIfBlock('delta_t <= dt_min')
+        print("Simulation converged as timestep has reached a minimum")
         self.addComputeGlobal('converged', '1')
         self.endBlock()
 
