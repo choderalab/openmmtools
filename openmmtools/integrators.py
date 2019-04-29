@@ -2095,7 +2095,7 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
     >>> integrator = FIREMinimizationIntegrator()
     >>> context = openmm.Context(system, integrator)
     >>> context.setPositions(positions)
-    >>> integrator.step(100)
+    >>> integrator.step(50)
     """
 
     def __init__(self, timestep=1.0 * unit.femtoseconds, tolerance=None, alpha=0.1, dt_max=10.0 * unit.femtoseconds, f_inc=1.1, f_dec=0.5, f_alpha=0.99, N_min=5):
@@ -2221,7 +2221,6 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
 
         # If dt goes to zero, signal we've converged!
         self.beginIfBlock('delta_t <= dt_min')
-        print("Simulation converged as timestep has reached a minimum")
         self.addComputeGlobal('converged', '1')
         self.endBlock()
 
