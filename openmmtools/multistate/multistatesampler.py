@@ -48,6 +48,7 @@ from pymbar.utils import ParameterError
 from openmmtools.integrators import FIREMinimizationIntegrator
 
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
 # ==============================================================================
 # MULTISTATE SAMPLER
@@ -544,8 +545,8 @@ class MultiStateSampler(object):
         self._initialize_reporter()
 
     @utils.with_timer('Minimizing all replicas')
-    def minimize(self, tolerance=1.0 * unit.kilojoules_per_mole / unit.nanometers,
-                 max_iterations=0):
+    def minimize(self, tolerance=2.0 * unit.kilojoules_per_mole / unit.nanometers,
+                 max_iterations=1000):
         """Minimize all replicas.
 
         Minimized positions are stored at the end.
@@ -1278,11 +1279,22 @@ class MultiStateSampler(object):
         try:
             if max_iterations == 0:
                 logger.debug('Using FIRE: tolerance {} minimizing to convergence'.format(tolerance))
+                step = 1
                 while integrator.getGlobalVariableByName('converged') < 1:
                     integrator.step(50)
+                    print(f'step: {step}')
+                    print(f"dE : {integrator.getGlobalVariableByName('dE')}")
+                    print(f"dt : {integrator.getGlobalVariableByName('delta_t')}")
+                    print(f"|f|: {integrator.getGlobalVariableByName('fmag')}") 
+                    print('')
+                    step += 1
             else:
                 logger.debug('Using FIRE: tolerance {} max_iterations {}'.format(tolerance, max_iterations))
                 integrator.step(max_iterations)
+                print(f"dE : {integrator.getGlobalVariableByName('dE')}")
+                print(f"dt : {integrator.getGlobalVariableByName('delta_t')}")
+                print(f"|f|: {integrator.getGlobalVariableByName('fmag')}") 
+                print('')
         except Exception as e:
             if str(e) == 'Particle coordinate is nan':
                 logger.debug('NaN encountered in FIRE minimizer; falling back to L-BFGS after resetting positions')
