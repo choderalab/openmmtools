@@ -297,7 +297,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     update_stages = _StoredProperty('update_stages', validate_function=_StoredProperty._update_stages_validator)
     flatness_criteria = _StoredProperty('flatness_criteria', validate_function=_StoredProperty._flatness_criteria_validator)
     flatness_threshold = _StoredProperty('flatness_threshold', validate_function=None)
-    minimum_visits = _StoredProperty('minimum_visits, validate_function=None)
+    minimum_visits = _StoredProperty('minimum_visits', validate_function=None)
     weight_update_method = _StoredProperty('weight_update_method', validate_function=_StoredProperty._weight_update_method_validator)
     beta_factor = _StoredProperty('beta_factor', validate_function=None)
     adapt_target_probabilities = _StoredProperty('adapt_target_probabilities', validate_function=_StoredProperty._adapt_target_probabilities_validator)
