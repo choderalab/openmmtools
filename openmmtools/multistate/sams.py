@@ -175,7 +175,7 @@ class SAMSSampler(multistate.MultiStateSampler):
                  update_stages='two-stage',
                  flatness_criteria='histogram-flatness',
                  flatness_threshold=0.5,
-                 mininum_visits=100,
+                 minimum_visits=100,
                  weight_update_method='rao-blackwellized',
                  beta_factor=0.8,
                  adapt_target_probabilities=False,
