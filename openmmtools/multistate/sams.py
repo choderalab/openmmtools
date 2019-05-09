@@ -171,7 +171,7 @@ class SAMSSampler(multistate.MultiStateSampler):
                  log_target_probabilities=None,
                  state_update_scheme='global-jump',
                  locality=5,
-                 weights_update=True,
+                 weight_update=True,
                  update_stages='two-stage',
                  flatness_criteria='histogram-flatness',
                  flatness_threshold=0.5,
@@ -198,7 +198,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             ``restricted-range`` will compute the probabilities for each of the states in the local neighborhood, increasing jump probability
         locality : int, optional, default=1
             Number of neighboring states on either side to consider for local update schemes.
-        weights_update : bool, optional, default=True
+        weight_update : bool, optional, default=True
              If False, the weight updating is disabled. This allows to perform expanded ensemble simulations.
         update_stages : str, optional, default='two-stage'
             One of ['one-stage', 'two-stage']
@@ -231,7 +231,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self.log_target_probabilities = log_target_probabilities
         self.state_update_scheme = state_update_scheme
         self.locality = locality
-        self.weights_update = weights_update
+        self.weight_update = weight_update
         self.update_stages = update_stages
         self.flatness_criteria = flatness_criteria
         self.flatness_threshold = flatness_threshold
@@ -293,7 +293,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     log_target_probabilities = _StoredProperty('log_target_probabilities', validate_function=None)
     state_update_scheme = _StoredProperty('state_update_scheme', validate_function=_StoredProperty._state_update_scheme_validator)
     locality = _StoredProperty('locality', validate_function=None)
-    weights_update = _StoredProperty('weights_update', validate_function=None)
+    weight_update = _StoredProperty('weight_update', validate_function=None)
     update_stages = _StoredProperty('update_stages', validate_function=_StoredProperty._update_stages_validator)
     flatness_criteria = _StoredProperty('flatness_criteria', validate_function=_StoredProperty._flatness_criteria_validator)
     flatness_threshold = _StoredProperty('flatness_threshold', validate_function=None)
@@ -383,16 +383,16 @@ class SAMSSampler(multistate.MultiStateSampler):
         super()._restore_sampler_from_reporter(reporter)
         self._cached_state_histogram = self._compute_state_histogram(reporter=reporter)
         logger.debug('Restored state histogram: {}'.format(self._cached_state_histogram))
-        data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'weights_update', 'stage', 't0', 'beta_factor')
+        data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'weight_update', 'stage', 't0', 'beta_factor')
         self._logZ = data['logZ']
-        self.weights_update = str(data['weights_update'][0])
+        self.weight_update = str(data['weight_update'][0])
         self._stage = int(data['stage'][0])
         self._t0 = int(data['t0'][0])
         self.beta_factor= int(data['beta_factor'][0])
 
         # Compute log weights from log target probability and logZ estimate
         self._update_log_weights()
-        if (self.weights_update):
+        if (self.weight_update):
             # Determine t0
             self._update_stage()
 
@@ -401,7 +401,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     def _report_iteration_items(self):
         super(SAMSSampler, self)._report_iteration_items()
 
-        self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, weights_update=self.weights_update,
+        self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, weight_update=self.weight_update,
                                                             stage=self._stage, t0=self._t0, beta_factor=self.beta_factor)
         # Split into which states and how many samplers are in each state
         # Trying to do histogram[replica_thermo_states] += 1 does not correctly handle multiple
@@ -444,7 +444,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             swap_fraction_accepted = float(n_swaps_accepted) / n_swaps_proposed
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
-        if (self.weights_update):
+        if (self.weight_update):
             # Update logZ estimates
             self._update_logZ_estimates(replicas_log_P_k)
 
