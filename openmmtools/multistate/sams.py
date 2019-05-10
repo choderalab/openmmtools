@@ -387,7 +387,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'weight_update', 'stage', 't0', 'beta_factor')
         self._logZ = data['logZ']
         if data['weight_update'][0] == 0:
-            self.weight_update = False         
+            self.weight_update = False
         self._stage = int(data['stage'][0])
         self._t0 = int(data['t0'][0])
         self.beta_factor= int(data['beta_factor'][0])
@@ -452,6 +452,9 @@ class SAMSSampler(multistate.MultiStateSampler):
 
             # Update log weights based on target probabilities
             self._update_log_weights()
+
+        else:
+            logger.debug('    state histogram counts ({} total): {}'.format(self._cached_state_histogram.sum(), self._cached_state_histogram))
 
     def _local_jump(self, replicas_log_P_k):
         n_replica, n_states, locality = self.n_replicas, self.n_states, self.locality
