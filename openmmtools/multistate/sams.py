@@ -55,6 +55,8 @@ class SAMSSampler(multistate.MultiStateSampler):
         Thermodynamic state sampling scheme. One of ['global-jump', 'local-jump', 'restricted-range']
     locality : int
         Number of neighboring states on either side to consider for local update schemes
+    weight_update : bool, default=True
+        If False, weights updating is disabled. This allows to perform expanded ensemble simulations.
     update_stages : str
         Number of stages to use for update. One of ['one-stage', 'two-stage']
     weight_update_method : str
@@ -199,7 +201,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         locality : int, optional, default=1
             Number of neighboring states on either side to consider for local update schemes.
         weight_update : bool, optional, default=True
-             If False, the weight updating is disabled. This allows to perform expanded ensemble simulations.
+             If False, weights updating is disabled. This allows to perform expanded ensemble simulations.
         update_stages : str, optional, default='two-stage'
             One of ['one-stage', 'two-stage']
             ``one-stage`` will use the asymptotically optimal scheme throughout the entire simulation (not recommended due to slow convergence)
