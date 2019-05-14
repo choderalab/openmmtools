@@ -651,9 +651,9 @@ class SAMSSampler(multistate.MultiStateSampler):
             pi_star = pi_k.min()
             t = float(self._iteration)
             if self._stage == 0: # initial stage
-                gamma = self.gamma0 * min(pi_star, t**(-beta_factor)) # Eq. 15 of [1]
+                gamma = self.gamma0 * min(pi_star, t**(-self.beta_factor)) # Eq. 15 of [1]
             elif self._stage == 1:
-                gamma = self.gamma0 * min(pi_star, (t - self._t0 + self._t0**beta_factor)**(-1)) # Eq. 15 of [1]
+                gamma = self.gamma0 * min(pi_star, (t - self._t0 + self._t0**self.beta_factor)**(-1)) # Eq. 15 of [1]
             else:
                 raise Exception('stage {} unknown'.format(self._stage))
 
