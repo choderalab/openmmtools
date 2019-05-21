@@ -9,7 +9,7 @@ New features
 
 Bugfixes
 --------
-- ``logsumexp`` is now imported from ``scipy.misc``
+- ``logsumexp`` is now imported from ``scipy.misc`` (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_)
 
 
 0.18.1 - Bugfix release
