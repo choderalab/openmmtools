@@ -1,14 +1,15 @@
 Release History
 ***************
 
-0.19.0
-======
+0.18.2 - Bugfix release
+=======================
 
 New features
 ------------
 
 Bugfixes
 --------
+- ``logsumexp`` is now imported from ``scipy.misc``
 
 
 0.18.1 - Bugfix release
