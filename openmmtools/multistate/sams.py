@@ -181,6 +181,7 @@ class SAMSSampler(multistate.MultiStateSampler):
                  weight_update_method='rao-blackwellized',
                  adapt_target_probabilities=False,
                  gamma0=1.0,
+                 beta_factor=0.8,
                  logZ_guess=None,
                  **kwargs):
         """Initialize a SAMS sampler.
@@ -225,8 +226,10 @@ class SAMSSampler(multistate.MultiStateSampler):
         adapt_target_probabilities : bool, optional, default=False
             If True, target probabilities will be adapted to achieve minimal thermodynamic length between terminal thermodynamic states.
             (EXPERIMENTAL)
-        gamma0 : float, optional, default=0.0
+        gamma0 : float, optional, default=1.0
             Initial weight adaptation rate.
+        beta_factor : float, optional, default=0.8
+            The decay factor of the weight adaption rate
         logZ_guess : array-like of shape [n_states] of floats, optional, default=None
             Initial guess for logZ for all states, if available.
         """
@@ -246,6 +249,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self.weight_update_method = weight_update_method
         self.adapt_target_probabilities = adapt_target_probabilities
         self.gamma0 = gamma0
+        self.beta_factor = beta_factor
         self.logZ_guess = logZ_guess
         # Private variables
         # self._replica_neighbors[replica_index] is a list of states that form the neighborhood of ``replica_index``
@@ -702,14 +706,12 @@ class SAMSSampler(multistate.MultiStateSampler):
         # Update logZ estimates from all replicas
         for (replica_index, state_index) in enumerate(self._replica_thermodynamic_states):
             logger.debug(' Replica %d state %d' % (replica_index, state_index))
-            # Compute attenuation factor gamma
-            beta_factor = 0.8
             pi_star = pi_k.min()
             t = float(self._iteration)
             if self._stage == 0: # initial stage
-                gamma = self.gamma0 * min(pi_star, t**(-beta_factor)) # Eq. 15 of [1]
+                gamma = self.gamma0 * min(pi_star, t**(-self.beta_factor)) # Eq. 15 of [1]
             elif self._stage == 1:
-                gamma = self.gamma0 * min(pi_star, (t - self._t0 + self._t0**beta_factor)**(-1)) # Eq. 15 of [1]
+                gamma = self.gamma0 * min(pi_star, (t - self._t0 + self._t0**self.beta_factor)**(-1)) # Eq. 15 of [1]
             else:
                 raise Exception('stage {} unknown'.format(self._stage))
 
