@@ -9,7 +9,8 @@ New features
 
 Bugfixes
 --------
-
+- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_.
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed
 
 0.18.1 - Bugfix release
 =======================
@@ -36,7 +37,7 @@ New features
   - ``MultiStateSampler``: sample independently from multiple thermodynamic states
   - ``ReplicaExchangeSampler``: replica exchange among thermodynamic states
   - ``SAMSSampler``: self-adjusted mixture sampling (SAMS) sampling
-- All samplers can use MPI via the ``mpiplus <https://github.com/choderalab/mpiplus>`_ package
+- All samplers can use MPI via the `mpiplus <https://github.com/choderalab/mpiplus>`_ package
 
 0.17.0 - Removed Py2 support, faster exact PME treatment
 ========================================================

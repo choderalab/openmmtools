@@ -1,0 +1,39 @@
+name: test
+channels:
+  - conda-forge
+  - omnia
+  - defaults
+dependencies:
+    # Base depends
+  - python
+  - pip
+
+  - setuptools
+  - openmm >=7.3.1
+  - cython
+  - python
+  - numpy
+  - scipy
+  - six
+  - openmm >=7.3.1
+  - parmed
+  - mdtraj
+  - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
+  - libnetcdf >=4.6.2 # workaround for libssl issues
+  - pyyaml
+  - cython
+  - sphinxcontrib-bibtex
+  - mpiplus
+  - pymbar
+  - pyyaml
+
+    # Testing
+  - nose
+  - nose-timer
+  - pytest
+  - pytest-cov
+  - codecov
+
+    # Pip-only installs
+  - pip:
+    #- codecov
