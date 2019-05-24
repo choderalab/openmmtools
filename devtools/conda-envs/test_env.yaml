@@ -29,8 +29,9 @@ dependencies:
 
     # Testing
   - nose
-  #- pytest
-  #- pytest-cov
+  - nose-timer
+  - pytest
+  - pytest-cov
   - codecov
 
     # Pip-only installs
