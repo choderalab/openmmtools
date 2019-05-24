@@ -9,7 +9,8 @@ New features
 
 Bugfixes
 --------
-- Update build infrasctructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_.
+- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_.
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed
 
 0.18.1 - Bugfix release
 =======================
