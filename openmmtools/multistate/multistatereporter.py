@@ -46,7 +46,7 @@ from typing import Union, Any
 from simtk import unit
 
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
-from openmmtools import version,states
+from openmmtools import states
 
 
 logger = logging.getLogger(__name__)
@@ -385,6 +385,8 @@ class MultiStateReporter(object):
         If the dataset has been initialized before, nothing happens. Return True
         if the file has been initialized before and False otherwise.
         """
+        from openmmtools import versions
+
         if 'scalar' not in ncfile.dimensions:
             # Create common dimensions.
             ncfile.createDimension('scalar', 1)  # Scalar dimension.
@@ -394,7 +396,7 @@ class MultiStateReporter(object):
             # Set global attributes.
             ncfile.application = 'YANK'
             ncfile.program = 'yank.py'
-            ncfile.programVersion = version.short_version
+            ncfile.programVersion = versions['version']
             ncfile.Conventions = convention
             ncfile.ConventionVersion = '0.2'
             ncfile.DataUsedFor = nc_name
