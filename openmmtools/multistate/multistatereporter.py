@@ -385,7 +385,7 @@ class MultiStateReporter(object):
         If the dataset has been initialized before, nothing happens. Return True
         if the file has been initialized before and False otherwise.
         """
-        from openmmtools import versions
+        from openmmtools import __version__
 
         if 'scalar' not in ncfile.dimensions:
             # Create common dimensions.
@@ -396,7 +396,7 @@ class MultiStateReporter(object):
             # Set global attributes.
             ncfile.application = 'YANK'
             ncfile.program = 'yank.py'
-            ncfile.programVersion = versions['version']
+            ncfile.programVersion = __version__
             ncfile.Conventions = convention
             ncfile.ConventionVersion = '0.2'
             ncfile.DataUsedFor = nc_name
