@@ -7,6 +7,8 @@ Release History
 Bugfixes
 --------
 - A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed  (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
+- Improve the robustness of opening the netcdf file on resuming of the multi-state samplers by setting the environment variable HDF5_USE_FILE_LOCKING to FALSE after 4 failed attempts (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+- Fixed a crash during exception handling (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
 
 Other
 -----
