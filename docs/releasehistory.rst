@@ -7,6 +7,11 @@ Release History
 New features
 ------------
 
+Enhancements
+------------
+- ``SAMSSampler`` supports expanded ensemble simulations
+- ``SAMSSampler`` accepts multiple criteria for switching the stage
+
 Bugfixes
 --------
 
