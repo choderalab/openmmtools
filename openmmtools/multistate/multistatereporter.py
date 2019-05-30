@@ -372,7 +372,7 @@ class MultiStateReporter(object):
                 raise e
             except:
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
-                             'in {} seconds'.format(i+1, n_attempts, sleep_time))
+                             'in {} seconds'.format(attempt+1, n_attempts, sleep_time))
                 time.sleep(sleep_time)
 
 
