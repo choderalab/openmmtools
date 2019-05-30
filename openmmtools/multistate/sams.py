@@ -208,7 +208,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             ``two-stage`` will use a heuristic first stage to achieve flat histograms before switching to the asymptotically optimal scheme
         flatness_criteria : string, optional, default='histogram-flatness'
             Method of assessing when to switch to asymptotically optimal scheme
-             One of ['logZ-flatness','minimum-visits','histogram-flatness']
+             One of ['minimum-logZ,'minimum-visits','histogram-flatness', 'histogram-flatness-round-trips']
         flatness_threshold : float, optional, default=0.5
             Histogram relative flatness threshold to use for first stage of two-stage scheme.
         minimum_visits : int, optional, default=100
@@ -238,6 +238,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self.flatness_criteria = flatness_criteria
         self.flatness_threshold = flatness_threshold
         self.minimum_visits = minimum_visits
+        self.minimum_round_trips = minimum_round_trips
         self.weight_update_method = weight_update_method
         self.beta_factor = beta_factor
         self.adapt_target_probabilities = adapt_target_probabilities
@@ -270,7 +271,7 @@ class SAMSSampler(multistate.MultiStateSampler):
 
         @staticmethod
         def _flatness_criteria_validator(instance, scheme):
-            supported_schemes = ['minimum-visits', 'logZ-flatness', 'histogram-flatness']
+            supported_schemes = ['minimum-visits', 'minimum-logZ', 'histogram-flatness', 'histogram-flatness-round-trips']
             if scheme not in supported_schemes:
                 raise ValueError("Unknown update scheme '{}'. Supported values "
                                  "are {}.".format(scheme, supported_schemes))
@@ -300,6 +301,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     flatness_criteria = _StoredProperty('flatness_criteria', validate_function=_StoredProperty._flatness_criteria_validator)
     flatness_threshold = _StoredProperty('flatness_threshold', validate_function=None)
     minimum_visits = _StoredProperty('minimum_visits', validate_function=None)
+    minimum_round_trips = _StoredProperty('minimum_round_trips', validate_function=None)
     weight_update_method = _StoredProperty('weight_update_method', validate_function=_StoredProperty._weight_update_method_validator)
     beta_factor = _StoredProperty('beta_factor', validate_function=None)
     adapt_target_probabilities = _StoredProperty('adapt_target_probabilities', validate_function=_StoredProperty._adapt_target_probabilities_validator)
@@ -307,6 +309,8 @@ class SAMSSampler(multistate.MultiStateSampler):
     logZ_guess = _StoredProperty('logZ_guess', validate_function=None)
 
     def _initialize_stage(self):
+        self.round_trips = 0
+        self._downhill = False
         self._t0 = 0  # reference iteration to subtract
         if self.update_stages == 'one-stage':
             self._stage = 1 # start with asymptotically-optimal stage
@@ -385,11 +389,12 @@ class SAMSSampler(multistate.MultiStateSampler):
         super()._restore_sampler_from_reporter(reporter)
         self._cached_state_histogram = self._compute_state_histogram(reporter=reporter)
         logger.debug('Restored state histogram: {}'.format(self._cached_state_histogram))
-        data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0')
+        data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0', 'round_trips', 'downhill')
         self._logZ = data['logZ']
         self._stage = int(data['stage'][0])
         self._t0 = int(data['t0'][0])
-
+        self.round_trips = int(data['round_trips'][0])
+        self._downhill = bool(int(data['downhill'][0]))
         # Compute log weights from log target probability and logZ estimate
         self._update_log_weights()
         if (self.weight_update):
@@ -401,7 +406,8 @@ class SAMSSampler(multistate.MultiStateSampler):
     def _report_iteration_items(self):
         super(SAMSSampler, self)._report_iteration_items()
 
-        self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, stage=self._stage, t0=self._t0)
+        self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, stage=self._stage,
+                                                            t0=self._t0, round_trips=self.round_trips, downhill=int(self._downhill))
         # Split into which states and how many samplers are in each state
         # Trying to do histogram[replica_thermo_states] += 1 does not correctly handle multiple
         # replicas in the same state.
@@ -433,6 +439,14 @@ class SAMSSampler(multistate.MultiStateSampler):
                 self._restricted_range_jump(replicas_log_P_k)
             else:
                 raise Exception('Programming error: Unreachable code')
+
+        n_replica, n_states = self.n_replicas, self.n_states
+        for replica_index, current_state_index in enumerate(self._replica_thermodynamic_states):
+            if (current_state_index == self.n_states-1):
+                self._downhill = True
+            if (current_state_index == 0) and (self._downhill == True):
+                self.round_trips += 1
+                self._downhill = False
 
         # Determine fraction of swaps accepted this iteration.
         n_swaps_proposed = self._n_proposed_matrix.sum()
@@ -596,14 +610,17 @@ class SAMSSampler(multistate.MultiStateSampler):
                 # Advance if every state has been visited at least once
                 if np.all(N_k >= self.minimum_visits):
                     advance = True
-            elif self.flatness_criteria == 'histogram-flatness':
+            elif (self.flatness_criteria == 'histogram-flatness-round-trips') or (self.flatness_criteria == 'histogram-flatness'):
                 # Check histogram flatness
                 empirical_pi_k = N_k[:] / N_k.sum()
                 pi_k = np.exp(self.log_target_probabilities)
                 relative_error_k = np.abs(pi_k - empirical_pi_k) / pi_k
                 if np.all(relative_error_k < self.flatness_threshold):
-                    advance = True
-            elif self.flatness_criteria == 'logZ-flatness':
+                    if (self.flatness_criteria == 'histogram-flatness-round-trips') and (self.round_trips >= self.minimum_round_trips):
+                        advance = True
+                    else:
+                        advance = True
+            elif self.flatness_criteria == 'minimum-logZ':
                 # TODO: Advance to asymptotically optimal scheme when logZ update fractional counts per state exceed threshold
                 # for all states.
                 criteria = abs(self._logZ / self.gamma0) > self.flatness_threshold
