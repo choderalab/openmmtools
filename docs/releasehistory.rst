@@ -1,16 +1,16 @@
 Release History
 ***************
 
-0.19.0
-======
-
-New features
-------------
+0.18.2 - Bugfix release
+=======================
 
 Bugfixes
 --------
-- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_.
-- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed  (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
+
+Other
+-----
+- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_  (`#424 <https://github.com/choderalab/openmmtools/pull/424>`_, `#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
 
 0.18.1 - Bugfix release
 =======================
