@@ -249,7 +249,7 @@ class SAMSSampler(multistate.MultiStateSampler):
                                                                  ('minimum_logZ', minimum_logZ),  ('minimum_visits', minimum_visits))
                                                                  if value is not None}
         self.advance = {criteria: False for criteria, value in self.criteria.items() if value is not None}
-        if self.self.update_stages = 'two-stage' and not bool(self.criteria)):
+        if (self.update_stages == 'two-stage') and not bool(self.criteria)):
             raise Exception('One or multiple criteria for switching stages must be specified. Supported criteria are: flatness, round_trips, minimum_logZ and minimum_visits')
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):
