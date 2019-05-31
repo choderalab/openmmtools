@@ -175,9 +175,9 @@ class SAMSSampler(multistate.MultiStateSampler):
                  weight_update=True,
                  weight_update_method='rao-blackwellized',
                  update_stages='two-stage',
-                 flatness = None,
+                 histogram_flatness = None,
                  minimum_visits = None,
-                 round_trips = None,
+                 minimum_round_trips = None,
                  minimum_logZ = None,
                  beta_factor=0.8,
                  adapt_target_probabilities=False,
@@ -210,14 +210,14 @@ class SAMSSampler(multistate.MultiStateSampler):
             One of ['one-stage', 'two-stage']
             ``one-stage`` will use the asymptotically optimal scheme throughout the entire simulation (not recommended due to slow convergence)
             ``two-stage`` will use a heuristic first stage to achieve flat histograms before switching to the asymptotically optimal scheme
-        flatness: float, default=None
+        histogram_flatness: float, default=None
             Histogram relative flatness threshold to use in first stage of two-stage scheme.
-        round_trips : int, default=None
-            Mininum number of round trips to use in first stage of two-stage scheme.
+        minimum_round_trips : int, default=None
+            Minimum number of round trips to use in first stage of two-stage scheme.
         minimum_visits : int, default=None
-            Mininum number of visits in each state to use in first stage of two-stage scheme.
+            Minimum number of visits in each state to use in first stage of two-stage scheme.
         minimum_logZ : float, default=None
-            Mininum logZ value to use in first stage of two-stage scheme.
+            Minimum logZ value to use in first stage of two-stage scheme.
         beta_factor :  float, optional, default=0.8
             Exponent for tunning the decaying rate of the gain factor.
         adapt_target_probabilities : bool, optional, default=False
@@ -237,6 +237,10 @@ class SAMSSampler(multistate.MultiStateSampler):
         self.weight_update = weight_update
         self.update_stages = update_stages
         self.weight_update_method = weight_update_method
+        self.histogram_flatness = histogram_flatness
+        self.minimum_round_trips = minimum_round_trips
+        self.minimum_visits = minimum_visits
+        self.minimum_logZ = minimum_logZ
         self.beta_factor = beta_factor
         self.adapt_target_probabilities = adapt_target_probabilities
         self.gamma0 = gamma0
@@ -245,12 +249,17 @@ class SAMSSampler(multistate.MultiStateSampler):
         # self._replica_neighbors[replica_index] is a list of states that form the neighborhood of ``replica_index``
         self._replica_neighbors = None
         self._cached_state_histogram = None
-        self.criteria = { criteria: value for criteria, value in (('flatness', flatness),  ('round_trips', round_trips),
-                                                                 ('minimum_logZ', minimum_logZ),  ('minimum_visits', minimum_visits))
-                                                                 if value is not None}
-        self.advance = {criteria: False for criteria, value in self.criteria.items() if value is not None}
-        if (self.update_stages == 'two-stage') and not bool(self.criteria):
-            raise Exception('One or multiple criteria for switching stages must be specified. Supported criteria are: flatness, round_trips, minimum_logZ and minimum_visits')
+        self._advance = {criteria: False for criteria, value in self._criteria.items() if value is not None}
+        if (self.update_stages == 'two-stage') and not bool(self._criteria):
+            raise Exception('One or multiple criteria for switching stages must be specified. Supported criteria are: histogram_flatness, minimum_round_trips, minimum_logZ and minimum_visits')
+
+    @property
+    def _criteria(self):
+        return { criteria: value for criteria, value in (('histogram_flatness', self.histogram_flatness),
+                                                         ('minimum_round_trips', self.minimum_round_trips),
+                                                         ('minimum_logZ', self.minimum_logZ),
+                                                         ('minimum_visits', self.minimum_visits))
+                                                         if value is not None}
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):
 
@@ -270,15 +279,6 @@ class SAMSSampler(multistate.MultiStateSampler):
                 raise ValueError("Unknown update scheme '{}'. Supported values "
                                  "are {}.".format(scheme, supported_schemes))
             return scheme
-
-        @staticmethod
-        def _criteria_validator(instance, **kwargs):
-            supported_scheme = ['flatness', 'round_trips', 'minimum_visits', 'minimum_logZ']
-            for s,v in kwargs.items():
-                if s not in supported_scheme:
-                    raise ValueError("Unknown criteria '{}'. Supported values "
-                                     "are {}.".format(s, supported_schemes))
-            return kwargs
 
         @staticmethod
         def _weight_update_method_validator(instance, scheme):
@@ -301,16 +301,22 @@ class SAMSSampler(multistate.MultiStateSampler):
     locality = _StoredProperty('locality', validate_function=None)
     weight_update = _StoredProperty('weight_update', validate_function=None)
     update_stages = _StoredProperty('update_stages', validate_function=_StoredProperty._update_stages_validator)
-    if self.update_stages == 'two-stage':
-        criteria = _StoredProperty('criteria', validate_function=_StoredProperty._criteria_validator)
     weight_update_method = _StoredProperty('weight_update_method', validate_function=_StoredProperty._weight_update_method_validator)
+    histogram_flatness = _StoredProperty('histogram_flatness', validate_function=None)
+    minimum_round_trips = _StoredProperty('minimum_round_trips', validate_function=None)
+    minimum_visits = _StoredProperty('minimum_visits', validate_function=None)
+    minimum_logZ = _StoredProperty('minimum_logZ', validate_function=None)
     beta_factor = _StoredProperty('beta_factor', validate_function=None)
     adapt_target_probabilities = _StoredProperty('adapt_target_probabilities', validate_function=_StoredProperty._adapt_target_probabilities_validator)
     gamma0 = _StoredProperty('gamma0', validate_function=None)
     logZ_guess = _StoredProperty('logZ_guess', validate_function=None)
 
     def _initialize_stage(self):
-        self.round_trips = 0
+
+        self._round_trips = 0
+        # The variable _downhill keeps track of which end state the walker has visited more recently.
+        # This is used for computing the number of round trips.
+        # _downhill = False: the walker is going uphill because it has visited the intial state more recently than the final state
         self._downhill = False
         self._t0 = 0  # reference iteration to subtract
         if self.update_stages == 'one-stage':
@@ -394,7 +400,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self._logZ = data['logZ']
         self._stage = int(data['stage'][0])
         self._t0 = int(data['t0'][0])
-        self.round_trips = int(data['round_trips'][0])
+        self._round_trips = int(data['round_trips'][0])
         self._downhill = bool(int(data['downhill'][0]))
         # Compute log weights from log target probability and logZ estimate
         self._update_log_weights()
@@ -408,7 +414,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         super(SAMSSampler, self)._report_iteration_items()
 
         self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, stage=self._stage,
-                                                            t0=self._t0, round_trips=self.round_trips, downhill=int(self._downhill))
+                                                            t0=self._t0, round_trips=self._round_trips, downhill=int(self._downhill))
         # Split into which states and how many samplers are in each state
         # Trying to do histogram[replica_thermo_states] += 1 does not correctly handle multiple
         # replicas in the same state.
@@ -441,11 +447,10 @@ class SAMSSampler(multistate.MultiStateSampler):
             else:
                 raise Exception('Programming error: Unreachable code')
 
-        n_replica, n_states = self.n_replicas, self.n_states
         for replica_index, current_state_index in enumerate(self._replica_thermodynamic_states):
             if self._downhill:
                 if current_state_index == 0:
-                    self.round_trips += 1
+                    self._round_trips += 1
                     self._downhill = False
             elif current_state_index == self.n_states-1:
                 self._downhill = True
@@ -599,35 +604,35 @@ class SAMSSampler(multistate.MultiStateSampler):
         Determine which adaptation stage we're in by checking histogram flatness.
 
         """
-
+        logger.debug('stage is {}'.format(self._stage))
         N_k = self._state_histogram
         logger.debug('    state histogram counts ({} total): {}'.format(self._cached_state_histogram.sum(), self._cached_state_histogram))
         if (self.update_stages == 'two-stage') and (self._stage == 0):
             if N_k.sum() == 0:
                 # No samples yet; don't do anything.
                 return
-            for criteria,value in self.criteria.items():
-                if criteria == 'flatness':
+            for criteria,value in self._criteria.items():
+                if criteria == 'histogram_flatness':
                     # Check histogram flatness
                     empirical_pi_k = N_k[:] / N_k.sum()
                     pi_k = np.exp(self.log_target_probabilities)
                     relative_error_k = np.abs(pi_k - empirical_pi_k) / pi_k
                     if np.all(relative_error_k < value):
-                        self.advance['flatness'] = True
-                elif criteria == 'round_trips' and self.round_trips >= value:
+                        self._advance['histogram_flatness'] = True
+                elif criteria == 'minimum_round_trips' and self._round_trips >= value:
                     # Check number of round_trips
-                    self.advance['round_trips'] = True
+                    self._advance['minimum_round_trips'] = True
                 elif criteria == 'minimum_visits' and np.all(N_k >= value):
                     # Check number of visits
-                    self.advance['mimimum_visits'] = True
+                    self._advance['mimimum_visits'] = True
                 elif criteria == 'minimum_logZ':
                     # Check logZ values
                     criteria = np.abs(self._logZ / self.gamma0) > value
                     logger.debug('minimum_logZ criteria met (%d total): %s' % (np.sum(criteria), str(np.array(criteria, 'i1'))))
                     if np.all(criteria):
-                        self.advance['minimum_logZ'] = True
+                        self._advance['minimum_logZ'] = True
 
-            if np.all(self.advance.values()) or ((self._t0 > 0) and (self._iteration > self._t0)):
+            if all(v == True for v in self._advance.values()) or ((self._t0 > 0) and (self._iteration > self._t0)):
                 # switch to asymptotically optimal scheme
                 self._stage = 1 # asymptotically optimal
                 self._t0 = self._iteration - 1
