@@ -250,7 +250,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self._replica_neighbors = None
         self._cached_state_histogram = None
         self._advance = {criteria: False for criteria, value in self._criteria.items() if value is not None}
-        if (self.update_stages == 'two-stage') and not bool(self._criteria):
+        if self.weight_update and (self.update_stages == 'two-stage') and not bool(self._criteria):
             raise Exception('One or multiple criteria for switching stages must be specified. Supported criteria are: histogram_flatness, minimum_round_trips, minimum_logZ and minimum_visits')
 
     @property
@@ -404,7 +404,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         self._downhill = bool(int(data['downhill'][0]))
         # Compute log weights from log target probability and logZ estimate
         self._update_log_weights()
-        if (self.weight_update):
+        if self.weight_update:
             # Determine t0
             self._update_stage()
 
@@ -464,7 +464,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             swap_fraction_accepted = float(n_swaps_accepted) / n_swaps_proposed
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
-        if (self.weight_update):
+        if self.weight_update:
             # Update logZ estimates
             self._update_logZ_estimates(replicas_log_P_k)
 
