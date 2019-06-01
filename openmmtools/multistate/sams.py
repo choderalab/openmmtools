@@ -104,7 +104,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     >>> move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
     >>> simulation = SAMSSampler(mcmc_moves=move, number_of_iterations=2,
     ...                          state_update_scheme='global-jump', locality=5,
-    ...                          update_stages='two-stage', flatness=0.5,
+    ...                          update_stages='two-stage', histogram_flatness=0.5,
     ...                          weight_update_method='rao-blackwellized',
     ...                          adapt_target_probabilities=False)
 
@@ -604,7 +604,6 @@ class SAMSSampler(multistate.MultiStateSampler):
         Determine which adaptation stage we're in by checking histogram flatness.
 
         """
-        logger.debug('stage is {}'.format(self._stage))
         N_k = self._state_histogram
         logger.debug('    state histogram counts ({} total): {}'.format(self._cached_state_histogram.sum(), self._cached_state_histogram))
         if (self.update_stages == 'two-stage') and (self._stage == 0):
