@@ -46,7 +46,7 @@ from typing import Union, Any
 from simtk import unit
 
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
-from openmmtools import version,states
+from openmmtools import states
 
 
 logger = logging.getLogger(__name__)
@@ -372,9 +372,13 @@ class MultiStateReporter(object):
                 raise e
             except:
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
-                             'in {} seconds'.format(i+1, n_attempts, sleep_time))
+                             'in {} seconds'.format(attempt+1, n_attempts, sleep_time))
                 time.sleep(sleep_time)
 
+        # At the very last attempt, we try setting the environment variable
+        # controlling the locking mechanism of HDF5 (see choderalab/yank#1165).
+        if n_attempts > 1:
+            os.environ['HDF5_USE_FILE_LOCKING'] = 'FALSE'
 
         # Last attempt finally raises any error.
         return netcdf.Dataset(*args, **kwargs)
@@ -385,6 +389,8 @@ class MultiStateReporter(object):
         If the dataset has been initialized before, nothing happens. Return True
         if the file has been initialized before and False otherwise.
         """
+        from openmmtools import __version__
+
         if 'scalar' not in ncfile.dimensions:
             # Create common dimensions.
             ncfile.createDimension('scalar', 1)  # Scalar dimension.
@@ -394,7 +400,7 @@ class MultiStateReporter(object):
             # Set global attributes.
             ncfile.application = 'YANK'
             ncfile.program = 'yank.py'
-            ncfile.programVersion = version.short_version
+            ncfile.programVersion = __version__
             ncfile.Conventions = convention
             ncfile.ConventionVersion = '0.2'
             ncfile.DataUsedFor = nc_name

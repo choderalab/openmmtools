@@ -1,11 +1,8 @@
 Release History
 ***************
 
-0.19.0
-======
-
-New features
-------------
+0.18.2 - Bugfix release
+=======================
 
 Enhancements
 ------------
@@ -14,7 +11,13 @@ Enhancements
 
 Bugfixes
 --------
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed  (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
+- Improve the robustness of opening the netcdf file on resuming of the multi-state samplers by setting the environment variable HDF5_USE_FILE_LOCKING to FALSE after 4 failed attempts (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+- Fixed a crash during exception handling (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
 
+Other
+-----
+- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_  (`#424 <https://github.com/choderalab/openmmtools/pull/424>`_, `#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
 
 0.18.1 - Bugfix release
 =======================
@@ -41,7 +44,7 @@ New features
   - ``MultiStateSampler``: sample independently from multiple thermodynamic states
   - ``ReplicaExchangeSampler``: replica exchange among thermodynamic states
   - ``SAMSSampler``: self-adjusted mixture sampling (SAMS) sampling
-- All samplers can use MPI via the ``mpiplus <https://github.com/choderalab/mpiplus>`_ package
+- All samplers can use MPI via the `mpiplus <https://github.com/choderalab/mpiplus>`_ package
 
 0.17.0 - Removed Py2 support, faster exact PME treatment
 ========================================================

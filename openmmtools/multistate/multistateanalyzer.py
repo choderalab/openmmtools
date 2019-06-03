@@ -31,7 +31,7 @@ import mdtraj
 import numpy as np
 from simtk import openmm
 import simtk.unit as units
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 from pymbar import MBAR, timeseries
 
 from openmmtools import multistate, utils, forces
