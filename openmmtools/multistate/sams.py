@@ -257,9 +257,6 @@ class SAMSSampler(multistate.MultiStateSampler):
                                                          ('minimum_logZ', self.minimum_logZ),
                                                          ('minimum_visits', self.minimum_visits))
                                                          if value is not None}
-    @property
-    def _advance(self):
-        return {criteria: False for criteria, value in self._criteria.items() if value is not None}
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):
 
@@ -312,9 +309,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     logZ_guess = _StoredProperty('logZ_guess', validate_function=None)
 
     def _initialize_stage(self):
-        if self.weight_update and (self.update_stages == 'two-stage') and not bool(self._criteria):
-            raise Exception('One or multiple criteria for switching stages must be specified. Supported criteria are: histogram_flatness, minimum_round_trips, minimum_visits, minimum_logZ')
-
+ 
         self._round_trips = 0
         # The variable _downhill keeps track of which end state the walker has visited more recently.
         # This is used for computing the number of round trips.
@@ -606,6 +601,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         Determine which adaptation stage we're in by checking histogram flatness.
 
         """
+        advance =  {criteria: False for criteria, value in self._criteria.items() if value is not None}
         N_k = self._state_histogram
         logger.debug('    state histogram counts ({} total): {}'.format(self._cached_state_histogram.sum(), self._cached_state_histogram))
         if (self.update_stages == 'two-stage') and (self._stage == 0):
@@ -619,21 +615,21 @@ class SAMSSampler(multistate.MultiStateSampler):
                     pi_k = np.exp(self.log_target_probabilities)
                     relative_error_k = np.abs(pi_k - empirical_pi_k) / pi_k
                     if np.all(relative_error_k < value):
-                        self._advance['histogram_flatness'] = True
+                        advance['histogram_flatness'] = True
                 elif criteria == 'minimum_round_trips' and self._round_trips >= value:
                     # Check number of round_trips
-                    self._advance['minimum_round_trips'] = True
+                    advance['minimum_round_trips'] = True
                 elif criteria == 'minimum_visits' and np.all(N_k >= value):
                     # Check number of visits
-                    self._advance['mimimum_visits'] = True
+                    advance['mimimum_visits'] = True
                 elif criteria == 'minimum_logZ':
                     # Check logZ values
                     criteria = np.abs(self._logZ / self.gamma0) > value
                     logger.debug('minimum_logZ criteria met (%d total): %s' % (np.sum(criteria), str(np.array(criteria, 'i1'))))
                     if np.all(criteria):
-                        self._advance['minimum_logZ'] = True
+                        advance['minimum_logZ'] = True
 
-            if (bool(self._advance) and all(v == True for v in self._advance.values())) or ((self._t0 > 0) and (self._iteration > self._t0)):
+            if (bool(advance) and all(v == True for v in advance.values())) or ((self._t0 > 0) and (self._iteration > self._t0)):
                 # switch to asymptotically optimal scheme
                 self._stage = 1 # asymptotically optimal
                 self._t0 = self._iteration - 1

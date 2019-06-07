@@ -1,13 +1,16 @@
 Release History
 ***************
 
-0.18.2 - Bugfix release
-=======================
+0.19.0
+======================
 
 Enhancements
 ------------
 - ``SAMSSampler`` supports expanded ensemble simulations
 - ``SAMSSampler`` accepts multiple criteria for switching the stage
+
+0.18.2 - Bugfix release
+=======================
 
 Bugfixes
 --------
