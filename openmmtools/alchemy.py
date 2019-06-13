@@ -1514,9 +1514,11 @@ class AbsoluteAlchemicalFactory(object):
             pairs = (list(itertools.combinations(populated_region_ids, 2)))
             region_permus += pairs
 
+        # Create a copy of the NonbondedForce to handle particle interactions and
+        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
+        nonbonded_force = copy.deepcopy(reference_force)
         #Perform tasks that do not need to be repeated for all regions i.e.Fix any NonbondedForce issues with Lennard-Jones sigma = 0
         # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0), which should have sigma > 0.
-        nonbonded_force = copy.deepcopy(reference_force)
         for particle_index in range(nonbonded_force.getNumParticles()):
             # Retrieve parameters.
             [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
@@ -1551,7 +1553,6 @@ class AbsoluteAlchemicalFactory(object):
                     region_names = ['_' + alchemical_region_0.region_name]
             else:
                 region_names = ['_' + alchemical_region_0.region_name, '_' + alchemical_region_1.region_name]
-
 
             # --------------------------------------------------
             # Determine energy expression for all custom forces
@@ -1625,10 +1626,6 @@ class AbsoluteAlchemicalFactory(object):
             #                                          | (only without exact PME treatment)                    |
             # --------------------------------------------------------------------------------------------------
 
-            # Create a copy of the NonbondedForce to handle particle interactions and
-            # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
-            nonbonded_force = copy.deepcopy(reference_force)
-
             def create_force(force_cls, energy_expression, lambda_variable_name, region_names, is_lambda_controlled):
                 """Shortcut to create a lambda-controlled custom forces."""
                 if is_lambda_controlled:
@@ -1678,6 +1675,7 @@ class AbsoluteAlchemicalFactory(object):
             if use_exact_pme_treatment:
                 for region_name in region_names:
                     nonbonded_force.addGlobalParameter('lambda_electrostatics{}'.format(region_name), 1.0)
+                #Do i need to add cross terms?
                 if len(region_names) > 1:
                     nonbonded_force.addGlobalParameter('lambda_electrostatics{}{}'.format(region_names[0],
                                                                                           region_names[1]), 1.0)
@@ -1744,13 +1742,13 @@ class AbsoluteAlchemicalFactory(object):
                 # to 1.0 for decoupled interactions in alchemical/alchemical force.
                 if len(region_names) > 1:
                     aa_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
-                                                                       'lambda_electrostatics', alchemical_region.annihilate_electrostatics)
+                                                                       'lambda_electrostatics', region_names, alchemical_region.annihilate_electrostatics)
                     all_electrostatics_custom_bond_forces = [aa_electrostatics_custom_bond_force]
                 else:
                     na_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
-                                                                       'lambda_electrostatics', is_lambda_controlled=True)
+                                                                       'lambda_electrostatics', region_names, is_lambda_controlled=True)
                     aa_electrostatics_custom_bond_force = create_force(openmm.CustomBondForce, exceptions_electrostatics_energy_expression,
-                                                                       'lambda_electrostatics', alchemical_region.annihilate_electrostatics)
+                                                                       'lambda_electrostatics', region_names, alchemical_region.annihilate_electrostatics)
                     all_electrostatics_custom_bond_forces = [na_electrostatics_custom_bond_force, aa_electrostatics_custom_bond_force]
 
             # Create CustomBondForce to handle exceptions for electrostatics
@@ -1832,9 +1830,10 @@ class AbsoluteAlchemicalFactory(object):
                     logger.debug('Adding electrostatic interaction groups between {0} and the environment,'
                                  ' and {0} with itself.'.format(region_ids[0]))
                     na_electrostatics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset_0)
-                    aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_1)
+                    aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_0)
 
             #Need to handle interactions between non interacting alchemical regions if we are using excat PME
+            # can't use interaction groups for nonbonded
 
             # ---------------------------------------------------------------
             # Distribute exceptions contributions in appropriate bond forces
