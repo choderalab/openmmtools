@@ -1750,7 +1750,6 @@ class AbsoluteAlchemicalFactory(object):
                 alchemical_atomset_1 = alchemical_regions_pairs[1].alchemical_atoms
             else:
                 alchemical_atomset_0 = alchemical_regions_pairs[0].alchemical_atoms
-                alchemical_atomset_1 = alchemical_regions_pairs[0].alchemical_atoms
 
             all_atomset = set(range(reference_force.getNumParticles()))  # all atoms, including alchemical region
             nonalchemical_atomset = all_atomset.difference(all_alchemical_atoms)
@@ -1769,16 +1768,9 @@ class AbsoluteAlchemicalFactory(object):
                 for force in all_electrostatics_custom_nonbonded_forces:
                     force.addParticle([charge, sigma])
                 # Set offset parameters in NonbondedForce.
-                if use_exact_pme_treatment:
-                    if len(region_names) > 1:
-                        #What if regions can see each other? Can't scale by lam0 and lam1 here otherwise lam0 will turn region
-                        # one off an vice versa
-                        #going to have to use a custom for when region sees region
-                        pass
-                    else:
-                        if use_exact_pme_treatment and particle_index in alchemical_atomset_0:
-                            nonbonded_force.addParticleParameterOffset('lambda_electrostatics{}'.format(region_names[0]),
-                                                                       particle_index, charge, 0.0, 0.0)
+                if use_exact_pme_treatment and particle_index in alchemical_atomset_0 and len(region_names) == 1:
+                    nonbonded_force.addParticleParameterOffset('lambda_electrostatics{}'.format(region_names[0]),
+                                                               particle_index, charge, 0.0, 0.0)
 
             # Turn off interactions contribution from alchemically-modified particles in unmodified
             # NonbondedForce that will be handled by all other forces
@@ -1787,7 +1779,7 @@ class AbsoluteAlchemicalFactory(object):
                 [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
                 # Even with exact treatment of the PME electrostatics, we turn off
                 # the NonbondedForce charge which is modeled by the offset parameter.
-                if particle_index in alchemical_atomset_0 or particle_index in alchemical_atomset_1:
+                if particle_index in alchemical_atomset_0:
                     nonbonded_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, abs(0*epsilon))
 
             # Restrict interaction evaluation of CustomNonbondedForces to their respective atom groups.
@@ -1840,13 +1832,10 @@ class AbsoluteAlchemicalFactory(object):
                     is_exception_epsilon = abs(epsilon.value_in_unit_system(unit.md_unit_system)) > 0.0
                     is_exception_chargeprod = abs(chargeprod.value_in_unit_system(unit.md_unit_system)) > 0.0
 
-                    #NOT SURE ABOUT THIS CAN WE HAVE MULTIPLE OFFSETS FOR ONE EXCLUSION?
-                    # If this is an electrostatic exception and we're using exact PME,
-                    # we just have to add the exception offset to the NonbondedForce.
-                    if use_exact_pme_treatment and at_least_one_alchemical and is_exception_chargeprod:
-                        for region_name in region_names:
-                            nonbonded_force.addExceptionParameterOffset('lambda_electrostatics{}'.format(region_name),
-                                                                        exception_index, chargeprod, 0.0, 0.0)
+                    if use_exact_pme_treatment and both_alchemical and is_exception_chargeprod:
+                        # Not sure how to deal with this case. Exception should be scaled by lam0*lam1.
+                        # However we can only have one Offset parameter per exception?
+                        raise ValueError('Cannot have exception that straddles two alchemical regions')
 
                     # If exception (and not exclusion), add special CustomBondForce terms to
                     # handle alchemically-modified Lennard-Jones and electrostatics exceptions
@@ -1882,7 +1871,7 @@ class AbsoluteAlchemicalFactory(object):
 
                     # If this is an electrostatic exception and we're using exact PME,
                     # we just have to add the exception offset to the NonbondedForce.
-                    if use_exact_pme_treatment and at_least_one_alchemical and is_exception_chargeprod:
+                    if use_exact_pme_treatment and only_one_alchemical and is_exception_chargeprod:
                         nonbonded_force.addExceptionParameterOffset('lambda_electrostatics{}'.format(region_names[0]),
                                                                     exception_index, chargeprod, 0.0, 0.0)
 
