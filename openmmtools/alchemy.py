@@ -1871,7 +1871,7 @@ class AbsoluteAlchemicalFactory(object):
 
                     # If this is an electrostatic exception and we're using exact PME,
                     # we just have to add the exception offset to the NonbondedForce.
-                    if use_exact_pme_treatment and only_one_alchemical and is_exception_chargeprod:
+                    if use_exact_pme_treatment and at_least_one_alchemical and is_exception_chargeprod:
                         nonbonded_force.addExceptionParameterOffset('lambda_electrostatics{}'.format(region_names[0]),
                                                                     exception_index, chargeprod, 0.0, 0.0)
 
