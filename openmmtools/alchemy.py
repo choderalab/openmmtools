@@ -695,7 +695,7 @@ class AbsoluteAlchemicalFactory(object):
 
         # Check that there are no virtual sites to alchemically modify.
         for alchemical_region in alchemical_regions:
-            for particle_index in alchemical_region.atoms:
+            for particle_index in alchemical_region.alchemical_atoms:
                 if reference_system.isVirtualSite(particle_index):
                     raise ValueError(f'Virtual atoms in region {alchemical_region.name}.'
                                       'Alchemically modified virtual sites are not supported')
@@ -1887,7 +1887,7 @@ class AbsoluteAlchemicalFactory(object):
             else:
                 for exception_index in range(nonbonded_force.getNumExceptions()):
                     # Retrieve parameters.
-                    [iatom, jatom, chargeprod, sigma, epsilon] = reference_force.getExceptionParameters(exception_index)
+                    [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
 
                     # Exclude this atom pair in CustomNonbondedForces. All nonbonded forces
                     # must have the same number of exceptions/exclusions on CUDA platform.
