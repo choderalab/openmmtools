@@ -417,7 +417,7 @@ _ALCHEMICAL_REGION_ARGS = collections.OrderedDict([
     ('annihilate_sterics', False),
     ('softcore_alpha', 0.5), ('softcore_a', 1), ('softcore_b', 1), ('softcore_c', 6),
     ('softcore_beta', 0.0), ('softcore_d', 1), ('softcore_e', 1), ('softcore_f', 2),
-    ('region_name', None)
+    ('name', None)
 ])
 
 
@@ -680,7 +680,7 @@ class AbsoluteAlchemicalFactory(object):
                 all_alchemical_elements[element_type].update(region_elements)
 
         # Check for duplicate names
-        alchemical_region_names = {alchemical_region.region_name for alchemical_region in alchemical_regions}
+        alchemical_region_names = {alchemical_region.name for alchemical_region in alchemical_regions}
         if len(alchemical_region_names) != len(alchemical_regions):
             raise ValueError('Two alchemical regions have the same name')
 
@@ -697,7 +697,7 @@ class AbsoluteAlchemicalFactory(object):
         for alchemical_region in alchemical_regions:
             for particle_index in alchemical_region.atoms:
                 if reference_system.isVirtualSite(particle_index):
-                    raise ValueError(f'Virtual atoms in region {alchemical_region.region_name}.'
+                    raise ValueError(f'Virtual atoms in region {alchemical_region.name}.'
                                       'Alchemically modified virtual sites are not supported')
 
         # Modify forces as appropriate. We delete the forces that
@@ -1123,8 +1123,8 @@ class AbsoluteAlchemicalFactory(object):
 
             # Check if the lambda variable needs a suffix to identify the region.
             lambda_variable_name = 'lambda_torsions'
-            if alchemical_region.region_name is not None:
-                lambda_variable_name += '_' + alchemical_region.region_name
+            if alchemical_region.name is not None:
+                lambda_variable_name += '_' + alchemical_region.name
 
             # Create CustomTorsionForce to handle alchemically modified torsions.
             energy_function = f"{lambda_variable_name}*k*(1+cos(periodicity*theta-phase))"
@@ -1196,8 +1196,8 @@ class AbsoluteAlchemicalFactory(object):
 
             # Check if the lambda variable needs a suffix to identify the region.
             lambda_variable_name = 'lambda_angles'
-            if alchemical_region.region_name is not None:
-                lambda_variable_name += '_' + alchemical_region.region_name
+            if alchemical_region.name is not None:
+                lambda_variable_name += '_' + alchemical_region.name
 
             # Create CustomAngleForce to handle alchemically modified angles.
             energy_function = f"{lambda_variable_name}*(K/2)*(theta-theta0)^2;"
@@ -1265,8 +1265,8 @@ class AbsoluteAlchemicalFactory(object):
 
             # Check if the lambda variable needs a suffix to identify the region.
             lambda_variable_name = 'lambda_bonds'
-            if alchemical_region.region_name is not None:
-                lambda_variable_name += '_' + alchemical_region.region_name
+            if alchemical_region.name is not None:
+                lambda_variable_name += '_' + alchemical_region.name
 
             # Define force here so that it is over writen saving only one copy.
             # Create CustomBondForce to handle alchemically modified bonds.
@@ -1565,7 +1565,7 @@ class AbsoluteAlchemicalFactory(object):
                         for atom2 in alchemical_regions[y].alchemical_atoms:
                             reference_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
                 else:
-                    region_names = ('_'+alchemical_regions[x].region_name, '_'+alchemical_regions[y].region_name)
+                    region_names = ('_'+alchemical_regions[x].name, '_'+alchemical_regions[y].name)
                     logger.debug('Adding a electrostatic interaction group between groups {}.'.format(region_names))
                     del region_names
 
@@ -1576,7 +1576,7 @@ class AbsoluteAlchemicalFactory(object):
         # With exact PME treatment, particle electrostatics is handled through offset parameters.
         if use_exact_pme_treatment:
             for alchemical_region in alchemical_regions:
-                nonbonded_force.addGlobalParameter(f'lambda_electrostatics_{alchemical_region.region_name}', 1.0)
+                nonbonded_force.addGlobalParameter(f'lambda_electrostatics_{alchemical_region.name}', 1.0)
 
         # Make of list of all single and double permutations of alchemical regions.
         single_regions = [[alchemical_region] for alchemical_region in alchemical_regions]
@@ -1593,7 +1593,7 @@ class AbsoluteAlchemicalFactory(object):
             # Make a list of region names for the alchemical regions interactions which are being built.
             region_names = []
             for alchemical_region in alchemical_regions_pairs:
-                region_names.append('_'+alchemical_region.region_name)
+                region_names.append('_'+alchemical_region.name)
 
             # --------------------------------------------------
             # Determine energy expression for all custom forces
