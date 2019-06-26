@@ -1669,13 +1669,13 @@ class AbsoluteAlchemicalFactory(object):
             # to 1.0 for decoupled interactions in alchemical/alchemical force.
             if len(lambda_var_suffixes) > 1:
                 aa_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
-                                                             'lambda_sterics', lambda_var_suffixes, is_lambda_controlled=True)
+                                                                 'lambda_sterics', lambda_var_suffixes, is_lambda_controlled=True)
                 all_sterics_custom_nonbonded_forces = [aa_sterics_custom_nonbonded_force]
             else:
                 na_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
-                                                             'lambda_sterics', lambda_var_suffixes, is_lambda_controlled=True)
+                                                                 'lambda_sterics', lambda_var_suffixes, is_lambda_controlled=True)
                 aa_sterics_custom_nonbonded_force = create_force(openmm.CustomNonbondedForce, sterics_energy_expression,
-                                                             'lambda_sterics', lambda_var_suffixes, alchemical_region.annihilate_sterics)
+                                                                 'lambda_sterics', lambda_var_suffixes, alchemical_region.annihilate_sterics)
                 all_sterics_custom_nonbonded_forces = [na_sterics_custom_nonbonded_force, aa_sterics_custom_nonbonded_force]
 
             # Add parameters and configure CustomNonbondedForces to match reference force.
@@ -1817,27 +1817,28 @@ class AbsoluteAlchemicalFactory(object):
                     nonbonded_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, abs(0*epsilon))
 
             # Restrict interaction evaluation of CustomNonbondedForces to their respective atom groups.
-            #Sterics
+            # Sterics
             if len(lambda_var_suffixes) > 1: # Multi region
                 logger.debug('Adding a steric interaction group between groups {}.'.format(lambda_var_suffixes))
                 aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_1)
-            else: #One region
+            else: # One region
                 logger.debug('Adding steric interaction groups between {0} and the environment,'
                              ' and {0} with itself.'.format(lambda_var_suffixes))
                 na_sterics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset_0)
                 aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_0)
-            #Electrostatics
+
+            # Electrostatics
             if not use_exact_pme_treatment:
-                if len(lambda_var_suffixes) > 1: #Multi region
+                if len(lambda_var_suffixes) > 1: # Multi region
                     logger.debug('Adding a electrostatic interaction group between groups {}.'.format(lambda_var_suffixes))
                     aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_1)
-                else: #One region
+                else: # One region
                     logger.debug('Adding electrostatic interaction groups between {0} and the environment,'
                                  ' and {0} with itself.'.format(lambda_var_suffixes))
                     na_electrostatics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset_0)
                     aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_0)
             else:
-                #Using the nonbonded force to handle electrostatics
+                # Using the nonbonded force to handle electrostatics
                 # and the "interaction groups" in the nonbonded have already been handled by exclusions.
                 pass
 
@@ -1952,8 +1953,9 @@ class AbsoluteAlchemicalFactory(object):
                 forces_by_lambda['lambda_electrostatics{}'.format(lambda_var_suffixes[0])].extend(all_electrostatics_custom_nonbonded_forces + all_electrostatics_custom_bond_forces)
                 forces_by_lambda['lambda_sterics{}'.format(lambda_var_suffixes[0])].extend(all_sterics_custom_nonbonded_forces + all_sterics_custom_bond_forces)
             else:
-                forces_by_lambda.update({'lambda_electrostatics{}'.format(lambda_var_suffixes[0]): all_electrostatics_custom_nonbonded_forces + all_electrostatics_custom_bond_forces})
-                forces_by_lambda.update({'lambda_sterics{}'.format(lambda_var_suffixes[0]): all_sterics_custom_nonbonded_forces + all_sterics_custom_bond_forces})
+                forces_by_lambda['lambda_electrostatics{}'.format(lambda_var_suffixes[0])] = all_electrostatics_custom_nonbonded_forces + all_electrostatics_custom_bond_forces
+                forces_by_lambda['lambda_sterics{}'.format(lambda_var_suffixes[0])] = all_sterics_custom_nonbonded_forces + all_sterics_custom_bond_forces
+
         if use_exact_pme_treatment:
             forces_by_lambda['lambda_electrostatics{}'.format(lambda_var_suffixes[0])].append(nonbonded_force)
         else:
