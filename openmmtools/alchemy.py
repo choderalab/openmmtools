@@ -1509,29 +1509,6 @@ class AbsoluteAlchemicalFactory(object):
         # Perform tasks that do not need to be repeated for all regions.
         # -------------------------------------------------------------
 
-        # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0), which should have sigma > 0.
-        for particle_index in range(reference_force.getNumParticles()):
-            # Retrieve parameters.
-            [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
-            # Check particle sigma is not zero.
-            if (sigma == 0.0 * unit.angstrom):
-                warning_msg = 'particle %d has Lennard-Jones sigma = 0 (charge=%s, sigma=%s, epsilon=%s); setting sigma=1A'
-                logger.warning(warning_msg % (particle_index, str(charge), str(sigma), str(epsilon)))
-                sigma = 1.0 * unit.angstrom
-                # Fix it.
-                reference_force.setParticleParameters(particle_index, charge, sigma, epsilon)
-
-        for exception_index in range(reference_force.getNumExceptions()):
-            # Retrieve parameters.
-            [iatom, jatom, chargeprod, sigma, epsilon] = reference_force.getExceptionParameters(exception_index)
-            # Check particle sigma is not zero.
-            if (sigma == 0.0 * unit.angstrom):
-                warning_msg = 'exception %d has Lennard-Jones sigma = 0 (iatom=%d, jatom=%d, chargeprod=%s, sigma=%s, epsilon=%s); setting sigma=1A'
-                logger.warning(warning_msg % (exception_index, iatom, jatom, str(chargeprod), str(sigma), str(epsilon)))
-                sigma = 1.0 * unit.angstrom
-                # Fix it.
-                reference_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
-
         # Define energy expression for electrostatics based on nonbonded method.
         nonbonded_method = reference_force.getNonbondedMethod()
         is_ewald_method = nonbonded_method in [openmm.NonbondedForce.Ewald,
@@ -1572,6 +1549,31 @@ class AbsoluteAlchemicalFactory(object):
         # Create a copy of the NonbondedForce to handle particle interactions and
         # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
         nonbonded_force = copy.deepcopy(reference_force)
+
+        # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0),
+        # which should have sigma > 0.
+        for particle_index in range(nonbonded_force.getNumParticles()):
+            # Retrieve parameters.
+            [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
+            # Check particle sigma is not zero.
+            if sigma == 0.0 * unit.angstrom:
+                warning_msg = 'particle %d has Lennard-Jones sigma = 0 (charge=%s, sigma=%s, epsilon=%s); setting sigma=1A'
+                logger.warning(warning_msg % (particle_index, str(charge), str(sigma), str(epsilon)))
+                sigma = 1.0 * unit.angstrom
+                # Fix it.
+                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+
+        # Same for the exceptions.
+        for exception_index in range(nonbonded_force.getNumExceptions()):
+            # Retrieve parameters.
+            [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
+            # Check particle sigma is not zero.
+            if sigma == 0.0 * unit.angstrom:
+                warning_msg = 'exception %d has Lennard-Jones sigma = 0 (iatom=%d, jatom=%d, chargeprod=%s, sigma=%s, epsilon=%s); setting sigma=1A'
+                logger.warning(warning_msg % (exception_index, iatom, jatom, str(chargeprod), str(sigma), str(epsilon)))
+                sigma = 1.0 * unit.angstrom
+                # Fix it.
+                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
 
         # With exact PME treatment, particle electrostatics is handled through offset parameters.
         if use_exact_pme_treatment:
