@@ -1534,18 +1534,6 @@ class AbsoluteAlchemicalFactory(object):
                 if (alchemical_region.softcore_beta, alchemical_region.softcore_d, alchemical_region.softcore_e) != (0, 1, 1):
                     raise ValueError('Softcore electrostatics is' + err_msg)
 
-        if use_exact_pme_treatment:
-            # Exclude noninteracting alchemical regions from seeing each other in the nonbonded
-            for x, y in itertools.combinations(range(len(alchemical_regions)), 2):
-                if (x, y) not in alchemical_regions_interactions:
-                    for atom1 in alchemical_regions[x].alchemical_atoms:
-                        for atom2 in alchemical_regions[y].alchemical_atoms:
-                            reference_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
-                else:
-                    region_names = (alchemical_regions[x].name, alchemical_regions[y].name)
-                    logger.debug(f'Adding a electrostatic interaction group between groups {region_names}.')
-                    del region_names
-
         # Create a copy of the NonbondedForce to handle particle interactions and
         # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
         nonbonded_force = copy.deepcopy(reference_force)
@@ -1575,8 +1563,19 @@ class AbsoluteAlchemicalFactory(object):
                 # Fix it.
                 nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
 
-        # With exact PME treatment, particle electrostatics is handled through offset parameters.
         if use_exact_pme_treatment:
+            # Exclude noninteracting alchemical regions from seeing each other in the nonbonded
+            for x, y in itertools.combinations(range(len(alchemical_regions)), 2):
+                if (x, y) not in alchemical_regions_interactions:
+                    for atom1 in alchemical_regions[x].alchemical_atoms:
+                        for atom2 in alchemical_regions[y].alchemical_atoms:
+                            nonbonded_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
+                else:
+                    region_names = (alchemical_regions[x].name, alchemical_regions[y].name)
+                    logger.debug(f'Adding a exact PME electrostatic interaction group between groups {region_names}.')
+                    del region_names
+
+            # With exact PME treatment, particle electrostatics is handled through offset parameters.
             for alchemical_region in alchemical_regions:
                 nonbonded_force.addGlobalParameter(f'lambda_electrostatics_{alchemical_region.name}', 1.0)
 
