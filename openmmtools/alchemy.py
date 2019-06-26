@@ -1595,7 +1595,10 @@ class AbsoluteAlchemicalFactory(object):
             # Make a list of region names for the alchemical regions interactions which are being built.
             lambda_var_suffixes = []
             for alchemical_region in alchemical_regions_pairs:
-                lambda_var_suffixes.append('_'+alchemical_region.name)
+                if alchemical_region.name is None:
+                    lambda_var_suffixes.append('')
+                else:
+                    lambda_var_suffixes.append('_' + alchemical_region.name)
 
             # --------------------------------------------------
             # Determine energy expression for all custom forces
