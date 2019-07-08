@@ -309,7 +309,11 @@ class SAMSSampler(multistate.MultiStateSampler):
     logZ_guess = _StoredProperty('logZ_guess', validate_function=None)
 
     def _initialize_stage(self):
- 
+        if self.weight_update and (self.update_stages == 'two-stage'):
+            for key in self._criteria.keys():
+                if key not in ['histogram_flatness', 'minimum_round_trips', 'minimum_visits', 'minimum_logZ']:  
+                    raise Exception('Unkown {} criteria. Supported values are: histogram_flatness, minimum_round_trips, minimum_logZ and minimum_visits'.format(key))
+
         self._round_trips = 0
         # The variable _downhill keeps track of which end state the walker has visited more recently.
         # This is used for computing the number of round trips.
