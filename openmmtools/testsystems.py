@@ -4544,3 +4544,28 @@ class LennardJonesPair(TestSystem):
         binding_free_energy = -kT * np.log(integral / V0)
 
         return binding_free_energy
+
+
+class CharmmSolvated(TestSystem):
+    """
+    Charmm input for a small molecule in TIP3P water.
+    """
+    def __init__(self, **kwargs):
+
+        super(TestSystem, self).__init__(**kwargs)
+
+        self.psf = openmm.app.CharmmPsfFile(get_data_filename("data/charmm-solvated/isa_wat.3_kcl.m14.psf"))
+        self.pdb = openmm.app.PDBFile(get_data_filename("data/charmm-solvated/isa_wat.3_kcl.m14.pdb"))
+        self.toppar = openmm.app.CharmmParameterSet(
+            get_data_filename("data/charmm-solvated/envi.str"),
+            get_data_filename("data/charmm-solvated/m14.rtf"),
+            get_data_filename("data/charmm-solvated/m14.prm"),
+        )
+        self.psf.setBox(*([30.584*unit.angstrom]*3 + [90.0]*3))
+        self.system = self.psf.createSystem(
+            self.toppar, nonbondedMethod=openmm.app.PME, nonbondedCutoff=1.2*unit.nanometer,
+            switchDistance=1.0*unit.nanometer, constraints=openmm.app.HBonds)
+        self.system.setDefaultPeriodicBoxVectors([3.0584, 0, 0], [0, 3.0584, 0], [0, 0, 3.0584])
+        self.topology = self.psf.topology
+        self.positions = self.pdb.getPositions()
+
