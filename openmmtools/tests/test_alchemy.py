@@ -2027,6 +2027,158 @@ class TestAlchemicalState(object):
             assert pickle.dumps(compound_state) == pickle.dumps(deserialized_state)
 
 
+def test_replace_variable_in_energy_string():
+    assert replace_variable_in_energy_string("r", "r", "s1") == "s1"
+    assert replace_variable_in_energy_string("a*r", "r", "s1") == "a*s1"
+    assert replace_variable_in_energy_string("a*r*r(2,1)", "r", "s1") == "a*s1*r(2,1)"
+    assert replace_variable_in_energy_string("r1","r","s1") == "r1"
+
+
+def test_is_variable_in_energy_string():
+    assert is_variable_in_energy_string("a*sigma*r; sigma=sigma1*sigma2", "sigma")
+    assert not is_variable_in_energy_string("a*sigma*r; sigma=sigma1*sigma2", "sigm")
+    assert is_variable_in_energy_string("r", "r")
+
+
+def test_is_nbfix_force():
+    charmm_solvated = testsystems.CharmmSolvated()
+    nbfix_forces = [charmm_solvated.system.getForce(i)
+                    for i in range(charmm_solvated.system.getNumForces())
+                    if is_nbfix_force(charmm_solvated.system.getForce(i))]
+    assert len(nbfix_forces) == 1
+
+
+def test_alchemical_nbfix_force():
+    """
+    Test that the energies in the end states of the alchemical calculation are consistent
+    with energies that do not use the alchemical forces.
+    """
+    pme_tol = 1e-5
+    platform = openmm.Platform.getPlatformByName("Reference")
+    testsystem = testsystems.CharmmSolvated(ewald_tolerance=pme_tol)
+
+    # utility functions
+    def calc_energy(testsystem, platform=platform):
+        dummy_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        context = openmm.Context(testsystem.system, dummy_integrator, platform)
+        context.setPositions(testsystem.positions)
+        return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+
+    def calc_energy_nonalchemical(platform=platform, pme_tol=pme_tol, **kwargs):
+        return calc_energy(testsystems.CharmmSolvated(ewald_tolerance=pme_tol, **kwargs), platform)
+
+    def calc_energy_alchemical(alchemical_atoms, do_decouple=False,  #if True, annihilate
+                               lambda_sterics=1.0, lambda_electrostatics=1.0,
+                               alchemical_pme_treatment='exact',
+                               original_system=testsystem, platform=platform):
+        alchemical_region = AlchemicalRegion(
+            alchemical_atoms=alchemical_atoms,
+            annihilate_electrostatics=not do_decouple,
+            annihilate_sterics=not do_decouple
+        )
+        factory = AbsoluteAlchemicalFactory(
+            disable_alchemical_dispersion_correction=True, alchemical_pme_treatment=alchemical_pme_treatment)
+        system = factory.create_alchemical_system(original_system.system, alchemical_region)
+        alchemical_state = AlchemicalState.from_system(system)
+        context = openmm.Context(system, openmm.VerletIntegrator(1.0*unit.femtosecond), platform)
+        context.setPositions(original_system.positions)
+        alchemical_state.lambda_sterics = lambda_sterics
+        alchemical_state.lambda_electrostatics = lambda_electrostatics
+        alchemical_state.apply_to_context(context)
+        return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+
+    # Calculate reference energies without using the alchemical facility
+    num_particles = 3033
+    particles = {
+        "all": list(range(num_particles)),
+        "region": list(range(30)),
+        "other": list(range(30, num_particles))
+    }
+
+    # ========== ANNIHILATION =========== #
+    tol = 6*pme_tol  # (assuming that the numerical error comes mostly from PME)
+    eref = dict()
+    eref["original"] = calc_energy_nonalchemical(annihilate_vdw=False, annihilate_charges=False)
+    eref["no_lj"] = calc_energy_nonalchemical(annihilate_vdw=True, annihilate_charges=False,
+                                             annihilate_subset=particles["region"])
+    eref["no_el"] = calc_energy_nonalchemical(annihilate_vdw=False, annihilate_charges=True,
+                                             annihilate_subset=particles["region"])
+    eref["no_nb"] = calc_energy_nonalchemical(annihilate_vdw=True, annihilate_charges=True,
+                                             annihilate_subset=particles["region"])
+    # all interactions in region switched on
+    assert np.isclose(calc_energy_alchemical(alchemical_atoms=particles["region"]), eref["original"], atol=tol, rtol=0)
+    # all interactions in region switched off
+    assert np.isclose(
+        calc_energy_alchemical(alchemical_atoms=particles["region"], lambda_electrostatics=0.0, lambda_sterics=0.0),
+        eref["no_nb"], atol=tol, rtol=0)
+    # all electrostatic interactions in region switched off
+    assert np.isclose(
+        calc_energy_alchemical(alchemical_atoms=particles["region"], lambda_electrostatics=0.0, lambda_sterics=1.0),
+        eref["no_el"], atol=tol, rtol=0)
+    # all steric interactions in region switched off
+    assert np.isclose(
+        calc_energy_alchemical(alchemical_atoms=particles["region"], lambda_electrostatics=1.0, lambda_sterics=0.0),
+        eref["no_lj"], atol=tol, rtol=0)
+
+    # ========== DECOUPLING =========== #
+    decouple_tol = 0.05  # because electrostatics have to be handled differently (no PME)
+    eref["bonded_terms"] = calc_energy_nonalchemical(annihilate_vdw=True, annihilate_charges=True,
+                                             annihilate_subset=particles["all"])
+    eref["bonded_and_vdw_terms"] = calc_energy_nonalchemical(annihilate_vdw=False, annihilate_charges=True,
+                                             annihilate_subset=particles["all"])
+    eref["no_el_other"] = calc_energy_nonalchemical(annihilate_vdw=False, annihilate_charges=True,
+                                             annihilate_subset=particles["other"])
+    eref["no_nb_other"] = calc_energy_nonalchemical(annihilate_vdw=True, annihilate_charges=True,
+                                             annihilate_subset=particles["other"])
+    # all interactions between region and other switched off
+    assert np.isclose(
+        calc_energy_alchemical(alchemical_atoms=particles["region"], do_decouple=True,
+                               alchemical_pme_treatment='coulomb', lambda_electrostatics=0.0, lambda_sterics=0.0),
+        eref["no_nb"] + eref["no_nb_other"] - eref["bonded_terms"], atol=decouple_tol, rtol=0)
+    assert np.isclose(
+        calc_energy_alchemical(alchemical_atoms=particles["region"], do_decouple=True,
+                           alchemical_pme_treatment='coulomb', lambda_electrostatics=0.0, lambda_sterics=1.0),
+        eref["no_el"] + eref["no_el_other"] - eref["bonded_and_vdw_terms"], atol=decouple_tol, rtol=0)
+
+    # ========== OPENMM BUG =========== #
+    # Test that a bug in openmm versions < 7.3.1 is not present
+    # In the older version, the electrostatics were not calculated in the nonbonded force if all charges were zero,
+    # even nonzero offsets were present.
+    assert np.isclose(calc_energy_alchemical(alchemical_atoms=particles["all"]), eref["original"], atol=tol, rtol=0)
+
+
+def test_electrostatic_offset():
+    """
+    Test that a bug in openmm versions < 7.3.1 is not present
+    In the older version, the electrostatics were not calculated in the nonbonded force if all charges were zero,
+    even nonzero offsets were present.
+    """
+    water = testsystems.WaterBox(dispersion_correction=False)
+    system_prototype = water.system
+    energies = []
+    for num_changed_particles in [0, 10, system_prototype.getNumParticles()-1, system_prototype.getNumParticles()]:
+        system = copy.deepcopy(system_prototype)
+        for f in range(system.getNumForces()):
+            force = system.getForce(f)
+            if isinstance(force, openmm.NonbondedForce):
+                force.addGlobalParameter("scale", 1.0)
+                # annihilate all Lennard-Jones
+                for p in range(system.getNumParticles()):
+                    q, sig, eps = force.getParticleParameters(p)
+                    force.setParticleParameters(p, q, sig, 0.0)
+                # transfer some electrostatics into offset
+                for p in range(num_changed_particles):
+                    q, sig, eps = force.getParticleParameters(p)
+                    force.setParticleParameters(p, 0.0, sig, eps)
+                    force.addParticleParameterOffset("scale", p, q, 0.0, 0.0)
+        context = openmm.Context(system, openmm.LangevinIntegrator(1,1,1))
+        context.setPositions(water.positions)
+        energies.append(context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole))
+
+    # all energies are the same
+    assert np.allclose(energies, energies[0], atol=0.05, rtol=0)
+
+
 # =============================================================================
 # MAIN FOR MANUAL DEBUGGING
 # =============================================================================
