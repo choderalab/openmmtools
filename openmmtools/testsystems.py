@@ -48,6 +48,7 @@ import numpy.random
 import itertools
 import copy
 import inspect
+import warnings
 
 import scipy
 import scipy.special
@@ -4549,23 +4550,91 @@ class LennardJonesPair(TestSystem):
 class CharmmSolvated(TestSystem):
     """
     Charmm input for a small molecule in TIP3P water.
+
+    Parameters
+    ----------
+    annihilate_charges: bool
+        Set all charges in the system to zero.
+    annihiliate_vdw: bool
+        Set all Lennard-Jones interactions in the system to zero.
+    ewald_tolerance: float
+        The tolerance for particle mesh Ewald.
+    annihilate_subset: list
+        A list of particle ids for which charges and van der Waals are to be annihilated in case annihilate_charges
+        or annihilate_vdw is True. The default (None) means that all interactions are annihilated for all_particles.
     """
-    def __init__(self, **kwargs):
+    def __init__(self, annihilate_charges=False, annihilate_vdw=False, ewald_tolerance=0.0005, annihilate_subset=None,
+                 **kwargs):
 
         super(TestSystem, self).__init__(**kwargs)
 
-        self.psf = openmm.app.CharmmPsfFile(get_data_filename("data/charmm-solvated/isa_wat.3_kcl.m14.psf"))
-        self.pdb = openmm.app.PDBFile(get_data_filename("data/charmm-solvated/isa_wat.3_kcl.m14.pdb"))
-        self.toppar = openmm.app.CharmmParameterSet(
-            get_data_filename("data/charmm-solvated/envi.str"),
-            get_data_filename("data/charmm-solvated/m14.rtf"),
-            get_data_filename("data/charmm-solvated/m14.prm"),
-        )
-        self.psf.setBox(*([30.584*unit.angstrom]*3 + [90.0]*3))
-        self.system = self.psf.createSystem(
-            self.toppar, nonbondedMethod=openmm.app.PME, nonbondedCutoff=1.2*unit.nanometer,
-            switchDistance=1.0*unit.nanometer, constraints=openmm.app.HBonds)
+        with warnings.catch_warnings():
+            warnings.simplefilter('ignore', openmm.app.internal.charmm.exceptions.CharmmPSFWarning)
+            warnings.simplefilter('ignore', UserWarning)
+
+            self.psf = openmm.app.CharmmPsfFile(get_data_filename("data/charmm-solvated/isa_wat.3_kcl.m14.psf"))
+            self.pdb = openmm.app.PDBFile(get_data_filename("data/charmm-solvated/isa_wat.3_kcl.m14.pdb"))
+            self.toppar = openmm.app.CharmmParameterSet(
+                get_data_filename("data/charmm-solvated/envi.str"),
+                get_data_filename("data/charmm-solvated/m14.rtf"),
+                get_data_filename("data/charmm-solvated/m14.prm"),
+            )
+            self.psf.setBox(*([30.584*unit.angstrom]*3 + [90.0]*3))
+            self.system = self.psf.createSystem(
+                self.toppar, nonbondedMethod=openmm.app.PME, nonbondedCutoff=1.2*unit.nanometer,
+                switchDistance=1.0*unit.nanometer, constraints=openmm.app.HBonds, ewaldErrorTolerance=ewald_tolerance)
         self.system.setDefaultPeriodicBoxVectors([3.0584, 0, 0], [0, 3.0584, 0], [0, 0, 3.0584])
         self.topology = self.psf.topology
         self.positions = self.pdb.getPositions()
+        self.num_particles = len(self.positions)
+        self.annihilated_particles = range(self.num_particles) if annihilate_subset is None else annihilate_subset
+        # disable long-range correction and remove intramolecular interactions
+        for i in range(self.system.getNumForces()):
+            force = self.system.getForce(i)
+            if isinstance(force, openmm.NonbondedForce):
+                force.setUseDispersionCorrection(False)
+                if annihilate_charges:
+                    for index in self.annihilated_particles:
+                        q,sig,eps = force.getParticleParameters(index)
+                        force.setParticleParameters(index, 0.0*unit.elementary_charge, sig, eps)
+                    for index in range(force.getNumParticleParameterOffsets()):
+                        a,b,c,q,sig,eps = force.getParticleParameterOffset(index)
+                        if b in self.annihilated_particles or c in self.annihilated_particles:
+                            force.setParticleParameterOffset(a, b, c, 0.0*unit.elementary_charge, sig, eps)
+                    for index in range(force.getNumExceptions()):
+                        j,k,q,sig,eps = force.getExceptionParameters(index)
+                        if j in self.annihilated_particles or k in self.annihilated_particles:
+                            force.setExceptionParameters(index, j, k, 0.0*unit.elementary_charge**2, sig, eps)
+                    for index in range(force.getNumExceptionParameterOffsets()):
+                        a,b,c,q,sig,eps = force.getExceptionParameterOffset(index)
+                        if b in self.annihilated_particles or c in self.annihilated_particles:
+                            force.setExceptionParameterOffset(a,b,c,0.0*unit.elementary_charge**2, sig, eps)
+                if annihilate_vdw:
+                    for index in self.annihilated_particles:
+                        q,sig,eps = force.getParticleParameters(index)
+                        force.setParticleParameters(index, q, sig, 0.0*unit.kilojoule_per_mole)
+                    for index in range(force.getNumParticleParameterOffsets()):
+                        a,b,c,q,sig,eps = force.getParticleParameterOffset(index)
+                        if b in self.annihilated_particles or c in self.annihilated_particles:
+                            force.setParticleParameterOffset(a, b, c, q, sig, 0.0*unit.kilojoule_per_mole)
+                    for index in range(force.getNumExceptions()):
+                        j,k,q,sig,eps = force.getExceptionParameters(index)
+                        if j in self.annihilated_particles or k in self.annihilated_particles:
+                            force.setExceptionParameters(index, j, k, q, sig, 0.0*unit.kilojoule_per_mole)
+                    for index in range(force.getNumExceptionParameterOffsets()):
+                        a,b,c,q,sig,eps = force.getExceptionParameterOffset(index)
+                        if b in self.annihilated_particles or c in self.annihilated_particles:
+                            force.setExceptionParameterOffset(a,b,c,q, sig, 0.0*unit.kilojoule_per_mole)
+            if isinstance(force, openmm.CustomNonbondedForce):
+                force.setUseLongRangeCorrection(False)
+                if annihilate_vdw:
+                    energy_terms = force.getEnergyFunction().split(";")
+                    energy_terms[0] = "ljon1*ljon2*({})".format(energy_terms[0])
+                    force.setEnergyFunction(";".join(energy_terms) + ";")
+                    force.addPerParticleParameter("ljon")
+                    for i in range(self.num_particles):
+                        parameters = force.getParticleParameters(i)
+                        new_parameters = list(parameters) + [0 if i in self.annihilated_particles else 1]
+                        force.setParticleParameters(i, new_parameters)
+
 
