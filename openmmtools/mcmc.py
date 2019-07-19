@@ -570,7 +570,7 @@ class BaseIntegratorMove(MCMCMove):
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
-    restart_attempts : int, optional
+    n_restart_attempts : int, optional
         When greater than 0, if after the integration there are NaNs in energies,
         the move will restart. When the integrator has a random component, this
         may help recovering. On the last attempt, the ``Context`` is
@@ -583,7 +583,7 @@ class BaseIntegratorMove(MCMCMove):
     n_steps : int
     context_cache : openmmtools.cache.ContextCache
     reassign_velocities : bool
-    restart_attempts : int or None
+    n_restart_attempts : int or None
 
     Examples
     --------
