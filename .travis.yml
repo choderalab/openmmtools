@@ -12,13 +12,16 @@ matrix:
       language: generic
       env: PYTHON_VER=3.7
 
-
     - os: linux
       language: generic  # No need to set Python version since its conda
       env: PYTHON_VER=3.6
     - os: linux
       language: generic
       env: PYTHON_VER=3.7
+
+  # TODO: Reactivate macOS tests if they stop segfaulting after switching from nose to pytest (see also #402 and #430).
+  allow_failures:
+    - os: osx
 
 env:
   global:
