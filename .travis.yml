@@ -21,7 +21,7 @@ matrix:
 
   # TODO: Reactivate macOS tests if they stop segfaulting after switching from nose to pytest (see also #402 and #430).
   allow_failures:
-    os: osx
+    - os: osx
 
 env:
   global:
