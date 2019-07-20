@@ -4589,8 +4589,7 @@ class CharmmSolvated(TestSystem):
         self.num_particles = len(self.positions)
         self.annihilated_particles = range(self.num_particles) if annihilate_subset is None else annihilate_subset
         # disable long-range correction and remove intramolecular interactions
-        for i in range(self.system.getNumForces()):
-            force = self.system.getForce(i)
+        for i, force in enumerate(self.system.getForces()):
             if isinstance(force, openmm.NonbondedForce):
                 force.setUseDispersionCorrection(False)
                 if annihilate_charges:
@@ -4628,13 +4627,37 @@ class CharmmSolvated(TestSystem):
             if isinstance(force, openmm.CustomNonbondedForce):
                 force.setUseLongRangeCorrection(False)
                 if annihilate_vdw:
-                    energy_terms = force.getEnergyFunction().split(";")
-                    energy_terms[0] = "ljon1*ljon2*({})".format(energy_terms[0])
-                    force.setEnergyFunction(";".join(energy_terms) + ";")
-                    force.addPerParticleParameter("ljon")
-                    for i in range(self.num_particles):
-                        parameters = force.getParticleParameters(i)
-                        new_parameters = list(parameters) + [0 if i in self.annihilated_particles else 1]
-                        force.setParticleParameters(i, new_parameters)
+                    modified_force = openmm.CustomNonbondedForce(force.getEnergyFunction())
+                    modified_force.setUseLongRangeCorrection(force.getUseLongRangeCorrection())
+                    modified_force.setUseSwitchingFunction(force.getUseSwitchingFunction())
+                    modified_force.setCutoffDistance(force.getCutoffDistance())
+                    modified_force.setSwitchingDistance(force.getSwitchingDistance())
+                    modified_force.setNonbondedMethod(force.getNonbondedMethod())
+                    for j in range(force.getNumGlobalParameters()):
+                        modified_force.addGlobalParameter(
+                            force.getGlobalParameterName(j), force.getGlobalParameterDefaultValue(j))
+                    for j in range(force.getNumExclusions()):
+                        modified_force.addExclusion(*force.getExclusionParticles(j))
+                    for j in range(force.getNumPerParticleParameters()):
+                        modified_force.addPerParticleParameter(force.getPerParticleParameterName(j))
+                    tabulated_functions = [force.getTabulatedFunction(j)
+                                           for j in range(force.getNumTabulatedFunctions())]
+                    tabulated_function_names = [force.getTabulatedFunctionName(j)
+                                                for j in range(force.getNumTabulatedFunctions())]
+                    for function, name in zip(tabulated_functions, tabulated_function_names):
+                        xsize, ysize, table = function.getFunctionParameters()
+                        table = np.pad(np.reshape(table, (xsize, ysize)), (0,1),
+                                       mode="constant", constant_values=0.0).flatten()
+                        new_function = openmm.Discrete2DFunction(xsize+1,ysize+1,table)
+                        modified_force.addTabulatedFunction(name, new_function)
+                    for j in range(force.getNumParticles()):
+                        if j in self.annihilated_particles:
+                            modified_force.addParticle([xsize])
+                        else:
+                            modified_force.addParticle(force.getParticleParameters(j))
+                    self.system.removeForce(i)
+                    self.system.addForce(modified_force)
+
+
 
 

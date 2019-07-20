@@ -282,7 +282,7 @@ def test_use_vdw_with_charmm_force_switch():
     switch = 1.0 #*unit.nanometer
     ljpair = LJPairTestBox()
     assert is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
-    use_vdw_with_charmm_force_switch(ljpair.system, cutoff*unit.nanometer, switch*unit.nanometer)
+    use_vdw_with_charmm_force_switch(ljpair.system, switch*unit.nanometer, cutoff*unit.nanometer)
     assert not is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
     ljpair.update_context()
 
@@ -305,4 +305,19 @@ def test_use_vdw_with_charmm_force_switch():
         assert abs(target_energy(r) - ljpair.get_energy(r)) < 1e-7
 
 
-#TODO: Testing on a system with 1-4's and NBFIXes
+def test_no_vdw_interactions_after_switch():
+    for switching in [use_vdw_with_charmm_force_switch, use_custom_vdw_switching_function]:
+        testsystem = testsystems.CharmmSolvated(annihilate_vdw=True)
+        switching(testsystem.system, 1.0*unit.nanometer, 1.2*unit.nanometer)
+        for i,f in enumerate(testsystem.system.getForces()):
+            f.setForceGroup(i)
+        context = Context(testsystem.system, openmm.VerletIntegrator(1.0*unit.femtosecond))
+        context.setPositions(testsystem.positions)
+        for i,f in enumerate(testsystem.system.getForces()):
+            if isinstance(f, openmm.CustomNonbondedForce):
+                assert np.isclose(
+                    0, context.getState(getEnergy=True, groups={i}).
+                        getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole), rtol=0)
+
+
+#TODO: Testing vs CHARMM energies

@@ -222,6 +222,11 @@ def is_lj_active_in_nonbonded_force(nonbonded_force):
         vdw = (eps.value_in_unit(unit.kilojoule_per_mole) * sig.value_in_unit(unit.nanometer))
         if vdw > 1e-5:
             return True
+    for i in range(nonbonded_force.getNumExceptions()):
+        particle1, particle2, qq, sig, eps = nonbonded_force.getExceptionParameters(i)
+        vdw = (eps.value_in_unit(unit.kilojoule_per_mole) * sig.value_in_unit(unit.nanometer))
+        if vdw > 1e-5:
+            return True
     return False
 
 
@@ -277,7 +282,7 @@ def get_forces_that_define_vdw(system):
                 continue
         # CUSTOM BOND FORCES (TYPICALLY FOR 1-4 INTERACTIONS)
         if isinstance(force, openmm.CustomBondForce):
-            bond_parameters = [force.getBondParameters()
+            bond_parameters = [force.getPerBondParameters()
                                for i in range(force.getNumPerBondParameters())]
             if ("epsilon" in bond_parameters) and ("sigma" in bond_parameters):
                 custom_bond_forces.append(force)
@@ -357,11 +362,11 @@ def vdw_as_custom_forces(system, lj_potential=LJ_POTENTIAL+A_B_FROM_EPSILON_SIGM
             q, sig, eps = nb_force.getParticleParameters(i)
             particle_id = vdw.addParticle([sig, eps])
             assert particle_id == i
-            nb_force.setParticleParameters(i, q, 0.0, 0.0)
+            nb_force.setParticleParameters(i, q, 1.0, 0.0)
 
         for i in range(nb_force.getNumExceptions()):
             atom1, atom2, q, sig, eps = nb_force.getExceptionParameters(i)
-            nb_force.setExceptionParameters(i, atom1, atom2, q, 0.0, 0.0)
+            nb_force.setExceptionParameters(i, atom1, atom2, q, 1.0, 0.0)
             vdw.addExclusion(atom1, atom2)
             vdw14.addBond(atom1, atom2, [sig, eps])
 
@@ -481,7 +486,7 @@ def use_custom_vdw_switching_function(system, switch_distance, cutoff_distance,
         apply_custom_switching_function(custom_b_force, switch_distance, cutoff_distance, switching_function)
 
 
-def use_vdw_with_charmm_force_switch(system, cutoff_distance, switch_distance):
+def use_vdw_with_charmm_force_switch(system, switch_distance, cutoff_distance):
     """Use the CHARMM force switching function for Lennard-Jones cutoffs.
 
     Modifies the system's Lennard-Jones interactions to use the force switching scheme by
