@@ -269,7 +269,7 @@ class ThermodynamicsError(Exception):
     >>> raise ThermodynamicsError(ThermodynamicsError.MULTIPLE_BAROSTATS)
     Traceback (most recent call last):
     ...
-    ThermodynamicsError: System has multiple barostats.
+    openmmtools.states.ThermodynamicsError: System has multiple barostats.
 
     """
 
@@ -329,7 +329,7 @@ class SamplerStateError(Exception):
     >>> raise SamplerStateError(SamplerStateError.INCONSISTENT_VELOCITIES)
     Traceback (most recent call last):
     ...
-    SamplerStateError: Velocities have different length than positions.
+    openmmtools.states.SamplerStateError: Velocities have different length than positions.
 
     """
 
@@ -430,7 +430,7 @@ class ThermodynamicState(object):
     ...                            pressure=1.0*unit.atmosphere)
     Traceback (most recent call last):
     ...
-    ThermodynamicsError: Non-periodic systems cannot have a barostat.
+    openmmtools.states.ThermodynamicsError: Non-periodic systems cannot have a barostat.
 
     When temperature and/or pressure are not specified (i.e. they are
     None) ThermodynamicState tries to infer them from a thermostat or
@@ -439,7 +439,7 @@ class ThermodynamicState(object):
     >>> state = ThermodynamicState(system=waterbox)
     Traceback (most recent call last):
     ...
-    ThermodynamicsError: System does not have a thermostat specifying the temperature.
+    openmmtools.states.ThermodynamicsError: System does not have a thermostat specifying the temperature.
     >>> thermostat = openmm.AndersenThermostat(200.0*unit.kelvin, 1.0/unit.picosecond)
     >>> force_id = waterbox.addForce(thermostat)
     >>> state = ThermodynamicState(system=waterbox)
@@ -538,7 +538,7 @@ class ThermodynamicState(object):
         >>> state.system = alanine.system
         Traceback (most recent call last):
         ...
-        ThermodynamicsError: System does not have a thermostat specifying the temperature.
+        openmmtools.states.ThermodynamicsError: System does not have a thermostat specifying the temperature.
 
         We can fix both thermostat and barostat while setting the system.
         >>> state.set_system(alanine.system, fix_state=True)
@@ -812,7 +812,7 @@ class ThermodynamicState(object):
         >>> state.reduced_potential(incompatible_sampler_state)
         Traceback (most recent call last):
         ...
-        ThermodynamicsError: The sampler state has a different number of particles.
+        openmmtools.states.ThermodynamicsError: The sampler state has a different number of particles.
 
         In case a cached SamplerState containing the potential energy
         and the volume of the context is not available, the method
@@ -1754,7 +1754,7 @@ class SamplerState(object):
         Position vectors for N particles (length units).
     velocities : Nx3 simtk.unit.Quantity, optional
         Velocity vectors for N particles (velocity units).
-    box_vectors : 3x3 simtk.unit.Quantity 
+    box_vectors : 3x3 simtk.unit.Quantity
         Current box vectors (length units).
 
     Attributes
@@ -1805,7 +1805,7 @@ class SamplerState(object):
     >>> sampler_state.update_from_context(incompatible_context)
     Traceback (most recent call last):
     ...
-    SamplerStateError: Specified positions with inconsistent number of particles.
+    openmmtools.states.SamplerStateError: Specified positions with inconsistent number of particles.
 
     Create a new SamplerState instead
 
@@ -1839,7 +1839,7 @@ class SamplerState(object):
             if isinstance(input, unit.Quantity) and not isinstance(input._value, np.ndarray):
                 args.append(np.array(input/input.unit)*input.unit)
             else:
-               args.append(copy.deepcopy(input))    
+               args.append(copy.deepcopy(input))
         self._initialize(*args)
 
     @classmethod
@@ -3065,7 +3065,7 @@ class GlobalParameterState(object):
     >>> my_composable_state.apply_to_system(system)
     Traceback (most recent call last):
     ...
-    GlobalParameterError: Could not find global parameter gamma_mysuffix in the system.
+    openmmtools.states.GlobalParameterError: Could not find global parameter gamma_mysuffix in the system.
 
     """
 
@@ -3104,6 +3104,10 @@ class GlobalParameterState(object):
         state_parameters = {}
         for force, parameter_name, parameter_id in cls._get_system_controlled_parameters(
                 system, parameters_name_suffix):
+
+            if parameter_id >= force.getNumGlobalParameters():
+                raise GlobalParameterStateError(f'Attempted to access system parameter {parameter_name} (id {parameter_id}) that does not exist in {force.__class__.__name__}')
+
             parameter_value = force.getGlobalParameterDefaultValue(parameter_id)
 
             # Check that we haven't already found
@@ -3301,6 +3305,10 @@ class GlobalParameterState(object):
                 err_msg = 'The system parameter {} is not defined in this state.'
                 raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
             else:
+
+                if parameter_id >= force.getNumGlobalParameters():
+                    raise GlobalParameterStateError(f'Attempted to access system parameter {parameter_name} (id {parameter_id}) that does not exist in {force.__class__.__name__}')
+
                 parameters_applied.add(parameter_name)
                 force.setGlobalParameterDefaultValue(parameter_id, parameter_value)
 
@@ -3363,11 +3371,13 @@ class GlobalParameterState(object):
                     err_msg = 'Context has parameter {} which is undefined in this state.'
                     raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
                 continue
+
             try:
                 context.setParameter(parameter_name, parameter_value)
             except Exception:
                 err_msg = 'Could not find parameter {} in context'
                 raise self._GLOBAL_PARAMETER_ERROR(err_msg.format(parameter_name))
+
 
     def _standardize_system(self, system):
         """Standardize the given system.

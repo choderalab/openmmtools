@@ -87,7 +87,9 @@ class TestThermodynamicState(object):
         cls.barostated_toluene.addForce(barostat)
 
         # A system with two identical MonteCarloBarostats
-        cls.multiple_barostat_alanine = copy.deepcopy(cls.barostated_alanine)
+        cls.multiple_barostat_alanine = copy.deepcopy(cls.alanine_explicit)
+        barostat = openmm.MonteCarloBarostat(cls.std_pressure, cls.std_temperature)
+        cls.multiple_barostat_alanine.addForce(barostat)
         barostat = openmm.MonteCarloBarostat(cls.std_pressure, cls.std_temperature)
         cls.multiple_barostat_alanine.addForce(barostat)
 

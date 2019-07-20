@@ -1,17 +1,61 @@
 Release History
 ***************
 
+Current development
+===================
+
+Bugfixes
+--------
+- Fixed a bug in ``multistateanalyzer.py`` where a function was imported from ``openmmtools.utils`` instead of ``openmmtools.multistate.utils`` (`#430 <https://github.com/choderalab/openmmtools/pull/430>`_).
+
+0.18.2 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed  (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
+- Improve the robustness of opening the netcdf file on resuming of the multi-state samplers by setting the environment variable HDF5_USE_FILE_LOCKING to FALSE after 4 failed attempts (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+- Fixed a crash during exception handling (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+
+Other
+-----
+- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_  (`#424 <https://github.com/choderalab/openmmtools/pull/424>`_, `#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+
+0.18.1 - Bugfix release
+=======================
+
+This is a minor bugfix release.
+
+New features
+------------
+- Improvements for ``HostGuest*`` classes
+  - add ``oemols``, ``host_oemol``, and ``guest_oemol`` properties to retrieve OpenEye Toolkit ``OEMol`` objects (requires toolkit license and installation)
+  - these classes can now accept overriding ``kwargs``
+
+Bugfixes
+--------
+- ``openmmtools.multistate`` experimental API warning is only issued when ``openmmtools.multistate`` is imported
+- ``AlchemicalNonequilibriumLangevinIntegrator.reset()`` now correctly resets the nonequilibrium work
+
+0.18.0 - Added multistate samplers
+==================================
+
+New features
+------------
+- Add a number of classes that can use MCMC to sample from multiple thermodynamic states:
+  - ``MultiStateSampler``: sample independently from multiple thermodynamic states
+  - ``ReplicaExchangeSampler``: replica exchange among thermodynamic states
+  - ``SAMSSampler``: self-adjusted mixture sampling (SAMS) sampling
+- All samplers can use MPI via the `mpiplus <https://github.com/choderalab/mpiplus>`_ package
+
 0.17.0 - Removed Py2 support, faster exact PME treatment
 ========================================================
 
 New features
 ------------
-- Add ``GlobalParameterFunction`` that allows to enslave a ``GlobalParameter`` to an arbitrary function of controlling
-variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
-- Allow to ignore velocities when building the dict representation of a ``SamplerState``. This can be useful for example
-to save bandwidth when sending a ``SamplerState`` over the network and velocities are not required (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
-- Add ``DoubleWellDimer_WCAFluid`` and ``DoubleWellChain_WCAFluid`` test
-  systems (`#389 <https://github.com/choderalab/openmmtools/pull/389>`_).
+- Add ``GlobalParameterFunction`` that allows to enslave a ``GlobalParameter`` to an arbitrary function of controlling variables (`#380 <https://github.com/choderalab/openmmtools/pull/380>`_).
+- Allow to ignore velocities when building the dict representation of a ``SamplerState``. This can be useful for example to save bandwidth when sending a ``SamplerState`` over the network and velocities are not required (`#386 <https://github.com/choderalab/openmmtools/pull/386>`_).
+- Add ``DoubleWellDimer_WCAFluid`` and ``DoubleWellChain_WCAFluid`` test systems (`#389 <https://github.com/choderalab/openmmtools/pull/389>`_).
 
 Enhancements
 ------------
@@ -24,19 +68,14 @@ considerable speed improvement over the previous implementation (`#380 <https://
 
 Bug fixes
 ---------
-- Fixed a bug involving the ``NoseHooverChainVelocityVerletIntegrator`` with ``System`` with constraints. The constraints
-were not taken into account when calculating the number of degrees of freedom resulting in the temperature not converging
-to the target value. (`#384 <https://github.com/choderalab/openmmtools/pull/384>`_)
-- Fixed a bug affecting ``reduced_potential_at_states`` when computing the reduced potential of systems in different
-``AlchemicalState``s when the same alchemical parameter appeared in force objects split in different force groups. (`#385 <https://github.com/choderalab/openmmtools/pull/385>`_)
+- Fixed a bug involving the ``NoseHooverChainVelocityVerletIntegrator`` with ``System`` with constraints. The constraints were not taken into account when calculating the number of degrees of freedom resulting in the temperature not converging to the target value. (`#384 <https://github.com/choderalab/openmmtools/pull/384>`_)
+- Fixed a bug affecting ``reduced_potential_at_states`` when computing the reduced potential of systems in different ``AlchemicalState``s when the same alchemical parameter appeared in force objects split in different force groups. (`#385 <https://github.com/choderalab/openmmtools/pull/385>`_)
 
 Deprecated and API breaks
 -------------------------
-- Python 2 is not supported anymore.
-- The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed
-since it doesn't make sense with the new parameter offset implementation.
-- The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been
-deprecated. Use ``AlchemicalState.get_alchemical_function`` and ``AlchemicalState.set_alchemical_function`` instead.
+- Python 2 and 3.5 is not supported anymore.
+- The ``update_alchemical_charges`` attribute of ``AlchemicalState`, which was deprecated in 0.16.0, has now been removed since it doesn't make sense with the new parameter offset implementation.
+- The methods ``AlchemicalState.get_alchemical_variable`` and ``AlchemicalState.set_alchemical_variable`` have been deprecated. Use ``AlchemicalState.get_alchemical_function`` and ``AlchemicalState.set_alchemical_function`` instead.
 
 
 0.16.0 - Py2 deprecated, GlobalParameterState class, SamplerState reads CVs
@@ -45,7 +84,7 @@ deprecated. Use ``AlchemicalState.get_alchemical_function`` and ``AlchemicalStat
 New features
 ------------
 - Add ability for ``SamplerState`` to access new `OpenMM Custom CV Force Variables
-  <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_ 
+  <http://docs.openmm.org/development/api-python/generated/simtk.openmm.openmm.CustomCVForce.html#simtk.openmm.openmm.CustomCVForce>`_
   (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).
 - ``SamplerState.update_from_context`` now has keywords to support finer grain updating from the Context. This is only
   recommended for advanced users (`#362 <https://github.com/choderalab/openmmtools/pull/362>`_).

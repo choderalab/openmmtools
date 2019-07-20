@@ -5,9 +5,11 @@ Various Python utilities for OpenMM.
 
 """
 
-# Define global version.
-from openmmtools import version
-__version__ = version.version
+from openmmtools import testsystems, integrators, alchemy, mcmc, states, cache, utils, constants, forces, forcefactories, storage, multistate
 
-# Import modules.
-from openmmtools import testsystems, integrators, alchemy, mcmc, states, cache, utils, constants, forces, forcefactories, storage
+# Handle versioneer
+from ._version import get_versions
+versions = get_versions()
+__version__ = versions['version']
+__git_revision__ = versions['full-revisionid']
+del get_versions, versions
