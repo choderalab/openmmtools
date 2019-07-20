@@ -39,6 +39,7 @@ import copy
 import logging
 import collections
 import string
+import warnings
 
 import numpy as np
 from simtk import openmm, unit
@@ -220,7 +221,7 @@ class AlchemicalState(states.GlobalParameterState):
     lambda_torsions = _LambdaParameter('lambda_torsions')
 
     @classmethod
-    def from_system(cls, system, *args, **kwargs):
+    def from_system(cls, system, *args, custom_lambdas=[], **kwargs):
         """Constructor reading the state from an alchemical system.
 
         Parameters
@@ -231,6 +232,9 @@ class AlchemicalState(states.GlobalParameterState):
             If specified, the state will search for a modified
             version of the alchemical parameters with the name
             ``parameter_name + '_' + parameters_name_suffix``.
+        custom_lambdas : list of str, optional
+            If specified, the listed variables are added as attributes
+            of the returned instance.
 
         Returns
         -------
@@ -245,7 +249,14 @@ class AlchemicalState(states.GlobalParameterState):
 
         """
         # The function is redefined here only to provide more specific documentation for this method.
-        return super().from_system(system, *args, **kwargs)
+        if custom_lambdas:
+            custom_cls = copy.deepcopy(cls)
+            for para in custom_lambdas:
+                if not hasattr(custom_cls, para):
+                    setattr(custom_cls, para, custom_cls._LambdaParameter(para))
+            return custom_cls.from_system(system, *args, **kwargs)
+        else:
+            return super().from_system(system, *args, **kwargs)
 
     def set_alchemical_parameters(self, new_value):
         """Set all defined lambda parameters to the given value.
@@ -483,138 +494,6 @@ class AlchemicalRegion(collections.namedtuple('AlchemicalRegion', _ALCHEMICAL_RE
 AlchemicalRegion.__new__.__defaults__ = tuple(_ALCHEMICAL_REGION_ARGS.values())
 
 
-def is_variable_in_energy_string(energy_string, variable_name):
-    """
-    Test whether an energy string for a custom force depends on a certain variable.
-
-    Parameters
-    ----------
-    energy_string : str
-        The energy function for a custom force.
-    variable_name : str
-        The variable name.
-
-    Returns
-    -------
-    is_variable_in_energy_string: bool
-        Whether the energy string contains the variable name.
-    """
-    new_energy_string = ""
-    letters = string.ascii_letters + string.digits + "_"
-    split = energy_string.split(variable_name)
-    for i in range(len(split) - 1):
-        r_preceded_by_name = (len(split[i]) > 0 and split[i][-1] in letters)
-        r_suceeded_by_name = (len(split[i + 1]) > 0 and split[i + 1][0] in letters + "(")
-        r_is_part_of_name = r_preceded_by_name or r_suceeded_by_name
-        if not r_is_part_of_name:
-            return True
-    return False
-
-
-def replace_variable_in_energy_string(energy_string, old_name, new_name):
-    """
-    Replace a variable name by a new name in an energy string.
-
-    Parameters
-    ----------
-    energy_string : str
-        The energy function for a custom force.
-    old_name : str
-        Old variable name.
-    new_name : str
-        New variable name.
-
-    Returns
-    -------
-    new_energy_string: str
-        Energy function, where the old variable name has been replaced by a new name.
-    """
-    new_energy_string = ""
-    letters = string.ascii_letters + string.digits + "_"
-    split = energy_string.split(old_name)
-    for i in range(len(split) - 1):
-        r_preceded_by_name = (len(split[i]) > 0 and split[i][-1] in letters)
-        r_suceeded_by_name = (len(split[i + 1]) > 0 and split[i + 1][0] in letters + "(")
-        r_is_part_of_name = r_preceded_by_name or r_suceeded_by_name
-        if r_is_part_of_name:
-            new_energy_string += (split[i] + old_name)
-        else:
-            new_energy_string += (split[i] + new_name)
-    new_energy_string += split[-1]
-    return new_energy_string
-
-
-def is_nbfix_force(force):
-    """
-    Check if the force represents a NBFIX Lennard-Jones force as created by openmm.app.CharmmPsfFile.createSystem.
-
-    Parameters
-    ----------
-    force: openmm.Force
-        The force object.
-
-    Returns
-    -------
-    is_nbfix_force: bool
-    """
-    if not isinstance(force, openmm.CustomNonbondedForce):
-        return False
-    tabulated_function_names = set(force.getTabulatedFunctionName(i)
-                                   for i in range(force.getNumTabulatedFunctions()))
-    per_particle_parameters = set(force.getPerParticleParameterName(i)
-                                  for i in range(force.getNumPerParticleParameters()))
-    if tabulated_function_names == set(["acoef", "bcoef"]) and per_particle_parameters == set(["type"]):
-        return True
-    else:
-        return False
-
-
-def modify_vdw_energy_string_softcore(energy_string, do_annihilate,
-                                      sigma_string="(acoef(type1,type2)/bcoef(type1,type2))^(1.0/6.0)"):
-    """
-    Turn the Lennard-Jones energy string into a soft-core energy string.
-    The returned soft-core string depends on a per-particle parameter "in_alchemical" that is 1 for all particles
-    in the alchemical region and 0 for all others.
-
-    Parameters
-    ----------
-    energy_string: str
-        The energy string of a custom force in OpenMM.
-    do_annihilate: bool
-        If True, annihiliate the Lennard-Jones interaction, otherwise decouple.
-    sigma_string: str
-        An energy string representing how the Lennard-Jones width sigma is calculated from parameters/
-        tabulated functions. The default represents the calculation of sigma from the tabulated functions acoef
-        and bcoef that are defined by openmm.app.CharmmPsfFile.createSystem
-
-    Returns
-    -------
-    modified_energy_string: str
-        An energy string representing the soft-core version of the original energy_string.
-    """
-    modified = replace_variable_in_energy_string(energy_string, "r", "reff")
-    r_softcore_string = "sigma12*((softcore_alpha*(1.0-lambda_sterics)^softcore_b + (r/sigma12)^softcore_c))^(1/softcore_c)"
-
-    switch_string = (
-        "in_alchemical1 + in_alchemical2 - in_alchemical1*in_alchemical2" if do_annihilate else
-        # 1 if one or both particles are in the alchemical region, 0 otherwise
-        "in_alchemical1 + in_alchemical2 - 2*in_alchemical1*in_alchemical2"
-        # 1 if one and only one particle is in the alchemical region, 0 otherwise
-    )
-    energy_commands = modified.split(";")
-    energy_commands[0] = "U_LJ=" + energy_commands[0]
-    energy_commands.insert(0, "select(do_softcore, (lambda_sterics^softcore_a)*U_LJ, U_LJ)")
-    energy_commands.append("reff = select(do_softcore, r_softcore, r)")
-    energy_commands.append("r_softcore = {}".format(r_softcore_string))
-    energy_commands.append("sigma12 = {}".format(sigma_string))
-    energy_commands.append("do_softcore = {}".format(switch_string))
-    modified_energy_string = ";".join(energy_commands) + ";"
-    return modified_energy_string
-
-
-
-
-
 # =============================================================================
 # ABSOLUTE ALCHEMICAL FACTORY
 # =============================================================================
@@ -805,6 +684,7 @@ class AbsoluteAlchemicalFactory(object):
         # have been processed modified at the end of the for loop.
         forces_to_remove = []
         alchemical_forces_by_lambda = {}
+
         for force_index, reference_force in enumerate(reference_system.getForces()):
             # TODO switch to functools.singledispatch when we drop Python2 support
             reference_force_name = reference_force.__class__.__name__
@@ -823,6 +703,15 @@ class AbsoluteAlchemicalFactory(object):
                         alchemical_forces_by_lambda[lambda_variable_name].extend(lambda_forces)
                     except KeyError:
                         alchemical_forces_by_lambda[lambda_variable_name] = lambda_forces
+                    # warn if there is a custom force in the system that has not been alchemically modified
+                    if lambda_variable_name == '' and "Custom" in reference_force.__class__.__name__:
+                        energy_function = reference_force.getEnergyFunction()
+                        if not force_has_softcore(energy_function):
+                            warnings.warn(
+                                "The system contains a custom force object that could not be alchemically modified ({};"
+                                "U={}). To manually add a soft core to it, try openmmtools.alchemy.modify_custom_force."
+                                    .format(reference_force.__class__.__name__, reference_force.getEnergyFunction())
+                            )
 
         # Remove original forces that have been alchemically modified.
         for force_index in reversed(forces_to_remove):
@@ -1838,23 +1727,86 @@ class AbsoluteAlchemicalFactory(object):
     def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region):
         raise Exception("Not implemented; needs CustomMultipleForce")
 
-    def _alchemically_modify_CustomNonbondedForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_CustomBondForce(self, reference_force, alchemical_region):
+        energy_function = reference_force.getEnergyFunction()
 
-        assert hasattr(reference_force, "getEnergyFunction")
-        assert isinstance(reference_force, openmm.CustomNonbondedForce)
-        assert isinstance(alchemical_region, AlchemicalRegion)
-
-        # Don't create a force if there are no alchemical atoms.
-        if len(alchemical_region.alchemical_atoms) == 0:
+        # Reasons to not modify the force
+        if (len(alchemical_region.alchemical_atoms) == 0
+                # Skip if the force does not depend on radius
+                or not is_variable_in_energy_string(energy_function, "r")
+                or force_has_softcore(energy_function)
+        ):
             return {'': [copy.deepcopy(reference_force)]}
 
-        if is_nbfix_force(reference_force):
-            modified_force = copy.deepcopy(reference_force)
+        # Alchemically modify
+        modified_force = copy.deepcopy(reference_force)
+
+        if is_custom_lj_force(reference_force):
             softcore_energy_string = modify_vdw_energy_string_softcore(
-                energy_string=reference_force.getEnergyFunction(), do_annihilate=alchemical_region.annihilate_sterics
+                energy_string=energy_function, do_annihilate=alchemical_region.annihilate_sterics,
+                sigma_string="sigma", bonded_force=True
+            )
+            terms = softcore_energy_string.split(";")
+            softcore_energy_string = ";".join(terms)
+            modified_force.setEnergyFunction(softcore_energy_string)
+            modified_force.addPerBondParameter("do_softcore")
+            for i in range(modified_force.getNumBonds()):
+                particle1, particle2, parameters = modified_force.getBondParameters(i)
+                parameters = list(parameters)
+                both_particles_alchemical = (particle1 in alchemical_region.alchemical_atoms
+                                             and particle2 in alchemical_region.alchemical_atoms)
+                only_one_particle_alchemical = ((particle1 in alchemical_region.alchemical_atoms)
+                                             != (particle2 in alchemical_region.alchemical_atoms))
+                if only_one_particle_alchemical:
+                    parameters.append(1)
+                elif both_particles_alchemical:
+                    parameters.append(1 if alchemical_region.annihilate_sterics else 0)
+                else:
+                    parameters.append(0)
+                modified_force.setBondParameters(i, particle1, particle2, parameters)
+
+                # add global parameters
+            modified_force.addGlobalParameter('lambda_sterics', 1.0)
+            modified_force.addGlobalParameter('softcore_alpha', alchemical_region.softcore_alpha)
+            modified_force.addGlobalParameter('softcore_a', alchemical_region.softcore_a)
+            modified_force.addGlobalParameter('softcore_b', alchemical_region.softcore_b)
+            modified_force.addGlobalParameter('softcore_c', alchemical_region.softcore_c)
+            return {'lambda_sterics': [modified_force]}
+        else:
+            return {'': [copy.deepcopy(reference_force)]}
+
+    def _alchemically_modify_CustomNonbondedForce(self, reference_force, alchemical_region):
+
+        energy_function = reference_force.getEnergyFunction()
+
+        # Reasons to not modify the force
+        if (len(alchemical_region.alchemical_atoms) == 0
+            # Skip if the force does not depend on radius
+            or not is_variable_in_energy_string(energy_function, "r")
+            or force_has_softcore(energy_function)
+        ):
+            return {'': [copy.deepcopy(reference_force)]}
+
+        # Alchemically modify
+        modified_force = copy.deepcopy(reference_force)
+        if is_nbfix_force(reference_force):
+            softcore_energy_string = modify_vdw_energy_string_softcore(
+                energy_string=energy_function, do_annihilate=alchemical_region.annihilate_sterics
             )
             modified_force.setEnergyFunction(softcore_energy_string)
 
+        elif is_custom_lj_force(reference_force):
+            softcore_energy_string = modify_vdw_energy_string_softcore(
+                energy_string=energy_function, do_annihilate=alchemical_region.annihilate_sterics,
+                sigma_string="0.5*(sigma1+sigma2)"
+                # we just recalculate sigma since this is certainly not the bottleneck
+            )
+            modified_force.setEnergyFunction(softcore_energy_string)
+        else:
+            # No fitting modification found
+            return {'': [copy.deepcopy(reference_force)]}
+
+        if is_custom_lj_force(reference_force) or is_nbfix_force(reference_force):
             # include the alchemical region as a per particle parameter
             modified_force.addPerParticleParameter("in_alchemical")
             for i in range(modified_force.getNumParticles()):
@@ -1865,16 +1817,10 @@ class AbsoluteAlchemicalFactory(object):
             # add global parameters
             modified_force.addGlobalParameter('lambda_sterics', 1.0)
             modified_force.addGlobalParameter('softcore_alpha', alchemical_region.softcore_alpha)
-            modified_force.addGlobalParameter('softcore_beta', alchemical_region.softcore_beta)
             modified_force.addGlobalParameter('softcore_a', alchemical_region.softcore_a)
             modified_force.addGlobalParameter('softcore_b', alchemical_region.softcore_b)
             modified_force.addGlobalParameter('softcore_c', alchemical_region.softcore_c)
-            modified_force.addGlobalParameter('softcore_d', alchemical_region.softcore_d)
-            modified_force.addGlobalParameter('softcore_e', alchemical_region.softcore_e)
-            modified_force.addGlobalParameter('softcore_f', alchemical_region.softcore_f)
             return {'lambda_sterics': [modified_force]}
-        else:
-            return {'': [copy.deepcopy(reference_force)]}
 
     def _alchemically_modify_AmoebaVdwForce(self, reference_force, alchemical_region):
         """Create alchemically-modified version of AmoebaVdwForce.
@@ -2241,6 +2187,283 @@ class AbsoluteAlchemicalFactory(object):
                     add_label(label.format(''), force_index1)
 
         return force_labels
+
+
+# =============================================================================
+# UTILITIES FOR CUSTOM FORCE MANIPULATION
+# =============================================================================
+
+def is_variable_in_energy_string(energy_string, variable_name):
+    """
+    Test whether an energy string for a custom force depends on a certain variable.
+
+    Parameters
+    ----------
+    energy_string : str
+        The energy function for a custom force.
+    variable_name : str
+        The variable name.
+
+    Returns
+    -------
+    is_variable_in_energy_string: bool
+        Whether the energy string contains the variable name.
+    """
+    new_energy_string = ""
+    letters = string.ascii_letters + string.digits + "_"
+    split = energy_string.split(variable_name)
+    for i in range(len(split) - 1):
+        r_preceded_by_name = (len(split[i]) > 0 and split[i][-1] in letters)
+        r_suceeded_by_name = (len(split[i + 1]) > 0 and split[i + 1][0] in letters + "(")
+        r_is_part_of_name = r_preceded_by_name or r_suceeded_by_name
+        if not r_is_part_of_name:
+            return True
+    return False
+
+
+def replace_variable_in_energy_string(energy_string, old_name, new_name):
+    """
+    Replace a variable name by a new name in an energy string.
+
+    Parameters
+    ----------
+    energy_string : str
+        The energy function for a custom force.
+    old_name : str
+        Old variable name.
+    new_name : str
+        New variable name.
+
+    Returns
+    -------
+    new_energy_string: str
+        Energy function, where the old variable name has been replaced by a new name.
+    """
+    new_energy_string = ""
+    letters = string.ascii_letters + string.digits + "_"
+    split = energy_string.split(old_name)
+    for i in range(len(split) - 1):
+        r_preceded_by_name = (len(split[i]) > 0 and split[i][-1] in letters)
+        r_suceeded_by_name = (len(split[i + 1]) > 0 and split[i + 1][0] in letters + "(")
+        r_is_part_of_name = r_preceded_by_name or r_suceeded_by_name
+        if r_is_part_of_name:
+            new_energy_string += (split[i] + old_name)
+        else:
+            new_energy_string += (split[i] + new_name)
+    new_energy_string += split[-1]
+    return new_energy_string
+
+
+def is_nbfix_force(force):
+    """
+    Check if the force represents a NBFIX Lennard-Jones force as created by openmm.app.CharmmPsfFile.createSystem.
+
+    Parameters
+    ----------
+    force: openmm.Force
+        The force object.
+
+    Returns
+    -------
+    is_nbfix_force: bool
+    """
+    if not isinstance(force, openmm.CustomNonbondedForce):
+        return False
+    tabulated_function_names = set(force.getTabulatedFunctionName(i)
+                                   for i in range(force.getNumTabulatedFunctions()))
+    per_particle_parameters = set(force.getPerParticleParameterName(i)
+                                  for i in range(force.getNumPerParticleParameters()))
+    if tabulated_function_names == set(["acoef", "bcoef"]) and per_particle_parameters == set(["type"]):
+        return True
+    else:
+        return False
+
+
+def is_custom_lj_force(force):
+    if isinstance(force, openmm.CustomNonbondedForce):
+        per_particle_parameters = set(
+            force.getPerParticleParameterName(i) for i in range(force.getNumPerParticleParameters()))
+        if per_particle_parameters == set(["sigma", "epsilon"]):
+            return True
+        else:
+            return False
+    elif isinstance(force, openmm.CustomBondForce):
+        per_bond_parameters = set(
+            force.getPerBondParameterName(i) for i in range(force.getNumPerBondParameters()))
+        if per_bond_parameters == set(["sigma", "epsilon"]):
+            return True
+        else:
+            return False
+    return False
+
+
+def modify_vdw_energy_string_softcore(energy_string, do_annihilate,
+                                      sigma_string="(acoef(type1,type2)^2/bcoef(type1,type2))^(1.0/6.0)",
+                                      bonded_force=False):
+    """
+    Turn the Lennard-Jones energy string into a soft-core energy string.
+    The returned soft-core string depends on a per-particle parameter "in_alchemical" that is 1 for all particles
+    in the alchemical region and 0 for all others.
+
+    Parameters
+    ----------
+    energy_string: str
+        The energy string of a custom force in OpenMM.
+    do_annihilate: bool
+        If True, annihiliate the Lennard-Jones interaction, otherwise decouple.
+    sigma_string: str
+        An energy string representing how the Lennard-Jones width sigma is calculated from parameters/
+        tabulated functions. The default represents the calculation of sigma from the tabulated functions acoef
+        and bcoef that are defined by openmm.app.CharmmPsfFile.createSystem
+
+    Returns
+    -------
+    modified_energy_string: str
+        An energy string representing the soft-core version of the original energy_string.
+    """
+    assert not is_variable_in_energy_string(energy_string, "sigma12")
+    scale_string = "lambda_sterics^softcore_a"
+    effective_radius_string = (
+        "sigma12*((softcore_alpha*(1.0-lambda_sterics)^softcore_b + (r/sigma12)^softcore_c))^(1/softcore_c)"
+    )
+    return modify_nonbonded_energy_string_softcore(
+        energy_string, do_annihilate, scale_string, effective_radius_string + "; sigma12=" + sigma_string,
+        bonded_force=bonded_force
+    )
+
+
+def modify_nonbonded_energy_string_softcore(energy_string, do_annihilate, scale_string, effective_radius_string,
+                                            bonded_force=False):
+    """
+    Turn the Lennard-Jones energy string into a soft-core energy string.
+    The returned soft-core string depends on a per-particle parameter "in_alchemical" that is 1 for all particles
+    in the alchemical region and 0 for all others.
+
+    Parameters
+    ----------
+    energy_string: str
+        The energy string of a custom force in OpenMM.
+    do_annihilate: bool
+        If True, annihiliate the Lennard-Jones interaction, otherwise decouple.
+    scale_string: str
+        An energy string representing the scalar that is multiplied onto the potential. This string will usually
+        contain a lambda parameter.
+    effective_radius_string: str
+        An energy string representing the effective radius for the softcore potential.
+
+    Returns
+    -------
+    modified_energy_string: str
+        An energy string representing the soft-core version of the original energy_string.
+    """
+    assert not is_variable_in_energy_string(energy_string, "do_softcore" )
+    assert not is_variable_in_energy_string(energy_string, "in_alchemical1")
+    assert not is_variable_in_energy_string(energy_string, "in_alchemical2")
+    assert not is_variable_in_energy_string(energy_string, "r_softcore")
+    assert not is_variable_in_energy_string(energy_string, "reff")
+    modified = replace_variable_in_energy_string(energy_string, "r", "reff")
+    energy_commands = modified.split(";")
+    energy_commands[0] = "U_LJ=" + energy_commands[0]
+    energy_commands.insert(0, "select(do_softcore, ({})*U_LJ, U_LJ)".format(scale_string))
+    energy_commands.append("reff = select(do_softcore, r_softcore, r)")
+    energy_commands.append("r_softcore = {}".format(effective_radius_string))
+    if not bonded_force:
+        switch_string = (
+            "in_alchemical1 + in_alchemical2 - in_alchemical1*in_alchemical2" if do_annihilate else
+            # 1 if one or both particles are in the alchemical region, 0 otherwise
+            "in_alchemical1 + in_alchemical2 - 2*in_alchemical1*in_alchemical2"
+            # 1 if one and only one particle is in the alchemical region, 0 otherwise
+        )
+        energy_commands.append("do_softcore = {}".format(switch_string))
+    modified_energy_string = ";".join(energy_commands) + ";"
+    return modified_energy_string
+
+
+def force_has_softcore(energy_function):
+    """Check the energy string for indicators of softcore potentials."""
+    # Skip if the force looks like it is already alchemically modified
+    return (
+            is_variable_in_energy_string(energy_function, "lambda_electrostatics")
+            or is_variable_in_energy_string(energy_function, "lambda_sterics")
+            or is_variable_in_energy_string(energy_function, "lambda_bonds")
+            or "softcore" in energy_function
+    )
+
+
+def modify_custom_force(force, alchemical_region, do_annihilate,
+                        scale_string="lambda_custom", effective_radius_string="r", full_energy_string=None, **kwargs):
+    """
+    Alchemically modify a custom force using either a user-defined energy string or a softcore potential.
+    Alchemical parameters and other additional parameters that the modified force may depend on
+    can be specified as keyword arguments together with their default values.
+    Each parameter that begins with 'lambda_' is regarded an alchemical parameter and will be added to the alchemical
+    state when calling AlchemicalState.from_system().
+
+    Parameters
+    ----------
+    force : openmm.Force
+        The custom force (so far, custom nonbonded forces are supported,
+        as well as custom bond forces that define 1-4 interactions).
+        The force is directly modified and the original instance will be lost after calling this function.
+    alchemical_region: AlchemicalRegion
+        The alchemical region.
+    do_annihilate : bool
+        If True, annihilate the alchemical atoms, if False, decouple the alchemical region from the rest of the system.
+    scale_string : str
+        The scale factor that will be multiplied with the original energy function. This scale will usually include
+        lambda parameters.
+    effective_radius_string : str
+        The energy expression that is used for the effective radius in the softcore potential.
+    full_energy_string : str
+        When redefining the complete energy string, pass full_energy_string. This overwrites any energy expressions
+        passed as scale_string or effective_radius_string.
+    kwargs:
+        Any additional global parameters that the force depends on. Parameters that begin with "lambda_" will
+        be added to the alchemical state upon creation.
+    """
+    energy_string = force.getEnergyFunction()
+    if full_energy_string is None:
+        full_energy_string = modify_nonbonded_energy_string_softcore(
+            energy_string, do_annihilate, scale_string, effective_radius_string,
+            bonded_force=isinstance(force, openmm.CustomBondForce))
+    force.setEnergyFunction(full_energy_string)
+
+    # add global parameters
+    for arg in kwargs:
+        if is_variable_in_energy_string(full_energy_string, arg):
+            force.addGlobalParameter(arg, kwargs[arg])
+            if not arg.startswith("lambda_"):
+                if hasattr(alchemical_region, arg) and getattr(alchemical_region, arg) != kwargs[arg]:
+                        warnings.warn("Argument {} in alchemical region was () but is getting overwritten "
+                                      "by modify_custom_force to {}.".format(arg, alchemical_region[arg], kwargs[arg]))
+                setattr(alchemical_region, arg, kwargs[arg])
+            else:
+                # parameter is handled by AlchemicalState, not AlchemicalRegion
+                pass
+
+    if isinstance(force, openmm.CustomNonbondedForce):
+        force.addPerParticleParameter("in_alchemical")
+        for i in range(force.getNumParticles()):
+            parameters = list(force.getParticleParameters(i))
+            parameters.append(1 if i in alchemical_region.alchemical_atoms else 0)
+            force.setParticleParameters(i, parameters)
+
+    if isinstance(force, openmm.CustomBondForce):
+        force.addPerBondParameter("do_softcore")
+        for i in range(force.getNumBonds()):
+            particle1, particle2, parameters = list(force.getBondParameters(i))
+            parameters = list(parameters)
+            both_particles_alchemical = (particle1 in alchemical_region.alchemical_atoms
+                                         and particle2 in alchemical_region.alchemical_atoms)
+            only_one_particle_alchemical = (particle1 in alchemical_region.alchemical_atoms
+                                            != particle2 in alchemical_region.alchemical_atoms)
+            if only_one_particle_alchemical:
+                parameters.append(1)
+            elif both_particles_alchemical:
+                parameters.append(1 if do_annihilate else 0)
+            else:
+                parameters.append(0)
+                force.setBondParameters(i, particle1, particle2, parameters)
 
 
 if __name__ == '__main__':

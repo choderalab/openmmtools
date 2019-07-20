@@ -2048,24 +2048,44 @@ def test_is_nbfix_force():
     assert len(nbfix_forces) == 1
 
 
-def test_alchemical_nbfix_force():
+def endstate_test(use_vswitch=False, pme_tol=1e-5, platform=openmm.Platform.getPlatformByName("Reference")):
     """
     Test that the energies in the end states of the alchemical calculation are consistent
     with energies that do not use the alchemical forces.
     """
-    pme_tol = 1e-5
-    platform = openmm.Platform.getPlatformByName("Reference")
     testsystem = testsystems.CharmmSolvated(ewald_tolerance=pme_tol)
+    if use_vswitch:
+        forcefactories.use_custom_vdw_switching_function(testsystem.system, 1.0*unit.nanometer, 1.2*unit.nanometer)
 
     # utility functions
     def calc_energy(testsystem, platform=platform):
         dummy_integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+        #for i,f in enumerate(testsystem.system.getForces()):
+        #    f.setForceGroup(i)
+        #    if isinstance(f, openmm.NonbondedForce):
+        #        f.setReciprocalSpaceForceGroup(testsystem.system.getNumForces())
         context = openmm.Context(testsystem.system, dummy_integrator, platform)
         context.setPositions(testsystem.positions)
+        #for i, f in enumerate(testsystem.system.getForces()):
+        #    print(f.__class__.__name__)
+        #    print(context.getState(getEnergy=True, groups={i}).getPotentialEnergy().value_in_unit(
+        #        unit.kilojoule_per_mole))
+        #    try:
+        #        print(f.getEnergyFunction())
+        #    except:
+        #        pass
+        #print("Reciprocal")
+        #print(context.getState(getEnergy=True, groups={testsystem.system.getNumForces()}).getPotentialEnergy().value_in_unit(
+        #    unit.kilojoule_per_mole))
+        #print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
+
         return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
 
-    def calc_energy_nonalchemical(platform=platform, pme_tol=pme_tol, **kwargs):
-        return calc_energy(testsystems.CharmmSolvated(ewald_tolerance=pme_tol, **kwargs), platform)
+    def calc_energy_nonalchemical(pme_tol=pme_tol, **kwargs):
+        testsys = testsystems.CharmmSolvated(ewald_tolerance=pme_tol, **kwargs)
+        if use_vswitch:
+            forcefactories.use_custom_vdw_switching_function(testsys.system, 1.0 * unit.nanometer, 1.2 * unit.nanometer)
+        return calc_energy(testsys)
 
     def calc_energy_alchemical(alchemical_atoms, do_decouple=False,  #if True, annihilate
                                lambda_sterics=1.0, lambda_electrostatics=1.0,
@@ -2079,12 +2099,28 @@ def test_alchemical_nbfix_force():
         factory = AbsoluteAlchemicalFactory(
             disable_alchemical_dispersion_correction=True, alchemical_pme_treatment=alchemical_pme_treatment)
         system = factory.create_alchemical_system(original_system.system, alchemical_region)
+        #for i,f in enumerate(system.getForces()):
+        #    f.setForceGroup(i)
+        #    if isinstance(f, openmm.NonbondedForce):
+        #        f.setReciprocalSpaceForceGroup(system.getNumForces())
         alchemical_state = AlchemicalState.from_system(system)
         context = openmm.Context(system, openmm.VerletIntegrator(1.0*unit.femtosecond), platform)
         context.setPositions(original_system.positions)
         alchemical_state.lambda_sterics = lambda_sterics
         alchemical_state.lambda_electrostatics = lambda_electrostatics
         alchemical_state.apply_to_context(context)
+        #for i, f in enumerate(system.getForces()):
+        #    print(f.__class__.__name__)
+        #    print(context.getState(getEnergy=True, groups={i}).getPotentialEnergy().value_in_unit(
+        #        unit.kilojoule_per_mole))
+        #    try:
+        #        print(f.getEnergyFunction())
+        #    except:
+        #        pass
+        #print("Reciprocal")
+        #print(context.getState(getEnergy=True, groups={testsystem.system.getNumForces()}).getPotentialEnergy().value_in_unit(
+        #    unit.kilojoule_per_mole))
+        #print("^^^^^^^^^^^^^^^^^^^^^^^^^^^^")
         return context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
 
     # Calculate reference energies without using the alchemical facility
@@ -2147,11 +2183,82 @@ def test_alchemical_nbfix_force():
     assert np.isclose(calc_energy_alchemical(alchemical_atoms=particles["all"]), eref["original"], atol=tol, rtol=0)
 
 
+def test_alchemical_nbfix_force():
+    endstate_test(use_vswitch=False)
+
+
+def test_alchemical_vswitch():
+    with warnings.catch_warnings():
+        warnings.simplefilter(
+            'error', "The system contains a custom force object that could not be alchemically modified")
+        endstate_test(use_vswitch=True)
+
+
+def test_modify_custom_force_full_energy_string():
+    platform = openmm.Platform.getPlatformByName("Reference")
+    # toy system
+    system = openmm.System()
+    system.addParticle(1.0)
+    system.addParticle(1.0)
+    force = openmm.CustomNonbondedForce("2+r")
+    force.addParticle()
+    force.addParticle()
+    system.addForce(force)
+
+    alchemical_region = AlchemicalRegion(alchemical_atoms=[0])
+    modify_custom_force(force=system.getForce(0), alchemical_region=alchemical_region,
+                        full_energy_string="lambda_customnb", do_annihilate=True,
+                        lambda_customnb=1.0)
+
+    alchemical_state = AlchemicalState.from_system(system, custom_lambdas=["lambda_customnb"])
+
+    context = openmm.Context(system, openmm.VerletIntegrator(1.0*unit.femtosecond), platform)
+    context.setPositions([[0,0,0], [0,0,0]])
+    context.setPeriodicBoxVectors([1,0,0],[0,1,0],[0,0,1])
+    alchemical_state.apply_to_context(context)
+
+    assert np.isclose(1, context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole))
+
+
+def test_modify_custom_force_scale_reff():
+    platform = openmm.Platform.getPlatformByName("Reference")
+    # toy system
+    system = openmm.System()
+    system.addParticle(1.0)
+    system.addParticle(1.0)
+    force = openmm.CustomNonbondedForce("2+r")
+    force.addParticle()
+    force.addParticle()
+    system.addForce(force)
+    force = openmm.NonbondedForce()
+    force.addParticle(0,1,0)
+    force.addParticle(0,1,0)
+    system.addForce(force)
+
+    alchemical_region = AlchemicalRegion(alchemical_atoms=[0])
+    modify_custom_force(system.getForce(0), alchemical_region=alchemical_region,
+                        scale_string="lambda_customnb", effective_radius_string="r-rshift", do_annihilate=True,
+                        lambda_customnb=1.0, rshift=1)
+    factory = AbsoluteAlchemicalFactory()
+    system = factory.create_alchemical_system(system, alchemical_region)
+    alchemical_state = AlchemicalState.from_system(system, custom_lambdas=["lambda_customnb"])
+
+    context = openmm.Context(system, openmm.VerletIntegrator(1.0 * unit.femtosecond), platform)
+    alchemical_state.lambda_customnb=2/3
+    alchemical_state.apply_to_context(context)
+    context.setPositions([[0, 0, 0], [0, 0, 0.5]])
+    context.setPeriodicBoxVectors([1, 0, 0], [0, 1, 0], [0, 0, 1])
+    alchemical_state.apply_to_context(context)
+
+    assert np.isclose(
+        1,context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole), rtol=0)
+
+
 def test_electrostatic_offset():
     """
-    Test that a bug in openmm versions < 7.3.1 is not present
+    Test that the alchemical factory is not affected by a bug in openmm versions < 7.3.1.
     In the older version, the electrostatics were not calculated in the nonbonded force if all charges were zero,
-    even nonzero offsets were present.
+    even when nonzero offsets were present.
     """
     water = testsystems.WaterBox(dispersion_correction=False)
     system_prototype = water.system
@@ -2185,3 +2292,4 @@ def test_electrostatic_offset():
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
+
