@@ -1,6 +1,17 @@
 Release History
 ***************
 
+0.18.3 - Disk writing enhancements and bugfixes
+===============================================
+
+Bugfixes
+--------
+- Fixed a few imprecisions in the documentation (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
+
+Enhancements
+------------
+- Disk writing speed is much faster for multi-state samplers when the `checkpoint_interval` is large. This was due to the dimension of the netcdf chunk size increasing with the checkpoint interval and surpassing the dimension of the netcdf chunk cache. The chunk size of the iteration dimension is now always set to 1 (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
+
 0.18.2 - Bugfix release
 =======================
 
