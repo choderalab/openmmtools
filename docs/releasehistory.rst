@@ -6,6 +6,7 @@ Release History
 
 Bugfixes
 --------
+- Fixed a bug in ``multistateanalyzer.py`` where a function was imported from ``openmmtools.utils`` instead of ``openmmtools.multistate.utils`` (`#430 <https://github.com/choderalab/openmmtools/pull/430>`_).
 - Fixed a few imprecisions in the documentation (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
 
 Enhancements
