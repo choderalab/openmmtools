@@ -25,3 +25,15 @@ States
     IComposableState
     GlobalParameterFunction
     GlobalParameterState
+
+|
+
+Utility functions
+-----------------
+
+.. currentmodule:: openmmtools.states
+.. autosummary::
+    :nosignatures:
+    :toctree: api/generated/
+
+    create_thermodynamic_state_protocol
