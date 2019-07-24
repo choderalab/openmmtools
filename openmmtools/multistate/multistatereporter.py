@@ -35,6 +35,7 @@ import glob
 import time
 import uuid
 import yaml
+import shutil
 import logging
 import warnings
 import collections
@@ -1695,7 +1696,7 @@ class MultiStateReporter(object):
 
         TODO: Can we use XTC frames to remove one dimension in the filenames?
         """
-        def _write_to_xtc(path, xyz, box):
+        def _write_to_xtc(path, positions, box_vectors):
             """
             Based on https://github.com/mdtraj/mdtraj/issues/1313#issuecomment-347988934
             """
@@ -1732,7 +1733,8 @@ class MultiStateReporter(object):
         for trajectory_file in trajectory_files:
             with XTCTrajectoryFile(trajectory_file, 'r') as xtc:
                 positions, _, _, box_vectors = xtc.read()
-                sampler_states.append(states.SamplerState(positions=positions, box_vectors=box_vectors))
+                sampler_states.append(states.SamplerState(positions=positions[0],
+                                                          box_vectors=box_vectors[0] if box_vectors is not None else None))
         return sampler_states
 
     def _write_dict(self, path, data, storage_name='analysis',
