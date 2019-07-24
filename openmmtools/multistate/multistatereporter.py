@@ -31,6 +31,7 @@ This code is licensed under the latest available version of the MIT License.
 
 import os
 import copy
+import glob
 import time
 import uuid
 import yaml
@@ -44,8 +45,9 @@ import netCDF4 as netcdf
 from typing import Union, Any
 
 from simtk import unit
+from mdtraj.formats import XTCTrajectoryFile
 
-from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
+from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string, temporary_directory
 from openmmtools import states
 
 
@@ -109,28 +111,37 @@ class MultiStateReporter(object):
     """
     def __init__(self, storage, open_mode=None,
                  checkpoint_interval=50, checkpoint_storage=None,
+                 trajectory_storage=None,
                  analysis_particle_indices=()):
 
         # Warn that API is experimental
         import warnings
         warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
-                 
+
         # Handle checkpointing
         if type(checkpoint_interval) != int:
             raise ValueError("checkpoint_interval must be an integer!")
         dirname, filename = os.path.split(storage)
+        basename, ext = os.path.splitext(filename)
         if checkpoint_storage is None:
-            basename, ext = os.path.splitext(filename)
             addon = "_checkpoint"
             checkpoint_storage = os.path.join(dirname, basename + addon + ext)
             logger.debug("Initial checkpoint file automatically chosen as {}".format(checkpoint_storage))
         else:
             checkpoint_storage = os.path.join(dirname, checkpoint_storage)
+        if trajectory_storage is None:
+            addon = "_trajectory"
+            trajectory_storage = os.path.join(dirname, basename + addon + '.xtc')
+            logger.debug("Initial trajectory file automatically chosen as {}".format(trajectory_storage))
+        else:
+            trajectory_storage = os.path.join(dirname, trajectory_storage)
         self._storage_analysis_file_path = storage
+        self._storage_analysis = None
         self._storage_checkpoint_file_path = checkpoint_storage
         self._storage_checkpoint = None
-        self._storage_analysis = None
         self._checkpoint_interval = checkpoint_interval
+        self._storage_trajectory_file_path = trajectory_storage
+        self._storage_trajectory = None
         # Cast to tuple no mater what 1-D-like input was given
         self._analysis_particle_indices = tuple(analysis_particle_indices)
         if open_mode is not None:
@@ -151,7 +162,7 @@ class MultiStateReporter(object):
         Return an iterable of the storage objects, avoids having the [list, of, storage, objects] everywhere
         Object 0 is always the primary file, all others are subfiles
         """
-        return self._storage_analysis, self._storage_checkpoint
+        return self._storage_analysis, self._storage_checkpoint, self._storage_trajectory
 
     @property
     def _storage_paths(self):
@@ -160,11 +171,13 @@ class MultiStateReporter(object):
         Object 0 is always the primary file, all others are subfiles
         """
         return self._storage_analysis_file_path, self._storage_checkpoint_file_path
+            #, self._storage_trajectory_file_path
 
     @property
     def _storage_dict(self):
         """Return an iterable dictionary of the self._storage_X objects"""
         return {'checkpoint': self._storage_checkpoint, 'analysis': self._storage_analysis}
+               # 'trajectory': self._storage_trajectory}
 
     @property
     def n_states(self):
@@ -274,7 +287,6 @@ class MultiStateReporter(object):
         # Open analysis file.
         self._storage_analysis = self._open_dataset_robustly(self._storage_analysis_file_path,
                                                              mode, version=netcdf_format)
-
 
         # The analysis netcdf file holds a reference UUID so that we can check
         # that the secondary netcdf files (currently only the checkpoint
@@ -653,8 +665,7 @@ class MultiStateReporter(object):
             if len(self._analysis_particle_indices) == 0:
                 raise ValueError("No particles were flagged for special analysis! "
                                  "No such trajectory would have been written!")
-            return self._read_sampler_states_from_given_file(iteration, storage_file='analysis',
-                                                             obey_checkpoint_interval=False)
+            return self._read_sampler_states_from_xtc(iteration)
         else:
             return self._read_sampler_states_from_given_file(iteration, storage_file='checkpoint',
                                                              obey_checkpoint_interval=True)
@@ -687,9 +698,8 @@ class MultiStateReporter(object):
                 # since a ndarray[tuple] is different than ndarray[list]
                 position_subset = positions[self._analysis_particle_indices, :]
                 sampler_subset.append(states.SamplerState(position_subset,
-                                                                  box_vectors=sampler_state.box_vectors))
-            self._write_sampler_states_to_given_file(sampler_subset, iteration, storage_file='analysis',
-                                                     obey_checkpoint_interval=False)
+                                                          box_vectors=sampler_state.box_vectors))
+            self._write_sampler_states_to_xtc(sampler_subset, iteration)
 
     def read_replica_thermodynamic_states(self, iteration=slice(None)):
         """Retrieve the indices of the ThermodynamicStates for each replica on the analysis file
@@ -1676,6 +1686,54 @@ class MultiStateReporter(object):
             return sampler_states
         else:
             return None
+
+    def _write_sampler_states_to_xtc(self, sampler_states: list, iteration: int):
+        """
+        Internal function to write SamplerState objects to XTC files. Each XTC file
+        can only contain one trajectory, so each iterations and replicas are hardcoded
+        in the filename: ``[prefix]_trajectory_i[iteration]_r[replica].xtc``.
+
+        TODO: Can we use XTC frames to remove one dimension in the filenames?
+        """
+        def _write_to_xtc(path, xyz, box):
+            """
+            Based on https://github.com/mdtraj/mdtraj/issues/1313#issuecomment-347988934
+            """
+            # Write to a temporary file and binary append
+            if os.path.isfile(path):
+                with temporary_directory() as tmp:
+                    tempxtc = os.path.join(tmp, 'tmp.xtc')
+                    with XTCTrajectoryFile(tempxtc, 'w') as xtc:
+                        xtc.write(xyz=positions, box=box_vectors) # time=time ?
+                    with open(path, 'ab') as dest, open(tempxtc, 'rb') as src:
+                        shutil.copyfileobj(src, dest)
+            else: # does not exist, simply write
+                with XTCTrajectoryFile(path, 'w') as xtc:
+                    xtc.write(xyz=positions, box=box_vectors) # time=time ?
+
+        basename, ext = os.path.splitext(self._storage_trajectory_file_path)
+        is_periodic = True if (sampler_states[0].box_vectors is not None) else False
+        for replica_index, sampler_state in enumerate(sampler_states):
+            # Create a new file per iteration&replica
+            path = "{}_i{}_r{}{}".format(basename, iteration, replica_index, ext)
+            xyz = sampler_state.positions / unit.nanometers
+            box = sampler_state.box_vectors / unit.nanometers if is_periodic else None
+            _write_to_xtc(path, xyz, box)
+
+    def _read_sampler_states_from_xtc(self, iteration):
+        """
+        Internal function to read (solute) trajectories from XTC files.
+        """
+        # Do we really need this?
+        basename, ext = os.path.splitext(self._storage_trajectory_file_path)
+        path = "{}_i{}_r{}{}".format(basename, iteration, '*', ext)
+        trajectory_files = sorted(glob.glob(path))
+        sampler_states = []
+        for trajectory_file in trajectory_files:
+            with XTCTrajectoryFile(trajectory_file, 'r') as xtc:
+                positions, _, _, box_vectors = xtc.read()
+                sampler_states.append(states.SamplerState(positions=positions, box_vectors=box_vectors))
+        return sampler_states
 
     def _write_dict(self, path, data, storage_name='analysis',
                     fixed_dimension=False, nested=False):
