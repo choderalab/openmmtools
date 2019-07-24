@@ -1690,11 +1690,9 @@ class MultiStateReporter(object):
 
     def _write_sampler_states_to_xtc(self, sampler_states: list, iteration: int):
         """
-        Internal function to write SamplerState objects to XTC files. Each XTC file
-        can only contain one trajectory, so each iterations and replicas are hardcoded
-        in the filename: ``[prefix]_trajectory_i[iteration]_r[replica].xtc``.
+        Internal function to write SamplerState objects to XTC files.
+        One XTC per iteration.
 
-        TODO: Can we use XTC frames to remove one dimension in the filenames?
         """
         def _write_to_xtc(path, positions, box_vectors):
             """
@@ -1714,12 +1712,17 @@ class MultiStateReporter(object):
 
         basename, ext = os.path.splitext(self._storage_trajectory_file_path)
         is_periodic = True if (sampler_states[0].box_vectors is not None) else False
+        n_particles = sampler_states[0].n_particles
+        n_replicas = len(sampler_states)
+        positions = np.empty([n_replicas, n_particles, 3])
+        box_vectors = np.empty([n_replicas, 3, 3]) if is_periodic else None
         for replica_index, sampler_state in enumerate(sampler_states):
             # Create a new file per iteration&replica
-            path = "{}_i{}_r{}{}".format(basename, iteration, replica_index, ext)
-            xyz = sampler_state.positions / unit.nanometers
-            box = sampler_state.box_vectors / unit.nanometers if is_periodic else None
-            _write_to_xtc(path, xyz, box)
+            path = "{}_i{}{}".format(basename, iteration, ext)
+            positions[replica_index] = sampler_state.positions / unit.nanometers
+            if is_periodic:
+                box_vectors[replica_index] = sampler_state.box_vectors / unit.nanometers if is_periodic else None
+        _write_to_xtc(path, positions, box_vectors)
 
     def _read_sampler_states_from_xtc(self, iteration):
         """
@@ -1727,14 +1730,13 @@ class MultiStateReporter(object):
         """
         # Do we really need this?
         basename, ext = os.path.splitext(self._storage_trajectory_file_path)
-        path = "{}_i{}_r{}{}".format(basename, iteration, '*', ext)
-        trajectory_files = sorted(glob.glob(path))
+        path = "{}_i{}{}".format(basename, iteration, ext)
         sampler_states = []
-        for trajectory_file in trajectory_files:
-            with XTCTrajectoryFile(trajectory_file, 'r') as xtc:
-                positions, _, _, box_vectors = xtc.read()
-                sampler_states.append(states.SamplerState(positions=positions[0],
-                                                          box_vectors=box_vectors[0] if box_vectors is not None else None))
+        with XTCTrajectoryFile(path, 'r') as xtc:
+            positions, _, _, box_vectors = xtc.read()
+            for idx, frame in enumerate(positions):
+                box = box_vectors[idx] if box_vectors is not None else None
+                sampler_states.append(states.SamplerState(positions=frame, box_vectors=box))
         return sampler_states
 
     def _write_dict(self, path, data, storage_name='analysis',
