@@ -1984,7 +1984,7 @@ class AbsoluteAlchemicalFactory(object):
         """
         # This feature is incompletely implemented, so raise an exception.
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+            raise NotImplemented("Multiple regions does not work with AmoebaVdwForce")
         else:
             alchemical_region = alchemical_region[0]
         raise NotImplemented('Alchemical modification of Amoeba VdW Forces is not supported.')
@@ -2037,7 +2037,7 @@ class AbsoluteAlchemicalFactory(object):
         return [softcore_force]
 
     @staticmethod
-    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, sasa_model='ACE', _=None):
+    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, _, sasa_model='ACE'): 
         """Create alchemically-modified version of GBSAOBCForce.
 
         Parameters
@@ -2062,7 +2062,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+            raise NotImplemented("Multiple regions does not work with GBSAOBCForce")
         else:
             alchemical_region = alchemical_region[0]
 
@@ -2097,6 +2097,7 @@ class AbsoluteAlchemicalFactory(object):
                                   "psi=I*or; or=radius-offset", openmm.CustomGBForce.SingleParticle)
 
         custom_force.addEnergyTerm("-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*(lambda_electrostatics*alchemical+(1-alchemical))*charge^2/B", openmm.CustomGBForce.SingleParticle)
+        print(sasa_model)
         if sasa_model == 'ACE':
             custom_force.addEnergyTerm("(lambda_electrostatics*alchemical+(1-alchemical))*28.3919551*(radius+0.14)^2*(radius/B)^6", openmm.CustomGBForce.SingleParticle)
 
@@ -2156,7 +2157,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+            raise NotImplemented("Multiple regions does not work with CustomGBForce")
         else:
             alchemical_region = alchemical_region[0]
 
