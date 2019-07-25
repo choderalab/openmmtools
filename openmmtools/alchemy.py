@@ -1577,7 +1577,10 @@ class AbsoluteAlchemicalFactory(object):
 
             # With exact PME treatment, particle electrostatics is handled through offset parameters.
             for alchemical_region in alchemical_regions:
-                nonbonded_force.addGlobalParameter(f'lambda_electrostatics_{alchemical_region.name}', 1.0)
+                if alchemical_region.name is None:
+                    nonbonded_force.addGlobalParameter('lambda_electrostatics', 1.0)
+                else:
+                    nonbonded_force.addGlobalParameter(f'lambda_electrostatics_{alchemical_region.name}', 1.0)
 
         # Make of list of all single and double permutations of alchemical regions.
         single_regions = [[alchemical_region] for alchemical_region in alchemical_regions]
@@ -1961,10 +1964,14 @@ class AbsoluteAlchemicalFactory(object):
             forces_by_lambda[''] = [nonbonded_force]
         return forces_by_lambda
 
-    def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region, _):
+        if len(alchemical_region) > 1:
+            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+        else:
+            alchemical_region = alchemical_region[0]
         raise Exception("Not implemented; needs CustomMultipleForce")
 
-    def _alchemically_modify_AmoebaVdwForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_AmoebaVdwForce(self, reference_force, alchemical_region, _):
         """Create alchemically-modified version of AmoebaVdwForce.
 
         Not implemented.
@@ -1976,6 +1983,10 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         # This feature is incompletely implemented, so raise an exception.
+        if len(alchemical_region) > 1:
+            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+        else:
+            alchemical_region = alchemical_region[0]
         raise NotImplemented('Alchemical modification of Amoeba VdW Forces is not supported.')
 
         # Softcore Halgren potential from Eq. 3 of
@@ -2026,7 +2037,7 @@ class AbsoluteAlchemicalFactory(object):
         return [softcore_force]
 
     @staticmethod
-    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, sasa_model='ACE'):
+    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, sasa_model='ACE', _=None):
         """Create alchemically-modified version of GBSAOBCForce.
 
         Parameters
@@ -2050,6 +2061,11 @@ class AbsoluteAlchemicalFactory(object):
         * Can we more generally modify any CustomGBSAForce?
 
         """
+        if len(alchemical_region) > 1:
+            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+        else:
+            alchemical_region = alchemical_region[0]
+
         # TODO make sasa_model a Factory attribute?
         custom_force = openmm.CustomGBForce()
 
@@ -2100,7 +2116,7 @@ class AbsoluteAlchemicalFactory(object):
 
         return {'lambda_electrostatics': [custom_force]}
 
-    def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_CustomGBForce(self, reference_force, alchemical_region, _):
         """Create alchemically-modified version of CustomGBForce.
 
         The GB functions are meta-programmed using the following rules:
@@ -2139,6 +2155,11 @@ class AbsoluteAlchemicalFactory(object):
             The alchemical version of the reference force.
 
         """
+        if len(alchemical_region) > 1:
+            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+        else:
+            alchemical_region = alchemical_region[0]
+
         custom_force = openmm.CustomGBForce()
 
         # Add global parameters
