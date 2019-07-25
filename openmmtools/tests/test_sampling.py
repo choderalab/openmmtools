@@ -467,7 +467,8 @@ class TestReporter(object):
             # Create sampler states.
             alanine_test = testsystems.AlanineDipeptideVacuum()
             positions = alanine_test.positions
-            sampler_states = [mmtools.states.SamplerState(positions=positions)
+            box_vectors = unit.Quantity([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]], unit=unit.nanometer)
+            sampler_states = [mmtools.states.SamplerState(positions=positions, box_vectors=box_vectors)
                               for _ in range(2)]
 
             # Check that after writing and reading, states are identical.
