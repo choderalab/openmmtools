@@ -709,7 +709,7 @@ class MultiStateReporter(object):
                 position_subset = positions[self._analysis_particle_indices, :]
                 sampler_subset.append(states.SamplerState(position_subset,
                                                           box_vectors=sampler_state.box_vectors))
-            self._write_sampler_states_to_xtc(sampler_subset, iteration)
+            self._write_sampler_states_to_xtc(sampler_subset)
 
     def read_replica_thermodynamic_states(self, iteration=slice(None)):
         """Retrieve the indices of the ThermodynamicStates for each replica on the analysis file
@@ -1697,10 +1697,16 @@ class MultiStateReporter(object):
         else:
             return None
 
-    def _write_sampler_states_to_xtc(self, sampler_states: list, iteration: int):
+    def _write_sampler_states_to_xtc(self, sampler_states: list):
         """
         Internal function to write SamplerState objects to XTC files.
-        One XTC per iteration.
+        One XTC per replica, named as ``<sliced_trajectory_storage>.<replica_index>.xtc``
+
+        Parameters
+        ----------
+        sampler_states : list of openmmtools.states.SamplerState
+            Replica states corresponding to the current iteration that should
+            be written to XTC files.
 
         """
         def _write_to_xtc(path, positions, box_vectors=None):
@@ -1726,17 +1732,12 @@ class MultiStateReporter(object):
 
         basename, ext = os.path.splitext(self._storage_trajectory_slice_file_path)
         is_periodic = sampler_states[0].box_vectors is not None
-        n_particles = sampler_states[0].n_particles
-        n_replicas = len(sampler_states)
-        positions = np.empty([n_replicas, n_particles, 3])
-        box_vectors = np.empty([n_replicas, 3, 3]) if is_periodic else None
         for replica_index, sampler_state in enumerate(sampler_states):
             # Create a new file per iteration&replica
-            path = "{}_i{}{}".format(basename, iteration, ext)
-            positions[replica_index] = sampler_state.positions / unit.nanometers
-            if is_periodic:
-                box_vectors[replica_index] = sampler_state.box_vectors / unit.nanometers if is_periodic else None
-        _write_to_xtc(path, positions, box_vectors)
+            path = "{}.{}{}".format(basename, replica_index, ext)
+            positions = sampler_state.positions / unit.nanometers
+            box_vectors = sampler_state.box_vectors / unit.nanometers if is_periodic else None
+            _write_to_xtc(path, [positions], box_vectors)
 
     def _read_sampler_states_from_xtc(self, iteration):
         """
@@ -1746,19 +1747,30 @@ class MultiStateReporter(object):
         Parameters
         ----------
         iteration : int
-            Which iteration to load from disk.
+            Which iteration (frame) to load from disk.
+
+        Returns
+        -------
+        sampler_states : list of openmmtools.states.SamplerState
+            States corresponding to the selected iteration for each replica,
+            sorted by replica index.
         """
         basename, ext = os.path.splitext(self._storage_trajectory_slice_file_path)
-        path = "{}_i{}{}".format(basename, iteration, ext)
+        path_template = "{}.*{}".format(basename, ext)
+        paths = sorted(glob.glob(path_template), key=lambda p: int(p.split('.')[-2]))
         sampler_states = []
-        if not os.path.isfile(path):
-            raise ValueError("Iteration {} cannot be located in disk "
-                             "(should be at `{}`).".format(iteration, path))
-        with XTCTrajectoryFile(path, 'r') as xtc:
-            positions, _, _, box_vectors = xtc.read()
-            for idx, frame in enumerate(positions):
-                box = box_vectors[idx] if box_vectors is not None else None
-                sampler_states.append(states.SamplerState(positions=frame, box_vectors=box))
+        if not paths:
+            raise ValueError("Sampler states {} cannot be located in disk "
+                             "(should be at `{}`).".format(iteration, path_template))
+        for path in paths:
+            with XTCTrajectoryFile(path, 'r') as xtc:
+                try:
+                    xtc.seek(iteration)
+                except IOError:
+                    raise ValueError("Iteration is out of bounds at replica `{}`".format(iteration, path))
+                positions, _, _, box_vectors = xtc.read(n_frames=1)
+                box = box_vectors if box_vectors is not None else None
+                sampler_states.append(states.SamplerState(positions=positions[0], box_vectors=box))
         return sampler_states
 
     def _write_dict(self, path, data, storage_name='analysis',
