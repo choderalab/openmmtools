@@ -1253,6 +1253,9 @@ class TestMultiRegionAbsoluteAlchemicalFactory(object):
         # Basic test systems: Lennard-Jones and water particles only.
         # Test also dispersion correction and switch off ("on" values
         # for these options are tested in HostGuestExplicit system).
+        cls.test_systems['LennardJonesCluster'] = testsystems.LennardJonesCluster()
+        cls.test_systems['LennardJonesFluid with dispersion correction'] = \
+            testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
         cls.test_systems['TIP3P WaterBox with reaction field, no switch, no dispersion correction'] = \
             testsystems.WaterBox(dispersion_correction=False, switch=False, nonbondedMethod=openmm.app.CutoffPeriodic)
 
@@ -1262,10 +1265,21 @@ class TestMultiRegionAbsoluteAlchemicalFactory(object):
         cls.test_region_zero = dict()
         cls.test_region_one = dict()
         cls.test_region_two = dict()
-
+        cls.test_region_zero['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2), name='zero')
+        cls.test_region_one['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2,4), name='one')
+        cls.test_region_two['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(4,6), name='two')
+        cls.test_region_zero['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10), name='zero')
+        cls.test_region_one['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10,20), name='one')
+        cls.test_region_two['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(20,30), name='two')
         cls.test_region_zero['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3), name='zero')
         cls.test_region_one['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3,6), name='one')
         cls.test_region_two['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(6,9), name='two')
+        #Not sure how to best convert remaining tests
+        #cls.test_region_zero['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(4), name='zero')  # Modify ions.
+        #cls.test_region_zero['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6), name='zero')
+        #cls.test_region_zero['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22), name='zero')
+        #cls.test_region_zero['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156), name='zero')
+
 
     @classmethod
     def generate_cases(cls):
