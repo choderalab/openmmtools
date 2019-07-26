@@ -2267,8 +2267,14 @@ class AbsoluteAlchemicalFactory(object):
 
         force_labels = {}
         nonbonded_forces = []
-        sterics_bond_forces = []
-        electro_bond_forces = []
+        sterics_none_bond_forces = []
+        electro_none_bond_forces = []
+        sterics_zero_bond_forces = []
+        electro_zero_bond_forces = []
+        sterics_one_bond_forces = []
+        electro_one_bond_forces = []
+        sterics_two_bond_forces = []
+        electro_two_bond_forces = []
 
         # We save CustomBondForces and CustomNonbondedForces used for nonbonded
         # forces and exceptions to distinguish them later
@@ -2285,18 +2291,42 @@ class AbsoluteAlchemicalFactory(object):
                 else:
                     add_label('alchemically modified GBSAOBCForce', force_index)
             elif isinstance(force, openmm.CustomBondForce) and check_energy_expression(force, 'lambda'):
-                if check_energy_expression(force, 'lambda_sterics'):
-                    sterics_bond_forces.append([force_index, force])
-                else:
-                    electro_bond_forces.append([force_index, force])
+                if check_energy_expression(force, 'lambda_sterics_zero'):
+                    sterics_zero_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_sterics_one'):
+                    sterics_one_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_sterics_two'):
+                    sterics_two_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_sterics'):
+                    sterics_none_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics_zero'):
+                    electro_zero_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics_one'):
+                    electro_one_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics_two'):
+                    electro_two_bond_forces.append([force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics'):
+                    electro_none_bond_forces.append([force_index, force])
             elif (isinstance(force, openmm.CustomNonbondedForce) and force.getEnergyFunction() == '0.0;' and
                           force.getGlobalParameterName(0) == 'lambda_electrostatics'):
                 add_label('CustomNonbondedForce holding alchemical atoms unmodified charges', force_index)
             elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, 'lambda'):
-                if check_energy_expression(force, 'lambda_sterics'):
-                    nonbonded_forces.append(['sterics', force_index, force])
-                else:
-                    nonbonded_forces.append(['electrostatics', force_index, force])
+                if check_energy_expression(force, 'lambda_sterics_zero'):
+                    nonbonded_forces.append(['sterics_zero', force_index, force])
+                elif check_energy_expression(force, 'lambda_sterics_one'):
+                    nonbonded_forces.append(['sterics_one', force_index, force])
+                elif check_energy_expression(force, 'lambda_sterics_two'):
+                    nonbonded_forces.append(['sterics_two', force_index, force])
+                elif check_energy_expression(force, 'lambda_sterics'):
+                    nonbonded_forces.append(['sterics_None', force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics_zero'):
+                    nonbonded_forces.append(['electrostatics_zero', force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics_one'):
+                    nonbonded_forces.append(['electrostatics_one', force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics_two'):
+                    nonbonded_forces.append(['electrostatics_two', force_index, force])
+                elif check_energy_expression(force, 'lambda_electrostatics'):
+                    nonbonded_forces.append(['electrostatics_None', force_index, force])
             else:
                 add_label('unmodified ' + force.__class__.__name__, force_index)
 
@@ -2309,45 +2339,56 @@ class AbsoluteAlchemicalFactory(object):
             else:
                 add_label(label.format('non-'), force_index)
 
+        region_names = ['None', 'zero', 'one', 'two']
+        steric_bonds_by_region = [sterics_none_bond_forces, sterics_zero_bond_forces,
+                                  sterics_one_bond_forces, sterics_two_bond_forces]
+        electro_bond_by_region = [electro_none_bond_forces, electro_zero_bond_forces,
+                                  electro_one_bond_forces, electro_two_bond_forces]
+
         # Differentiate between na/aa bond forces for exceptions.
-        for force_type, bond_forces in [('sterics', sterics_bond_forces), ('electrostatics', electro_bond_forces)]:
-            # With exact PME there are no CustomBondForces modeling electrostatics exceptions.
-            if force_type == 'electrostatics' and len(bond_forces) == 0:
+        for i, (sterics_bond_forces, electro_bond_forces) in enumerate(zip(steric_bonds_by_region, electro_bond_by_region)):
+            if len(sterics_bond_forces) == 0:
                 continue
-            # Otherwise there should be two CustomBondForce.
-            assert len(bond_forces) == 2
-            label = 'alchemically modified BondForce for {}alchemical/alchemical ' + force_type + ' exceptions'
+            region_name = region_names[i]
+            for force_type, bond_forces in [('sterics', sterics_bond_forces), ('electrostatics', electro_bond_forces)]:
+                # With exact PME there are no CustomBondForces modeling electrostatics exceptions.
+                if force_type == 'electrostatics' and len(bond_forces) == 0:
+                    continue
+                # Otherwise there should be two CustomBondForce.
+                assert len(bond_forces) == 2
+                label = 'alchemically modified BondForce for {}alchemical/alchemical '\
+                        + force_type + '_{}'.format(region_name) + ' exceptions'
 
-            # Sort forces by number of bonds.
-            bond_forces = sorted(bond_forces, key=lambda x: x[1].getNumBonds())
-            (force_index1, force1), (force_index2, force2) = bond_forces
+                # Sort forces by number of bonds.
+                bond_forces = sorted(bond_forces, key=lambda x: x[1].getNumBonds())
+                (force_index1, force1), (force_index2, force2) = bond_forces
 
-            # Check if both define their parameters (with decoupling the lambda
-            # parameter doesn't exist in the alchemical-alchemical force)
-            parameter_name = 'lambda_' + force_type
-            if check_parameter(force1, parameter_name) != check_parameter(force2, parameter_name):
-                if check_parameter(force1, parameter_name):
-                    add_label(label.format('non-'), force_index1)
-                    add_label(label.format(''), force_index2)
-                else:
+                # Check if both define their parameters (with decoupling the lambda
+                # parameter doesn't exist in the alchemical-alchemical force)
+                parameter_name = 'lambda_' + force_type + '_{}'.format(region_name)
+                if check_parameter(force1, parameter_name) != check_parameter(force2, parameter_name):
+                    if check_parameter(force1, parameter_name):
+                        add_label(label.format('non-'), force_index1)
+                        add_label(label.format(''), force_index2)
+                    else:
+                        add_label(label.format(''), force_index1)
+                        add_label(label.format('non-'), force_index2)
+
+                # If they are both empty they are identical and any label works.
+                elif force1.getNumBonds() == 0 and force2.getNumBonds() == 0:
                     add_label(label.format(''), force_index1)
                     add_label(label.format('non-'), force_index2)
 
-            # If they are both empty they are identical and any label works.
-            elif force1.getNumBonds() == 0 and force2.getNumBonds() == 0:
-                add_label(label.format(''), force_index1)
-                add_label(label.format('non-'), force_index2)
-
-            # We check that the bond atoms are both alchemical or not.
-            else:
-                atom_i, atom_j, _ = force2.getBondParameters(0)
-                both_alchemical = atom_i in alchemical_atoms and atom_j in alchemical_atoms
-                if both_alchemical:
-                    add_label(label.format(''), force_index2)
-                    add_label(label.format('non-'), force_index1)
+                # We check that the bond atoms are both alchemical or not.
                 else:
-                    add_label(label.format('non-'), force_index2)
-                    add_label(label.format(''), force_index1)
+                    atom_i, atom_j, _ = force2.getBondParameters(0)
+                    both_alchemical = atom_i in alchemical_atoms and atom_j in alchemical_atoms
+                    if both_alchemical:
+                        add_label(label.format(''), force_index2)
+                        add_label(label.format('non-'), force_index1)
+                    else:
+                        add_label(label.format('non-'), force_index2)
+                        add_label(label.format(''), force_index1)
 
         return force_labels
 
