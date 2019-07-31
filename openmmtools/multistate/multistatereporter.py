@@ -1769,8 +1769,9 @@ class MultiStateReporter(object):
                 except IOError:
                     raise ValueError("Iteration is out of bounds at replica `{}`".format(iteration, path))
                 positions, _, _, box_vectors = xtc.read(n_frames=1)
-                box = box_vectors if box_vectors is not None else None
-                sampler_states.append(states.SamplerState(positions=positions[0], box_vectors=box))
+                box = unit.Quantity(box_vectors, unit=unit.nanometer) if box_vectors is not None else None
+                positions_quantity = unit.Quantity(positions[0], unit=unit.nanometer)
+                sampler_states.append(states.SamplerState(positions=positions_quantity, box_vectors=box))
         return sampler_states
 
     def _write_dict(self, path, data, storage_name='analysis',
