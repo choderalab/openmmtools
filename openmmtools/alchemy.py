@@ -2264,17 +2264,11 @@ class AbsoluteAlchemicalFactory(object):
                         found = True
                         break
             return found
-
+        
         force_labels = {}
-        nonbonded_forces = []
-        sterics_none_bond_forces = []
-        electro_none_bond_forces = []
-        sterics_zero_bond_forces = []
-        electro_zero_bond_forces = []
-        sterics_one_bond_forces = []
-        electro_one_bond_forces = []
-        sterics_two_bond_forces = []
-        electro_two_bond_forces = []
+        nonbonded_forces = {'' :[], 'zero': [], 'one': [], 'two': []}
+        sterics_bond_forces = {'' :[], 'zero': [], 'one': [], 'two': []}
+        electro_bond_forces = {'' :[], 'zero': [], 'one': [], 'two': []}
 
         # We save CustomBondForces and CustomNonbondedForces used for nonbonded
         # forces and exceptions to distinguish them later
@@ -2292,73 +2286,76 @@ class AbsoluteAlchemicalFactory(object):
                     add_label('alchemically modified GBSAOBCForce', force_index)
             elif isinstance(force, openmm.CustomBondForce) and check_energy_expression(force, 'lambda'):
                 if check_energy_expression(force, 'lambda_sterics_zero'):
-                    sterics_zero_bond_forces.append([force_index, force])
+                    sterics_bond_forces['zero'].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_sterics_one'):
-                    sterics_one_bond_forces.append([force_index, force])
+                    sterics_bond_forces['one'].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_sterics_two'):
-                    sterics_two_bond_forces.append([force_index, force])
+                    sterics_bond_forces['two'].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_sterics'):
-                    sterics_none_bond_forces.append([force_index, force])
+                    sterics_bond_forces[''].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics_zero'):
-                    electro_zero_bond_forces.append([force_index, force])
+                    electro_bond_forces['zero'].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics_one'):
-                    electro_one_bond_forces.append([force_index, force])
+                    electro_bond_forces['one'].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics_two'):
-                    electro_two_bond_forces.append([force_index, force])
+                    electro_bond_forces['two'].append([force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics'):
-                    electro_none_bond_forces.append([force_index, force])
+                    electro_bond_forces[''].append([force_index, force])
             elif (isinstance(force, openmm.CustomNonbondedForce) and force.getEnergyFunction() == '0.0;' and
                           force.getGlobalParameterName(0) == 'lambda_electrostatics'):
                 add_label('CustomNonbondedForce holding alchemical atoms unmodified charges', force_index)
             elif isinstance(force, openmm.CustomNonbondedForce) and check_energy_expression(force, 'lambda'):
                 if check_energy_expression(force, 'lambda_sterics_zero'):
-                    nonbonded_forces.append(['sterics_zero', force_index, force])
+                    nonbonded_forces['zero'].append(['sterics', force_index, force])
                 elif check_energy_expression(force, 'lambda_sterics_one'):
-                    nonbonded_forces.append(['sterics_one', force_index, force])
+                    nonbonded_forces['one'].append(['sterics', force_index, force])
                 elif check_energy_expression(force, 'lambda_sterics_two'):
-                    nonbonded_forces.append(['sterics_two', force_index, force])
+                    nonbonded_forces['two'].append(['sterics', force_index, force])
                 elif check_energy_expression(force, 'lambda_sterics'):
-                    nonbonded_forces.append(['sterics_None', force_index, force])
+                    nonbonded_forces[''].append(['sterics', force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics_zero'):
-                    nonbonded_forces.append(['electrostatics_zero', force_index, force])
+                    nonbonded_forces['zero'].append(['electrostatics', force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics_one'):
-                    nonbonded_forces.append(['electrostatics_one', force_index, force])
+                    nonbonded_forces['one'].append(['electrostatics',force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics_two'):
-                    nonbonded_forces.append(['electrostatics_two', force_index, force])
+                    nonbonded_forces['two'].append(['electrostatics', force_index, force])
                 elif check_energy_expression(force, 'lambda_electrostatics'):
-                    nonbonded_forces.append(['electrostatics_None', force_index, force])
+                    nonbonded_forces[''].append(['electrostatics', force_index, force])
             else:
                 add_label('unmodified ' + force.__class__.__name__, force_index)
 
         # Differentiate between na/aa nonbonded forces.
-        for force_type, force_index, force in nonbonded_forces:
-            label = 'alchemically modified NonbondedForce for {}alchemical/alchemical ' + force_type
-            interacting_atoms, alchemical_atoms = force.getInteractionGroupParameters(0)
-            if interacting_atoms == alchemical_atoms:  # alchemical-alchemical atoms
-                add_label(label.format(''), force_index)
-            else:
-                add_label(label.format('non-'), force_index)
-
-        region_names = ['None', 'zero', 'one', 'two']
-        steric_bonds_by_region = [sterics_none_bond_forces, sterics_zero_bond_forces,
-                                  sterics_one_bond_forces, sterics_two_bond_forces]
-        electro_bond_by_region = [electro_none_bond_forces, electro_zero_bond_forces,
-                                  electro_one_bond_forces, electro_two_bond_forces]
+        for region_name, forces in nonbonded_forces.items():
+            for force_type, force_index, force in forces:
+                if region_name == '':
+                    label = 'alchemically modified NonbondedForce for {}alchemical/alchemical ' + force_type
+                else:
+                    label = 'alchemically modified NonbondedForce for {}alchemical/alchemical ' + force_type +\
+                            ' for region ' + region_name
+                interacting_atoms, alchemical_atoms = force.getInteractionGroupParameters(0)
+                if interacting_atoms == alchemical_atoms:  # alchemical-alchemical atoms
+                    add_label(label.format(''), force_index)
+                else:
+                    add_label(label.format('non-'), force_index)
 
         # Differentiate between na/aa bond forces for exceptions.
-        for i, (sterics_bond_forces, electro_bond_forces) in enumerate(zip(steric_bonds_by_region, electro_bond_by_region)):
-            if len(sterics_bond_forces) == 0:
+        for (region_name, sterics_forces), electro_forces in zip(sterics_bond_forces.items(), electro_bond_forces.values()):
+            if len(sterics_forces) == 0:
                 continue
-            region_name = region_names[i]
-            for force_type, bond_forces in [('sterics', sterics_bond_forces), ('electrostatics', electro_bond_forces)]:
+            for force_type, bond_forces in [('sterics', sterics_forces), ('electrostatics', electro_forces)]:
                 # With exact PME there are no CustomBondForces modeling electrostatics exceptions.
                 if force_type == 'electrostatics' and len(bond_forces) == 0:
                     continue
                 # Otherwise there should be two CustomBondForce.
                 assert len(bond_forces) == 2
-                label = 'alchemically modified BondForce for {}alchemical/alchemical '\
-                        + force_type + '_{}'.format(region_name) + ' exceptions'
+                print(region_name)
+                if region_name == '':
+                    label = 'alchemically modified BondForce for {}alchemical/alchemical ' + force_type + ' exceptions'
+                else:
+                    label = 'alchemically modified BondForce for {}alchemical/alchemical ' + force_type +\
+                            ' exceptions for region ' + region_name
 
+                print(label)
                 # Sort forces by number of bonds.
                 bond_forces = sorted(bond_forces, key=lambda x: x[1].getNumBonds())
                 (force_index1, force1), (force_index2, force2) = bond_forces
