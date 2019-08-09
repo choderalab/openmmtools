@@ -279,7 +279,6 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
     # Compute total energy from nonbonded interactions
     tot_energy = compute_energy(system, positions)
     tot_reciprocal_energy = compute_energy(system, positions, force_group={30})
-    system = copy.deepcopy(reference_system) # Restore alchemical sterics/electro of other alch_atoms
 
     # Compute contributions from particle sterics
     turn_off_nonbonded(system, sterics=True, only_atoms=alchemical_atoms)
@@ -322,7 +321,7 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
 
     # Compute contributions from exceptions sterics
     system = copy.deepcopy(reference_system)  # Restore particle interactions
-    turn_off_nonbonded(system, sterics=True, exceptions=True, only_atoms=all_alchemical_atoms)
+    turn_off_nonbonded(system, sterics=True, exceptions=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_exception_sterics = compute_energy(system, positions)
     system = copy.deepcopy(reference_system)  # Restore alchemical sterics
     turn_off_nonbonded(system, sterics=True, exceptions=True, only_atoms=nonalchemical_atoms)
@@ -337,7 +336,7 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
 
     # Compute contributions from exceptions electrostatics
     system = copy.deepcopy(reference_system)  # Restore exceptions sterics
-    turn_off_nonbonded(system, electrostatics=True, exceptions=True, only_atoms=all_alchemical_atoms)
+    turn_off_nonbonded(system, electrostatics=True, exceptions=True, only_atoms=alchemical_atoms)
     tot_energy_no_alchem_exception_electro = compute_energy(system, positions)
     system = copy.deepcopy(reference_system)  # Restore alchemical electrostatics
     turn_off_nonbonded(system, electrostatics=True, exceptions=True, only_atoms=nonalchemical_atoms)
