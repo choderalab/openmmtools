@@ -272,8 +272,9 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
     # Compute particle interactions between different groups of atoms
     # ----------------------------------------------------------------
     #Turn off other alchemical regions
-    turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, only_atoms=other_alchemical_atoms)
-    turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, exceptions=True, only_atoms=other_alchemical_atoms)
+    if len(other_alchemical_atoms) > 0:
+        turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, only_atoms=other_alchemical_atoms)
+        turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, exceptions=True, only_atoms=other_alchemical_atoms)
     system = copy.deepcopy(reference_system)
 
     # Compute total energy from nonbonded interactions
@@ -522,7 +523,12 @@ def check_multi_interacting_energy_components(reference_system, alchemical_syste
     positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
         The positions to test (units of length).
 
+    Note
+    ----------
+    Interactions between alchemical regions are not tested here.
+    Alchemical regions are assumed to be non interacting.
     """
+
     all_alchemical_atoms = set()
     for region in alchemical_regions:
         for atom in region.alchemical_atoms:
@@ -562,7 +568,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
         other_alchemical_atoms = all_alchemical_atoms.difference(alchemical_regions.alchemical_atoms)
         print("Dissecting reference system's nonbonded force for region {}".format(alchemical_regions.name))
     else:
-        other_alchemical_atoms = set()
+        other_alchemical_atoms = {}
         print("Dissecting reference system's nonbonded force")
 
     energy_components = dissect_nonbonded_energy(reference_system, positions,
@@ -1580,11 +1586,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
         cls.test_region_zero['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3), name='zero')
         cls.test_region_one['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3,6), name='one')
         cls.test_region_two['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(6,9), name='two')
-        #Not sure how to best convert remaining tests
-        #cls.test_region_zero['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(4), name='zero')  # Modify ions.
-        #cls.test_region_zero['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6), name='zero')
-        #cls.test_region_zero['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22), name='zero')
-        #Three regions push this system beyhond 32 force groups
+        #Three regions push HostGuest system beyond 32 force groups
         cls.test_region_zero['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156), name='zero')
         cls.test_region_one['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(156,160), name='one')
         cls.test_region_two['HostGuestExplicit'] = None
