@@ -461,6 +461,8 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
     method is an Ewald method.
 
     """
+    if not isinstance(alchemical_regions, list):
+        alchemical_regions = [alchemical_regions]
     force_group = -1  # Default we compare the energy of all groups.
 
     # Check nonbonded method. Comparing with PME is more complicated
@@ -486,8 +488,13 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
 
         # Compute the reciprocal space correction added to the direct space
         # energy due to the exceptions of the alchemical atoms.
-        alchemical_atoms = alchemical_regions.alchemical_atoms
-        aa_correction, na_correction = compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions)
+        aa_correction = 0.0 * unit.kilojoule_per_mole
+        na_correction = 0.0 * unit.kilojoule_per_mole
+        for region in alchemical_regions:
+            alchemical_atoms = region.alchemical_atoms
+            aa, na = compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions)
+            aa_correction += aa
+            na_correction += na
 
     # Compute potential of the direct space.
     potentials = [compute_energy(system, positions, force_group=force_group)
@@ -568,7 +575,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
         other_alchemical_atoms = all_alchemical_atoms.difference(alchemical_regions.alchemical_atoms)
         print("Dissecting reference system's nonbonded force for region {}".format(alchemical_regions.name))
     else:
-        other_alchemical_atoms = {}
+        other_alchemical_atoms = set()
         print("Dissecting reference system's nonbonded force")
 
     energy_components = dissect_nonbonded_energy(reference_system, positions,
@@ -881,45 +888,6 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
         assert_almost_equal(reference_force_energy, alchemical_energy,
                             'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
-
-def check_split_force_groups(system):
-    """Check that force groups are split correctly."""
-    force_groups_by_lambda = {}
-    lambdas_by_force_group = {}
-
-    # Separate forces groups by lambda parameters that AlchemicalState supports.
-    for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
-            system, parameters_name_suffix=None):
-        force_group = force.getForceGroup()
-        try:
-            force_groups_by_lambda[lambda_name].add(force_group)
-        except KeyError:
-            force_groups_by_lambda[lambda_name] = {force_group}
-        try:
-            lambdas_by_force_group[force_group].add(lambda_name)
-        except KeyError:
-            lambdas_by_force_group[force_group] = {lambda_name}
-
-    # Check that force group 0 doesn't hold alchemical forces.
-    assert 0 not in force_groups_by_lambda
-
-    # There are as many alchemical force groups as not-None lambda variables.
-    alchemical_state = AlchemicalState.from_system(system)
-    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters()
-                     if getattr(alchemical_state, lambda_name) is not None}
-    assert valid_lambdas == set(force_groups_by_lambda.keys())
-
-    # Check that force groups and lambda variables are in 1-to-1 correspondence.
-    assert len(force_groups_by_lambda) == len(lambdas_by_force_group)
-    for d in [force_groups_by_lambda, lambdas_by_force_group]:
-        for value in d.values():
-            assert len(value) == 1
-
-    # With exact treatment of PME, the NonbondedForce must
-    # be in the lambda_electrostatics force group.
-    if is_alchemical_pme_treatment_exact(system):
-        force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
-        assert force_groups_by_lambda['lambda_electrostatics'] == {nonbonded_force.getForceGroup()}
 
 def check_split_force_groups(system):
     """Check that force groups are split correctly."""
