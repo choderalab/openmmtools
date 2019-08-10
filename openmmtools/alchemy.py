@@ -1088,6 +1088,7 @@ class AbsoluteAlchemicalFactory(object):
             non-alchemical environment.
 
         """
+        logging.debug(len(alchemical_regions))
         for i, alchemical_region_A in enumerate(alchemical_regions):
             if alchemical_region_A.alchemical_atoms.intersection(particles):
                 j = 0
@@ -1136,18 +1137,14 @@ class AbsoluteAlchemicalFactory(object):
         force = openmm.PeriodicTorsionForce()
         force.setForceGroup(reference_force.getForceGroup())
         for torsion_index in range(reference_force.getNumTorsions()):
+            particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(
+                torsion_index)
+            particles = set((particle1, particle2, particle3, particle4))
             if torsion_index not in all_alchemical_torsions:
-                particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(torsion_index)
-                particles = set((particle1, particle2, particle3, particle4))
                 if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
                     pass
                 else:
                     force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
-            else:
-                # Check there are no alchemical torsions straddling regions
-                msg = 'No support for alchemical torsions across multiple alchemical regions'
-                if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-                    raise NotImplemented(msg)
 
         # Update the returned value with the non-alchemical force.
         alchemical_forces[''] = [force]
@@ -1217,18 +1214,13 @@ class AbsoluteAlchemicalFactory(object):
         force = openmm.HarmonicAngleForce()
         force.setForceGroup(reference_force.getForceGroup())
         for angle_index in range(reference_force.getNumAngles()):
+            [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
+            particles = set((particle1, particle2, particle3))
             if angle_index not in all_alchemical_angles:
-                [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
-                particles = set((particle1, particle2, particle3))
                 if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
                     pass
                 else:
                     force.addAngle(particle1, particle2, particle3, theta0, K)
-            else:
-                # Check there are no alchemical angles straddling regions
-                msg = 'No support for alchemical angles across multiple alchemical regions'
-                if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-                    raise NotImplemented(msg)
 
         # Update the returned value with the non-alchemical force.
         alchemical_forces[''] = [force]
@@ -1296,18 +1288,13 @@ class AbsoluteAlchemicalFactory(object):
         force = openmm.HarmonicBondForce()
         force.setForceGroup(reference_force.getForceGroup())
         for bond_index in range(reference_force.getNumBonds()):
+            [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
+            particles = set((particle1, particle2))
             if bond_index not in all_alchemical_bonds:
-                [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
-                particles = set((particle1, particle2))
                 if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
                     pass
                 else:
                     force.addBond(particle1, particle2, theta0, K)
-            else:
-                # Check there are no alchemical bonds straddling regions
-                msg = 'No support for alchemical bonds across multiple alchemical regions'
-                if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-                    raise NotImplemented(msg)
 
         # Update the returned value with the non-alchemical force.
         alchemical_forces[''] = [force]
@@ -2334,6 +2321,8 @@ class AbsoluteAlchemicalFactory(object):
                     add_label('alchemically modified HarmonicAngleForce for region one', force_index)
                 elif check_parameter(force, 'lambda_angles_two'):
                     add_label('alchemically modified HarmonicAngleForce for region two', force_index)
+                else:
+                    add_label('alchemically modified HarmonicAngleForce', force_index)
             elif isinstance(force, openmm.CustomBondForce) and check_energy_expression(force, 'lambda_bonds'):
                 if check_parameter(force, 'lambda_bonds_zero'):
                     add_label('alchemically modified HarmonicBondForce for region zero', force_index)
@@ -2341,6 +2330,8 @@ class AbsoluteAlchemicalFactory(object):
                     add_label('alchemically modified HarmonicBondForce for region one', force_index)
                 elif check_parameter(force, 'lambda_bonds_two'):
                     add_label('alchemically modified HarmonicBondForce for region two', force_index)
+                else:
+                    add_label('alchemically modified HarmonicBondForce', force_index)
             elif isinstance(force, openmm.CustomTorsionForce) and check_energy_expression(force, 'lambda_torsions'):
                 if check_parameter(force, 'lambda_torsions_zero'):
                     add_label('alchemically modified PeriodicTorsionForce for region zero', force_index)
@@ -2348,6 +2339,8 @@ class AbsoluteAlchemicalFactory(object):
                     add_label('alchemically modified PeriodicTorsionForce for region one', force_index)
                 elif check_parameter(force, 'lambda_torsions_two'):
                     add_label('alchemically modified PeriodicTorsionForce for region two', force_index)
+                else:
+                    add_label('alchemically modified PeriodicTorsionForce', force_index)
             elif isinstance(force, openmm.CustomGBForce) and check_parameter(force, 'lambda_electrostatics'):
                 if check_energy_expression(force, 'unscaled'):
                     add_label('alchemically modified CustomGBForce', force_index)
