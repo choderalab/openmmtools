@@ -1088,7 +1088,6 @@ class AbsoluteAlchemicalFactory(object):
             non-alchemical environment.
 
         """
-        logging.debug(len(alchemical_regions))
         for i, alchemical_region_A in enumerate(alchemical_regions):
             if alchemical_region_A.alchemical_atoms.intersection(particles):
                 j = 0
