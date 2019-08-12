@@ -889,44 +889,49 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
                             'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
 
-def check_split_force_groups(system):
+def check_split_force_groups(system, region_names=None):
     """Check that force groups are split correctly."""
-    force_groups_by_lambda = {}
-    lambdas_by_force_group = {}
 
+    if region_names is None:
+        region_names = []
+    print(region_names)
     # Separate forces groups by lambda parameters that AlchemicalState supports.
-    for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
-            system, parameters_name_suffix=None):
-        force_group = force.getForceGroup()
-        try:
-            force_groups_by_lambda[lambda_name].add(force_group)
-        except KeyError:
-            force_groups_by_lambda[lambda_name] = {force_group}
-        try:
-            lambdas_by_force_group[force_group].add(lambda_name)
-        except KeyError:
-            lambdas_by_force_group[force_group] = {lambda_name}
+    for region in region_names:
+        force_groups_by_lambda = {}
+        lambdas_by_force_group = {}
+        for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
+                system, parameters_name_suffix=region):
+            force_group = force.getForceGroup()
+            try:
+                force_groups_by_lambda[lambda_name].add(force_group)
+            except KeyError:
+                force_groups_by_lambda[lambda_name] = {force_group}
+            try:
+                lambdas_by_force_group[force_group].add(lambda_name)
+            except KeyError:
+                lambdas_by_force_group[force_group] = {lambda_name}
 
-    # Check that force group 0 doesn't hold alchemical forces.
-    assert 0 not in force_groups_by_lambda
+        # Check that force group 0 doesn't hold alchemical forces.
+        assert 0 not in force_groups_by_lambda
 
-    # There are as many alchemical force groups as not-None lambda variables.
-    alchemical_state = AlchemicalState.from_system(system)
-    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters()
-                     if getattr(alchemical_state, lambda_name) is not None}
-    assert valid_lambdas == set(force_groups_by_lambda.keys())
+        # There are as many alchemical force groups as not-None lambda variables.
+        alchemical_state = AlchemicalState.from_system(system, parameters_name_suffix=region)
+        valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters(parameters_name_suffix=region)
+                         if getattr(alchemical_state, lambda_name) is not None}
+        print(valid_lambdas, force_groups_by_lambda.keys())
+        assert valid_lambdas == set(force_groups_by_lambda.keys())
 
-    # Check that force groups and lambda variables are in 1-to-1 correspondence.
-    assert len(force_groups_by_lambda) == len(lambdas_by_force_group)
-    for d in [force_groups_by_lambda, lambdas_by_force_group]:
-        for value in d.values():
-            assert len(value) == 1
+        # Check that force groups and lambda variables are in 1-to-1 correspondence.
+        assert len(force_groups_by_lambda) == len(lambdas_by_force_group)
+        for d in [force_groups_by_lambda, lambdas_by_force_group]:
+            for value in d.values():
+                assert len(value) == 1
 
-    # With exact treatment of PME, the NonbondedForce must
-    # be in the lambda_electrostatics force group.
-    if is_alchemical_pme_treatment_exact(system):
-        force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
-        assert force_groups_by_lambda['lambda_electrostatics'] == {nonbonded_force.getForceGroup()}
+        # With exact treatment of PME, the NonbondedForce must
+        # be in the lambda_electrostatics force group.
+        if is_alchemical_pme_treatment_exact(system):
+            force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
+            assert force_groups_by_lambda['lambda_electrostatics_{}'.format(region)] == {nonbonded_force.getForceGroup()}
 
 
 # =============================================================================
@@ -1637,6 +1642,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
 
                 # Add test case.
                 cls.test_cases[test_case_name] = (test_system, alchemical_system, test_regions)
+
                 n_test_cases += 1
 
                 # If we don't use softcore electrostatics and we annihilate charges
@@ -1653,6 +1659,20 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             if nonbonded_method == openmm.NonbondedForce.CutoffPeriodic:
                 forcefactories.replace_reaction_field(test_system.system, return_copy=False,
                                                       switch_width=direct_space_factory.switch_width)
+
+    def test_split_force_groups(self):
+        """Forces having different lambda variables should have a different force group."""
+        # Select 1 implicit, 1 explicit, and 1 exact PME explicit test case randomly.
+        test_cases = self.filter_cases(lambda x: 'Implicit' in x, max_number=1)
+        test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' in x, max_number=1))
+        test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' not in x, max_number=1))
+        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
+            region_names = []
+            for region in alchemical_region:
+                region_names.append(region.name)
+            f = partial(check_split_force_groups, alchemical_system, region_names)
+            f.description = "Testing force splitting among groups of {}".format(test_name)
+            yield f
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
