@@ -651,6 +651,9 @@ class AbsoluteAlchemicalFactory(object):
             Alchemically-modified version of reference_system.
 
         """
+        if alchemical_regions_interactions != frozenset():
+            raise NotImplemented('Interactions between alchemcial regions is untested')
+
         logger.debug(f'Dictionary of interacting alchemical regions: {alchemical_regions_interactions}')
         if isinstance(alchemical_regions, AlchemicalRegion):
             alchemical_regions = [alchemical_regions]
@@ -661,7 +664,6 @@ class AbsoluteAlchemicalFactory(object):
                               for alchemical_region in alchemical_regions]
 
         # Check for duplicate alchemical atoms/bonds/angles/torsions.
-
         all_alchemical_elements = {element_type: set() for element_type in ['atoms', 'bonds', 'angles', 'torsions']}
 
         for alchemical_region in alchemical_regions:
@@ -794,7 +796,8 @@ class AbsoluteAlchemicalFactory(object):
         energy_components = collections.OrderedDict()
         for force_label, force_index in force_labels.items():
             energy_components[force_label] = context.getState(getEnergy=True,
-                                                              groups=2**force_index).getPotentialEnergy()
+                                                                groups=2**force_index).getPotentialEnergy()
+
         # Clean up
         del context, integrator
         return energy_components
@@ -1112,6 +1115,10 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the torsions to
             alchemically modify.
+        alchemical_regions_interactions : Set[Tuple[int, int]], optional
+            Set of alchemical region index pairs for interacting regions.
+            By default, all alchemical regions interact only with the
+            non-alchemical environment.
 
         Returns
         -------
@@ -1190,6 +1197,10 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the angles to
             alchemically modify.
+        alchemical_regions_interactions : Set[Tuple[int, int]], optional
+            Set of alchemical region index pairs for interacting regions.
+            By default, all alchemical regions interact only with the
+            non-alchemical environment.
 
         Returns
         -------
@@ -1263,6 +1274,10 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the bonds to
             alchemically modify.
+        alchemical_regions_interactions : Set[Tuple[int, int]], optional
+            Set of alchemical region index pairs for interacting regions.
+            By default, all alchemical regions interact only with the
+            non-alchemical environment.
 
         Returns
         -------
@@ -1497,6 +1512,10 @@ class AbsoluteAlchemicalFactory(object):
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the atoms to
             alchemically modify.
+        alchemical_regions_interactions : Set[Tuple[int, int]], optional
+            Set of alchemical region index pairs for interacting regions.
+            By default, all alchemical regions interact only with the
+            non-alchemical environment.
 
         Returns
         -------
@@ -1574,34 +1593,34 @@ class AbsoluteAlchemicalFactory(object):
                 if (alchemical_region.softcore_beta, alchemical_region.softcore_d, alchemical_region.softcore_e) != (0, 1, 1):
                     raise ValueError('Softcore electrostatics is' + err_msg)
 
-        # Create a copy of the NonbondedForce to handle particle interactions and
-        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
-        nonbonded_force = copy.deepcopy(reference_force)
-
-        # Fix any NonbondedForce issues with Lennard-Jones sigma = 0 (epsilon = 0),
+        # Fix any issues in reference force with Lennard-Jones sigma = 0 (epsilon = 0),
         # which should have sigma > 0.
-        for particle_index in range(nonbonded_force.getNumParticles()):
+        for particle_index in range(reference_force.getNumParticles()):
             # Retrieve parameters.
-            [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
+            [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
             # Check particle sigma is not zero.
             if sigma == 0.0 * unit.angstrom:
                 warning_msg = 'particle %d has Lennard-Jones sigma = 0 (charge=%s, sigma=%s, epsilon=%s); setting sigma=1A'
                 logger.warning(warning_msg % (particle_index, str(charge), str(sigma), str(epsilon)))
                 sigma = 1.0 * unit.angstrom
                 # Fix it.
-                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+                reference_force.setParticleParameters(particle_index, charge, sigma, epsilon)
 
         # Same for the exceptions.
-        for exception_index in range(nonbonded_force.getNumExceptions()):
+        for exception_index in range(reference_force.getNumExceptions()):
             # Retrieve parameters.
-            [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
+            [iatom, jatom, chargeprod, sigma, epsilon] = reference_force.getExceptionParameters(exception_index)
             # Check particle sigma is not zero.
             if sigma == 0.0 * unit.angstrom:
                 warning_msg = 'exception %d has Lennard-Jones sigma = 0 (iatom=%d, jatom=%d, chargeprod=%s, sigma=%s, epsilon=%s); setting sigma=1A'
                 logger.warning(warning_msg % (exception_index, iatom, jatom, str(chargeprod), str(sigma), str(epsilon)))
                 sigma = 1.0 * unit.angstrom
                 # Fix it.
-                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
+                reference_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
+
+        # Create a copy of the NonbondedForce to handle particle interactions and
+        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
+        nonbonded_force = copy.deepcopy(reference_force)
 
         if use_exact_pme_treatment:
             # Exclude noninteracting alchemical regions from seeing each other in the nonbonded
@@ -1609,7 +1628,7 @@ class AbsoluteAlchemicalFactory(object):
                 if (x, y) not in alchemical_regions_interactions:
                     for atom1 in alchemical_regions[x].alchemical_atoms:
                         for atom2 in alchemical_regions[y].alchemical_atoms:
-                            nonbonded_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
+                            reference_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
                 else:
                     region_names = (alchemical_regions[x].name, alchemical_regions[y].name)
                     logger.debug(f'Adding a exact PME electrostatic interaction group between groups {region_names}.')
