@@ -1628,7 +1628,7 @@ class AbsoluteAlchemicalFactory(object):
                 if (x, y) not in alchemical_regions_interactions:
                     for atom1 in alchemical_regions[x].alchemical_atoms:
                         for atom2 in alchemical_regions[y].alchemical_atoms:
-                            reference_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
+                            nonbonded_force.addException(atom1, atom2, 0.0, 1.0, 0.0, True)
                 else:
                     region_names = (alchemical_regions[x].name, alchemical_regions[y].name)
                     logger.debug(f'Adding a exact PME electrostatic interaction group between groups {region_names}.')
