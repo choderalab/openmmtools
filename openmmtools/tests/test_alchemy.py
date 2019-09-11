@@ -211,7 +211,6 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
                                                          epsilon_coeff*epsilon_scale)
 
 
-
 def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, other_alchemical_atoms):
     """Dissect the nonbonded energy contributions of the reference system
     by atom group and sterics/electrostatics.
@@ -227,6 +226,8 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
         The positions to test.
     alchemical_atoms : set of int
         The indices of the alchemical atoms.
+    other_alchemical_atoms : set of int
+        The indices of the alchemical atoms in other alchemical regions
 
     Returns
     -------
@@ -542,6 +543,7 @@ def check_multi_interacting_energy_components(reference_system, alchemical_syste
             all_alchemical_atoms.add(atom)
     for region in alchemical_regions:
         check_interacting_energy_components(reference_system, alchemical_system, region, positions, all_alchemical_atoms, True)
+
 
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions,
                                         all_alchemical_atoms=None, multi_regions=False):
@@ -894,7 +896,6 @@ def check_split_force_groups(system, region_names=None):
 
     if region_names is None:
         region_names = []
-    print(region_names)
     # Separate forces groups by lambda parameters that AlchemicalState supports.
     for region in region_names:
         force_groups_by_lambda = {}
@@ -918,7 +919,6 @@ def check_split_force_groups(system, region_names=None):
         alchemical_state = AlchemicalState.from_system(system, parameters_name_suffix=region)
         valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters(parameters_name_suffix=region)
                          if getattr(alchemical_state, lambda_name) is not None}
-        print(valid_lambdas, force_groups_by_lambda.keys())
         assert valid_lambdas == set(force_groups_by_lambda.keys())
 
         # Check that force groups and lambda variables are in 1-to-1 correspondence.
@@ -1683,18 +1683,6 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             yield f
 
     @attr('slow')
-    def test_fully_interacting_energy_components(self):
-        """Test interacting state energy by force component."""
-        # This is a very expensive but very informative test. We can
-        # run this locally when test_fully_interacting_energies() fails.
-        test_cases = self.filter_cases(lambda x: 'Explicit' in x)
-        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
-            f = partial(check_multi_interacting_energy_components, test_system.system, alchemical_system,
-                        alchemical_region, test_system.positions)
-            f.description = "Testing energy components of %s..." % test_name
-            yield f
-
-    @attr('slow')
     def test_platforms(self):
         """Test interacting and noninteracting energies on all platforms."""
         global GLOBAL_ALCHEMY_PLATFORM
@@ -1723,6 +1711,18 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
 
         # Restore global platform
         GLOBAL_ALCHEMY_PLATFORM = old_global_platform
+
+    @attr('slow')
+    def test_fully_interacting_energy_components(self):
+        """Test interacting state energy by force component."""
+        # This is a very expensive but very informative test. We can
+        # run this locally when test_fully_interacting_energies() fails.
+        test_cases = self.filter_cases(lambda x: 'Explicit' in x)
+        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
+            f = partial(check_multi_interacting_energy_components, test_system.system, alchemical_system,
+                        alchemical_region, test_system.positions)
+            f.description = "Testing energy components of %s..." % test_name
+            yield f
 
 class TestDispersionlessAlchemicalFactory(object):
     """
