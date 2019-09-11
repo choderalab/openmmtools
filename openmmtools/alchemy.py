@@ -699,7 +699,7 @@ class AbsoluteAlchemicalFactory(object):
         for alchemical_region in alchemical_regions:
             for particle_index in alchemical_region.alchemical_atoms:
                 if reference_system.isVirtualSite(particle_index):
-                    raise ValueError(f'Virtual atoms in region {alchemical_region.name}.'
+                    raise ValueError(f'Virtual atoms in region {alchemical_region.name}. '
                                       'Alchemically modified virtual sites are not supported')
 
         # Modify forces as appropriate. We delete the forces that
