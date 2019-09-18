@@ -271,6 +271,73 @@ def split_nb_using_exceptions(system, md_topology):
     return new_system
 
 
+
+# surrogate could deviate in functional form from the NonbondedForce defaults (e.g. using soft-core)
+surrogate_energy_expression = default_energy_expression
+half_surrogate_energy_expression = '0.5*' + surrogate_energy_expression
+minus_surrogate_energy_expression = '-' + surrogate_energy_expression
+minus_half_surrogate_energy_expression = '-' + half_surrogate_energy_expression
+
+# TODO: different energy expressions for protein-protein and protein-solvent interactions?
+
+from copy import deepcopy
+def split_nb_using_subtraction(system, md_topology,
+                               cutoff=10.0 * unit.angstrom # TODO: use the cutoff!
+                               ):
+    """
+    Force group 0: default NonbondedForce minus surrogate
+    Force group 1: surrogate + non-Nonbonded"""
+
+    new_system = deepcopy(system)
+
+
+    # find the default nonbonded force
+    force_index, force = find_forces(new_system, openmm.NonbondedForce, only_one=True)
+    force.setForceGroup(0)
+
+    # find atom indices for solvent, atom indices for solute
+    # NOTE: these need to be python ints -- not np.int64s -- when passing to addInteractionGroup later!
+    solvent_indices = list(map(int, md_topology.select('water')))
+    solute_indices = list(map(int, md_topology.select('not water')))
+    # TODO: handle counterions
+
+    # TODO: smooth cutoff, and check how bad this is with very small cutoff (setUseSwitchingFunction(True)
+    # TODO: soft-core LJ or other variants (maybe think about playing with effective vdW radii?
+
+    # define surrogate forces that need to be added
+    protein_protein_force = clone_nonbonded_parameters(force, half_surrogate_energy_expression)
+    protein_solvent_force = clone_nonbonded_parameters(force, surrogate_energy_expression)
+
+    # define surrogate forces that need to be subtracted
+    minus_protein_protein_force = clone_nonbonded_parameters(force, minus_half_surrogate_energy_expression)
+    minus_protein_solvent_force = clone_nonbonded_parameters(force, minus_surrogate_energy_expression)
+
+    # add forces to new_system
+    for new_force in [protein_protein_force, protein_solvent_force, minus_protein_protein_force, minus_protein_solvent_force]:
+        new_system.addForce(new_force)
+
+    # set interaction groups
+    protein_protein_force.addInteractionGroup(set1=solute_indices, set2=solute_indices)
+    protein_solvent_force.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
+
+    minus_protein_protein_force.addInteractionGroup(set1=solute_indices, set2=solute_indices)
+    minus_protein_solvent_force.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
+
+    # set force groups
+    minus_protein_protein_force.setForceGroup(0)
+    minus_protein_solvent_force.setForceGroup(0)
+
+    protein_protein_force.setForceGroup(1)
+    protein_solvent_force.setForceGroup(1)
+
+    # handle non-NonbondedForce's
+    for force in new_system.getForces():
+        if 'Nonbonded' not in force.__class__.__name__:
+            force.setForceGroup(1)
+
+    return new_system
+
+
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
