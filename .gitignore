@@ -98,5 +98,8 @@ ENV/
 # mkdocs documentation
 /site
 
+# pycharm
+.idea
+
 # mypy
 .mypy_cache/
