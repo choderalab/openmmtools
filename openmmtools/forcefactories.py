@@ -174,6 +174,103 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
     thermodynamic_state.system = system
 
 
+from openmmtools.constants import ONE_4PI_EPS0
+default_energy_expression = "(4*epsilon*((sigma/r)^12-(sigma/r)^6) + k * chargeprod/r); sigma=0.5*(sigma1+sigma2); epsilon=sqrt(epsilon1*epsilon2); chargeprod=charge1*charge2; k={};".format(ONE_4PI_EPS0)
+
+
+def clone_nonbonded_parameters(nonbonded_force, energy_expression=default_energy_expression):
+    """Creates a new CustomNonbonded force with the same global parameters,
+    per-particle parameters, and exception parameters as """
+
+    #TODO: assert that nonbonded_force.getNonbondedMethod() indicates reaction field
+
+    # call constructor
+    new_force = openmm.CustomNonbondedForce(energy_expression)
+    new_force.addPerParticleParameter('charge')
+    new_force.addPerParticleParameter('sigma')
+    new_force.addPerParticleParameter('epsilon')
+
+    # go through all of the setter and getter methods
+    new_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
+    #new_force.setEwaldErrorTolerance(nonbonded_force.getEwaldErrorTolerance())
+    #new_force.setForceGroup(nonbonded_force.getForceGroup())
+    #new_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod()) # If PME, will be an Illegal value for CustomNonbonded
+    #new_force.setPMEParameters(*nonbonded_force.getPMEParameters())
+    #new_force.setReactionFieldDielectric(nonbonded_force.getReactionFieldDielectric())
+    #new_force.setReciprocalSpaceForceGroup(nonbonded_force.getReciprocalSpaceForceGroup())
+    new_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
+    #new_force.setUseDispersionCorrection(nonbonded_force.getUseDispersionCorrection())
+    new_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
+
+    # now add all the particle parameters
+    num_particles = nonbonded_force.getNumParticles()
+    for i in range(num_particles):
+        new_force.addParticle(nonbonded_force.getParticleParameters(i))
+
+    # now add all the exceptions
+    #    for exception_index in range(nonbonded_force.getNumExceptions()):
+    #        new_force.addException(nonbonded_force.getExceptionParameters(exception_index))
+
+    # TODO: There's probably a cleaner, more Pythonic way to do this
+    # (this was the most obvious way, but may not work in the future if the OpenMM API changes)
+
+    return new_force
+
+from copy import deepcopy
+from openmmtools.forces import find_forces
+
+def split_using_exceptions(system, md_topology):
+    """Construct a new system where force group 0 contains slow, expensive solvent-solvent
+    interactions, and force group 1 contains fast, cheaper solute-solute and solute-solvent
+    interactions.
+
+    TODO: correct this:
+    Force group 0: default nonbonded force with exceptions for solute-solvent pairs
+    Force group 1:
+    * CustomNonbonded force with interaction group for solute-solvent pairs
+    * non-Nonbonded forces
+
+    TODO: more informative docstring
+    """
+
+    # create a copy of the original system: only touch this
+    new_system = deepcopy(system)
+
+    # find the default nonbonded force
+    force_index, nb_force = find_forces(new_system, openmm.NonbondedForce, only_one=True)
+    # assert('Cutoff' in nb_force.getNonbondedMethod()) # TODO: this, less jankily
+
+    # create copies containing
+    nb_except_solute_solvent = nb_force
+    nb_only_solute_solvent = clone_nonbonded_parameters(nb_force)
+
+    nb_except_solute_solvent.setForceGroup(0)
+
+    # identify solvent-solute pairs
+    # find the pairs (i,j) where i in solute, j in solvent
+
+    # NOTE: these need to be python ints -- not np.int64s -- when passing to addInteractionGroup later!
+    solvent_indices = list(map(int, md_topology.select('water')))
+    solute_indices = list(map(int, md_topology.select('not water')))
+
+    # for each (i,j) set chargeprod, sigma, epsilon to 0, causing these pairs to be omitted completely from force calculation
+    for i in solvent_indices:
+        for j in solute_indices:
+            nb_except_solute_solvent.addException(i, j, 0, 0, 0)
+
+    nb_only_solute_solvent.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
+
+    nb_except_solute_solvent.setForceGroup(0)
+    nb_only_solute_solvent.setForceGroup(1)
+
+    # handle non-NonbondedForce's
+    for force in new_system.getForces():
+        if 'Nonbonded' not in force.__class__.__name__:
+            force.setForceGroup(1)
+
+    return new_system
+
+
 if __name__ == '__main__':
     import doctest
     doctest.testmod()
