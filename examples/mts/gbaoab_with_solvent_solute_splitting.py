@@ -1,9 +1,9 @@
 from openmmtools import testsystems
-from openmmtools.forcefactories import split_using_exceptions
+from openmmtools.forcefactories import split_nb_using_exceptions
 
 testsystem = testsystems.AlanineDipeptideExplicit()  # using PME! should be starting with reaction field
 
-new_system = split_using_exceptions(testsystem.system, testsystem.mdtraj_topology)
+new_system = split_nb_using_exceptions(testsystem.system, testsystem.mdtraj_topology)
 
 from simtk.openmm.app import Simulation
 from openmmtools.integrators import LangevinIntegrator

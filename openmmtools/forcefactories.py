@@ -219,7 +219,7 @@ def clone_nonbonded_parameters(nonbonded_force, energy_expression=default_energy
 from copy import deepcopy
 from openmmtools.forces import find_forces
 
-def split_using_exceptions(system, md_topology):
+def split_nb_using_exceptions(system, md_topology):
     """Construct a new system where force group 0 contains slow, expensive solvent-solvent
     interactions, and force group 1 contains fast, cheaper solute-solute and solute-solvent
     interactions.
