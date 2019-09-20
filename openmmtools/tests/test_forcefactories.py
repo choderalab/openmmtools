@@ -196,3 +196,25 @@ def test_replace_reaction_field():
                     name=test_name, platform=platform)
         f.description = "Testing replace_reaction_field on system {} with shifted=True".format(test_name)
         yield f
+
+
+def check_force_group_decomposition_valid(testsystem, force_group_splitter):
+    """force_group_splitter(system, md_topology) returns a copy of system that
+    splits system's forces in some convenient way.
+
+    Check that the copy describes the same system overall, by checking whether it
+    produces identical forces as the original on a slightly randomized configuration.
+    """
+    new_system = force_group_splitter(testsystem.system, testsystem.mdtraj_topology)
+    positions = generate_new_positions(testsystem.system, testsystem.positions, nsteps=5)
+    compare_system_forces(testsystem.system, new_system, positions)
+
+
+def test_split_nb_using_exceptions():
+    testsystem = testsystems.AlanineDipeptideExplicit()
+    check_force_group_decomposition_valid(testsystem, split_nb_using_exceptions)
+
+
+def test_split_nb_using_subtraction():
+    testsystem = testsystems.AlanineDipeptideExplicit()
+    check_force_group_decomposition_valid(testsystem, split_nb_using_subtraction)
