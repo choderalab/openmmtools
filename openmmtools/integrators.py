@@ -2125,22 +2125,29 @@ class GHMCIntegrator(LangevinIntegrator):
         kwargs['splitting'] = "O { V R V } O"
         super(GHMCIntegrator, self).__init__(*args, **kwargs)
 
+
 class FIREMinimizationIntegrator(mm.CustomIntegrator):
     """Fast Internal Relaxation Engine (FIRE) minimization.
+
     Notes
     -----
     This integrator is taken verbatim from Peter Eastman's example appearing in the CustomIntegrator header file documentation.
+
     References
     ----------
     Erik Bitzek, Pekka Koskinen, Franz Gaehler, Michael Moseler, and Peter Gumbsch.
     Structural Relaxation Made Simple. PRL 97:170201, 2006.
     http://dx.doi.org/10.1103/PhysRevLett.97.170201
+
     Examples
     --------
     >>> from openmmtools import testsystems
     >>> from simtk import openmm
     >>> t = testsystems.AlanineDipeptideVacuum()
     >>> system, positions = t.system, t.positions
+
+    Create a FIRE integrator with default parameters and minimize for 100 steps
+
     >>> integrator = FIREMinimizationIntegrator()
     >>> context = openmm.Context(system, integrator)
     >>> context.setPositions(positions)

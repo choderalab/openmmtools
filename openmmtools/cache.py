@@ -650,12 +650,57 @@ class DummyContextCache(object):
         The OpenMM platform to use. If None, OpenMM tries to select
         the fastest one available.
 
+    Examples
+    --------
+    Create a new ``Context`` object for alanine dipeptide in vacuum in NPT.
+
+    >>> from simtk import openmm, unit
+    >>> from openmmtools import states, testsystems
+    >>> system = testsystems.AlanineDipeptideVacuum().system
+    >>> thermo_state = states.ThermodynamicState(system, temperature=300*unit.kelvin)
+
+    >>> context_cache = DummyContextCache()
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> context, context_integrator = context_cache.get_context(thermo_state, integrator)
+
+    Or create a ``Context`` with an arbitrary integrator (when you only
+    need to compute energies, for example).
+
+    >>> context, context_integrator = context_cache.get_context(thermo_state)
+
     """
     def __init__(self, platform=None):
         self.platform = platform
 
-    def get_context(self, thermodynamic_state, integrator):
-        """Create a new context in the given thermodynamic state."""
+    def get_context(self, thermodynamic_state, integrator=None):
+        """Create a new context in the given thermodynamic state.
+
+        Parameters
+        ----------
+        thermodynamic_state : states.ThermodynamicState
+            The thermodynamic state of the system.
+        integrator : simtk.openmm.Integrator, optional
+            The integrator to bind to the new context. If ``None``, an arbitrary
+            integrator is used. Currently, this is a ``LangevinIntegrator`` with
+            "V R O R V" splitting, but this might change in the future. Default
+            is ``None``.
+
+        Returns
+        -------
+        context : simtk.openmm.Context
+            The new context in the given thermodynamic system.
+        context_integrator : simtk.openmm.Integrator
+            The integrator bound to the context that can be used for
+            propagation. This is identical to the ``integrator`` argument
+            if it was passed.
+
+        """
+        if integrator is None:
+            integrator = integrators.LangevinIntegrator(
+                timestep=1.0*unit.femtoseconds,
+                splitting="V R O R V",
+                temperature=thermodynamic_state.temperature
+            )
         context = thermodynamic_state.create_context(integrator, self.platform)
         return context, integrator
 
