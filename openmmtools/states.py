@@ -281,11 +281,13 @@ class ThermodynamicsError(Exception):
      MULTIPLE_BAROSTATS,
      NO_BAROSTAT,
      UNSUPPORTED_BAROSTAT,
+     UNSUPPORTED_ANISOTROPIC_BAROSTAT,
+     UNSUPPORTED_MEMBRANE_BAROSTAT,
      INCONSISTENT_BAROSTAT,
      BAROSTATED_NONPERIODIC,
      INCONSISTENT_INTEGRATOR,
      INCOMPATIBLE_SAMPLER_STATE,
-     INCOMPATIBLE_ENSEMBLE) = range(12)
+     INCOMPATIBLE_ENSEMBLE) = range(14)
 
     error_messages = {
         MULTIPLE_THERMOSTATS: "System has multiple thermostats.",
@@ -294,6 +296,10 @@ class ThermodynamicsError(Exception):
         INCONSISTENT_THERMOSTAT: "System thermostat is inconsistent with thermodynamic state.",
         MULTIPLE_BAROSTATS: "System has multiple barostats.",
         UNSUPPORTED_BAROSTAT: "Found unsupported barostat {} in system.",
+        UNSUPPORTED_ANISOTROPIC_BAROSTAT:
+            "MonteCarloAnisotropicBarostat is only supported if the pressure along all scaled axes is the same.",
+        UNSUPPORTED_MEMBRANE_BAROSTAT:
+            "MonteCarloAnisotropicBarostat is only supported if the surface tension is zero.",
         NO_BAROSTAT: "System does not have a barostat specifying the pressure.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
         BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat.",
@@ -696,7 +702,7 @@ class ThermodynamicState(object):
         # Update the internally stored standard system, and restore the old
         # pressure if something goes wrong (e.g. the system is not periodic).
         try:
-            self._pressure = new_barostat.getDefaultPressure()
+            self._pressure = self._get_barostat_pressure(new_barostat)
             self._unsafe_set_system(system, fix_state=False)
         except ThermodynamicsError:
             self._pressure = old_pressure
@@ -1235,9 +1241,12 @@ class ThermodynamicState(object):
         # If pressure is None, we try to infer the pressure from the barostat.
         barostat = self._find_barostat(system)
         if pressure is None and barostat is not None:
-            self._pressure = barostat.getDefaultPressure()
+            self._pressure = self._get_barostat_pressure(barostat)
         else:
             self._pressure = pressure  # Pressure here can also be None.
+        self._barostat_type = openmm.MonteCarloBarostat
+        if barostat is not None:
+            self._barostat_type = type(barostat)
 
         # If temperature is None, we infer the temperature from a thermostat.
         if temperature is None:
@@ -1386,7 +1395,7 @@ class ThermodynamicState(object):
         # Here we push the barostat at the end.
         barostat = self._pop_barostat(system)
         if barostat is not None:
-            barostat.setDefaultPressure(self._STANDARD_PRESSURE)
+            self._set_barostat_pressure(barostat, self._STANDARD_PRESSURE)
             system.addForce(barostat)
 
     def _compute_standard_system_hash(self, standard_system):
@@ -1422,7 +1431,7 @@ class ThermodynamicState(object):
         # Apply pressure and temperature to barostat.
         if update_pressure:
             self._set_barostat_pressure(barostat, self.pressure)
-            context.setParameter(barostat.Pressure(), self.pressure)
+            self._set_barostat_pressure_in_context(barostat, self.pressure, context)
         if update_temperature:
             self._set_barostat_temperature(barostat, self.temperature)
             # TODO remove try except when drop openmm7.0 support
@@ -1544,7 +1553,7 @@ class ThermodynamicState(object):
     # Internal-usage: barostat handling
     # -------------------------------------------------------------------------
 
-    _SUPPORTED_BAROSTATS = {'MonteCarloBarostat'}
+    _SUPPORTED_BAROSTATS = {'MonteCarloBarostat', 'MonteCarloAnisotropicBarostat', 'MonteCarloMembraneBarostat'}
 
     @classmethod
     def _find_barostat(cls, system, get_index=False):
@@ -1573,6 +1582,19 @@ class ThermodynamicState(object):
             if barostat.__class__.__name__ not in cls._SUPPORTED_BAROSTATS:
                 raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_BAROSTAT,
                                           barostat.__class__.__name__)
+            elif isinstance(barostat, openmm.MonteCarloAnisotropicBarostat):
+                # support only if pressure in all scaled directions is equal
+                pressures = barostat.getDefaultPressure().value_in_unit(unit.bar)
+                scaled = [barostat.getScaleX(), barostat.getScaleY(), barostat.getScaleY()]
+                if sum(scaled) == 0:
+                    raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT)
+                active_pressures = [pressure for pressure, active in zip(pressures, scaled)]
+                if any(abs(pressure - active_pressures[0]) > 0 for pressure in active_pressures):
+                    raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT)
+            elif isinstance(barostat, openmm.MonteCarloMembraneBarostat):
+                surface_tension = barostat.getDefaultSurfaceTension()
+                if abs(surface_tension.value_in_unit(unit.bar*unit.nanometer)) > 0:
+                    raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_MEMBRANE_BAROSTAT)
         if get_index:
             return force_idx, barostat
         return barostat
@@ -1596,13 +1618,14 @@ class ThermodynamicState(object):
         return None
 
     def _is_barostat_consistent(self, barostat):
-        """Check the barostat's temperature and pressure."""
+        """Check the barostat's type, temperature and pressure."""
         try:
             barostat_temperature = barostat.getDefaultTemperature()
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat_temperature = barostat.getTemperature()
-        barostat_pressure = barostat.getDefaultPressure()
-        is_consistent = utils.is_quantity_close(barostat_temperature, self.temperature)
+        barostat_pressure = self._get_barostat_pressure(barostat)
+        is_consistent = (type(barostat) is self._barostat_type)
+        is_consistent = is_consistent and utils.is_quantity_close(barostat_temperature, self.temperature)
         is_consistent = is_consistent and utils.is_quantity_close(barostat_pressure,
                                                                   self.pressure)
         return is_consistent
@@ -1644,7 +1667,31 @@ class ThermodynamicState(object):
     @staticmethod
     def _set_barostat_pressure(barostat, pressure):
         """Set barostat pressure."""
-        barostat.setDefaultPressure(pressure)
+        if isinstance(pressure, unit.Quantity):
+            pressure = pressure.value_in_unit(unit.bar)
+        if isinstance(barostat, openmm.MonteCarloAnisotropicBarostat):
+            barostat.setDefaultPressure(openmm.Vec3(pressure, pressure, pressure)*unit.bar)
+        else:
+            barostat.setDefaultPressure(pressure*unit.bar)
+
+    @staticmethod
+    def _set_barostat_pressure_in_context(barostat, pressure, context):
+        """Set barostat pressure."""
+        if isinstance(barostat, openmm.MonteCarloAnisotropicBarostat):
+            p = pressure.value_in_unit(unit.bar)
+            context.setParameter(barostat.Pressure(), openmm.Vec3(p, p, p)*unit.bar)
+        else:
+            context.setParameter(barostat.Pressure(), pressure)
+
+    @staticmethod
+    def _get_barostat_pressure(barostat):
+        """Set barostat pressure."""
+        if isinstance(barostat, openmm.MonteCarloAnisotropicBarostat):
+            scaled = [barostat.getScaleX(), barostat.getScaleY(), barostat.getScaleZ()]
+            first_scaled_axis = scaled.index(True)
+            return barostat.getDefaultPressure()[first_scaled_axis]
+        else:
+            return barostat.getDefaultPressure()
 
     @staticmethod
     def _set_barostat_temperature(barostat, temperature):
