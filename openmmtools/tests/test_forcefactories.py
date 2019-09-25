@@ -206,7 +206,7 @@ def check_force_group_decomposition_valid(testsystem, force_group_splitter):
     produces identical forces as the original on a slightly randomized configuration.
     """
     new_system = force_group_splitter(testsystem.system, testsystem.mdtraj_topology)
-    positions = generate_new_positions(testsystem.system, testsystem.positions, nsteps=5)
+    positions = generate_new_positions(testsystem.system, testsystem.positions, nsteps=50)
     compare_system_forces(testsystem.system, new_system, positions)
 
 
