@@ -178,14 +178,17 @@ from openmmtools.constants import ONE_4PI_EPS0
 default_energy_expression = "(4*epsilon*((sigma/r)^12-(sigma/r)^6) + k * chargeprod/r); sigma=0.5*(sigma1+sigma2); epsilon=sqrt(epsilon1*epsilon2); chargeprod=charge1*charge2; k={};".format(ONE_4PI_EPS0)
 
 
-def clone_nonbonded_parameters(nonbonded_force, energy_expression=default_energy_expression):
+def clone_nonbonded_parameters(nonbonded_force, 
+                               energy_expression=default_energy_expression,
+                               energy_prefactor=''):
     """Creates a new CustomNonbonded force with the same global parameters,
     per-particle parameters, and exception parameters as """
 
     #TODO: assert that nonbonded_force.getNonbondedMethod() indicates reaction field
 
     # call constructor
-    new_force = openmm.CustomNonbondedForce(energy_expression)
+    # The 'energy_prefactor' allows us to easily change sign, or e.g. halve the energy if needed
+    new_force = openmm.CustomNonbondedForce(energy_prefactor+energy_expression)
     new_force.addPerParticleParameter('charge')
     new_force.addPerParticleParameter('sigma')
     new_force.addPerParticleParameter('epsilon')
@@ -225,9 +228,9 @@ def split_nb_using_exceptions(system, md_topology):
     interactions.
 
     TODO: correct this:
-    Force group 0: default nonbonded force with exceptions for solute-solvent pairs
+    Force group 0: default nonbonded force with exceptions for solute-{solute,solvent} pairs
     Force group 1:
-    * CustomNonbonded force with interaction group for solute-solvent pairs
+    * CustomNonbonded force with interaction group for solute-{solute,solvent} pairs
     * non-Nonbonded forces
 
     TODO: more informative docstring
@@ -240,11 +243,10 @@ def split_nb_using_exceptions(system, md_topology):
     force_index, nb_force = find_forces(new_system, openmm.NonbondedForce, only_one=True)
     # assert('Cutoff' in nb_force.getNonbondedMethod()) # TODO: this, less jankily
 
-    # create copies containing
-    nb_except_solute_solvent = nb_force
-    nb_only_solute_solvent = clone_nonbonded_parameters(nb_force)
-
-    nb_except_solute_solvent.setForceGroup(0)
+    # create copies for each interaction. Only half in solute/solute as we double count.
+    nb_only_solvent_solvent = nb_force
+    nb_only_solvent_solute = clone_nonbonded_parameters(nb_force)
+    nb_only_solute_solute = clone_nonbonded_parameters(nb_force,energy_prefactor='0.5*')
 
     # identify solvent-solute pairs
     # find the pairs (i,j) where i in solute, j in solvent
@@ -254,15 +256,26 @@ def split_nb_using_exceptions(system, md_topology):
     solute_indices = list(map(int, md_topology.select('not water')))
 
     # for each (i,j) set chargeprod, sigma, epsilon to 0, causing these pairs to be omitted completely from force calculation
+    # Remove solute-solute interactions
+    for i in solute_indices:
+        for j in solute_indices:
+            nb_only_solvent_solvent.addException(i, j, 0, 0, 0, replace=True)
+                
+    # Remove solvent-solute interactions
     for i in solvent_indices:
         for j in solute_indices:
-            nb_except_solute_solvent.addException(i, j, 0, 0, 0)
-
-    nb_only_solute_solvent.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
-
-    nb_except_solute_solvent.setForceGroup(0)
-    nb_only_solute_solvent.setForceGroup(1)
-
+            nb_only_solvent_solvent.addException(i, j, 0, 0, 0,replace=True)
+ 
+ 
+    # Add appropriate interaction groups
+    nb_only_solvent_solute.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
+    nb_only_solute_solute.addInteractionGroup(set1=solute_indices, set2=solute_indices)
+ 
+    # Set solvent-solvent to fg 0, everything else to fg1
+    nb_only_solvent_solvent.setForceGroup(0) 
+    nb_only_solvent_solute.setForceGroup(1)
+    nb_only_solute_solute.setForceGroup(1)
+     
     # handle non-NonbondedForce's
     for force in new_system.getForces():
         if 'Nonbonded' not in force.__class__.__name__:
