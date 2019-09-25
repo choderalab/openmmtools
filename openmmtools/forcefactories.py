@@ -345,7 +345,8 @@ minus_half_surrogate_energy_expression = '-' + half_surrogate_energy_expression
 # TODO: different energy expressions for protein-protein and protein-solvent interactions?
 
 def split_nb_using_subtraction(system, md_topology,
-                               cutoff=10.0 * unit.angstrom # TODO: use the cutoff!
+                               switching_distance=4.0 * unit.angstrom,
+                               cutoff_distance=5.0 * unit.angstrom,
                                ):
     """
     Force group 0: default NonbondedForce minus surrogate
@@ -362,6 +363,7 @@ def split_nb_using_subtraction(system, md_topology,
     # NOTE: these need to be python ints -- not np.int64s -- when passing to addInteractionGroup later!
     solvent_indices = list(map(int, md_topology.select('water')))
     solute_indices = list(map(int, md_topology.select('not water')))
+
     # TODO: handle counterions
 
     # TODO: smooth cutoff, and check how bad this is with very small cutoff (setUseSwitchingFunction(True)
@@ -377,6 +379,8 @@ def split_nb_using_subtraction(system, md_topology,
 
     # add forces to new_system
     for new_force in [protein_protein_force, protein_solvent_force, minus_protein_protein_force, minus_protein_solvent_force]:
+        new_force.setSwitchingDistance(switching_distance)
+        new_force.setCutoffDistance(cutoff_distance)
         new_system.addForce(new_force)
 
     # set interaction groups
