@@ -1351,7 +1351,7 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2))
         cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
         cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
-        cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(4))  # Modify ions.
+        cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(3))  # Modify ions.
         cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
