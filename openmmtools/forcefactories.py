@@ -184,7 +184,9 @@ def clone_nonbonded_parameters(nonbonded_force,
     """Creates a new CustomNonbonded force with the same global parameters,
     per-particle parameters, and exception parameters as """
 
-    #TODO: assert that nonbonded_force.getNonbondedMethod() indicates reaction field
+    allowable_nb_methods = {openmm.NonbondedForce.CutoffPeriodic, openmm.NonbondedForce.CutoffNonPeriodic}
+    assert(nonbonded_force.getNonbondedMethod() in allowable_nb_methods)
+
 
     # call constructor
     # The 'energy_prefactor' allows us to easily change sign, or e.g. halve the energy if needed
@@ -193,24 +195,26 @@ def clone_nonbonded_parameters(nonbonded_force,
     new_force.addPerParticleParameter('sigma')
     new_force.addPerParticleParameter('epsilon')
 
+
     # go through all of the setter and getter methods
     new_force.setCutoffDistance(nonbonded_force.getCutoffDistance())
     #new_force.setEwaldErrorTolerance(nonbonded_force.getEwaldErrorTolerance())
     #new_force.setForceGroup(nonbonded_force.getForceGroup())
-    #new_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod()) # If PME, will be an Illegal value for CustomNonbonded
+    new_force.setNonbondedMethod(nonbonded_force.getNonbondedMethod())
     #new_force.setPMEParameters(*nonbonded_force.getPMEParameters())
     #new_force.setReactionFieldDielectric(nonbonded_force.getReactionFieldDielectric())
     #new_force.setReciprocalSpaceForceGroup(nonbonded_force.getReciprocalSpaceForceGroup())
-    new_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
-    #new_force.setUseDispersionCorrection(nonbonded_force.getUseDispersionCorrection())
     new_force.setUseSwitchingFunction(nonbonded_force.getUseSwitchingFunction())
+    new_force.setSwitchingDistance(nonbonded_force.getSwitchingDistance())
+    new_force.setUseLongRangeCorrection(nonbonded_force.getUseDispersionCorrection())
+
 
     # now add all the particle parameters
     num_particles = nonbonded_force.getNumParticles()
     for i in range(num_particles):
         new_force.addParticle(nonbonded_force.getParticleParameters(i))
 
-    # now add all the exceptions
+    # now add all the exceptions? # TODO: check if we want to do this...
     #    for exception_index in range(nonbonded_force.getNumExceptions()):
     #        new_force.addException(nonbonded_force.getExceptionParameters(exception_index))
 
