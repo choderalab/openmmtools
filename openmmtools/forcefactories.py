@@ -223,8 +223,7 @@ def clone_nonbonded_parameters(nonbonded_force,
 
     return new_force
 
-from copy import deepcopy
-from openmmtools.forces import find_forces
+
 def split_nb_using_interaction_groups(system, md_topology):
     """Construct a copy of system where its nonbonded force has been replaced
     with three nonbonded forces, each using an interaction group restricted to
@@ -279,10 +278,10 @@ def split_nb_using_exceptions(system, md_topology):
     """
 
     # create a copy of the original system: only touch this
-    new_system = deepcopy(system)
+    new_system = copy.deepcopy(system)
 
     # find the default nonbonded force
-    force_index, nb_force = find_forces(new_system, openmm.NonbondedForce, only_one=True)
+    force_index, nb_force = forces.find_forces(new_system, openmm.NonbondedForce, only_one=True)
     # assert('Cutoff' in nb_force.getNonbondedMethod()) # TODO: this, less jankily
 
     # create copies for each interaction. Only half in solute/solute as we double count.
@@ -335,7 +334,6 @@ minus_half_surrogate_energy_expression = '-' + half_surrogate_energy_expression
 
 # TODO: different energy expressions for protein-protein and protein-solvent interactions?
 
-from copy import deepcopy
 def split_nb_using_subtraction(system, md_topology,
                                cutoff=10.0 * unit.angstrom # TODO: use the cutoff!
                                ):
@@ -343,11 +341,11 @@ def split_nb_using_subtraction(system, md_topology,
     Force group 0: default NonbondedForce minus surrogate
     Force group 1: surrogate + non-Nonbonded"""
 
-    new_system = deepcopy(system)
+    new_system = copy.deepcopy(system)
 
 
     # find the default nonbonded force
-    force_index, force = find_forces(new_system, openmm.NonbondedForce, only_one=True)
+    force_index, force = forces.find_forces(new_system, openmm.NonbondedForce, only_one=True)
     force.setForceGroup(0)
 
     # find atom indices for solvent, atom indices for solute
