@@ -250,6 +250,12 @@ def split_nb_using_interaction_groups(system, md_topology):
     nb_only_solvent_solute.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
     nb_only_solute_solute.addInteractionGroup(set1=solute_indices, set2=solute_indices)
 
+    # remove original force, add new forces
+    new_system.removeForce(force_index)
+    new_system.addForce(nb_only_solvent_solvent)
+    new_system.addForce(nb_only_solute_solute)
+    new_system.addForce(nb_only_solvent_solute)
+
     # Set solvent-solvent to fg 0, everything else to fg1
     nb_only_solvent_solvent.setForceGroup(0)
     nb_only_solvent_solute.setForceGroup(1)
@@ -311,6 +317,10 @@ def split_nb_using_exceptions(system, md_topology):
     # Add appropriate interaction groups
     nb_only_solvent_solute.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
     nb_only_solute_solute.addInteractionGroup(set1=solute_indices, set2=solute_indices)
+
+    # add new forces
+    new_system.addForce(nb_only_solute_solute)
+    new_system.addForce(nb_only_solvent_solute)
  
     # Set solvent-solvent to fg 0, everything else to fg1
     nb_only_solvent_solvent.setForceGroup(0) 
