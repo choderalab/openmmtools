@@ -210,11 +210,12 @@ def check_force_group_decomposition_valid(testsystem, force_group_splitter):
     compare_system_forces(testsystem.system, new_system, positions)
 
 
+from simtk.openmm import app
 def test_split_nb_using_exceptions():
-    testsystem = testsystems.AlanineDipeptideExplicit()
+    testsystem = testsystems.AlanineDipeptideExplicit(nonbondedMethod=app.CutoffPeriodic)
     check_force_group_decomposition_valid(testsystem, split_nb_using_exceptions)
 
 
 def test_split_nb_using_subtraction():
-    testsystem = testsystems.AlanineDipeptideExplicit()
+    testsystem = testsystems.AlanineDipeptideExplicit(nonbondedMethod=app.CutoffPeriodic)
     check_force_group_decomposition_valid(testsystem, split_nb_using_subtraction)
