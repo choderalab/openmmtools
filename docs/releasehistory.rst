@@ -1,6 +1,11 @@
 Release History
 ***************
 
+Enhancements
+------------
+- Added support for anisotropic and membrane barostats in `ThermodynamicState`
+
+
 0.18.3 - Storage enhancements and bugfixes
 ==========================================
 
