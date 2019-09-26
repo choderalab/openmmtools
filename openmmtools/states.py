@@ -1645,10 +1645,6 @@ class ThermodynamicState(object):
                 active_pressures = [pressure for pressure, active in zip(pressures, scaled) if active]
                 if any(abs(pressure - active_pressures[0]) > 0 for pressure in active_pressures):
                     raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT)
-            #elif isinstance(barostat, openmm.MonteCarloMembraneBarostat):
-            #    surface_tension = barostat.getDefaultSurfaceTension()
-            #    if abs(surface_tension.value_in_unit(unit.bar*unit.nanometer)) > 0:
-            #        raise ThermodynamicsError(ThermodynamicsError.UNSUPPORTED_MEMBRANE_BAROSTAT)
         if get_index:
             return force_idx, barostat
         return barostat
