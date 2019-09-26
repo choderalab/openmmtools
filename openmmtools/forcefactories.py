@@ -226,8 +226,9 @@ def clone_nonbonded_parameters(nonbonded_force,
 
 def split_nb_using_interaction_groups(system, md_topology):
     """Construct a copy of system where its nonbonded force has been replaced
-    with three nonbonded forces, each using an interaction group restricted to
-    water-water, water-solute, or solute-solute interactions. Water-water
+    with two nonbonded forces, one using an interaction group restricted to
+    water-water interactions, and the other using interaction groups
+    restricted to water-solute and solute-solute interactions. Water-water
     interactions are in force group 0, and all other interactions are in force
     group 1.
     """
@@ -239,27 +240,29 @@ def split_nb_using_interaction_groups(system, md_topology):
     force_index, nb_force = forces.find_forces(new_system, openmm.NonbondedForce, only_one=True)
     # create copies for each interaction. Only half in solvent/solvent and solute/solute as we double-count.
     nb_only_solvent_solvent = clone_nonbonded_parameters(nb_force, energy_prefactor='0.5*')
-    nb_only_solvent_solute = clone_nonbonded_parameters(nb_force)
-    nb_only_solute_solute = clone_nonbonded_parameters(nb_force, energy_prefactor='0.5*')
+    nb_solute = clone_nonbonded_parameters(nb_force)
 
     # NOTE: these need to be python ints -- not np.int64s -- when passing to addInteractionGroup later!
     solvent_indices = list(map(int, md_topology.select('water')))
     solute_indices = list(map(int, md_topology.select('not water')))
 
+    #all_indices = list(range(md_topology.n_atoms))
+
     nb_only_solvent_solvent.addInteractionGroup(set1=solvent_indices, set2=solvent_indices)
-    nb_only_solvent_solute.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
-    nb_only_solute_solute.addInteractionGroup(set1=solute_indices, set2=solute_indices)
+
+    nb_solute.addInteractionGroup(set1=solute_indices, set2=solute_indices)
+    nb_solute.addInteractionGroup(set1=solute_indices, set2=solvent_indices)
+
+    #nb_solute.addInteractionGroup(set1=solute_indices, set2=all_indices)
 
     # remove original force, add new forces
     new_system.removeForce(force_index)
+    new_system.addForce(nb_solute)
     new_system.addForce(nb_only_solvent_solvent)
-    new_system.addForce(nb_only_solute_solute)
-    new_system.addForce(nb_only_solvent_solute)
 
     # Set solvent-solvent to fg 0, everything else to fg1
     nb_only_solvent_solvent.setForceGroup(0)
-    nb_only_solvent_solute.setForceGroup(1)
-    nb_only_solute_solute.setForceGroup(1)
+    nb_solute.setForceGroup(1)
 
     # handle non-NonbondedForce's
     for force in new_system.getForces():
