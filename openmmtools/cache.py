@@ -453,13 +453,17 @@ class ContextCache(object):
         else:
             platform_serialization = None
         return dict(platform=platform_serialization, capacity=self.capacity,
-                    time_to_live=self.time_to_live)
+                    time_to_live=self.time_to_live, platform_properties=self._platform_properties)
 
     def __setstate__(self, serialization):
         if serialization['platform'] is None:
             self._platform = None
         else:
             self._platform = openmm.Platform.getPlatformByName(serialization['platform'])
+        if not 'platform_properties' in serialization:
+            self._platform_properties = None
+        else:
+            self._platform_properties = serialization["platform_properties"]
         self._lru = LRUCache(serialization['capacity'], serialization['time_to_live'])
 
     # -------------------------------------------------------------------------
