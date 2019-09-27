@@ -229,6 +229,9 @@ class ContextCache(object):
     platform : simtk.openmm.Platform, optional
         The OpenMM platform to use to create Contexts. If None, OpenMM
         tries to select the fastest one available (default is None).
+    platform_properties : dict, optional
+        A dictionary of platform properties for the OpenMM platform.
+        Only valid if the platform is not None (default is None).
     **kwargs
         Parameters to pass to the underlying LRUCache constructor such
         as capacity and time_to_live.
@@ -303,8 +306,11 @@ class ContextCache(object):
 
     """
 
-    def __init__(self, platform=None, **kwargs):
+    def __init__(self, platform=None, platform_properties=None, **kwargs):
         self._platform = platform
+        self._platform_properties = platform_properties
+        if platform_properties is not None and platform is None:
+            raise ValueError("To set platform_properties, you need to also specify the platform.")
         self._lru = LRUCache(**kwargs)
 
     def __len__(self):
@@ -429,7 +435,7 @@ class ContextCache(object):
             try:
                 context = self._lru[context_id]
             except KeyError:
-                context = thermodynamic_state.create_context(integrator, self._platform)
+                context = thermodynamic_state.create_context(integrator, self._platform, self._platform_properties)
             self._lru[context_id] = context
         context_integrator = context.getIntegrator()
 

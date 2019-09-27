@@ -357,3 +357,22 @@ class TestContextCache(object):
         cache.get_context(self.compatible_states[0], integrator)
         with nose.tools.assert_raises(RuntimeError):
             cache.platform = platforms[0]
+
+    def test_platform_properties(self):
+        platform_properties = {"CpuThreads": "2"}
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=None, platform_properties=platform_properties)
+        assert str(cm.exception) == "To set platform_properties, you need to also specify the platform."
+
+        platform = openmm.Platform.getPlatformByName("CPU")
+        cache = ContextCache(
+                platform=platform,
+                platform_properties=platform_properties
+        )
+
+        thermodynamic_state = copy.deepcopy(self.water_300k)
+        integrator = integrators.LangevinIntegrator(temperature=300 * unit.kelvin, measure_heat=True,
+                                                    measure_shadow_work=True)
+        context, _ = cache.get_context(thermodynamic_state, integrator)
+        assert context.getPlatform().getPropertyValue(context, "CpuThreads") == "2"
+        del context
