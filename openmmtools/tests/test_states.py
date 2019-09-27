@@ -669,6 +669,27 @@ class TestThermodynamicState(object):
             # Get rid of old context. This test can create a lot of them.
             del context, integrator
 
+        # test platform properties
+        state = ThermodynamicState(self.toluene_vacuum, self.std_temperature)
+        platform_properties = {"CpuThreads": "2"}
+        with nose.tools.assert_raises(ValueError) as cm:
+            state.create_context(
+                openmm.VerletIntegrator(0.001),
+                platform=None,
+                platform_properties=platform_properties
+            )
+        assert str(cm.exception) == "To set platform_properties, you need to also specify the platform."
+
+        platform = openmm.Platform.getPlatformByName("CPU")
+        context = state.create_context(
+                openmm.VerletIntegrator(0.001),
+                platform=platform,
+                platform_properties=platform_properties
+        )
+        assert context.getPlatform().getPropertyValue(context, "CpuThreads") == "2"
+        del context
+
+
     def test_method_is_compatible(self):
         """ThermodynamicState context and state compatibility methods."""
 

@@ -1074,7 +1074,7 @@ class ThermodynamicState(object):
         is_compatible = self._standard_system_hash == context_system_hash
         return is_compatible
 
-    def create_context(self, integrator, platform=None):
+    def create_context(self, integrator, platform=None, platform_properties=None):
         """Create a context in this ThermodynamicState.
 
         The context contains a copy of the system. If the integrator
@@ -1098,6 +1098,9 @@ class ThermodynamicState(object):
         platform : simtk.openmm.Platform, optional
            Platform to use. If None, OpenMM tries to select the fastest
            available platform. Default is None.
+        platform_properties : dict, optional
+           A dictionary of platform properties. Requires platform to be
+           specified.
 
         Returns
         -------
@@ -1109,6 +1112,8 @@ class ThermodynamicState(object):
         ThermodynamicsError
             If the integrator has a temperature different from this
             ThermodynamicState.
+        ValueError
+            If platform_properties is specified, but platform is None
 
         Examples
         --------
@@ -1149,9 +1154,13 @@ class ThermodynamicState(object):
 
         # Create context.
         if platform is None:
+            if platform_properties is not None:
+                raise ValueError("To set platform_properties, you need to also specify the platform.")
             return openmm.Context(system, integrator)
-        else:
+        elif platform_properties is None:
             return openmm.Context(system, integrator, platform)
+        else:
+            return openmm.Context(system, integrator, platform, platform_properties)
 
     def apply_to_context(self, context):
         """Apply this ThermodynamicState to the context.
