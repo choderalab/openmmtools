@@ -272,10 +272,11 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
 
     # Compute particle interactions between different groups of atoms
     # ----------------------------------------------------------------
-    #Turn off other alchemical regions
+    # Turn off other alchemical regions
     if len(other_alchemical_atoms) > 0:
         turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, only_atoms=other_alchemical_atoms)
         turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, exceptions=True, only_atoms=other_alchemical_atoms)
+
     system = copy.deepcopy(reference_system)
 
     # Compute total energy from nonbonded interactions
@@ -442,12 +443,11 @@ def is_alchemical_pme_treatment_exact(alchemical_system):
     # lambda_electrostatics variable.
     _, nonbonded_force = forces.find_forces(alchemical_system, openmm.NonbondedForce,
                                             only_one=True)
-    test_electro_suffixes = ['', '_zero', '_one', '_two']
     for parameter_idx in range(nonbonded_force.getNumGlobalParameters()):
         parameter_name = nonbonded_force.getGlobalParameterName(parameter_idx)
-        for suffix in test_electro_suffixes:
-            if parameter_name == 'lambda_electrostatics{}'.format(suffix):
-                return True
+        # With multiple alchemical regions, lambda_electrostatics might have a suffix.
+        if parameter_name.startswith('lambda_electrostatics'):
+            return True
     return False
 
 
@@ -464,7 +464,9 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
     """
     if not isinstance(alchemical_regions, list):
         alchemical_regions = [alchemical_regions]
-    force_group = -1  # Default we compare the energy of all groups.
+
+    # Default we compare the energy of all groups.
+    force_group = -1
 
     # Check nonbonded method. Comparing with PME is more complicated
     # because the alchemical system with direct-space treatment of PME
@@ -517,6 +519,7 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         err_msg = "Maximum allowable deviation exceeded (was {:.8f} kcal/mol; allowed {:.8f} kcal/mol)."
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
+
 def check_multi_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """wrapper around check_interacting_energy_components for multiple regions
 
@@ -542,7 +545,9 @@ def check_multi_interacting_energy_components(reference_system, alchemical_syste
         for atom in region.alchemical_atoms:
             all_alchemical_atoms.add(atom)
     for region in alchemical_regions:
-        check_interacting_energy_components(reference_system, alchemical_system, region, positions, all_alchemical_atoms, True)
+        check_interacting_energy_components(
+            reference_system, alchemical_system, region, positions,
+            all_alchemical_atoms, multi_regions=True)
 
 
 def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions,
@@ -611,22 +616,22 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
                                                                         positions, platform=GLOBAL_ALCHEMY_PLATFORM)
     if multi_regions:
-        region_lable = ' for region {}'.format(alchemical_regions.name)
+        region_label = ' for region {}'.format(alchemical_regions.name)
     else:
-        region_lable = ''
+        region_label = ''
 
     # Sterics particle and exception interactions are always modeled with a custom force.
-    na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics' + region_lable]
-    aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics' + region_lable]
-    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions' + region_lable]
-    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions' + region_lable]
+    na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics' + region_label]
+    aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics' + region_label]
+    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions' + region_label]
+    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions' + region_label]
 
     # With exact treatment of PME, we use the NonbondedForce offset for electrostatics.
     try:
-        na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics' + region_lable]
-        aa_custom_particle_electro = energy_components['alchemically modified NonbondedForce for alchemical/alchemical electrostatics' + region_lable]
-        na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions' + region_lable]
-        aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions' + region_lable]
+        na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics' + region_label]
+        aa_custom_particle_electro = energy_components['alchemically modified NonbondedForce for alchemical/alchemical electrostatics' + region_label]
+        na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions' + region_label]
+        aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions' + region_label]
     except KeyError:
         assert is_exact_pme
 
@@ -650,41 +655,41 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     # Check sterics interactions match
     assert_almost_equal(nn_particle_sterics, unmod_nn_particle_sterics,
-                        'Non-alchemical/non-alchemical atoms particle sterics' + region_lable)
+                        'Non-alchemical/non-alchemical atoms particle sterics' + region_label)
     assert_almost_equal(nn_exception_sterics, unmod_nn_exception_sterics,
-                        'Non-alchemical/non-alchemical atoms exceptions sterics' + region_lable)
+                        'Non-alchemical/non-alchemical atoms exceptions sterics' + region_label)
     assert_almost_equal(aa_particle_sterics, aa_custom_particle_sterics,
-                        'Alchemical/alchemical atoms particle sterics' + region_lable)
+                        'Alchemical/alchemical atoms particle sterics' + region_label)
     assert_almost_equal(aa_exception_sterics, aa_custom_exception_sterics,
-                        'Alchemical/alchemical atoms exceptions sterics' + region_lable)
+                        'Alchemical/alchemical atoms exceptions sterics' + region_label)
     assert_almost_equal(na_particle_sterics, na_custom_particle_sterics,
-                        'Non-alchemical/alchemical atoms particle sterics' + region_lable)
+                        'Non-alchemical/alchemical atoms particle sterics' + region_label)
     assert_almost_equal(na_exception_sterics, na_custom_exception_sterics,
-                        'Non-alchemical/alchemical atoms exceptions sterics' + region_lable)
+                        'Non-alchemical/alchemical atoms exceptions sterics' + region_label)
 
     # Check electrostatics interactions
     assert_almost_equal(nn_particle_electro, unmod_nn_particle_electro,
-                        'Non-alchemical/non-alchemical atoms particle electrostatics' + region_lable)
+                        'Non-alchemical/non-alchemical atoms particle electrostatics' + region_label)
     assert_almost_equal(nn_exception_electro, unmod_nn_exception_electro,
-                        'Non-alchemical/non-alchemical atoms exceptions electrostatics' + region_lable)
+                        'Non-alchemical/non-alchemical atoms exceptions electrostatics' + region_label)
     # With exact treatment of PME, the electrostatics of alchemical-alchemical
     # atoms is modeled with NonbondedForce offsets.
     if is_exact_pme:
         # Reciprocal space.
         assert_almost_equal(aa_reciprocal_energy, unmod_aa_reciprocal_energy,
-                            'Alchemical/alchemical atoms reciprocal space energy' + region_lable)
+                            'Alchemical/alchemical atoms reciprocal space energy' + region_label)
         assert_almost_equal(na_reciprocal_energy, unmod_na_reciprocal_energy,
-                            'Non-alchemical/alchemical atoms reciprocal space energy' + region_lable)
+                            'Non-alchemical/alchemical atoms reciprocal space energy' + region_label)
         # Direct space.
         assert_almost_equal(aa_particle_electro, unmod_aa_particle_electro,
-                            'Alchemical/alchemical atoms particle electrostatics' + region_lable)
+                            'Alchemical/alchemical atoms particle electrostatics' + region_label)
         assert_almost_equal(na_particle_electro, unmod_na_particle_electro,
-                            'Non-alchemical/alchemical atoms particle electrostatics' + region_lable)
+                            'Non-alchemical/alchemical atoms particle electrostatics' + region_label)
         # Exceptions.
         assert_almost_equal(aa_exception_electro, unmod_aa_exception_electro,
-                            'Alchemical/alchemical atoms exceptions electrostatics' + region_lable)
+                            'Alchemical/alchemical atoms exceptions electrostatics' + region_label)
         assert_almost_equal(na_exception_electro, unmod_na_exception_electro,
-                            'Non-alchemical/alchemical atoms exceptions electrostatics' + region_lable)
+                            'Non-alchemical/alchemical atoms exceptions electrostatics' + region_label)
     # With direct space PME, the custom forces model only the
     # direct space of alchemical-alchemical interactions.
     else:
@@ -697,14 +702,14 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
         # Check direct space energy
         assert_almost_equal(aa_particle_electro, aa_custom_particle_electro,
-                            'Alchemical/alchemical atoms particle electrostatics' + region_lable)
+                            'Alchemical/alchemical atoms particle electrostatics' + region_label)
         assert_almost_equal(na_particle_electro, na_custom_particle_electro,
-                            'Non-alchemical/alchemical atoms particle electrostatics' + region_lable)
+                            'Non-alchemical/alchemical atoms particle electrostatics' + region_label)
         # Check exceptions.
         assert_almost_equal(aa_exception_electro, aa_custom_exception_electro,
-                            'Alchemical/alchemical atoms exceptions electrostatics' + region_lable)
+                            'Alchemical/alchemical atoms exceptions electrostatics' + region_label)
         assert_almost_equal(na_exception_electro, na_custom_exception_electro,
-                            'Non-alchemical/alchemical atoms exceptions electrostatics' + region_lable)
+                            'Non-alchemical/alchemical atoms exceptions electrostatics' + region_label)
 
     # With Ewald methods, the NonbondedForce should always hold the
     # reciprocal space energy of nonalchemical-nonalchemical atoms.
@@ -737,6 +742,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
         assert_almost_equal(reference_force_energy, tot_alchemical_forces_energies,
                             '{} energy '.format(force_name))
 
+
 def check_multi_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
     """wrapper around check_noninteracting_energy_components for multiple regions
     Parameters
@@ -752,6 +758,7 @@ def check_multi_noninteracting_energy_components(reference_system, alchemical_sy
     """
     for region in alchemical_regions:
         check_noninteracting_energy_components(reference_system, alchemical_system, region, positions, True)
+
 
 def check_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions, multi_regions=False):
     """Check non-interacting energy components are zero when appropriate.
@@ -1723,6 +1730,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
                         alchemical_region, test_system.positions)
             f.description = "Testing energy components of %s..." % test_name
             yield f
+
 
 class TestDispersionlessAlchemicalFactory(object):
     """
