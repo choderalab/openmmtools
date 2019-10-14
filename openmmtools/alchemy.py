@@ -652,7 +652,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         if alchemical_regions_interactions != frozenset():
-            raise NotImplemented('Interactions between alchemcial regions is untested')
+            raise NotImplementedError('Interactions between alchemical regions is untested')
 
         logger.debug(f'Dictionary of interacting alchemical regions: {alchemical_regions_interactions}')
         if isinstance(alchemical_regions, AlchemicalRegion):
@@ -694,14 +694,14 @@ class AbsoluteAlchemicalFactory(object):
         # constraints, box vectors and all the forces. We'll later remove
         # the forces that we remodel to be alchemically modified.
         alchemical_system = copy.deepcopy(reference_system)
-        
+
         # Check that there are no virtual sites to alchemically modify.
         for alchemical_region in alchemical_regions:
             for particle_index in alchemical_region.alchemical_atoms:
                 if reference_system.isVirtualSite(particle_index):
                     raise ValueError(f'Virtual atoms in region {alchemical_region.name}. '
                                       'Alchemically modified virtual sites are not supported')
-                    
+
         # Modify forces as appropriate. We delete the forces that
         # have been processed modified at the end of the for loop.
         forces_to_remove = []
@@ -1076,13 +1076,13 @@ class AbsoluteAlchemicalFactory(object):
                 alchemical_system.addForce(force)
 
     @staticmethod
-    def _is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-        """Test if a set of particles are in two regions simultaneously and if these regions are interacting
+    def _are_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
+        """Test if a set of particles are in two regions simultaneously and if these regions are interacting.
 
         Parameters
         ----------
-        particles: set()
-            Set of particles to test check if they in two regions
+        particles: set
+            Set of particles to check if they are in two noninteracting alchemical regions.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the torsions to test.
         alchemical_regions_interactions : Set[Tuple[int, int]], optional
@@ -1104,8 +1104,8 @@ class AbsoluteAlchemicalFactory(object):
                     j += 1
         return False
 
-    @staticmethod
-    def _alchemically_modify_PeriodicTorsionForce(reference_force, alchemical_regions, alchemical_regions_interactions):
+    @classmethod
+    def _alchemically_modify_PeriodicTorsionForce(cls, reference_force, alchemical_regions, alchemical_regions_interactions):
         """Create alchemically-modified version of PeriodicTorsionForce.
 
         Parameters
@@ -1146,11 +1146,13 @@ class AbsoluteAlchemicalFactory(object):
             particle1, particle2, particle3, particle4, periodicity, phase, k = reference_force.getTorsionParameters(
                 torsion_index)
             particles = set((particle1, particle2, particle3, particle4))
-            if torsion_index not in all_alchemical_torsions:
-                if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-                    pass
-                else:
-                    force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
+
+            # We don't connect through a torsion two particles that belong
+            # to two different and noninteracting alchemical regions.
+            are_straddling = cls._are_straddling_noninteracting_regions(
+                particles, alchemical_regions, alchemical_regions_interactions)
+            if (torsion_index not in all_alchemical_torsions) and (not are_straddling):
+                force.addTorsion(particle1, particle2, particle3, particle4, periodicity, phase, k)
 
         # Update the returned value with the non-alchemical force.
         alchemical_forces[''] = [force]
@@ -1186,8 +1188,8 @@ class AbsoluteAlchemicalFactory(object):
 
         return alchemical_forces
 
-    @staticmethod
-    def _alchemically_modify_HarmonicAngleForce(reference_force, alchemical_regions, alchemical_regions_interactions):
+    @classmethod
+    def _alchemically_modify_HarmonicAngleForce(cls, reference_force, alchemical_regions, alchemical_regions_interactions):
         """Create alchemically-modified version of HarmonicAngleForce
 
         Parameters
@@ -1226,11 +1228,13 @@ class AbsoluteAlchemicalFactory(object):
         for angle_index in range(reference_force.getNumAngles()):
             [particle1, particle2, particle3, theta0, K] = reference_force.getAngleParameters(angle_index)
             particles = set((particle1, particle2, particle3))
-            if angle_index not in all_alchemical_angles:
-                if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-                    pass
-                else:
-                    force.addAngle(particle1, particle2, particle3, theta0, K)
+
+            # We don't connect through an angle two particles that belong
+            # to two different and noninteracting alchemical regions.
+            are_straddling = cls._are_straddling_noninteracting_regions(
+                particles, alchemical_regions, alchemical_regions_interactions)
+            if (angle_index not in all_alchemical_angles) and (not are_straddling):
+                force.addAngle(particle1, particle2, particle3, theta0, K)
 
         # Update the returned value with the non-alchemical force.
         alchemical_forces[''] = [force]
@@ -1263,8 +1267,8 @@ class AbsoluteAlchemicalFactory(object):
 
         return alchemical_forces
 
-    @staticmethod
-    def _alchemically_modify_HarmonicBondForce(reference_force, alchemical_regions, alchemical_regions_interactions):
+    @classmethod
+    def _alchemically_modify_HarmonicBondForce(cls, reference_force, alchemical_regions, alchemical_regions_interactions):
         """Create alchemically-modified version of HarmonicBondForce
 
         Parameters
@@ -1304,11 +1308,13 @@ class AbsoluteAlchemicalFactory(object):
         for bond_index in range(reference_force.getNumBonds()):
             [particle1, particle2, theta0, K] = reference_force.getBondParameters(bond_index)
             particles = set((particle1, particle2))
-            if bond_index not in all_alchemical_bonds:
-                if AbsoluteAlchemicalFactory._is_straddling_noninteracting_regions(particles, alchemical_regions, alchemical_regions_interactions):
-                    pass
-                else:
-                    force.addBond(particle1, particle2, theta0, K)
+
+            # We don't connect through a bond two particles that belong
+            # to two different and noninteracting alchemical regions.
+            are_straddling = cls._are_straddling_noninteracting_regions(
+                particles, alchemical_regions, alchemical_regions_interactions)
+            if (bond_index not in all_alchemical_bonds) and (not are_straddling):
+                force.addBond(particle1, particle2, theta0, K)
 
         # Update the returned value with the non-alchemical force.
         alchemical_forces[''] = [force]
@@ -1341,6 +1347,18 @@ class AbsoluteAlchemicalFactory(object):
         return alchemical_forces
 
     def _get_sterics_energy_expressions(self, lambda_variable_suffixes):
+        """Return the energy expressions for sterics.
+
+        Parameters
+        ----------
+        lambda_variable_suffixes : List[str]
+            A list with suffixes for the global variable "lambda_sterics" that
+            will control the energy. If no suffix is necessary (i.e. there are
+            no multiple alchemical regions) just set lambda_variable_suffixes[0] = ''.
+            If the list has more than one element, the energy is controlled by
+            the multiplication of lambda_sterics_suffix1 * lambda_sterics_suffix2.
+        """
+
         # Sterics mixing rules.
         if lambda_variable_suffixes[0] == '':
             lambda_variable_name = 'lambda_sterics'
@@ -1371,6 +1389,15 @@ class AbsoluteAlchemicalFactory(object):
         as there's no electrostatics CustomNondondedForce in this case, and
         lambda_electrostatics is modeled through an offset parameter in a
         NonbondedForce.
+
+        Parameters
+        ----------
+        lambda_variable_suffixes : List[str]
+            A list with suffixes for the global variable "lambda_electrostatics" that
+            will control the energy. If no suffix is necessary (i.e. there are
+            no multiple alchemical regions) just set lambda_variable_suffixes[0] = ''.
+            If the list has more than one element, the energy is controlled by
+            the multiplication of lambda_electrostatics_suffix1 * lambda_electrostatics_suffix2.
         """
         if lambda_variable_suffixes[0] == '':
             lambda_variable_name = 'lambda_electrostatics'
@@ -1391,7 +1418,7 @@ class AbsoluteAlchemicalFactory(object):
 
         # Define mixing rules.
         electrostatics_mixing_rules = ('chargeprod = charge1*charge2;'  # Mixing rule for charges.
-                                        'sigma = 0.5*(sigma1 + sigma2);')  # Mixing rule for sigma.
+                                       'sigma = 0.5*(sigma1 + sigma2);')  # Mixing rule for sigma.
 
         # Standard Coulomb expression with softened core. This is used
         #   - When the nonbonded method of the reference force is NoCutoff.
@@ -1564,6 +1591,10 @@ class AbsoluteAlchemicalFactory(object):
         if len(all_alchemical_atoms) == 0:
             return {'': [copy.deepcopy(reference_force)]}
 
+        # Create a set of all the non-alchemical atoms only.
+        all_atomset = set(range(reference_force.getNumParticles()))
+        nonalchemical_atomset = all_atomset.difference(all_alchemical_atoms)
+
         # -------------------------------------------------------------
         # Perform tasks that do not need to be repeated for all regions.
         # -------------------------------------------------------------
@@ -1593,6 +1624,10 @@ class AbsoluteAlchemicalFactory(object):
                 if (alchemical_region.softcore_beta, alchemical_region.softcore_d, alchemical_region.softcore_e) != (0, 1, 1):
                     raise ValueError('Softcore electrostatics is' + err_msg)
 
+        # Create a copy of the NonbondedForce to handle particle interactions and
+        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
+        nonbonded_force = copy.deepcopy(reference_force)
+
         # Fix any issues in reference force with Lennard-Jones sigma = 0 (epsilon = 0),
         # which should have sigma > 0.
         for particle_index in range(reference_force.getNumParticles()):
@@ -1604,7 +1639,7 @@ class AbsoluteAlchemicalFactory(object):
                 logger.warning(warning_msg % (particle_index, str(charge), str(sigma), str(epsilon)))
                 sigma = 1.0 * unit.angstrom
                 # Fix it.
-                reference_force.setParticleParameters(particle_index, charge, sigma, epsilon)
+                nonbonded_force.setParticleParameters(particle_index, charge, sigma, epsilon)
 
         # Same for the exceptions.
         for exception_index in range(reference_force.getNumExceptions()):
@@ -1616,11 +1651,7 @@ class AbsoluteAlchemicalFactory(object):
                 logger.warning(warning_msg % (exception_index, iatom, jatom, str(chargeprod), str(sigma), str(epsilon)))
                 sigma = 1.0 * unit.angstrom
                 # Fix it.
-                reference_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
-
-        # Create a copy of the NonbondedForce to handle particle interactions and
-        # 1,4 exceptions between non-alchemical/non-alchemical atoms (nn).
-        nonbonded_force = copy.deepcopy(reference_force)
+                nonbonded_force.setExceptionParameters(exception_index, iatom, jatom, chargeprod, sigma, epsilon)
 
         if use_exact_pme_treatment:
             # Exclude noninteracting alchemical regions from seeing each other in the nonbonded
@@ -1643,7 +1674,7 @@ class AbsoluteAlchemicalFactory(object):
 
         # Make of list of all single and double permutations of alchemical regions.
         single_regions = [[alchemical_region] for alchemical_region in alchemical_regions]
-        if alchemical_regions_interactions == set():
+        if len(alchemical_regions_interactions) == 0:
             pair_regions = []
         else:
             # Only generate pairs of alchemical regions specified by alchemical_regions_interactions.
@@ -1846,16 +1877,13 @@ class AbsoluteAlchemicalFactory(object):
             else:
                 alchemical_atomset_0 = alchemical_regions_pairs[0].alchemical_atoms
 
-            all_atomset = set(range(reference_force.getNumParticles()))  # all atoms, including alchemical region
-            nonalchemical_atomset = all_atomset.difference(all_alchemical_atoms)
-
             # Copy NonbondedForce particle terms for alchemically-modified particles
             # to CustomNonbondedForces, and/or add the charge offsets for exact PME.
             # On CUDA, for efficiency reasons, all nonbonded forces (custom and not)
             # must have the same particles.
             for particle_index in range(nonbonded_force.getNumParticles()):
                 # Retrieve nonbonded parameters.
-                [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
+                [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
                 # Set sterics parameters in CustomNonbondedForces.
                 for force in all_sterics_custom_nonbonded_forces:
                     force.addParticle([sigma, epsilon])
@@ -1871,7 +1899,7 @@ class AbsoluteAlchemicalFactory(object):
             # NonbondedForce that will be handled by all other forces
             for particle_index in range(nonbonded_force.getNumParticles()):
                 # Retrieve parameters.
-                [charge, sigma, epsilon] = reference_force.getParticleParameters(particle_index)
+                [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
                 # Even with exact treatment of the PME electrostatics, we turn off
                 # the NonbondedForce charge which is modeled by the offset parameter.
                 if particle_index in alchemical_atomset_0:
@@ -1913,7 +1941,7 @@ class AbsoluteAlchemicalFactory(object):
             if len(lambda_var_suffixes) > 1:
                 for exception_index in range(nonbonded_force.getNumExceptions()):
                     # Retrieve parameters.
-                    [iatom, jatom, chargeprod, sigma, epsilon] = reference_force.getExceptionParameters(exception_index)
+                    [iatom, jatom, chargeprod, sigma, epsilon] = nonbonded_force.getExceptionParameters(exception_index)
 
                     # Exclude this atom pair in CustomNonbondedForces. All nonbonded forces
                     # must have the same number of exceptions/exclusions on CUDA platform.
@@ -2025,7 +2053,7 @@ class AbsoluteAlchemicalFactory(object):
 
     def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region, _):
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with AmoebaMultipoleForce")
+            raise NotImplementedError("Multiple regions does not work with AmoebaMultipoleForce")
         else:
             alchemical_region = alchemical_region[0]
         raise Exception("Not implemented; needs CustomMultipleForce")
@@ -2043,10 +2071,10 @@ class AbsoluteAlchemicalFactory(object):
         """
         # This feature is incompletely implemented, so raise an exception.
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with AmoebaVdwForce")
+            raise NotImplementedError("Multiple regions does not work with AmoebaVdwForce")
         else:
             alchemical_region = alchemical_region[0]
-        raise NotImplemented('Alchemical modification of Amoeba VdW Forces is not supported.')
+        raise NotImplementedError('Alchemical modification of Amoeba VdW Forces is not supported.')
 
         # Softcore Halgren potential from Eq. 3 of
         # Shi, Y., Jiao, D., Schnieders, M.J., and Ren, P. (2009). Trypsin-ligand binding free
@@ -2121,7 +2149,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with GBSAOBCForce")
+            raise NotImplementedError("Multiple regions does not work with GBSAOBCForce")
         else:
             alchemical_region = alchemical_region[0]
 
@@ -2155,7 +2183,7 @@ class AbsoluteAlchemicalFactory(object):
         custom_force.addComputedValue("B", "1/(1/or-tanh(psi-0.8*psi^2+4.85*psi^3)/radius);"
                                   "psi=I*or; or=radius-offset", openmm.CustomGBForce.SingleParticle)
 
-        custom_force.addEnergyTerm("-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*(lambda_electrostatics*alchemical+(1-alchemical))*charge^2/B", openmm.CustomGBForce.SingleParticle) 
+        custom_force.addEnergyTerm("-0.5*138.935485*(1/soluteDielectric-1/solventDielectric)*(lambda_electrostatics*alchemical+(1-alchemical))*charge^2/B", openmm.CustomGBForce.SingleParticle)
         if sasa_model == 'ACE':
             custom_force.addEnergyTerm("(lambda_electrostatics*alchemical+(1-alchemical))*28.3919551*(radius+0.14)^2*(radius/B)^6", openmm.CustomGBForce.SingleParticle)
 
@@ -2215,7 +2243,7 @@ class AbsoluteAlchemicalFactory(object):
 
         """
         if len(alchemical_region) > 1:
-            raise NotImplemented("Multiple regions does not work with CustomGBForce")
+            raise NotImplementedError("Multiple regions does not work with CustomGBForce")
         else:
             alchemical_region = alchemical_region[0]
 
