@@ -1951,8 +1951,11 @@ class AbsoluteAlchemicalFactory(object):
                     # Pair of interacting alchemical regions, therefore they are both alchemical or neither alchemical.
                     both_alchemical = ((iatom in alchemical_atomsets[0] and jatom in alchemical_atomsets[1]) or
                                        (jatom in alchemical_atomsets[0] and iatom in alchemical_atomsets[1]))
-                    at_least_one_alchemical = both_alchemical
                     only_one_alchemical = False
+                    #The condition of at_least_one_alchemical is treated only once per single
+                    # region so we don't repeat it when dealing with pairs of interacting regions.
+                    at_least_one_alchemical = False
+
 
                     if use_exact_pme_treatment and both_alchemical and is_exception_chargeprod:
                         # Exceptions here should be scaled by lam0*lam1.
