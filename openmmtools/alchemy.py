@@ -1948,9 +1948,11 @@ class AbsoluteAlchemicalFactory(object):
 
                 # Check how many alchemical atoms we have in the exception.
                 if len(lambda_var_suffixes) > 1:
-                    # Pair of interacting regions
+                    # Pair of interacting alchemical regions, therefore they are both alchemical or neither alchemical.
                     both_alchemical = ((iatom in alchemical_atomsets[0] and jatom in alchemical_atomsets[1]) or
                                        (jatom in alchemical_atomsets[0] and iatom in alchemical_atomsets[1]))
+                    at_least_one_alchemical = both_alchemical
+                    only_one_alchemical = False
 
                     if use_exact_pme_treatment and both_alchemical and is_exception_chargeprod:
                         # Exceptions here should be scaled by lam0*lam1.
@@ -1977,22 +1979,21 @@ class AbsoluteAlchemicalFactory(object):
                     if is_exception_chargeprod and not use_exact_pme_treatment:
                         aa_electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
 
-                # When this is a single region, we model the exception between alchemical
+                # When this is a single region we model the exception between alchemical
                 # and non-alchemical particles using a single custom bond.
-                if len(lambda_var_suffixes) == 1:
-                    if only_one_alchemical:
-                        if is_exception_epsilon:
-                            na_sterics_custom_bond_force.addBond(iatom, jatom, [sigma, epsilon])
-                        if is_exception_chargeprod and not use_exact_pme_treatment:
-                            na_electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
-                    # else: both particles are non-alchemical, leave them in the unmodified NonbondedForce
+                elif only_one_alchemical:
+                    if is_exception_epsilon:
+                        na_sterics_custom_bond_force.addBond(iatom, jatom, [sigma, epsilon])
+                    if is_exception_chargeprod and not use_exact_pme_treatment:
+                        na_electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
+                # else: both particles are non-alchemical, leave them in the unmodified NonbondedForce
 
-                    # Turn off all exception contributions from alchemical atoms in the NonbondedForce
-                    # modelling non-alchemical atoms only. We need to do it only once per single
-                    # region so we don't repeat it when dealing with pairs of interacting regions.
-                    if at_least_one_alchemical:
-                        nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
-                                                               abs(0.0*chargeprod), sigma, abs(0.0*epsilon))
+                # Turn off all exception contributions from alchemical atoms in the NonbondedForce
+                # modelling non-alchemical atoms only. We need to do it only once per single
+                # region so we don't repeat it when dealing with pairs of interacting regions.
+                if at_least_one_alchemical:
+                    nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
+                                                           abs(0.0*chargeprod), sigma, abs(0.0*epsilon))
 
             # Add global parameters to forces.
             def add_global_parameters(force):
