@@ -1871,11 +1871,11 @@ class AbsoluteAlchemicalFactory(object):
             # -------------------------------------------------------------------------------
 
             # Create atom groups.
-            if len(lambda_var_suffixes) > 1:
-                alchemical_atomset_0 = alchemical_regions_pairs[0].alchemical_atoms
-                alchemical_atomset_1 = alchemical_regions_pairs[1].alchemical_atoms
-            else:
-                alchemical_atomset_0 = alchemical_regions_pairs[0].alchemical_atoms
+            if len(lambda_var_suffixes) > 1: # Multi region
+                alchemical_atomsets = [alchemical_regions_pairs[0].alchemical_atoms,
+                                       alchemical_regions_pairs[1].alchemical_atoms]
+            else: # One region
+                alchemical_atomsets = [alchemical_regions_pairs[0].alchemical_atoms]
 
             # Copy NonbondedForce particle terms for alchemically-modified particles
             # to CustomNonbondedForces, and/or add the charge offsets for exact PME.
@@ -1891,7 +1891,7 @@ class AbsoluteAlchemicalFactory(object):
                 for force in all_electrostatics_custom_nonbonded_forces:
                     force.addParticle([charge, sigma])
                 # Set offset parameters in NonbondedForce.
-                if use_exact_pme_treatment and particle_index in alchemical_atomset_0 and len(lambda_var_suffixes) == 1:
+                if use_exact_pme_treatment and particle_index in alchemical_atomsets[0] and len(lambda_var_suffixes) == 1:
                     nonbonded_force.addParticleParameterOffset('lambda_electrostatics{}'.format(lambda_var_suffixes[0]),
                                                                particle_index, charge, 0.0, 0.0)
 
@@ -1902,30 +1902,29 @@ class AbsoluteAlchemicalFactory(object):
                 [charge, sigma, epsilon] = nonbonded_force.getParticleParameters(particle_index)
                 # Even with exact treatment of the PME electrostatics, we turn off
                 # the NonbondedForce charge which is modeled by the offset parameter.
-                if particle_index in alchemical_atomset_0:
+                if particle_index in alchemical_atomsets[0]:
                     nonbonded_force.setParticleParameters(particle_index, abs(0.0*charge), sigma, abs(0*epsilon))
 
             # Restrict interaction evaluation of CustomNonbondedForces to their respective atom groups.
             # Sterics
-            if len(lambda_var_suffixes) > 1: # Multi region
-                logger.debug('Adding a steric interaction group between groups {}.'.format(lambda_var_suffixes))
-                aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_1)
-            else: # One region
-                logger.debug('Adding steric interaction groups between {0} and the environment,'
-                             ' and {0} with itself.'.format(lambda_var_suffixes))
-                na_sterics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset_0)
-                aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_0)
+            if len(lambda_var_suffixes) == 1:
+                logger.debug('Adding steric interaction groups between {} and the environment.'.format(lambda_var_suffixes[0]))
+                na_sterics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomsets[0])
+
+            logger.debug('Adding a steric interaction group between group {0} and {1}.'.format(lambda_var_suffixes[0],
+                                                                                               lambda_var_suffixes[-1]))
+            aa_sterics_custom_nonbonded_force.addInteractionGroup(alchemical_atomsets[0], alchemical_atomsets[-1])
 
             # Electrostatics
             if not use_exact_pme_treatment:
-                if len(lambda_var_suffixes) > 1: # Multi region
-                    logger.debug('Adding a electrostatic interaction group between groups {}.'.format(lambda_var_suffixes))
-                    aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_1)
-                else: # One region
-                    logger.debug('Adding electrostatic interaction groups between {0} and the environment,'
-                                 ' and {0} with itself.'.format(lambda_var_suffixes))
-                    na_electrostatics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomset_0)
-                    aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomset_0, alchemical_atomset_0)
+                if len(lambda_var_suffixes) == 1:
+                    logger.debug('Adding electrostatic interaction groups between {} and the environment.'.format(lambda_var_suffixes[0]))
+                    na_electrostatics_custom_nonbonded_force.addInteractionGroup(nonalchemical_atomset, alchemical_atomsets[0])
+
+                logger.debug('Adding a electrostatic interaction group between group {0} and {1}.'.format(lambda_var_suffixes[0],
+                                                                                                          lambda_var_suffixes[-1]))
+                aa_electrostatics_custom_nonbonded_force.addInteractionGroup(alchemical_atomsets[0], alchemical_atomsets[-1])
+
             else:
                 # Using the nonbonded force to handle electrostatics
                 # and the "interaction groups" in the nonbonded have already been handled by exclusions.
@@ -1949,16 +1948,16 @@ class AbsoluteAlchemicalFactory(object):
                         force.addExclusion(iatom, jatom)
 
                     # Check how many alchemical atoms we have
-                    both_alchemical = iatom in alchemical_atomset_0 and jatom in alchemical_atomset_1
-                    at_least_one_alchemical = iatom in alchemical_atomset_0 or jatom in alchemical_atomset_1
+                    both_alchemical = iatom in alchemical_atomsets[0] and jatom in alchemical_atomsets[1] or\
+                                      jatom in alchemical_atomsets[0] and iatom in alchemical_atomsets[1]
 
                     # Check if this is an exception or an exclusion
                     is_exception_epsilon = abs(epsilon.value_in_unit_system(unit.md_unit_system)) > 0.0
                     is_exception_chargeprod = abs(chargeprod.value_in_unit_system(unit.md_unit_system)) > 0.0
 
                     if use_exact_pme_treatment and both_alchemical and is_exception_chargeprod:
-                        # Not sure how to deal with this case. Exception should be scaled by lam0*lam1.
-                        # However we can only have one Offset parameter per exception?
+                        # Exceptions here should be scaled by lam0*lam1.
+                        # This can be implemented in the future using a CustomBondForce.
                         raise ValueError('Cannot have exception that straddles two alchemical regions')
 
                     # If exception (and not exclusion), add special CustomBondForce terms to
@@ -1969,11 +1968,6 @@ class AbsoluteAlchemicalFactory(object):
                         if is_exception_chargeprod and not use_exact_pme_treatment:
                             aa_electrostatics_custom_bond_force.addBond(iatom, jatom, [chargeprod, sigma])
 
-                    # Turn off all exception contributions from alchemical atoms in the NonbondedForce
-                    # modelling non-alchemical atoms only
-                    if at_least_one_alchemical:
-                        nonbonded_force.setExceptionParameters(exception_index, iatom, jatom,
-                                                               abs(0.0*chargeprod), sigma, abs(0.0*epsilon))
             else:
                 for exception_index in range(nonbonded_force.getNumExceptions()):
                     # Retrieve parameters.
@@ -1985,8 +1979,8 @@ class AbsoluteAlchemicalFactory(object):
                         force.addExclusion(iatom, jatom)
 
                     # Check how many alchemical atoms we have
-                    both_alchemical = iatom in alchemical_atomset_0 and jatom in alchemical_atomset_0
-                    at_least_one_alchemical = iatom in alchemical_atomset_0 or jatom in alchemical_atomset_0
+                    both_alchemical = iatom in alchemical_atomsets[0] and jatom in alchemical_atomsets[0]
+                    at_least_one_alchemical = iatom in alchemical_atomsets[0] or jatom in alchemical_atomsets[0]
                     only_one_alchemical = at_least_one_alchemical and not both_alchemical
 
                     # Check if this is an exception or an exclusion
