@@ -1,6 +1,13 @@
 Release History
 ***************
 
+0.19.0 - Multiple alchemical regions
+====================================
+
+New features
+------------
+- Added support in ``AbsoluteAlchemicalFactory`` for handling multiple independent alchemical regions (`#438 <https://github.com/choderalab/openmmtools/pull/438>`_).
+
 0.18.3 - Storage enhancements and bugfixes
 ==========================================
 
@@ -20,7 +27,7 @@ Enhancements
 
 Bugfixes
 --------
-- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed  (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
 - Improve the robustness of opening the netcdf file on resuming of the multi-state samplers by setting the environment variable HDF5_USE_FILE_LOCKING to FALSE after 4 failed attempts (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
 - Fixed a crash during exception handling (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
 
