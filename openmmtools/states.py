@@ -176,6 +176,8 @@ def reduced_potential_at_states(sampler_state, thermodynamic_states, context_cac
         for energy_idx, state_idx in enumerate(state_indices):
             reduced_potentials[state_idx] = compatible_energies[energy_idx]
 
+    return reduced_potentials
+
 
 def group_by_compatibility(thermodynamic_states):
     """Utility function to split the thermodynamic states by compatibility.
