@@ -7,10 +7,10 @@ matrix:
     # Extra includes for OSX since python language is not available by default on OSX
     - os: osx
       language: generic
-      env: PYTHON_VER=3.6
+      env: PYTHON_VER=3.6 OPENMM="latest"
     - os: osx
       language: generic
-      env: PYTHON_VER=3.7
+      env: PYTHON_VER=3.7 OPENMM="latest"
 
     - os: linux
       language: generic  # No need to set Python version since its conda
