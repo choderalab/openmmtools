@@ -25,7 +25,6 @@ dependencies:
   - sphinxcontrib-bibtex
   - mpiplus
   - pymbar
-  - pyyaml
 
     # Testing
   - nose

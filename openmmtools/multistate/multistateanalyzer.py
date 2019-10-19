@@ -1067,7 +1067,7 @@ class PhaseAnalyzer(ABC):
         # Reset self._sign
         self._sign = '+'
         if self.name is None:
-            names.append(utils.generate_phase_name(self.name, []))
+            names.append(multistate.utils.generate_phase_name(self.name, []))
         else:
             names.append(self.name)
         if isinstance(other, MultiPhaseAnalyzer):
@@ -1077,7 +1077,7 @@ class PhaseAnalyzer(ABC):
             final_new_names = []
             for name in new_names:
                 other_names = [n for n in new_names if n != name]
-                final_new_names.append(utils.generate_phase_name(name, other_names + names))
+                final_new_names.append(multistate.utils.generate_phase_name(name, other_names + names))
             names.extend(final_new_names)
             for new_sign in new_signs:
                 if operator != '+' and new_sign == '+':
@@ -1086,7 +1086,7 @@ class PhaseAnalyzer(ABC):
                     signs.append('+')
             phases.extend(new_phases)
         elif isinstance(other, PhaseAnalyzer):
-            names.append(utils.generate_phase_name(other.name, names))
+            names.append(multistate.utils.generate_phase_name(other.name, names))
             if operator != '+' and other._sign == '+':
                 signs.append('-')
             else:

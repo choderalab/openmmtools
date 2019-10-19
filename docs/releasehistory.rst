@@ -8,6 +8,19 @@ New features
 ------------
 - Added support in ``AbsoluteAlchemicalFactory`` for handling multiple independent alchemical regions (`#438 <https://github.com/choderalab/openmmtools/pull/438>`_).
 
+0.18.3 - Storage enhancements and bugfixes
+==========================================
+
+Bugfixes
+--------
+- Fixed a bug in ``multistateanalyzer.py`` where a function was imported from ``openmmtools.utils`` instead of ``openmmtools.multistate.utils`` (`#430 <https://github.com/choderalab/openmmtools/pull/430>`_).
+- Fixed a few imprecisions in the documentation (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
+
+Enhancements
+------------
+- Writing on disk is much faster when the `checkpoint_interval` of multi-state samplers is large. This was due
+  to the dimension of the netcdf chunk size increasing with the checkpoint interval and surpassing the dimension
+  of the netcdf chunk cache. The chunk size of the iteration dimension is now always set to 1 (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
 
 0.18.2 - Bugfix release
 =======================
