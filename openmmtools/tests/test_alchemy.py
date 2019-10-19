@@ -1720,12 +1720,14 @@ class TestAlchemicalState(object):
         context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.apply_to_context(context)
+        del context
 
         # Raise error if AlchemicalState is applied to a Context with missing parameters.
         alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
         context = self.alanine_state.create_context(copy.deepcopy(integrator))
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.apply_to_context(context)
+        del context
 
         # Correctly sets Context's parameters.
         for state in [self.full_alanine_state, self.alanine_state_exact_pme]:
