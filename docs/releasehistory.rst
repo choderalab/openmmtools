@@ -8,6 +8,10 @@ New features
 ------------
 - Added support in ``AbsoluteAlchemicalFactory`` for handling multiple independent alchemical regions (`#438 <https://github.com/choderalab/openmmtools/pull/438>`_).
 
+Bugfixes
+--------
+- Fix return value in ``states.reduced_potential_at_states`` (`#444 <https://github.com/choderalab/openmmtools/pull/444>`_).
+
 0.18.3 - Storage enhancements and bugfixes
 ==========================================
 
