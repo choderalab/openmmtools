@@ -1360,12 +1360,13 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
+        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(0,3))        
 
         # Modify ions.
         for atom in cls.test_systems['TIP4P-EW WaterBox and NaCl with PME'].topology.atoms():
             if atom.name in ['Na', 'Cl']:
                 cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(atom.index, atom.index+1))
-
+                break
 
     @classmethod
     def generate_cases(cls):
