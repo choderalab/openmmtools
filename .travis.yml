@@ -7,21 +7,32 @@ matrix:
     # Extra includes for OSX since python language is not available by default on OSX
     - os: osx
       language: generic
-      env: PYTHON_VER=3.6
+      env: PYTHON_VER=3.6 OPENMM="latest"
     - os: osx
       language: generic
-      env: PYTHON_VER=3.7
+      env: PYTHON_VER=3.7 OPENMM="latest"
 
     - os: linux
       language: generic  # No need to set Python version since its conda
-      env: PYTHON_VER=3.6
+      env: PYTHON_VER=3.6 OPENMM="latest"
     - os: linux
       language: generic
-      env: PYTHON_VER=3.7
+      env: PYTHON_VER=3.7 OPENMM="latest"
 
-  # TODO: Reactivate macOS tests if they stop segfaulting after switching from nose to pytest (see also #402 and #430).
+    - os: linux
+      language: generic
+      env: PYTHON_VER=3.7 OPENMM="nightly"
+    - os: linux
+      language: generic
+      env: PYTHON_VER=3.7 OPENMM="conda-forge"
+
   allow_failures:
+    # TODO: Reactivate macOS tests if they stop segfaulting after switching from nose to pytest (see also #402 and #430).
     - os: osx
+    # Allow conda-forge failure
+    - os: linux
+      language: generic
+      env: PYTHON_VER=3.7 OPENMM="conda-forge"
 
 env:
   global:
@@ -45,6 +56,11 @@ install:
   - conda activate test
     # Build and install package
   - python setup.py develop --no-deps
+    # Install desired OpenMM version
+  - if [ "$OPENMM" == "latest" ]; then echo "Using latest release OpenMM."; conda install --yes -c omnia openmm; fi
+  - if [ "$OPENMM" == "beta" ]; then echo "Using OpenMM beta"; conda install --yes -c omnia/label/beta openmm; fi
+  - if [ "$OPENMM" == "nightly" ]; then echo "Using OpenMM nightly dev build."; conda install --yes -c omnia-dev openmm; fi
+  - if [ "$OPENMM" == "conda-forge" ]; then echo "Using OpenMM conda-forge testing build."; conda install --yes -c conda-forge/label/testing openmm; conda remove --force ocl-icd ocl-icd-system; fi
 
 
 script:
