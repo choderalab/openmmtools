@@ -211,8 +211,7 @@ def turn_off_nonbonded(system, sterics=False, electrostatics=False,
                                                          epsilon_coeff*epsilon_scale)
 
 
-
-def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
+def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, other_alchemical_atoms):
     """Dissect the nonbonded energy contributions of the reference system
     by atom group and sterics/electrostatics.
 
@@ -227,6 +226,8 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
         The positions to test.
     alchemical_atoms : set of int
         The indices of the alchemical atoms.
+    other_alchemical_atoms : set of int
+        The indices of the alchemical atoms in other alchemical regions
 
     Returns
     -------
@@ -249,7 +250,8 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
         na_reciprocal_energy: electrostatics of reciprocal space between nonalchemical-alchemical atoms
 
     """
-    nonalchemical_atoms = set(range(reference_system.getNumParticles())).difference(alchemical_atoms)
+    all_alchemical_atoms = set(alchemical_atoms).union(other_alchemical_atoms)
+    nonalchemical_atoms = set(range(reference_system.getNumParticles())).difference(all_alchemical_atoms)
 
     # Remove all forces but NonbondedForce and eventually the
     # CustomNonbondedForce used to model reaction field.
@@ -270,6 +272,11 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms):
 
     # Compute particle interactions between different groups of atoms
     # ----------------------------------------------------------------
+    # Turn off other alchemical regions
+    if len(other_alchemical_atoms) > 0:
+        turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, only_atoms=other_alchemical_atoms)
+        turn_off_nonbonded(reference_system, sterics=True, electrostatics=True, exceptions=True, only_atoms=other_alchemical_atoms)
+
     system = copy.deepcopy(reference_system)
 
     # Compute total energy from nonbonded interactions
@@ -438,7 +445,8 @@ def is_alchemical_pme_treatment_exact(alchemical_system):
                                             only_one=True)
     for parameter_idx in range(nonbonded_force.getNumGlobalParameters()):
         parameter_name = nonbonded_force.getGlobalParameterName(parameter_idx)
-        if parameter_name == 'lambda_electrostatics':
+        # With multiple alchemical regions, lambda_electrostatics might have a suffix.
+        if parameter_name.startswith('lambda_electrostatics'):
             return True
     return False
 
@@ -454,7 +462,11 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
     method is an Ewald method.
 
     """
-    force_group = -1  # Default we compare the energy of all groups.
+    if not isinstance(alchemical_regions, list):
+        alchemical_regions = [alchemical_regions]
+
+    # Default we compare the energy of all groups.
+    force_group = -1
 
     # Check nonbonded method. Comparing with PME is more complicated
     # because the alchemical system with direct-space treatment of PME
@@ -479,8 +491,13 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
 
         # Compute the reciprocal space correction added to the direct space
         # energy due to the exceptions of the alchemical atoms.
-        alchemical_atoms = alchemical_regions.alchemical_atoms
-        aa_correction, na_correction = compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions)
+        aa_correction = 0.0 * unit.kilojoule_per_mole
+        na_correction = 0.0 * unit.kilojoule_per_mole
+        for region in alchemical_regions:
+            alchemical_atoms = region.alchemical_atoms
+            aa, na = compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions)
+            aa_correction += aa
+            na_correction += na
 
     # Compute potential of the direct space.
     potentials = [compute_energy(system, positions, force_group=force_group)
@@ -503,8 +520,8 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
 
-def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
-    """Compare full and alchemically-modified system energies by energy component.
+def check_multi_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
+    """wrapper around check_interacting_energy_components for multiple regions
 
     Parameters
     ----------
@@ -517,6 +534,39 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
         The positions to test (units of length).
 
+    Note
+    ----------
+    Interactions between alchemical regions are not tested here.
+    Alchemical regions are assumed to be non interacting.
+    """
+
+    all_alchemical_atoms = set()
+    for region in alchemical_regions:
+        for atom in region.alchemical_atoms:
+            all_alchemical_atoms.add(atom)
+    for region in alchemical_regions:
+        check_interacting_energy_components(
+            reference_system, alchemical_system, region, positions,
+            all_alchemical_atoms, multi_regions=True)
+
+
+def check_interacting_energy_components(reference_system, alchemical_system, alchemical_regions, positions,
+                                        all_alchemical_atoms=None, multi_regions=False):
+    """Compare full and alchemically-modified system energies by energy component.
+
+    Parameters
+    ----------
+    reference_system : simtk.openmm.System
+        The reference system.
+    alchemical_system : simtk.openmm.System
+        The alchemically modified system to test.
+    alchemical_regions : AlchemicalRegion.
+       The alchemically modified region.
+    positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
+        The positions to test (units of length).
+    multi_regions : boolean
+        Indicates if mutiple regions are being tested
+
     """
     energy_unit = unit.kilojoule_per_mole
     reference_system = copy.deepcopy(reference_system)
@@ -528,9 +578,15 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     nonbonded_method = nonbonded_force.getNonbondedMethod()
 
     # Get energy components of reference system's nonbonded force
-    print("Dissecting reference system's nonbonded force")
+    if multi_regions:
+        other_alchemical_atoms = all_alchemical_atoms.difference(alchemical_regions.alchemical_atoms)
+        print("Dissecting reference system's nonbonded force for region {}".format(alchemical_regions.name))
+    else:
+        other_alchemical_atoms = set()
+        print("Dissecting reference system's nonbonded force")
+
     energy_components = dissect_nonbonded_energy(reference_system, positions,
-                                                 alchemical_regions.alchemical_atoms)
+                                                 alchemical_regions.alchemical_atoms, other_alchemical_atoms)
     nn_particle_sterics, aa_particle_sterics, na_particle_sterics,\
     nn_particle_electro, aa_particle_electro, na_particle_electro,\
     nn_exception_sterics, aa_exception_sterics, na_exception_sterics,\
@@ -538,9 +594,12 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     nn_reciprocal_energy, aa_reciprocal_energy, na_reciprocal_energy = energy_components
 
     # Dissect unmodified nonbonded force in alchemical system
-    print("Dissecting alchemical system's unmodified nonbonded force")
+    if multi_regions:
+        print("Dissecting alchemical system's unmodified nonbonded force for region {}".format(alchemical_regions.name))
+    else:
+        print("Dissecting alchemical system's unmodified nonbonded force")
     energy_components = dissect_nonbonded_energy(alchemical_system, positions,
-                                                 alchemical_regions.alchemical_atoms)
+                                                 alchemical_regions.alchemical_atoms, other_alchemical_atoms)
     unmod_nn_particle_sterics, unmod_aa_particle_sterics, unmod_na_particle_sterics,\
     unmod_nn_particle_electro, unmod_aa_particle_electro, unmod_na_particle_electro,\
     unmod_nn_exception_sterics, unmod_aa_exception_sterics, unmod_na_exception_sterics,\
@@ -548,24 +607,31 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     unmod_nn_reciprocal_energy, unmod_aa_reciprocal_energy, unmod_na_reciprocal_energy = energy_components
 
     # Get alchemically-modified energy components
-    print("Computing alchemical system components energies")
-    alchemical_state = AlchemicalState.from_system(alchemical_system)
+    if multi_regions:
+        print("Computing alchemical system components energies for region {}".format(alchemical_regions.name))
+    else:
+        print("Computing alchemical system components energies")
+    alchemical_state = AlchemicalState.from_system(alchemical_system, parameters_name_suffix=alchemical_regions.name)
     alchemical_state.set_alchemical_parameters(1.0)
     energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
                                                                         positions, platform=GLOBAL_ALCHEMY_PLATFORM)
+    if multi_regions:
+        region_label = ' for region {}'.format(alchemical_regions.name)
+    else:
+        region_label = ''
 
     # Sterics particle and exception interactions are always modeled with a custom force.
-    na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics']
-    aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics']
-    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions']
-    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions']
+    na_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical sterics' + region_label]
+    aa_custom_particle_sterics = energy_components['alchemically modified NonbondedForce for alchemical/alchemical sterics' + region_label]
+    na_custom_exception_sterics = energy_components['alchemically modified BondForce for non-alchemical/alchemical sterics exceptions' + region_label]
+    aa_custom_exception_sterics = energy_components['alchemically modified BondForce for alchemical/alchemical sterics exceptions' + region_label]
 
     # With exact treatment of PME, we use the NonbondedForce offset for electrostatics.
     try:
-        na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics']
-        aa_custom_particle_electro = energy_components['alchemically modified NonbondedForce for alchemical/alchemical electrostatics']
-        na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions']
-        aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions']
+        na_custom_particle_electro = energy_components['alchemically modified NonbondedForce for non-alchemical/alchemical electrostatics' + region_label]
+        aa_custom_particle_electro = energy_components['alchemically modified NonbondedForce for alchemical/alchemical electrostatics' + region_label]
+        na_custom_exception_electro = energy_components['alchemically modified BondForce for non-alchemical/alchemical electrostatics exceptions' + region_label]
+        aa_custom_exception_electro = energy_components['alchemically modified BondForce for alchemical/alchemical electrostatics exceptions' + region_label]
     except KeyError:
         assert is_exact_pme
 
@@ -589,41 +655,41 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     # Check sterics interactions match
     assert_almost_equal(nn_particle_sterics, unmod_nn_particle_sterics,
-                        'Non-alchemical/non-alchemical atoms particle sterics')
+                        'Non-alchemical/non-alchemical atoms particle sterics' + region_label)
     assert_almost_equal(nn_exception_sterics, unmod_nn_exception_sterics,
-                        'Non-alchemical/non-alchemical atoms exceptions sterics')
+                        'Non-alchemical/non-alchemical atoms exceptions sterics' + region_label)
     assert_almost_equal(aa_particle_sterics, aa_custom_particle_sterics,
-                        'Alchemical/alchemical atoms particle sterics')
+                        'Alchemical/alchemical atoms particle sterics' + region_label)
     assert_almost_equal(aa_exception_sterics, aa_custom_exception_sterics,
-                        'Alchemical/alchemical atoms exceptions sterics')
+                        'Alchemical/alchemical atoms exceptions sterics' + region_label)
     assert_almost_equal(na_particle_sterics, na_custom_particle_sterics,
-                        'Non-alchemical/alchemical atoms particle sterics')
+                        'Non-alchemical/alchemical atoms particle sterics' + region_label)
     assert_almost_equal(na_exception_sterics, na_custom_exception_sterics,
-                        'Non-alchemical/alchemical atoms exceptions sterics')
+                        'Non-alchemical/alchemical atoms exceptions sterics' + region_label)
 
     # Check electrostatics interactions
     assert_almost_equal(nn_particle_electro, unmod_nn_particle_electro,
-                        'Non-alchemical/non-alchemical atoms particle electrostatics')
+                        'Non-alchemical/non-alchemical atoms particle electrostatics' + region_label)
     assert_almost_equal(nn_exception_electro, unmod_nn_exception_electro,
-                        'Non-alchemical/non-alchemical atoms exceptions electrostatics')
+                        'Non-alchemical/non-alchemical atoms exceptions electrostatics' + region_label)
     # With exact treatment of PME, the electrostatics of alchemical-alchemical
     # atoms is modeled with NonbondedForce offsets.
     if is_exact_pme:
         # Reciprocal space.
         assert_almost_equal(aa_reciprocal_energy, unmod_aa_reciprocal_energy,
-                            'Alchemical/alchemical atoms reciprocal space energy')
+                            'Alchemical/alchemical atoms reciprocal space energy' + region_label)
         assert_almost_equal(na_reciprocal_energy, unmod_na_reciprocal_energy,
-                            'Non-alchemical/alchemical atoms reciprocal space energy')
+                            'Non-alchemical/alchemical atoms reciprocal space energy' + region_label)
         # Direct space.
         assert_almost_equal(aa_particle_electro, unmod_aa_particle_electro,
-                            'Alchemical/alchemical atoms particle electrostatics')
+                            'Alchemical/alchemical atoms particle electrostatics' + region_label)
         assert_almost_equal(na_particle_electro, unmod_na_particle_electro,
-                            'Non-alchemical/alchemical atoms particle electrostatics')
+                            'Non-alchemical/alchemical atoms particle electrostatics' + region_label)
         # Exceptions.
         assert_almost_equal(aa_exception_electro, unmod_aa_exception_electro,
-                            'Alchemical/alchemical atoms exceptions electrostatics')
+                            'Alchemical/alchemical atoms exceptions electrostatics' + region_label)
         assert_almost_equal(na_exception_electro, unmod_na_exception_electro,
-                            'Non-alchemical/alchemical atoms exceptions electrostatics')
+                            'Non-alchemical/alchemical atoms exceptions electrostatics' + region_label)
     # With direct space PME, the custom forces model only the
     # direct space of alchemical-alchemical interactions.
     else:
@@ -636,14 +702,14 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
         # Check direct space energy
         assert_almost_equal(aa_particle_electro, aa_custom_particle_electro,
-                            'Alchemical/alchemical atoms particle electrostatics')
+                            'Alchemical/alchemical atoms particle electrostatics' + region_label)
         assert_almost_equal(na_particle_electro, na_custom_particle_electro,
-                            'Non-alchemical/alchemical atoms particle electrostatics')
+                            'Non-alchemical/alchemical atoms particle electrostatics' + region_label)
         # Check exceptions.
         assert_almost_equal(aa_exception_electro, aa_custom_exception_electro,
-                            'Alchemical/alchemical atoms exceptions electrostatics')
+                            'Alchemical/alchemical atoms exceptions electrostatics' + region_label)
         assert_almost_equal(na_exception_electro, na_custom_exception_electro,
-                            'Non-alchemical/alchemical atoms exceptions electrostatics')
+                            'Non-alchemical/alchemical atoms exceptions electrostatics' + region_label)
 
     # With Ewald methods, the NonbondedForce should always hold the
     # reciprocal space energy of nonalchemical-nonalchemical atoms.
@@ -677,9 +743,8 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
                             '{} energy '.format(force_name))
 
 
-def check_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
-    """Check non-interacting energy components are zero when appropriate.
-
+def check_multi_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
+    """wrapper around check_noninteracting_energy_components for multiple regions
     Parameters
     ----------
     reference_system : simtk.openmm.System
@@ -690,18 +755,40 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
        The alchemically modified region.
     positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
         The positions to test (units of length).
+    """
+    for region in alchemical_regions:
+        check_noninteracting_energy_components(reference_system, alchemical_system, region, positions, True)
 
+
+def check_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions, multi_regions=False):
+    """Check non-interacting energy components are zero when appropriate.
+    Parameters
+    ----------
+    reference_system : simtk.openmm.System
+        The reference system (not alchemically modified).
+    alchemical_system : simtk.openmm.System
+        The alchemically modified system to test.
+    alchemical_regions : AlchemicalRegion.
+       The alchemically modified region.
+    positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
+        The positions to test (units of length).
+    multi_regions : boolean
+        Indicates if mutiple regions are being tested
     """
     alchemical_system = copy.deepcopy(alchemical_system)
     is_exact_pme = is_alchemical_pme_treatment_exact(alchemical_system)
 
     # Set state to non-interacting.
-    alchemical_state = AlchemicalState.from_system(alchemical_system)
+    alchemical_state = AlchemicalState.from_system(alchemical_system, parameters_name_suffix=alchemical_regions.name)
     alchemical_state.set_alchemical_parameters(0.0)
     energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
                                                                         positions, platform=GLOBAL_ALCHEMY_PLATFORM)
 
     def assert_zero_energy(label):
+        # Handle multiple alchemical regions.
+        if multi_regions:
+            label = label + ' for region ' + alchemical_regions.name
+        # Testing energy component of each region.
         print('testing {}'.format(label))
         value = energy_components[label]
         assert abs(value / GLOBAL_ENERGY_UNIT) == 0.0, ("'{}' should have zero energy in annihilated alchemical"
@@ -811,44 +898,47 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
                             'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
 
 
-def check_split_force_groups(system):
+def check_split_force_groups(system, region_names=None):
     """Check that force groups are split correctly."""
-    force_groups_by_lambda = {}
-    lambdas_by_force_group = {}
 
+    if region_names is None:
+        region_names = []
     # Separate forces groups by lambda parameters that AlchemicalState supports.
-    for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
-            system, parameters_name_suffix=None):
-        force_group = force.getForceGroup()
-        try:
-            force_groups_by_lambda[lambda_name].add(force_group)
-        except KeyError:
-            force_groups_by_lambda[lambda_name] = {force_group}
-        try:
-            lambdas_by_force_group[force_group].add(lambda_name)
-        except KeyError:
-            lambdas_by_force_group[force_group] = {lambda_name}
+    for region in region_names:
+        force_groups_by_lambda = {}
+        lambdas_by_force_group = {}
+        for force, lambda_name, _ in AlchemicalState._get_system_controlled_parameters(
+                system, parameters_name_suffix=region):
+            force_group = force.getForceGroup()
+            try:
+                force_groups_by_lambda[lambda_name].add(force_group)
+            except KeyError:
+                force_groups_by_lambda[lambda_name] = {force_group}
+            try:
+                lambdas_by_force_group[force_group].add(lambda_name)
+            except KeyError:
+                lambdas_by_force_group[force_group] = {lambda_name}
 
-    # Check that force group 0 doesn't hold alchemical forces.
-    assert 0 not in force_groups_by_lambda
+        # Check that force group 0 doesn't hold alchemical forces.
+        assert 0 not in force_groups_by_lambda
 
-    # There are as many alchemical force groups as not-None lambda variables.
-    alchemical_state = AlchemicalState.from_system(system)
-    valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters()
-                     if getattr(alchemical_state, lambda_name) is not None}
-    assert valid_lambdas == set(force_groups_by_lambda.keys())
+        # There are as many alchemical force groups as not-None lambda variables.
+        alchemical_state = AlchemicalState.from_system(system, parameters_name_suffix=region)
+        valid_lambdas = {lambda_name for lambda_name in alchemical_state._get_controlled_parameters(parameters_name_suffix=region)
+                         if getattr(alchemical_state, lambda_name) is not None}
+        assert valid_lambdas == set(force_groups_by_lambda.keys())
 
-    # Check that force groups and lambda variables are in 1-to-1 correspondence.
-    assert len(force_groups_by_lambda) == len(lambdas_by_force_group)
-    for d in [force_groups_by_lambda, lambdas_by_force_group]:
-        for value in d.values():
-            assert len(value) == 1
+        # Check that force groups and lambda variables are in 1-to-1 correspondence.
+        assert len(force_groups_by_lambda) == len(lambdas_by_force_group)
+        for d in [force_groups_by_lambda, lambdas_by_force_group]:
+            for value in d.values():
+                assert len(value) == 1
 
-    # With exact treatment of PME, the NonbondedForce must
-    # be in the lambda_electrostatics force group.
-    if is_alchemical_pme_treatment_exact(system):
-        force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
-        assert force_groups_by_lambda['lambda_electrostatics'] == {nonbonded_force.getForceGroup()}
+        # With exact treatment of PME, the NonbondedForce must
+        # be in the lambda_electrostatics force group.
+        if is_alchemical_pme_treatment_exact(system):
+            force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
+            assert force_groups_by_lambda['lambda_electrostatics_{}'.format(region)] == {nonbonded_force.getForceGroup()}
 
 
 # =============================================================================
@@ -1221,7 +1311,6 @@ def test_resolve_alchemical_region():
         with nose.tools.assert_raises(ValueError):
             AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
 
-
 class TestAbsoluteAlchemicalFactory(object):
     """Test AbsoluteAlchemicalFactory class."""
 
@@ -1268,11 +1357,16 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions = dict()
         cls.test_regions['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2))
         cls.test_regions['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10))
-        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
-        cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(4))  # Modify ions.
         cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
+        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(0,3))        
+
+        # Modify ions.
+        for atom in cls.test_systems['TIP4P-EW WaterBox and NaCl with PME'].topology.atoms():
+            if atom.name in ['Na', 'Cl']:
+                cls.test_regions['TIP4P-EW WaterBox and NaCl'] = AlchemicalRegion(alchemical_atoms=range(atom.index, atom.index+1))
+                break
 
     @classmethod
     def generate_cases(cls):
@@ -1438,6 +1532,208 @@ class TestAbsoluteAlchemicalFactory(object):
             f = partial(overlap_check, test_system.system, alchemical_system, test_system.positions,
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
             f.description = "Testing reference/alchemical overlap for {}".format(test_name)
+            yield f
+
+class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
+    """Test AbsoluteAlchemicalFactory class using multiple regions."""
+
+    @classmethod
+    def define_systems(cls):
+        """Create shared test systems in cls.test_systems for the test suite."""
+        cls.test_systems = dict()
+
+        # Basic test systems: Lennard-Jones and water particles only.
+        # Test also dispersion correction and switch off ("on" values
+        # for these options are tested in HostGuestExplicit system).
+        cls.test_systems['LennardJonesCluster'] = testsystems.LennardJonesCluster()
+        cls.test_systems['LennardJonesFluid with dispersion correction'] = \
+            testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=True)
+        cls.test_systems['TIP3P WaterBox with reaction field, no switch, no dispersion correction'] = \
+            testsystems.WaterBox(dispersion_correction=False, switch=False, nonbondedMethod=openmm.app.CutoffPeriodic)
+        cls.test_systems['HostGuestExplicit with PME'] = \
+            testsystems.HostGuestExplicit(nonbondedMethod=openmm.app.PME)
+        cls.test_systems['HostGuestExplicit with CutoffPeriodic'] = \
+            testsystems.HostGuestExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
+
+    @classmethod
+    def define_regions(cls):
+        """Create shared AlchemicalRegions for test systems in cls.test_regions."""
+        cls.test_region_zero = dict()
+        cls.test_region_one = dict()
+        cls.test_region_two = dict()
+
+        cls.test_region_zero['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2), name='zero')
+        cls.test_region_one['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(2,4), name='one')
+        cls.test_region_two['LennardJonesCluster'] = AlchemicalRegion(alchemical_atoms=range(4,6), name='two')
+        cls.test_region_zero['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10), name='zero')
+        cls.test_region_one['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(10,20), name='one')
+        cls.test_region_two['LennardJonesFluid'] = AlchemicalRegion(alchemical_atoms=range(20,30), name='two')
+        cls.test_region_zero['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3), name='zero')
+        cls.test_region_one['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3,6), name='one')
+        cls.test_region_two['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(6,9), name='two')
+        #Three regions push HostGuest system beyond 32 force groups
+        cls.test_region_zero['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156), name='zero')
+        cls.test_region_one['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(156,160), name='one')
+        cls.test_region_two['HostGuestExplicit'] = None
+
+    @classmethod
+    def generate_cases(cls):
+        """Generate all test cases in cls.test_cases combinatorially."""
+        cls.test_cases = dict()
+        direct_space_factory = AbsoluteAlchemicalFactory(alchemical_pme_treatment='direct-space',
+                                                         alchemical_rf_treatment='switched')
+        exact_pme_factory = AbsoluteAlchemicalFactory(alchemical_pme_treatment='exact')
+
+        # We generate all possible combinations of annihilate_sterics/electrostatics
+        # for each test system. We also annihilate bonds, angles and torsions every
+        # 3 test cases so that we test it at least one for each test system and for
+        # each combination of annihilate_sterics/electrostatics.
+        n_test_cases = 0
+        for test_system_name, test_system in cls.test_systems.items():
+
+            # Find standard alchemical region zero.
+            for region_name_zero, region_zero in cls.test_region_zero.items():
+                if region_name_zero in test_system_name:
+                    break
+            assert region_name_zero in test_system_name, test_system_name
+
+            # Find standard alchemical region one.
+            for region_name_one, region_one in cls.test_region_one.items():
+                if region_name_one in test_system_name:
+                    break
+            assert region_name_one in test_system_name, test_system_name
+
+            # Find standard alchemical region two.
+            for region_name_two, region_two in cls.test_region_two.items():
+                if region_name_two in test_system_name:
+                    break
+            assert region_name_two in test_system_name, test_system_name
+
+            assert region_name_zero == region_name_one and region_name_one == region_name_two
+            #We only want two regions for HostGuest or we get too many force groups
+            if 'HostGuestExplicit' in region_name_one:
+                test_regions = [region_zero, region_one]
+            else:
+                test_regions = [region_zero, region_one, region_two]
+
+            # Find nonbonded method.
+            force_idx, nonbonded_force = forces.find_forces(test_system.system, openmm.NonbondedForce, only_one=True)
+            nonbonded_method = nonbonded_force.getNonbondedMethod()
+
+            # Create all combinations of annihilate_sterics/electrostatics.
+            for annihilate_sterics, annihilate_electrostatics in itertools.product((True, False), repeat=2):
+                # Create new region that we can modify.
+                for i, test_region in enumerate(test_regions):
+                    test_regions[i] = test_region._replace(annihilate_sterics=annihilate_sterics,
+                                                  annihilate_electrostatics=annihilate_electrostatics)
+
+                # Create test name.
+                test_case_name = test_system_name[:]
+                if annihilate_sterics:
+                    test_case_name += ', annihilated sterics'
+                if annihilate_electrostatics:
+                    test_case_name += ', annihilated electrostatics'
+
+                # Annihilate bonds and angles every three test_cases.
+                if n_test_cases % 3 == 0:
+                    for i, test_region in enumerate(test_regions):
+                        test_regions[i] = test_region._replace(alchemical_bonds=True, alchemical_angles=True,
+                                                       alchemical_torsions=True)
+                    test_case_name += ', annihilated bonds, angles and torsions'
+
+                # Add different softcore parameters every five test_cases.
+                if n_test_cases % 5 == 0:
+                    for i, test_region in enumerate(test_regions):
+                        test_regions[i] = test_region._replace(softcore_alpha=1.0, softcore_beta=1.0, softcore_a=1.0, softcore_b=1.0,
+                                                       softcore_c=1.0, softcore_d=1.0, softcore_e=1.0, softcore_f=1.0)
+                    test_case_name += ', modified softcore parameters'
+
+                #region_interactions = frozenset(itertools.combinations(range(len(test_regions)), 2))
+                # Pre-generate alchemical system.
+                alchemical_system = direct_space_factory.create_alchemical_system(test_system.system, alchemical_regions = test_regions)
+
+                # Add test case.
+                cls.test_cases[test_case_name] = (test_system, alchemical_system, test_regions)
+
+                n_test_cases += 1
+
+                # If we don't use softcore electrostatics and we annihilate charges
+                # we can test also exact PME treatment. We don't increase n_test_cases
+                # purposely to keep track of which tests are added above.
+                if (test_regions[1].softcore_beta == 0.0 and annihilate_electrostatics and
+                            nonbonded_method in [openmm.NonbondedForce.PME, openmm.NonbondedForce.Ewald]):
+                    alchemical_system = exact_pme_factory.create_alchemical_system(test_system.system, alchemical_regions = test_regions)
+                    test_case_name += ', exact PME'
+                    cls.test_cases[test_case_name] = (test_system, alchemical_system, test_regions)
+
+            # If the test system uses reaction field replace reaction field
+            # of the reference system to allow comparisons.
+            if nonbonded_method == openmm.NonbondedForce.CutoffPeriodic:
+                forcefactories.replace_reaction_field(test_system.system, return_copy=False,
+                                                      switch_width=direct_space_factory.switch_width)
+
+    def test_split_force_groups(self):
+        """Forces having different lambda variables should have a different force group."""
+        # Select 1 implicit, 1 explicit, and 1 exact PME explicit test case randomly.
+        test_cases = self.filter_cases(lambda x: 'Implicit' in x, max_number=1)
+        test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' in x, max_number=1))
+        test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' not in x, max_number=1))
+        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
+            region_names = []
+            for region in alchemical_region:
+                region_names.append(region.name)
+            f = partial(check_split_force_groups, alchemical_system, region_names)
+            f.description = "Testing force splitting among groups of {}".format(test_name)
+            yield f
+
+    def test_noninteracting_energy_components(self):
+        """Check all forces annihilated/decoupled when their lambda variables are zero."""
+        for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
+            f = partial(check_multi_noninteracting_energy_components, test_system.system, alchemical_system,
+                        alchemical_region, test_system.positions)
+            f.description = "Testing non-interacting energy of {}".format(test_name)
+            yield f
+
+    @attr('slow')
+    def test_platforms(self):
+        """Test interacting and noninteracting energies on all platforms."""
+        global GLOBAL_ALCHEMY_PLATFORM
+        old_global_platform = GLOBAL_ALCHEMY_PLATFORM
+
+        # Do not repeat tests on the platform already tested.
+        if old_global_platform is None:
+            default_platform_name = utils.get_fastest_platform().getName()
+        else:
+            default_platform_name = old_global_platform.getName()
+        platforms = [platform for platform in utils.get_available_platforms()
+                     if platform.getName() != default_platform_name]
+
+        # Test interacting and noninteracting energies on all platforms.
+        for platform in platforms:
+            GLOBAL_ALCHEMY_PLATFORM = platform
+            for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
+                f = partial(compare_system_energies, test_system.system, alchemical_system,
+                            alchemical_region, test_system.positions)
+                f.description = "Test fully interacting energy of {} on {}".format(test_name, platform.getName())
+                yield f
+                f = partial(check_multi_noninteracting_energy_components, test_system.system, alchemical_system,
+                            alchemical_region, test_system.positions)
+                f.description = "Test non-interacting energy of {} on {}".format(test_name, platform.getName())
+                yield f
+
+        # Restore global platform
+        GLOBAL_ALCHEMY_PLATFORM = old_global_platform
+
+    @attr('slow')
+    def test_fully_interacting_energy_components(self):
+        """Test interacting state energy by force component."""
+        # This is a very expensive but very informative test. We can
+        # run this locally when test_fully_interacting_energies() fails.
+        test_cases = self.filter_cases(lambda x: 'Explicit' in x)
+        for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
+            f = partial(check_multi_interacting_energy_components, test_system.system, alchemical_system,
+                        alchemical_region, test_system.positions)
+            f.description = "Testing energy components of %s..." % test_name
             yield f
 
 
@@ -1715,12 +2011,14 @@ class TestAlchemicalState(object):
         context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.apply_to_context(context)
+        del context
 
         # Raise error if AlchemicalState is applied to a Context with missing parameters.
         alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
         context = self.alanine_state.create_context(copy.deepcopy(integrator))
         with nose.tools.assert_raises(AlchemicalStateError):
             alchemical_state.apply_to_context(context)
+        del context
 
         # Correctly sets Context's parameters.
         for state in [self.full_alanine_state, self.alanine_state_exact_pme]:
