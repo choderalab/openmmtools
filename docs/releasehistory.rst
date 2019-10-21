@@ -7,8 +7,8 @@ Release History
 New features
 ------------
 - Added support in ``AbsoluteAlchemicalFactory`` for handling multiple independent alchemical regions (`#438 <https://github.com/choderalab/openmmtools/pull/438>`_).
-- Added support for anisotropic and membrane barostats in `ThermodynamicState`
-- Added support for platform properties in ContextCache (e.g. for mixed and double precision CUDA in multistate sampler)
+- Added support for anisotropic and membrane barostats in `ThermodynamicState` (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_)
+- Added support for platform properties in ContextCache (e.g. for mixed and double precision CUDA in multistate sampler) (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_)
 
 0.18.3 - Storage enhancements and bugfixes
 ==========================================

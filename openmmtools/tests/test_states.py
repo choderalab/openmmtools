@@ -859,8 +859,8 @@ class TestThermodynamicState(object):
         reduced_potential = state.reduced_potential(sampler_state)
         pressure_volume_work = (self.std_pressure * sampler_state.volume *
                                 unit.AVOGADRO_CONSTANT_NA)
-        surface_work = (self.std_surface_tension * sampler_state.area *
-                                unit.AVOGADRO_CONSTANT_NA)
+        surface_work = (self.std_surface_tension * sampler_state.area_xy *
+                        unit.AVOGADRO_CONSTANT_NA)
         potential_energy = (reduced_potential / beta - pressure_volume_work + surface_work) / kj_mol
 
         assert np.isclose(sampler_state.potential_energy / kj_mol, potential_energy)
@@ -1117,7 +1117,7 @@ class TestSamplerState(object):
 
         # The other attributes are copied correctly.
         assert sliced_sampler_state.volume == sampler_state.volume
-        assert sliced_sampler_state.area == sampler_state.area
+        assert sliced_sampler_state.area_xy == sampler_state.area_xy
 
         # Energies are undefined for as subset of atoms.
         assert sliced_sampler_state.kinetic_energy is None

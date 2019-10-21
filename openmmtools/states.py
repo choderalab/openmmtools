@@ -242,7 +242,7 @@ def _box_vectors_volume(box_vectors):
     return np.linalg.det(box_matrix) * a.unit**3
 
 
-def _box_vectors_area(box_vectors):
+def _box_vectors_area_xy(box_vectors):
     """Return the xy-area of the box vectors.
 
     Parameters
@@ -253,7 +253,7 @@ def _box_vectors_area(box_vectors):
     Returns
     -------
 
-    area : simtk.unit.Quantity
+    area_xy : simtk.unit.Quantity
         The box area in units of length^2.
     """
     return box_vectors[0][0] * box_vectors[1][1]
@@ -882,12 +882,12 @@ class ThermodynamicState(object):
             openmm_state = context_state.getState(getEnergy=True)
             potential_energy = openmm_state.getPotentialEnergy()
             volume = openmm_state.getPeriodicBoxVolume()
-            area = _box_vectors_area(openmm_state.getPeriodicBoxVectors())
+            area = _box_vectors_area_xy(openmm_state.getPeriodicBoxVectors())
         else:
             n_particles = context_state.n_particles
             potential_energy = context_state.potential_energy
             volume = context_state.volume
-            area = context_state.area
+            area = context_state.area_xy
 
         # Check compatibility.
         if n_particles != self.n_particles:
@@ -1833,14 +1833,14 @@ class ThermodynamicState(object):
     # -------------------------------------------------------------------------
 
     @staticmethod
-    def _compute_reduced_potential(potential_energy, temperature, volume, pressure, area=None, surface_tension=None):
+    def _compute_reduced_potential(potential_energy, temperature, volume, pressure, area_xy=None, surface_tension=None):
         """Convert potential energy into reduced potential."""
         beta = 1.0 / (unit.BOLTZMANN_CONSTANT_kB * temperature)
         reduced_potential = potential_energy / unit.AVOGADRO_CONSTANT_NA
         if pressure is not None:
             reduced_potential += pressure * volume
-        if area is not None and surface_tension is not None:
-            reduced_potential -= surface_tension * area
+        if area_xy is not None and surface_tension is not None:
+            reduced_potential -= surface_tension * area_xy
         return beta * reduced_potential
 
     def _find_force_groups_to_update(self, context, thermodynamic_state, memo):
@@ -2106,9 +2106,9 @@ class SamplerState(object):
         return _box_vectors_volume(self.box_vectors)
 
     @property
-    def area(self):
+    def area_xy(self):
         """The xy-area of the box (read-only)"""
-        return _box_vectors_area(self.box_vectors)
+        return _box_vectors_area_xy(self.box_vectors)
 
     @property
     def n_particles(self):
