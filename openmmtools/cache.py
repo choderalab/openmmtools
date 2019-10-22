@@ -307,10 +307,9 @@ class ContextCache(object):
     """
 
     def __init__(self, platform=None, platform_properties=None, **kwargs):
+        self._validate_platform_properties(platform, platform_properties)
         self._platform = platform
         self._platform_properties = platform_properties
-        if platform_properties is not None and platform is None:
-            raise ValueError("To set platform_properties, you need to also specify the platform.")
         self._lru = LRUCache(**kwargs)
 
     def __len__(self):
@@ -330,7 +329,17 @@ class ContextCache(object):
     def platform(self, new_platform):
         if len(self._lru) > 0:
             raise RuntimeError('Cannot change platform of a non-empty ContextCache')
+        if new_platform is None:
+            self._platform_properties = None
+        self._validate_platform_properties(new_platform, self._platform_properties)
         self._platform = new_platform
+
+    def set_platform(self, new_platform, platform_properties=None):
+        if len(self._lru) > 0:
+            raise RuntimeError('Cannot change platform of a non-empty ContextCache')
+        self._validate_platform_properties(new_platform, platform_properties)
+        self._platform = new_platform
+        self._platform_properties = platform_properties
 
     @property
     def capacity(self):
@@ -448,6 +457,7 @@ class ContextCache(object):
         return context, context_integrator
 
     def __getstate__(self):
+        # this serialization format was introduced in openmmtools > 0.18.3 (pull request #437)
         if self.platform is not None:
             platform_serialization = self.platform.getName()
         else:
@@ -456,6 +466,7 @@ class ContextCache(object):
                     time_to_live=self.time_to_live, platform_properties=self._platform_properties)
 
     def __setstate__(self, serialization):
+        # this serialization format was introduced in openmmtools > 0.18.3 (pull request #437)
         if serialization['platform'] is None:
             self._platform = None
         else:
@@ -639,6 +650,35 @@ class ContextCache(object):
             cls._cached_default_integrator_id = default_integrator_id
         return cls._cached_default_integrator_id
     _cached_default_integrator_id = None
+
+    @staticmethod
+    def _validate_platform_properties(platform=None, platform_properties=None):
+        """Check if platform properties are valid for the platform; else raise ValueError."""
+        if platform_properties is None:
+            return True
+        if platform_properties is not None and platform is None:
+            raise ValueError("To set platform_properties, you need to also specify the platform.")
+        if not isinstance(platform_properties, dict):
+            raise ValueError("platform_properties must be a dictionary")
+        for key, value in platform_properties.items():
+            if not isinstance(value, str):
+                raise ValueError(
+                    "All platform properties must be strings. You supplied {}: {} of type {}".format(
+                        key, value, type(value)
+                    )
+                )
+        # create a context to check if all properties are
+        dummy_system = openmm.System()
+        dummy_system.addParticle(1)
+        dummy_integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
+        try:
+            openmm.Context(dummy_system, dummy_integrator, platform, platform_properties)
+            return True
+        except Exception as e:
+            if "Illegal property name" in str(e):
+                raise ValueError("Invalid platform property for this platform. {}".format(e))
+            else:
+                raise e
 
 
 # =============================================================================

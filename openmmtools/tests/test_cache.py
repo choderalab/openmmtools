@@ -359,16 +359,52 @@ class TestContextCache(object):
             cache.platform = platforms[0]
 
     def test_platform_properties(self):
-        # Failure test
+        # Failure tests
+        # no platform specified
         platform_properties = {"CpuThreads": "2"}
         with nose.tools.assert_raises(ValueError) as cm:
             ContextCache(platform=None, platform_properties=platform_properties)
-        assert str(cm.exception) == "To set platform_properties, you need to also specify the platform."
+        # non-string value in properties
+        cpu_platform = openmm.Platform.getPlatformByName("CPU")
+        ref_platform = openmm.Platform.getPlatformByName("Reference")
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=cpu_platform, platform_properties={"CpuThreads": 2})
+        assert "All platform properties must be strings." in str(cm.exception)
+        # non-dict properties
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=cpu_platform, platform_properties="jambalaya")
+        assert str(cm.exception) == "platform_properties must be a dictionary"
+        # invalid property
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=cpu_platform, platform_properties={"jambalaya": "2"})
+        assert "Invalid platform property for this platform." in str(cm.exception)
 
-        # test
-        platform = openmm.Platform.getPlatformByName("CPU")
+        # setter
         cache = ContextCache(
-                platform=platform,
+            platform=cpu_platform,
+            platform_properties=platform_properties
+        )
+        with nose.tools.assert_raises(ValueError) as cm:
+            cache.platform = ref_platform
+        assert "Invalid platform property for this platform." in str(cm.exception)
+        # this should work
+        cache.set_platform(ref_platform)
+        assert cache.platform == ref_platform
+        # assert errors are checked in set_platform
+        with nose.tools.assert_raises(ValueError) as cm:
+            cache.set_platform(cpu_platform, platform_properties={"jambalaya": "2"})
+        assert "Invalid platform property for this platform." in str(cm.exception)
+        # assert that resetting the platform resets the properties
+        cache = ContextCache(
+                platform=cpu_platform,
+                platform_properties=platform_properties
+        )
+        cache.platform = None
+        assert cache._platform_properties is None
+
+        # Functionality test
+        cache = ContextCache(
+                platform=cpu_platform,
                 platform_properties=platform_properties
         )
         thermodynamic_state = copy.deepcopy(self.water_300k)
