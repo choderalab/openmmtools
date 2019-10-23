@@ -1421,9 +1421,6 @@ class ThermodynamicState(object):
         # This line raises MULTIPLE_BAROSTATS and UNSUPPORTED_BAROSTAT.
         barostat = self._find_barostat(system)
         if barostat is not None:
-            if not self._is_barostat_consistent(barostat):
-                raise TE(TE.INCONSISTENT_BAROSTAT)
-
             # Check that barostat is not added to non-periodic system. We
             # cannot use System.usesPeriodicBoundaryConditions() because
             # in OpenMM < 7.1 that returns True when a barostat is added.
@@ -1433,6 +1430,10 @@ class ThermodynamicState(object):
                     nonbonded_method = force.getNonbondedMethod()
                     if nonbonded_method in self._NONPERIODIC_NONBONDED_METHODS:
                         raise TE(TE.BAROSTATED_NONPERIODIC)
+
+            if not self._is_barostat_consistent(barostat):
+                raise TE(TE.INCONSISTENT_BAROSTAT)
+
         elif self.pressure is not None:
             raise TE(TE.NO_BAROSTAT)
 
@@ -1710,8 +1711,15 @@ class ThermodynamicState(object):
             return barostat
         return None
 
+    def _is_barostat_type_consistent(self, barostat):
+        # during initialization (standard system not set), any barostat type is OK
+        if not hasattr(self, "_standard_system"):
+            return True
+        system_barostat = self._find_barostat(self._standard_system)
+        return type(barostat) == type(system_barostat)
+
     def _is_barostat_consistent(self, barostat):
-        """Check the barostat's, temperature, pressure, and surface_tension."""
+        """Check the barostat's temperature, pressure, and surface_tension."""
         try:
             barostat_temperature = barostat.getDefaultTemperature()
         except AttributeError:  # versions previous to OpenMM 7.1
@@ -1719,7 +1727,8 @@ class ThermodynamicState(object):
         barostat_pressure = self._get_barostat_pressure(barostat)
         barostat_surface_tension = self._get_barostat_surface_tension(barostat)
 
-        is_consistent = utils.is_quantity_close(barostat_temperature, self.temperature)
+        is_consistent = self._is_barostat_type_consistent(barostat)
+        is_consistent = is_consistent and utils.is_quantity_close(barostat_temperature, self.temperature)
         is_consistent = is_consistent and utils.is_quantity_close(barostat_pressure, self.pressure)
         if barostat is not None and self._surface_tension is not None:
             is_consistent = is_consistent and utils.is_quantity_close(barostat_surface_tension, self._surface_tension)

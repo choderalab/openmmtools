@@ -236,7 +236,7 @@ class TestThermodynamicState(object):
         barostat = openmm.MonteCarloBarostat(pressure, temperature + 10*unit.kelvin)
         assert not state._is_barostat_consistent(barostat)
 
-        #assert not state._is_barostat_consistent(self.supported_anisotropic_barostat)
+        assert not state._is_barostat_consistent(self.supported_anisotropic_barostat)
         assert not state._is_barostat_consistent(self.membrane_barostat_gamma_zero)
 
     def test_method_set_system_temperature(self):
@@ -730,6 +730,11 @@ class TestThermodynamicState(object):
             ThermodynamicState(self.membrane_barostat_alanine_gamma_zero),
             ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero),
             True
+        )
+        check_compatibility(
+            ThermodynamicState(self.barostated_alanine),
+            ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero),
+            False
         )
 
     def test_method_apply_to_context(self):
