@@ -316,7 +316,7 @@ class ThermodynamicsError(Exception):
         UNSUPPORTED_ANISOTROPIC_BAROSTAT:
             "MonteCarloAnisotropicBarostat is only supported if the pressure along all scaled axes is the same.",
         SURFACE_TENSION_NOT_SUPPORTED:
-            "Surface tension can only be set for states that have a system with a MonteCarloBarostat.",
+            "Surface tension can only be set for states that have a system with a MonteCarloMembraneBarostat.",
         NO_BAROSTAT: "System does not have a barostat specifying the pressure.",
         INCONSISTENT_BAROSTAT: "System barostat is inconsistent with thermodynamic state.",
         BAROSTATED_NONPERIODIC: "Non-periodic systems cannot have a barostat.",
@@ -413,6 +413,11 @@ class ThermodynamicState(object):
         or just set to this pressure in case it already exists. If
         None, the pressure is inferred from the system barostat, and
         NVT ensemble is assumed if there is no barostat.
+    surface_tension : simtk.unit.Quantity, optional
+        The surface tension for the system at constant surface tension.
+        If this is specified, the system must have a MonteCarloMembraneBarostat.
+        If None, the surface_tension is inferred from the barostat and
+        NPT/NVT ensemble is assumed if there is no MonteCarloMembraneBarostat.
 
     Attributes
     ----------
@@ -493,8 +498,8 @@ class ThermodynamicState(object):
     # Public interface
     # -------------------------------------------------------------------------
 
-    def __init__(self, system, temperature=None, pressure=None):
-        self._initialize(system, temperature, pressure)
+    def __init__(self, system, temperature=None, pressure=None, surface_tension=None):
+        self._initialize(system, temperature, pressure, surface_tension)
 
     @property
     def system(self):
@@ -632,6 +637,7 @@ class ThermodynamicState(object):
             self._pop_barostat(system)
         else:  # Set pressure of standard barostat.
             self._set_system_pressure(system, self.pressure)
+            self._set_system_surface_tension(system, self.surface_tension)
 
         # Set temperature of standard thermostat and barostat.
         if not (remove_barostat and remove_thermostat):
@@ -709,6 +715,8 @@ class ThermodynamicState(object):
         if barostat is not None:  # NPT ensemble.
             self._set_barostat_pressure(barostat, self.pressure)
             self._set_barostat_temperature(barostat, self.temperature)
+            if self.surface_tension is not None:
+                self._set_barostat_surface_tension(barostat, self.surface_tension)
         return barostat
 
     @barostat.setter
@@ -716,10 +724,15 @@ class ThermodynamicState(object):
         # If None, just remove the barostat from the standard system.
         if new_barostat is None:
             self.pressure = None
+            self.surface_tension = None
             return
 
-        # Remember old pressure in case something goes wrong.
+        # Remember old pressure and surface tension in case something goes wrong.
         old_pressure = self.pressure
+        old_surface_tension = self.surface_tension
+        # make sure that the barostat type does not change
+        if self.barostat is not None and type(new_barostat) is not type(self.barostat):
+            raise ThermodynamicsError(ThermodynamicsError.INCONSISTENT_BAROSTAT)
 
         # Build the system with the new barostat.
         system = self.get_system(remove_barostat=True)
@@ -729,9 +742,11 @@ class ThermodynamicState(object):
         # pressure if something goes wrong (e.g. the system is not periodic).
         try:
             self._pressure = self._get_barostat_pressure(new_barostat)
+            self._surface_tension = self._get_barostat_surface_tension(new_barostat)
             self._unsafe_set_system(system, fix_state=False)
         except ThermodynamicsError:
             self._pressure = old_pressure
+            self._surface_tension = old_surface_tension
             raise
 
     @property
@@ -784,23 +799,15 @@ class ThermodynamicState(object):
 
     @property
     def surface_tension(self):
-        """Surface tension; None if the barostat is not a MonteCarloMembraneBarostat"""
-        barostat = self._find_barostat(self._standard_system)
-        if isinstance(barostat, openmm.MonteCarloMembraneBarostat):
-            return barostat.getDefaultSurfaceTension()
-        else:
-            return None
+        """Surface tension"""
+        return self._surface_tension
 
     @surface_tension.setter
     def surface_tension(self, gamma):
-        # working around a bug in the unit conversion https://github.com/openmm/openmm/issues/2406
-        if isinstance(gamma, unit.Quantity):
-            gamma = gamma.value_in_unit(unit.bar * unit.nanometer)
-        barostat = self._find_barostat(self._standard_system)
-        if isinstance(barostat, openmm.MonteCarloMembraneBarostat):
-            barostat.setDefaultSurfaceTension(gamma)
-        else:
+        if (self._surface_tension is None) != (gamma is None):
             raise ThermodynamicsError(ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED)
+        else:
+            self._surface_tension = gamma
 
     def reduced_potential(self, context_state):
         """Reduced potential in this thermodynamic state.
@@ -934,7 +941,9 @@ class ThermodynamicState(object):
 
         # In NPT, we'll need also the volume.
         is_npt = thermodynamic_states[0].pressure is not None
+        is_npgammat = thermodynamic_states[0].surface_tension is not None
         volume = None
+        area_xy = None
 
         energy_by_force_group = {force.getForceGroup(): 0.0*unit.kilocalories_per_mole
                                  for force in context.getSystem().getForces()}
@@ -960,11 +969,13 @@ class ThermodynamicState(object):
             # Compute volume if this is the first time we obtain a state.
             if is_npt and volume is None:
                 volume = openmm_state.getPeriodicBoxVolume()
+            if is_npgammat and area_xy is None:
+                area_xy = _box_vectors_area_xy(openmm_state.getPeriodicBoxVectors())
 
             # Compute the new total reduced potential.
             potential_energy = unit.sum(list(energy_by_force_group.values()))
             reduced_potential = cls._compute_reduced_potential(potential_energy, state.temperature,
-                                                               volume, state.pressure)
+                                                               volume, state.pressure, area_xy, state.surface_tension)
             reduced_potentials[state_idx] = reduced_potential
 
             # Update groups to compute for next states.
@@ -1258,12 +1269,13 @@ class ThermodynamicState(object):
             serialized_system = openmm.XmlSerializer.serialize(self._standard_system)
             serialized_system = zlib.compress(serialized_system.encode(self._ENCODING))
         return dict(standard_system=serialized_system, temperature=self.temperature,
-                    pressure=self.pressure)
+                    pressure=self.pressure, surface_tension=self._surface_tension)
 
     def __setstate__(self, serialization):
         """Set the state from a dictionary representation."""
         self._temperature = serialization['temperature']
         self._pressure = serialization['pressure']
+        self._surface_tension = serialization['surface_tension']
 
         serialized_system = serialization['standard_system']
         # Decompress system, if need be
@@ -1292,7 +1304,7 @@ class ThermodynamicState(object):
     # Internal-usage: initialization
     # -------------------------------------------------------------------------
 
-    def _initialize(self, system, temperature=None, pressure=None):
+    def _initialize(self, system, temperature=None, pressure=None, surface_tension=None):
         """Initialize the thermodynamic state."""
         # Avoid modifying the original system when setting temperature and pressure.
         system = copy.deepcopy(system)
@@ -1303,9 +1315,15 @@ class ThermodynamicState(object):
             self._pressure = self._get_barostat_pressure(barostat)
         else:
             self._pressure = pressure  # Pressure here can also be None.
-        self._barostat_type = openmm.MonteCarloBarostat
-        if barostat is not None:
-            self._barostat_type = type(barostat)
+
+        # If surface tension is None, we try to infer the pressure from the barostat.
+        barostat_type = type(barostat)
+        if surface_tension is None and barostat_type == openmm.MonteCarloMembraneBarostat:
+            self._surface_tension = barostat.getDefaultSurfaceTension()
+        elif surface_tension is not None and barostat_type != openmm.MonteCarloMembraneBarostat:
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+        else:
+            self._surface_tension = surface_tension
 
         # If temperature is None, we infer the temperature from a thermostat.
         if temperature is None:
@@ -1321,6 +1339,8 @@ class ThermodynamicState(object):
             self._set_system_temperature(system, temperature)
         if pressure is not None:
             self._set_system_pressure(system, pressure)
+        if surface_tension is not None:
+            self._set_system_surface_tension(system, surface_tension)
 
         # We can use the unsafe set_system since the system has been copied.
         self._unsafe_set_system(system, fix_state=False)
@@ -1336,6 +1356,7 @@ class ThermodynamicState(object):
     # caused by unit conversion.
     _STANDARD_PRESSURE = 1.0*unit.bar
     _STANDARD_TEMPERATURE = 273.0*unit.kelvin
+    _STANDARD_SURFACE_TENSION = 0.0*unit.nanometer*unit.bar
 
     _NONPERIODIC_NONBONDED_METHODS = {openmm.NonbondedForce.NoCutoff,
                                       openmm.NonbondedForce.CutoffNonPeriodic}
@@ -1351,12 +1372,13 @@ class ThermodynamicState(object):
         # Configure temperature and pressure.
         if fix_state:
             # We just need to add/remove the barostat according to the ensemble.
-            # Temperature and pressure of thermostat and barostat will be set
+            # Temperature, pressure, surface tension of thermostat and barostat will be set
             # to their standard value afterwards.
             self._set_system_pressure(system, self.pressure)
+            self._set_system_surface_tension(system, self.surface_tension)
         else:
             # If the flag is deactivated, we check that temperature
-            # and pressure of the system are correct.
+            # pressure, and surface tension of the system are correct.
             self._check_system_consistency(system)
 
         # Update standard system.
@@ -1455,6 +1477,8 @@ class ThermodynamicState(object):
         barostat = self._pop_barostat(system)
         if barostat is not None:
             self._set_barostat_pressure(barostat, self._STANDARD_PRESSURE)
+            if isinstance(barostat, openmm.MonteCarloMembraneBarostat):
+                self._set_barostat_surface_tension(barostat, self._STANDARD_SURFACE_TENSION)
             system.addForce(barostat)
 
     def _compute_standard_system_hash(self, standard_system):
@@ -1483,15 +1507,20 @@ class ThermodynamicState(object):
         if (barostat is None) != (self._pressure is None):
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
 
+        if (type(barostat) is openmm.MonteCarloMembraneBarostat) == (self._surface_tension is None):
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+
         # No need to set the barostat if we are in NVT.
         if self._pressure is None:
             return
 
-        # Apply pressure and temperature to barostat.
+        # Apply pressure, surface tension, and temperature to barostat.
         if update_pressure:
             self._set_barostat_pressure(barostat, self.pressure)
             self._set_barostat_pressure_in_context(barostat, self.pressure, context)
+
         if self.surface_tension is not None and update_surface_tension:
+            self._set_barostat_surface_tension(barostat, self.surface_tension)
             self._set_barostat_surface_tension_in_context(barostat, self.surface_tension, context)
 
         if update_temperature:
@@ -1534,7 +1563,7 @@ class ThermodynamicState(object):
         update_temperature = self.temperature != thermodynamic_state.temperature
         update_surface_tension = self.surface_tension != thermodynamic_state.surface_tension
 
-        if update_pressure or update_temperature:
+        if update_pressure or update_temperature or update_surface_tension:
             self._set_context_barostat(context, update_pressure, update_temperature, update_surface_tension)
         if update_temperature:
             self._set_context_thermostat(context)
@@ -1618,6 +1647,11 @@ class ThermodynamicState(object):
 
     _SUPPORTED_BAROSTATS = {'MonteCarloBarostat', 'MonteCarloAnisotropicBarostat', 'MonteCarloMembraneBarostat'}
 
+    @property
+    def _barostat_type(self):
+        barostat = self._find_barostat(self._standard_system)
+        return type(barostat)
+
     @classmethod
     def _find_barostat(cls, system, get_index=False):
         """Return the first barostat found in the system.
@@ -1677,16 +1711,20 @@ class ThermodynamicState(object):
         return None
 
     def _is_barostat_consistent(self, barostat):
-        """Check the barostat's type, temperature and pressure."""
+        """Check the barostat's, temperature, pressure, and surface_tension."""
         try:
             barostat_temperature = barostat.getDefaultTemperature()
         except AttributeError:  # versions previous to OpenMM 7.1
             barostat_temperature = barostat.getTemperature()
         barostat_pressure = self._get_barostat_pressure(barostat)
-        is_consistent = (type(barostat) is self._barostat_type)
-        is_consistent = is_consistent and utils.is_quantity_close(barostat_temperature, self.temperature)
-        is_consistent = is_consistent and utils.is_quantity_close(barostat_pressure,
-                                                                  self.pressure)
+        barostat_surface_tension = self._get_barostat_surface_tension(barostat)
+
+        is_consistent = utils.is_quantity_close(barostat_temperature, self.temperature)
+        is_consistent = is_consistent and utils.is_quantity_close(barostat_pressure, self.pressure)
+        if barostat is not None and self._surface_tension is not None:
+            is_consistent = is_consistent and utils.is_quantity_close(barostat_surface_tension, self._surface_tension)
+        else:
+            is_consistent = is_consistent and (barostat_surface_tension == self._surface_tension) # both None
         return is_consistent
 
     def _set_system_pressure(self, system, pressure):
@@ -1757,6 +1795,32 @@ class ThermodynamicState(object):
         """Set barostat temperature."""
         barostat.setDefaultTemperature(temperature)
 
+    def _set_system_surface_tension(self, system, gamma):
+        """Set system surface tension"""
+        if gamma is not None and not system.usesPeriodicBoundaryConditions():
+            raise ThermodynamicsError(ThermodynamicsError.BAROSTATED_NONPERIODIC)
+        barostat = self._find_barostat(system)
+        if (gamma is None) == isinstance(barostat, openmm.MonteCarloMembraneBarostat):
+            raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
+        self._set_barostat_surface_tension(barostat, gamma)
+
+
+    def _set_barostat_surface_tension(self, barostat, gamma):
+        # working around a bug in the unit conversion https://github.com/openmm/openmm/issues/2406
+        if isinstance(gamma, unit.Quantity):
+            gamma = gamma.value_in_unit(unit.bar * unit.nanometer)
+        # barostat = self._find_barostat(system)
+        if isinstance(barostat, openmm.MonteCarloMembraneBarostat):
+            barostat.setDefaultSurfaceTension(gamma)
+        elif gamma is not None:
+            raise ThermodynamicsError(ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED)
+
+    def _get_barostat_surface_tension(self, barostat):
+        if isinstance(barostat, openmm.MonteCarloMembraneBarostat):
+            return barostat.getDefaultSurfaceTension()
+        else:
+            return None
+
     @staticmethod
     def _set_barostat_surface_tension_in_context(barostat, surface_tension, context):
         """Set barostat surface tension."""
@@ -1765,7 +1829,7 @@ class ThermodynamicState(object):
             surface_tension = surface_tension.value_in_unit(unit.nanometer*unit.bar)
         try:
             context.getParameter(barostat.SurfaceTension())
-        except Exception as e:
+        except Exception:
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
         context.setParameter(barostat.SurfaceTension(), surface_tension)
 

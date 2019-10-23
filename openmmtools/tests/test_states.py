@@ -236,7 +236,7 @@ class TestThermodynamicState(object):
         barostat = openmm.MonteCarloBarostat(pressure, temperature + 10*unit.kelvin)
         assert not state._is_barostat_consistent(barostat)
 
-        assert not state._is_barostat_consistent(self.supported_anisotropic_barostat)
+        #assert not state._is_barostat_consistent(self.supported_anisotropic_barostat)
         assert not state._is_barostat_consistent(self.membrane_barostat_gamma_zero)
 
     def test_method_set_system_temperature(self):
@@ -365,15 +365,15 @@ class TestThermodynamicState(object):
                 state.barostat = self.unsupported_anisotropic_barostat
             assert cm.exception.code == ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT
 
-            # Assign non-standard barostat raise error
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
-                state.barostat = self.supported_anisotropic_barostat
-            assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
-
-            # Assign non-standard barostat raise error
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
-                state.barostat = self.membrane_barostat_gamma_zero
-            assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
+            # Assign barostat with different type raise error
+            if state.barostat is not None and type(state.barostat) != type(self.supported_anisotropic_barostat):
+                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                    state.barostat = self.supported_anisotropic_barostat
+                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTA
+            if state.barostat is not None and type(state.barostat) != type(self.membrane_barostat_gamma_zero):
+                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                    state.barostat = self.membrane_barostat_gamma_zero
+                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
 
             # After exception, state is left consistent
             assert state.pressure is None
@@ -437,7 +437,7 @@ class TestThermodynamicState(object):
                       (self.barostated_toluene, TE.BAROSTATED_NONPERIODIC),
                       (self.multiple_barostat_alanine, TE.MULTIPLE_BAROSTATS),
                       (self.unsupported_anisotropic_barostat_alanine, TE.UNSUPPORTED_ANISOTROPIC_BAROSTAT),
-                      (self.supported_anisotropic_barostat_alanine, TE.INCONSISTENT_BAROSTAT),
+                      #(self.supported_anisotropic_barostat_alanine, TE.INCONSISTENT_BAROSTAT),
                       (self.membrane_barostat_alanine_gamma_zero, TE.INCONSISTENT_BAROSTAT),
                       (self.inconsistent_pressure_alanine, TE.INCONSISTENT_BAROSTAT),
                       (self.inconsistent_temperature_alanine, TE.INCONSISTENT_THERMOSTAT),
@@ -725,6 +725,12 @@ class TestThermodynamicState(object):
         barostated_alanine2 = copy.deepcopy(barostated_alanine)
         barostated_alanine2.pressure = barostated_alanine.pressure + 0.2*unit.bars
         check_compatibility(barostated_alanine, barostated_alanine2, True)
+
+        check_compatibility(
+            ThermodynamicState(self.membrane_barostat_alanine_gamma_zero),
+            ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero),
+            True
+        )
 
     def test_method_apply_to_context(self):
         """ThermodynamicState.apply_to_context() method."""
