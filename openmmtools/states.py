@@ -1316,7 +1316,7 @@ class ThermodynamicState(object):
         else:
             self._pressure = pressure  # Pressure here can also be None.
 
-        # If surface tension is None, we try to infer the pressure from the barostat.
+        # If surface tension is None, we try to infer the surface tension from the barostat.
         barostat_type = type(barostat)
         if surface_tension is None and barostat_type == openmm.MonteCarloMembraneBarostat:
             self._surface_tension = barostat.getDefaultSurfaceTension()
@@ -1648,11 +1648,6 @@ class ThermodynamicState(object):
 
     _SUPPORTED_BAROSTATS = {'MonteCarloBarostat', 'MonteCarloAnisotropicBarostat', 'MonteCarloMembraneBarostat'}
 
-    @property
-    def _barostat_type(self):
-        barostat = self._find_barostat(self._standard_system)
-        return type(barostat)
-
     @classmethod
     def _find_barostat(cls, system, get_index=False):
         """Return the first barostat found in the system.
@@ -1813,12 +1808,10 @@ class ThermodynamicState(object):
             raise ThermodynamicsError(ThermodynamicsError.INCOMPATIBLE_ENSEMBLE)
         self._set_barostat_surface_tension(barostat, gamma)
 
-
     def _set_barostat_surface_tension(self, barostat, gamma):
         # working around a bug in the unit conversion https://github.com/openmm/openmm/issues/2406
         if isinstance(gamma, unit.Quantity):
             gamma = gamma.value_in_unit(unit.bar * unit.nanometer)
-        # barostat = self._find_barostat(system)
         if isinstance(barostat, openmm.MonteCarloMembraneBarostat):
             barostat.setDefaultSurfaceTension(gamma)
         elif gamma is not None:

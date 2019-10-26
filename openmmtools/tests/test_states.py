@@ -437,7 +437,7 @@ class TestThermodynamicState(object):
                       (self.barostated_toluene, TE.BAROSTATED_NONPERIODIC),
                       (self.multiple_barostat_alanine, TE.MULTIPLE_BAROSTATS),
                       (self.unsupported_anisotropic_barostat_alanine, TE.UNSUPPORTED_ANISOTROPIC_BAROSTAT),
-                      #(self.supported_anisotropic_barostat_alanine, TE.INCONSISTENT_BAROSTAT),
+                      (self.supported_anisotropic_barostat_alanine, TE.INCONSISTENT_BAROSTAT),
                       (self.membrane_barostat_alanine_gamma_zero, TE.INCONSISTENT_BAROSTAT),
                       (self.inconsistent_pressure_alanine, TE.INCONSISTENT_BAROSTAT),
                       (self.inconsistent_temperature_alanine, TE.INCONSISTENT_THERMOSTAT),
