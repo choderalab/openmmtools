@@ -159,16 +159,16 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             # Create Analyzer.
             analyzer = self.ANALYZER(reporter)
 
-            # TODO: Check if deviations exceed tolerance.
+            # Check if free energies have the right shape and deviations exceed tolerance
             delta_f_ij, delta_f_ij_stderr = analyzer.get_free_energy()
             nstates, _ = delta_f_ij.shape
 
             if include_unsampled_states:
-                nstates_expected = self.N_STATES+2
-                delta_f_ij_analytical = self.delta_f_ij_analytical
+                nstates_expected = self.N_STATES+2 # We expect N_STATES plus two additional states
+                delta_f_ij_analytical = self.delta_f_ij_analytical # Use the whole matrix
             else:
-                nstates_expected = self.N_STATES
-                delta_f_ij_analytical = self.delta_f_ij_analytical[1:-1,1:-1]
+                nstates_expected = self.N_STATES # We expect only N_STATES
+                delta_f_ij_analytical = self.delta_f_ij_analytical[1:-1,1:-1] # Use only the intermediate, sampled states
 
             assert nstates == nstates_expected, \
                 f'analyzer.get_free_energy() returned {delta_f_ij.shape} but expected {nstates_expected,nstates_expected}'
