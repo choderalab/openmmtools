@@ -10,7 +10,7 @@ New features
 
 Bugfixes
 --------
-- The multistate samplers now issue experimental API warnings via `logger.warn()` rather than `warnings.warn()` (#446)
+- The multistate samplers now issue experimental API warnings via ``logger.warn()`` rather than ```warnings.warn()`` (`#446 <https://github.com/choderalab/openmmtools/pull/446>`_)
 
 0.18.3 - Storage enhancements and bugfixes
 ==========================================
