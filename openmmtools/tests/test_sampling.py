@@ -32,8 +32,12 @@ from openmmtools import testsystems
 from simtk import openmm, unit
 
 import mpiplus
-from openmmtools.multistate import MultiStateReporter, MultiStateSampler, ReplicaExchangeSampler, ParallelTemperingSampler, SAMSSampler
-from openmmtools.multistate import ReplicaExchangeAnalyzer, SAMSAnalyzer
+from openmmtools.multistate import MultiStateReporter
+from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
+from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyzer
+from openmmtools.multistate import ParallelTemperingSampler, ParallelTemperingAnalyzer
+from openmmtools.multistate import SAMSSampler, SAMSAnalyzer
+
 from openmmtools.multistate.multistatereporter import _DictYamlLoader
 
 # quiet down some citation spam
@@ -64,289 +68,162 @@ def check_thermodynamic_states_equality(original_states, restored_states):
             assert original_state.lambda_sterics == restored_state.lambda_sterics
             assert original_state.lambda_electrostatics == restored_state.lambda_electrostatics
 
-
-def compute_harmonic_oscillator_expectations(K, temperature):
-    """Compute mean and variance of potential and kinetic energies for a 3D harmonic oscillator.
-
-    Notes
-    -----
-    Numerical quadrature is used to compute the mean and standard deviation of the potential energy.
-    Mean and standard deviation of the kinetic energy, as well as the absolute free energy, is computed analytically.
-
-    Parameters
-    ----------
-    K : simtk.unit.Quantity
-        Spring constant.
-    temperature : simtk.unit.Quantity
-        Temperature.
-
-    Returns
-    -------
-    values : dict
-
-    TODO
-
-    Replace this with built-in analytical expectations
-
-    """
-
-    values = dict()
-
-    # Compute thermal energy and inverse temperature from specified temperature.
-    kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
-    kT = kB * temperature  # thermal energy
-    beta = 1.0 / kT  # inverse temperature
-
-    # Compute standard deviation along one dimension.
-    sigma = 1.0 / unit.sqrt(beta * K)
-
-    # Define limits of integration along r.
-    r_min = 0.0 * unit.nanometers  # initial value for integration
-    r_max = 10.0 * sigma      # maximum radius to integrate to
-
-    # Compute mean and std dev of potential energy.
-    V = lambda r : (K/2.0) * (r*unit.nanometers)**2 / unit.kilojoules_per_mole # potential in kJ/mol, where r in nm
-    q = lambda r : 4.0 * math.pi * r**2 * math.exp(-beta * (K/2.0) * (r*unit.nanometers)**2) # q(r), where r in nm
-    (IqV2, dIqV2) = scipy.integrate.quad(lambda r : q(r) * V(r)**2, r_min / unit.nanometers, r_max / unit.nanometers)
-    (IqV, dIqV)   = scipy.integrate.quad(lambda r : q(r) * V(r), r_min / unit.nanometers, r_max / unit.nanometers)
-    (Iq, dIq)     = scipy.integrate.quad(lambda r : q(r), r_min / unit.nanometers, r_max / unit.nanometers)
-    values['potential'] = dict()
-    values['potential']['mean'] = (IqV / Iq) * unit.kilojoules_per_mole
-    values['potential']['stddev'] = (IqV2 / Iq) * unit.kilojoules_per_mole
-
-    # Compute mean and std dev of kinetic energy.
-    values['kinetic'] = dict()
-    values['kinetic']['mean'] = (3./2.) * kT
-    values['kinetic']['stddev'] = math.sqrt(3./2.) * kT
-
-    # Compute dimensionless free energy.
-    # f = - \ln \int_{-\infty}^{+\infty} \exp[-\beta K x^2 / 2]
-    #   = - \ln \int_{-\infty}^{+\infty} \exp[-x^2 / 2 \sigma^2]
-    #   = - \ln [\sqrt{2 \pi} \sigma]
-    values['f'] = - np.log(2 * np.pi * (sigma / unit.angstroms)**2) * (3.0/2.0)
-
-    return values
-
-
 # ==============================================================================
-# TEST ANALYSIS REPLICA EXCHANGE
+# Harmonic oscillator free energy test
 # ==============================================================================
 
-@attr('slow')  # Skip on Travis-CI
-def test_replica_exchange_harmonic_oscillator(verbose=False, verbose_simulation=False):
-    """Test harmonic oscillator free energies for replica-exchange."""
-    # Define mass of carbon atom.
-    mass = 12.0 * unit.amu
+class TestHarmonicOscillatorsMultiStateSampler(object):
+    """Test multistate sampler can compute free energies of harmonic oscillator"""
 
-    sampler_states = list()
-    thermodynamic_states = list()
-    analytical_results = list()
-    f_i_analytical = list()  # Dimensionless free energies.
-    u_i_analytical = list()  # Reduced potentials.
+    # ------------------------------------
+    # VARIABLES TO SET FOR EACH TEST CLASS
+    # ------------------------------------
 
-    # Define thermodynamic states.
-    Ks = [500.00, 400.0, 300.0] * unit.kilocalories_per_mole / unit.angstroms**2  # Spring constants.
-    temperatures = [300.0, 350.0, 400.0] * unit.kelvin  # Temperatures.
-    for (K, temperature) in zip(Ks, temperatures):
-        # Create harmonic oscillator system.
-        testsystem = testsystems.HarmonicOscillator(K=K, mass=mass, mm=openmm)
+    N_SAMPLERS = 3
+    N_STATES = 5 # number of thermodynamic states to sample; two additional unsampled states will be added
+    N_ITERATIONS = 500 # number of iterations
+    SAMPLER = MultiStateSampler
+    ANALYZER = MultiStateSamplerAnalyzer
 
-        # Create thermodynamic state and save positions.
-        system, positions = [testsystem.system, testsystem.positions]
-        sampler_states.append(mmtools.states.SamplerState(positions))
-        thermodynamic_states.append(mmtools.states.ThermodynamicState(system=system, temperature=temperature))
+    @classmethod
+    def setup_class(cls):
+        # Configure the global context cache to use the Reference platform
+        from openmmtools import cache
+        platform = openmm.Platform.getPlatformByName('Reference')
+        cls.old_global_context_cache = cache.global_context_cache
+        cache.global_context_cache = cache.ContextCache(platform=platform)
 
-        # Store analytical results.
-        results = compute_harmonic_oscillator_expectations(K, temperature)
-        analytical_results.append(results)
-        f_i_analytical.append(results['f'])
-        reduced_potential = results['potential']['mean'] / (kB * temperature)
-        u_i_analytical.append(reduced_potential)
+        # Set oscillators to mass of carbon atom
+        mass = 12.0 * unit.amu
 
-    # Compute analytical Delta_f_ij
-    nstates = len(f_i_analytical)
-    f_i_analytical = np.array(f_i_analytical)
-    u_i_analytical = np.array(u_i_analytical)
-    s_i_analytical = u_i_analytical - f_i_analytical
-    Delta_f_ij_analytical = np.zeros([nstates, nstates], np.float64)
-    Delta_u_ij_analytical = np.zeros([nstates, nstates], np.float64)
-    Delta_s_ij_analytical = np.zeros([nstates, nstates], np.float64)
-    for i in range(nstates):
-        for j in range(nstates):
-            Delta_f_ij_analytical[i, j] = f_i_analytical[j] - f_i_analytical[i]
-            Delta_u_ij_analytical[i, j] = u_i_analytical[j] - u_i_analytical[i]
-            Delta_s_ij_analytical[i, j] = s_i_analytical[j] - s_i_analytical[i]
+        # Translate the sampler states to be different one from each other.
+        n_particles = 1
+        positions = unit.Quantity(np.zeros([n_particles,3]), unit.angstroms)
+        cls.sampler_states = [
+            mmtools.states.SamplerState(positions=positions)
+            for sampler_index in range(cls.N_SAMPLERS)]
 
-    # Create and configure simulation object.
-    move = mmtools.mcmc.LangevinDynamicsMove(timestep=2.0*unit.femtoseconds,
-                                             collision_rate=20.0/unit.picosecond,
-                                             n_steps=500, reassign_velocities=True)
-    simulation = ReplicaExchangeSampler(mcmc_moves=move, number_of_iterations=400)
+        # Generate list of thermodynamic states and analytical free energies
+        # This list includes both sampled and two unsampled states
+        thermodynamic_states = list()
+        temperature = 300 * unit.kelvin
+        f_i = np.zeros([cls.N_STATES+2]) # f_i[state_index] is the dimensionless free energy of state `state_index`
+        for state_index in range(cls.N_STATES + 2):
+            sigma = (1.0 + 0.2 * state_index) * unit.angstroms # compute reasonable standard deviation with good overlap
+            kT = kB * temperature # compute thermal energy
+            K = kT / sigma**2 # compute spring constant
+            testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
+            thermodynamic_state = mmtools.states.ThermodynamicState(testsystem.system, temperature)
+            thermodynamic_states.append(thermodynamic_state)
 
-    # Define file for temporary storage.
-    with mmtools.utils.temporary_directory() as tmp_dir:
-        storage = os.path.join(tmp_dir, 'test_storage.nc')
-        reporter = MultiStateReporter(storage, checkpoint_interval=1)
-        simulation.create(thermodynamic_states, sampler_states, reporter)
+            # Store analytical reduced free energy
+            f_i[state_index] = - np.log(2 * np.pi * (sigma / unit.angstroms)**2) * (3.0/2.0)
 
-        # Run simulation we keep the debug info off during the simulation
-        # to not clog the output, and reactivate it for analysis.
-        simulation.run()
+        # delta_f_ij_analytical[i,j] = f_i_analytical[j] - f_i_analytical[i]
+        cls.f_i_analytical = f_i
+        cls.delta_f_ij_analytical = f_i - f_i[:,np.newaxis]
 
-        # Create Analyzer.
-        analyzer = ReplicaExchangeAnalyzer(reporter)
+        # Define sampled and unsampled states.
+        cls.nstates = cls.N_STATES
+        cls.unsampled_states = [thermodynamic_states[0], thermodynamic_states[-1]] # first and last
+        cls.thermodynamic_states = thermodynamic_states[1:-1] # intermediate states
 
-        # TODO: Check if deviations exceed tolerance.
-        Delta_f_ij, dDelta_f_ij = analyzer.get_free_energy()
-        error = np.abs(Delta_f_ij - Delta_f_ij_analytical)
-        indices = np.where(dDelta_f_ij > 0.0)
-        nsigma = np.zeros([nstates,nstates], np.float32)
-        nsigma[indices] = error[indices] / dDelta_f_ij[indices]
-        MAX_SIGMA = 6.0 # maximum allowed number of standard errors
-        if np.any(nsigma > MAX_SIGMA):
-            print("Delta_f_ij")
-            print(Delta_f_ij)
-            print("Delta_f_ij_analytical")
-            print(Delta_f_ij_analytical)
-            print("error")
-            print(error)
-            print("stderr")
-            print(dDelta_f_ij)
-            print("nsigma")
-            print(nsigma)
-            raise Exception("Dimensionless free energy difference exceeds MAX_SIGMA of %.1f" % MAX_SIGMA)
+    @classmethod
+    def teardown_class(cls):
+        # Restore global context cache
+        from openmmtools import cache
+        cache.global_context_cache = cls.old_global_context_cache
 
-        Delta_u_ij, dDelta_u_ij = analyzer.get_enthalpy()
-        error = Delta_u_ij - Delta_u_ij_analytical
-        nsigma = np.zeros([nstates,nstates], np.float32)
-        nsigma[indices] = error[indices] / dDelta_f_ij[indices]
-        if np.any(nsigma > MAX_SIGMA):
-            print("Delta_u_ij")
-            print(Delta_u_ij)
-            print("Delta_u_ij_analytical")
-            print(Delta_u_ij_analytical)
-            print("error")
-            print(error)
-            print("nsigma")
-            print(nsigma)
-            raise Exception("Dimensionless potential energy difference exceeds MAX_SIGMA of %.1f" % MAX_SIGMA)
+    def run(self, include_unsampled_states=False):
+        # Create and configure simulation object
+        move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0*unit.angstroms)
+        simulation = self.SAMPLER(mcmc_moves=move, number_of_iterations=self.N_ITERATIONS)
+
+        # Define file for temporary storage.
+        with mmtools.utils.temporary_directory() as tmp_dir:
+            storage = os.path.join(tmp_dir, 'test_storage.nc')
+            reporter = MultiStateReporter(storage, checkpoint_interval=self.N_ITERATIONS)
+
+            if include_unsampled_states:
+                simulation.create(self.thermodynamic_states, self.sampler_states, reporter,
+                                  unsampled_thermodynamic_states=self.unsampled_states)
+            else:
+                simulation.create(self.thermodynamic_states, self.sampler_states, reporter)
+
+            # Run simulation without debug logging
+            import logging
+            logger = logging.getLogger()
+            logger.setLevel(logging.CRITICAL)
+            simulation.run()
+
+            # Create Analyzer.
+            analyzer = self.ANALYZER(reporter)
+
+            # Check if free energies have the right shape and deviations exceed tolerance
+            delta_f_ij, delta_f_ij_stderr = analyzer.get_free_energy()
+            nstates, _ = delta_f_ij.shape
+
+            if include_unsampled_states:
+                nstates_expected = self.N_STATES+2 # We expect N_STATES plus two additional states
+                delta_f_ij_analytical = self.delta_f_ij_analytical # Use the whole matrix
+            else:
+                nstates_expected = self.N_STATES # We expect only N_STATES
+                delta_f_ij_analytical = self.delta_f_ij_analytical[1:-1,1:-1] # Use only the intermediate, sampled states
+
+            assert nstates == nstates_expected, \
+                f'analyzer.get_free_energy() returned {delta_f_ij.shape} but expected {nstates_expected,nstates_expected}'
+
+            error = np.abs(delta_f_ij - delta_f_ij_analytical)
+            indices = np.where(delta_f_ij_stderr > 0.0)
+            nsigma = np.zeros([nstates,nstates], np.float32)
+            nsigma[indices] = error[indices] / delta_f_ij_stderr[indices]
+            MAX_SIGMA = 6.0 # maximum allowed number of standard errors
+            if np.any(nsigma > MAX_SIGMA):
+                np.set_printoptions(precision=3)
+                print("delta_f_ij")
+                print(delta_f_ij)
+                print("delta_f_ij_analytical")
+                print(delta_f_ij_analytical)
+                print("error")
+                print(error)
+                print("stderr")
+                print(delta_f_ij_stderr)
+                print("nsigma")
+                print(nsigma)
+                raise Exception("Dimensionless free energy difference exceeds MAX_SIGMA of %.1f" % MAX_SIGMA)
 
         # Clean up.
         del simulation
 
-    if verbose:
-        print("PASSED.")
+    def test_with_unsampled_states(self):
+        self.run(include_unsampled_states=True)
 
+    def test_without_unsampled_states(self):
+        self.run(include_unsampled_states=False)
 
-# ==============================================================================
-# TEST ANALYSIS SAMS
-# ==============================================================================
+class TestHarmonicOscillatorsReplicaExchangeSampler(TestHarmonicOscillatorsMultiStateSampler):
+    """Test replica-exchange sampler can compute free energies of harmonic oscillator"""
 
-@attr('slow')  # Skip on Travis-CI
-def test_sams_harmonic_oscillator(verbose=False, verbose_simulation=False):
-    """Harmonic oscillator free energies for SAMS."""
-    # Define mass of carbon atom.
-    mass = 12.0 * unit.amu
+    # ------------------------------------
+    # VARIABLES TO SET FOR EACH TEST CLASS
+    # ------------------------------------
 
-    sampler_states = list()
-    thermodynamic_states = list()
-    analytical_results = list()
-    f_i_analytical = list()  # Dimensionless free energies.
-    u_i_analytical = list()  # Reduced potentials.
+    N_SAMPLERS = 5
+    N_STATES = 5
+    SAMPLER = ReplicaExchangeSampler
+    ANALYZER = ReplicaExchangeAnalyzer
 
-    # Define thermodynamic states.
-    Ks = [500.00, 400.0, 300.0] * unit.kilocalories_per_mole / unit.angstroms**2  # Spring constants.
-    temperatures = [300.0, 350.0, 400.0] * unit.kelvin  # Temperatures.
-    for (K, temperature) in zip(Ks, temperatures):
-        # Create harmonic oscillator system.
-        testsystem = testsystems.HarmonicOscillator(K=K, mass=mass, mm=openmm)
+class TestHarmonicOscillatorsSAMSSampler(TestHarmonicOscillatorsMultiStateSampler):
+    """Test SAMS sampler can compute free energies of harmonic oscillator"""
 
-        # Create thermodynamic state and save positions.
-        system, positions = [testsystem.system, testsystem.positions]
-        sampler_states.append(mmtools.states.SamplerState(positions))
-        thermodynamic_states.append(mmtools.states.ThermodynamicState(system=system, temperature=temperature))
+    # ------------------------------------
+    # VARIABLES TO SET FOR EACH TEST CLASS
+    # ------------------------------------
 
-        # Store analytical results.
-        results = compute_harmonic_oscillator_expectations(K, temperature)
-        analytical_results.append(results)
-        f_i_analytical.append(results['f'])
-        reduced_potential = results['potential']['mean'] / (kB * temperature)
-        u_i_analytical.append(reduced_potential)
-
-    # Compute analytical Delta_f_ij
-    nstates = len(f_i_analytical)
-    f_i_analytical = np.array(f_i_analytical)
-    u_i_analytical = np.array(u_i_analytical)
-    s_i_analytical = u_i_analytical - f_i_analytical
-    Delta_f_ij_analytical = np.zeros([nstates, nstates], np.float64)
-    Delta_u_ij_analytical = np.zeros([nstates, nstates], np.float64)
-    Delta_s_ij_analytical = np.zeros([nstates, nstates], np.float64)
-    for i in range(nstates):
-        for j in range(nstates):
-            Delta_f_ij_analytical[i, j] = f_i_analytical[j] - f_i_analytical[i]
-            Delta_u_ij_analytical[i, j] = u_i_analytical[j] - u_i_analytical[i]
-            Delta_s_ij_analytical[i, j] = s_i_analytical[j] - s_i_analytical[i]
-
-    # Create and configure simulation object.
-    move = mmtools.mcmc.LangevinDynamicsMove(timestep=2.0*unit.femtoseconds,
-                                             collision_rate=20.0/unit.picosecond,
-                                             n_steps=500, reassign_velocities=True)
-    simulation = SAMSSampler(mcmc_moves=move, number_of_iterations=200)
-
-    # Define file for temporary storage.
-    with mmtools.utils.temporary_directory() as tmp_dir:
-        storage = os.path.join(tmp_dir, 'test_storage.nc')
-        reporter = MultiStateReporter(storage, checkpoint_interval=1)
-        simulation.create(thermodynamic_states, sampler_states, reporter)
-
-        # Run simulation we keep the debug info off during the simulation
-        # to not clog the output, and reactivate it for analysis.
-        simulation.run()
-
-        # Create Analyzer.
-        analyzer = SAMSAnalyzer(reporter)
-
-        # TODO: Check if deviations exceed tolerance.
-        Delta_f_ij, dDelta_f_ij = analyzer.get_free_energy()
-        error = np.abs(Delta_f_ij - Delta_f_ij_analytical)
-        indices = np.where(dDelta_f_ij > 0.0)
-        nsigma = np.zeros([nstates,nstates], np.float32)
-        nsigma[indices] = error[indices] / dDelta_f_ij[indices]
-        MAX_SIGMA = 6.0 # maximum allowed number of standard errors
-        if np.any(nsigma > MAX_SIGMA):
-            print("Delta_f_ij")
-            print(Delta_f_ij)
-            print("Delta_f_ij_analytical")
-            print(Delta_f_ij_analytical)
-            print("error")
-            print(error)
-            print("stderr")
-            print(dDelta_f_ij)
-            print("nsigma")
-            print(nsigma)
-            raise Exception("Dimensionless free energy difference exceeds MAX_SIGMA of %.1f" % MAX_SIGMA)
-
-        Delta_u_ij, dDelta_u_ij = analyzer.get_enthalpy()
-        error = Delta_u_ij - Delta_u_ij_analytical
-        nsigma = np.zeros([nstates,nstates], np.float32)
-        nsigma[indices] = error[indices] / dDelta_f_ij[indices]
-        if np.any(nsigma > MAX_SIGMA):
-            print("Delta_u_ij")
-            print(Delta_u_ij)
-            print("Delta_u_ij_analytical")
-            print(Delta_u_ij_analytical)
-            print("error")
-            print(error)
-            print("nsigma")
-            print(nsigma)
-            raise Exception("Dimensionless potential energy difference exceeds MAX_SIGMA of %.1f" % MAX_SIGMA)
-
-        # Clean up.
-        del simulation
-
-    if verbose:
-        print("PASSED.")
-
+    N_SAMPLERS = 1
+    N_STATES = 5
+    SAMPLER = SAMSSampler
+    ANALYZER = SAMSAnalyzer
 
 # ==============================================================================
 # TEST REPORTER
