@@ -59,7 +59,8 @@ class TestThermodynamicState(object):
         """Create the test systems used in the test suite."""
         cls.std_pressure = ThermodynamicState._STANDARD_PRESSURE
         cls.std_temperature = ThermodynamicState._STANDARD_TEMPERATURE
-        cls.std_surface_tension = 100.0 * unit.bar * unit.nanometer
+        cls.std_surface_tension = ThermodynamicState._STANDARD_SURFACE_TENSION
+        cls.modified_surface_tension = 100.0 * unit.bar * unit.nanometer
 
         alanine_explicit = testsystems.AlanineDipeptideExplicit()
         cls.alanine_positions = alanine_explicit.positions
@@ -106,7 +107,7 @@ class TestThermodynamicState(object):
         cls.membrane_barostat_alanine_gamma_nonzero = copy.deepcopy(cls.alanine_explicit)
         # working around a bug in the unit conversion https://github.com/openmm/openmm/issues/2406
         cls.membrane_barostat_gamma_nonzero = openmm.MonteCarloMembraneBarostat(
-            cls.std_pressure, cls.std_surface_tension.value_in_unit(unit.bar*unit.nanometer), cls.std_temperature,
+            cls.std_pressure, cls.modified_surface_tension.value_in_unit(unit.bar*unit.nanometer), cls.std_temperature,
             openmm.MonteCarloMembraneBarostat.XYIsotropic, openmm.MonteCarloMembraneBarostat.ZFree
         )
         cls.membrane_barostat_alanine_gamma_nonzero.addForce(cls.membrane_barostat_gamma_nonzero)
@@ -396,15 +397,15 @@ class TestThermodynamicState(object):
 
         # test setting and getting surface tension
         state = ThermodynamicState(self.membrane_barostat_alanine_gamma_zero, self.std_temperature)
-        assert utils.is_quantity_close(state.surface_tension, 0.0 * unit.bar * unit.nanometer)
-        state.surface_tension = self.std_surface_tension
-        assert utils.is_quantity_close(state.surface_tension, self.std_surface_tension)
+        assert utils.is_quantity_close(state.surface_tension, 0.0 * unit.bar * unit.nanometer, rtol=0.0, atol=1e-10)
+        state.surface_tension = self.modified_surface_tension
+        assert utils.is_quantity_close(state.surface_tension, self.modified_surface_tension)
         state.surface_tension = 0.0 * unit.bar * unit.nanometer
-        assert utils.is_quantity_close(state.surface_tension, 0.0 * unit.bar * unit.nanometer)
+        assert utils.is_quantity_close(state.surface_tension, 0.0 * unit.bar * unit.nanometer, rtol=0.0, atol=1e-10)
 
         # test initial surface tension of nonzero-gamma barostat
         state = ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero, self.std_temperature)
-        assert utils.is_quantity_close(state.surface_tension, self.std_surface_tension)
+        assert utils.is_quantity_close(state.surface_tension, self.modified_surface_tension)
 
     def test_property_volume(self):
         """Check that volume is computed correctly."""
@@ -807,10 +808,10 @@ class TestThermodynamicState(object):
         gamma_context = openmm.Context(self.membrane_barostat_alanine_gamma_zero, openmm.VerletIntegrator(0.001))
         state3.apply_to_context(gamma_context)
         assert gamma_context.getParameter(self.membrane_barostat_gamma_nonzero.SurfaceTension()) == 0.0
-        state3.surface_tension = self.std_surface_tension
+        state3.surface_tension = self.modified_surface_tension
         state3.apply_to_context(gamma_context)
         assert (gamma_context.getParameter(self.membrane_barostat_gamma_nonzero.SurfaceTension())
-                == self.std_surface_tension.value_in_unit(unit.nanometer*unit.bar))
+                == self.modified_surface_tension.value_in_unit(unit.nanometer*unit.bar))
         state3.surface_tension = 0.0 * unit.nanometer * unit.bar
 
 
@@ -870,7 +871,7 @@ class TestThermodynamicState(object):
         reduced_potential = state.reduced_potential(sampler_state)
         pressure_volume_work = (self.std_pressure * sampler_state.volume *
                                 unit.AVOGADRO_CONSTANT_NA)
-        surface_work = (self.std_surface_tension * sampler_state.area_xy *
+        surface_work = (self.modified_surface_tension * sampler_state.area_xy *
                         unit.AVOGADRO_CONSTANT_NA)
         potential_energy = (reduced_potential / beta - pressure_volume_work + surface_work) / kj_mol
 
