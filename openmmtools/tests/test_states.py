@@ -762,7 +762,16 @@ class TestThermodynamicState(object):
 
             # Compute with multi-state method.
             obtained_energies.extend(ThermodynamicState.reduced_potential_at_states(context, compatible_group))
+        expected_energies = np.array(expected_energies)
         assert np.allclose(np.array(expected_energies), np.array(obtained_energies))
+
+        # Check that the utility function does the same.
+        sampler_state = SamplerState(positions=self.alanine_positions)
+        thermodynamic_states = [thermodynamic_states[i] for i in [0, 2]]
+        from openmmtools.cache import ContextCache
+        obtained_energies = reduced_potential_at_states(
+            sampler_state, thermodynamic_states, ContextCache())
+        assert np.allclose(expected_energies[:2], obtained_energies)
 
 
 # =============================================================================
