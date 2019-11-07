@@ -229,6 +229,9 @@ class ContextCache(object):
     platform : simtk.openmm.Platform, optional
         The OpenMM platform to use to create Contexts. If None, OpenMM
         tries to select the fastest one available (default is None).
+    platform_properties : dict, optional
+        A dictionary of platform properties for the OpenMM platform.
+        Only valid if the platform is not None (default is None).
     **kwargs
         Parameters to pass to the underlying LRUCache constructor such
         as capacity and time_to_live.
@@ -303,8 +306,10 @@ class ContextCache(object):
 
     """
 
-    def __init__(self, platform=None, **kwargs):
+    def __init__(self, platform=None, platform_properties=None, **kwargs):
+        self._validate_platform_properties(platform, platform_properties)
         self._platform = platform
+        self._platform_properties = platform_properties
         self._lru = LRUCache(**kwargs)
 
     def __len__(self):
@@ -324,7 +329,17 @@ class ContextCache(object):
     def platform(self, new_platform):
         if len(self._lru) > 0:
             raise RuntimeError('Cannot change platform of a non-empty ContextCache')
+        if new_platform is None:
+            self._platform_properties = None
+        self._validate_platform_properties(new_platform, self._platform_properties)
         self._platform = new_platform
+
+    def set_platform(self, new_platform, platform_properties=None):
+        if len(self._lru) > 0:
+            raise RuntimeError('Cannot change platform of a non-empty ContextCache')
+        self._validate_platform_properties(new_platform, platform_properties)
+        self._platform = new_platform
+        self._platform_properties = platform_properties
 
     @property
     def capacity(self):
@@ -429,7 +444,7 @@ class ContextCache(object):
             try:
                 context = self._lru[context_id]
             except KeyError:
-                context = thermodynamic_state.create_context(integrator, self._platform)
+                context = thermodynamic_state.create_context(integrator, self._platform, self._platform_properties)
             self._lru[context_id] = context
         context_integrator = context.getIntegrator()
 
@@ -442,18 +457,24 @@ class ContextCache(object):
         return context, context_integrator
 
     def __getstate__(self):
+        # this serialization format was introduced in openmmtools > 0.18.3 (pull request #437)
         if self.platform is not None:
             platform_serialization = self.platform.getName()
         else:
             platform_serialization = None
         return dict(platform=platform_serialization, capacity=self.capacity,
-                    time_to_live=self.time_to_live)
+                    time_to_live=self.time_to_live, platform_properties=self._platform_properties)
 
     def __setstate__(self, serialization):
+        # this serialization format was introduced in openmmtools > 0.18.3 (pull request #437)
         if serialization['platform'] is None:
             self._platform = None
         else:
             self._platform = openmm.Platform.getPlatformByName(serialization['platform'])
+        if not 'platform_properties' in serialization:
+            self._platform_properties = None
+        else:
+            self._platform_properties = serialization["platform_properties"]
         self._lru = LRUCache(serialization['capacity'], serialization['time_to_live'])
 
     # -------------------------------------------------------------------------
@@ -630,6 +651,35 @@ class ContextCache(object):
         return cls._cached_default_integrator_id
     _cached_default_integrator_id = None
 
+    @staticmethod
+    def _validate_platform_properties(platform=None, platform_properties=None):
+        """Check if platform properties are valid for the platform; else raise ValueError."""
+        if platform_properties is None:
+            return True
+        if platform_properties is not None and platform is None:
+            raise ValueError("To set platform_properties, you need to also specify the platform.")
+        if not isinstance(platform_properties, dict):
+            raise ValueError("platform_properties must be a dictionary")
+        for key, value in platform_properties.items():
+            if not isinstance(value, str):
+                raise ValueError(
+                    "All platform properties must be strings. You supplied {}: {} of type {}".format(
+                        key, value, type(value)
+                    )
+                )
+        # create a context to check if all properties are
+        dummy_system = openmm.System()
+        dummy_system.addParticle(1)
+        dummy_integrator = openmm.VerletIntegrator(1.0*unit.femtoseconds)
+        try:
+            openmm.Context(dummy_system, dummy_integrator, platform, platform_properties)
+            return True
+        except Exception as e:
+            if "Illegal property name" in str(e):
+                raise ValueError("Invalid platform property for this platform. {}".format(e))
+            else:
+                raise e
+
 
 # =============================================================================
 # DUMMY CONTEXT CACHE
@@ -650,12 +700,57 @@ class DummyContextCache(object):
         The OpenMM platform to use. If None, OpenMM tries to select
         the fastest one available.
 
+    Examples
+    --------
+    Create a new ``Context`` object for alanine dipeptide in vacuum in NPT.
+
+    >>> from simtk import openmm, unit
+    >>> from openmmtools import states, testsystems
+    >>> system = testsystems.AlanineDipeptideVacuum().system
+    >>> thermo_state = states.ThermodynamicState(system, temperature=300*unit.kelvin)
+
+    >>> context_cache = DummyContextCache()
+    >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
+    >>> context, context_integrator = context_cache.get_context(thermo_state, integrator)
+
+    Or create a ``Context`` with an arbitrary integrator (when you only
+    need to compute energies, for example).
+
+    >>> context, context_integrator = context_cache.get_context(thermo_state)
+
     """
     def __init__(self, platform=None):
         self.platform = platform
 
-    def get_context(self, thermodynamic_state, integrator):
-        """Create a new context in the given thermodynamic state."""
+    def get_context(self, thermodynamic_state, integrator=None):
+        """Create a new context in the given thermodynamic state.
+
+        Parameters
+        ----------
+        thermodynamic_state : states.ThermodynamicState
+            The thermodynamic state of the system.
+        integrator : simtk.openmm.Integrator, optional
+            The integrator to bind to the new context. If ``None``, an arbitrary
+            integrator is used. Currently, this is a ``LangevinIntegrator`` with
+            "V R O R V" splitting, but this might change in the future. Default
+            is ``None``.
+
+        Returns
+        -------
+        context : simtk.openmm.Context
+            The new context in the given thermodynamic system.
+        context_integrator : simtk.openmm.Integrator
+            The integrator bound to the context that can be used for
+            propagation. This is identical to the ``integrator`` argument
+            if it was passed.
+
+        """
+        if integrator is None:
+            integrator = integrators.LangevinIntegrator(
+                timestep=1.0*unit.femtoseconds,
+                splitting="V R O R V",
+                temperature=thermodynamic_state.temperature
+            )
         context = thermodynamic_state.create_context(integrator, self.platform)
         return context, integrator
 

@@ -1,6 +1,66 @@
 Release History
 ***************
 
+0.19.0 - Multiple alchemical regions
+====================================
+
+New features
+------------
+- Added support in ``AbsoluteAlchemicalFactory`` for handling multiple independent alchemical regions (`#438 <https://github.com/choderalab/openmmtools/pull/438>`_).
+- Added support for anisotropic and membrane barostats in `ThermodynamicState` (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_)
+- Added support for platform properties in ContextCache (e.g. for mixed and double precision CUDA in multistate sampler) (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_)
+
+Bugfixes
+--------
+- The multistate samplers now issue experimental API warnings via ``logger.warn()`` rather than ```warnings.warn()`` (`#446 <https://github.com/choderalab/openmmtools/pull/446>`_)
+
+Bugfixes
+--------
+- Fix return value in ``states.reduced_potential_at_states`` (`#444 <https://github.com/choderalab/openmmtools/pull/444>`_).
+
+0.18.3 - Storage enhancements and bugfixes
+==========================================
+
+Bugfixes
+--------
+- Fixed a bug in ``multistateanalyzer.py`` where a function was imported from ``openmmtools.utils`` instead of ``openmmtools.multistate.utils`` (`#430 <https://github.com/choderalab/openmmtools/pull/430>`_).
+- Fixed a few imprecisions in the documentation (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
+
+Enhancements
+------------
+- Writing on disk is much faster when the `checkpoint_interval` of multi-state samplers is large. This was due
+  to the dimension of the netcdf chunk size increasing with the checkpoint interval and surpassing the dimension
+  of the netcdf chunk cache. The chunk size of the iteration dimension is now always set to 1 (`#432 <https://github.com/choderalab/openmmtools/pull/432>`_).
+
+0.18.2 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- A bug in the multistate samplers where``logsumexp`` was imported from ``scipy.misc`` (now in ``scipy.special``) was fixed (`#423 <https://github.com/choderalab/openmmtools/pull/423>`_).
+- Improve the robustness of opening the netcdf file on resuming of the multi-state samplers by setting the environment variable HDF5_USE_FILE_LOCKING to FALSE after 4 failed attempts (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+- Fixed a crash during exception handling (`#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+
+Other
+-----
+- Update build infrastructure to match `MolSSI cookiecutter <https://github.com/MolSSI/cookiecutter-cms>`_  (`#424 <https://github.com/choderalab/openmmtools/pull/424>`_, `#426 <https://github.com/choderalab/openmmtools/pull/426>`_).
+
+0.18.1 - Bugfix release
+=======================
+
+This is a minor bugfix release.
+
+New features
+------------
+- Improvements for ``HostGuest*`` classes
+  - add ``oemols``, ``host_oemol``, and ``guest_oemol`` properties to retrieve OpenEye Toolkit ``OEMol`` objects (requires toolkit license and installation)
+  - these classes can now accept overriding ``kwargs``
+
+Bugfixes
+--------
+- ``openmmtools.multistate`` experimental API warning is only issued when ``openmmtools.multistate`` is imported
+- ``AlchemicalNonequilibriumLangevinIntegrator.reset()`` now correctly resets the nonequilibrium work
+
 0.18.0 - Added multistate samplers
 ==================================
 
@@ -10,8 +70,7 @@ New features
   - ``MultiStateSampler``: sample independently from multiple thermodynamic states
   - ``ReplicaExchangeSampler``: replica exchange among thermodynamic states
   - ``SAMSSampler``: self-adjusted mixture sampling (SAMS) sampling
-- All samplers can use MPI via the ``mpiplus <https://github.com/choderalab/mpiplus>`_ package
-
+- All samplers can use MPI via the `mpiplus <https://github.com/choderalab/mpiplus>`_ package
 
 0.17.0 - Removed Py2 support, faster exact PME treatment
 ========================================================

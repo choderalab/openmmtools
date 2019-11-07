@@ -761,7 +761,7 @@ part of a system.
 
 .. doctest::
 
-    >>> # Prepare the T4 Lysozyme + p-xylene system for alchemical modification.
+    >>> # Prepare the host-guest system for alchemical modification.
     >>> guest_atoms = host_guest.mdtraj_topology.select('resname B2')
     >>> alchemical_region = alchemy.AlchemicalRegion(alchemical_atoms=guest_atoms)
     >>> factory = alchemy.AbsoluteAlchemicalFactory()
@@ -786,8 +786,8 @@ Finally, let's mix Monte Carlo and dynamics for propagation.
 .. doctest::
 
     >>> sequence_move = mcmc.SequenceMove(move_list=[
-    ...     mcmc.MCDisplacementMove(atom_subset=pxylene_atoms),
-    ...     mcmc.MCRotationMove(atom_subset=pxylene_atoms),
+    ...     mcmc.MCDisplacementMove(atom_subset=guest_atoms),
+    ...     mcmc.MCRotationMove(atom_subset=guest_atoms),
     ...     mcmc.LangevinSplittingDynamicsMove(timestep=2.0*unit.femtoseconds, n_steps=n_steps,
     ...                                        reassign_velocities=True, n_restart_attempts=6)
     ... ])

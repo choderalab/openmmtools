@@ -49,7 +49,6 @@ from openmmtools.integrators import FIREMinimizationIntegrator
 
 logger = logging.getLogger(__name__)
 
-
 # ==============================================================================
 # MULTISTATE SAMPLER
 # ==============================================================================
@@ -131,6 +130,7 @@ class MultiStateSampler(object):
 
     """
 
+
     # -------------------------------------------------------------------------
     # Constructors.
     # -------------------------------------------------------------------------
@@ -139,6 +139,10 @@ class MultiStateSampler(object):
                  online_analysis_interval=200, online_analysis_target_error=0.0,
                  online_analysis_minimum_iterations=200,
                  locality=None):
+
+        # Warn that API is experimental
+        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+
         # These will be set on initialization. See function
         # create() for explanation of single variables.
         self._thermodynamic_states = None
@@ -1124,7 +1128,7 @@ class MultiStateSampler(object):
         """
         options_to_report = dict()
         for c in inspect.getmro(cls):
-            parameter_names, _, _, defaults = inspect.getargspec(c.__init__)
+            parameter_names, _, _, defaults, _, _, _ = inspect.getfullargspec(c.__init__)
             if defaults:
                 class_options = {parameter_name: defaults[index] for (index, parameter_name) in
                                  enumerate(parameter_names[-len(defaults):])}
@@ -1139,7 +1143,7 @@ class MultiStateSampler(object):
         """
         options_to_report = dict()
         for cls in inspect.getmro(type(self)):
-            parameter_names, _, _, defaults = inspect.getargspec(cls.__init__)
+            parameter_names, _, _, defaults, _, _, _ = inspect.getfullargspec(cls.__init__)
             if defaults:
                 class_options = {parameter_name: getattr(self, '_' + parameter_name) for
                                  parameter_name in parameter_names[-len(defaults):]}

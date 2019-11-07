@@ -59,6 +59,8 @@ class TestThermodynamicState(object):
         """Create the test systems used in the test suite."""
         cls.std_pressure = ThermodynamicState._STANDARD_PRESSURE
         cls.std_temperature = ThermodynamicState._STANDARD_TEMPERATURE
+        cls.std_surface_tension = ThermodynamicState._STANDARD_SURFACE_TENSION
+        cls.modified_surface_tension = 100.0 * unit.bar * unit.nanometer
 
         alanine_explicit = testsystems.AlanineDipeptideExplicit()
         cls.alanine_positions = alanine_explicit.positions
@@ -87,18 +89,44 @@ class TestThermodynamicState(object):
         cls.barostated_toluene.addForce(barostat)
 
         # A system with two identical MonteCarloBarostats
-        cls.multiple_barostat_alanine = copy.deepcopy(cls.barostated_alanine)
+        cls.multiple_barostat_alanine = copy.deepcopy(cls.alanine_explicit)
+        barostat = openmm.MonteCarloBarostat(cls.std_pressure, cls.std_temperature)
+        cls.multiple_barostat_alanine.addForce(barostat)
         barostat = openmm.MonteCarloBarostat(cls.std_pressure, cls.std_temperature)
         cls.multiple_barostat_alanine.addForce(barostat)
 
         # A system with an unsupported MonteCarloAnisotropicBarostat
-        cls.unsupported_barostat_alanine = copy.deepcopy(cls.alanine_explicit)
+        cls.unsupported_anisotropic_barostat_alanine = copy.deepcopy(cls.alanine_explicit)
+        pressure_in_bars = cls.std_pressure / unit.bar
+        anisotropic_pressure = openmm.Vec3(pressure_in_bars, pressure_in_bars,
+                                           1.0+pressure_in_bars)
+        cls.unsupported_anisotropic_barostat = openmm.MonteCarloAnisotropicBarostat(anisotropic_pressure, cls.std_temperature)
+        cls.unsupported_anisotropic_barostat_alanine.addForce(cls.unsupported_anisotropic_barostat)
+
+        # A system with an unsupported MonteCarloMembraneBarostat
+        cls.membrane_barostat_alanine_gamma_nonzero = copy.deepcopy(cls.alanine_explicit)
+        # working around a bug in the unit conversion https://github.com/openmm/openmm/issues/2406
+        cls.membrane_barostat_gamma_nonzero = openmm.MonteCarloMembraneBarostat(
+            cls.std_pressure, cls.modified_surface_tension.value_in_unit(unit.bar*unit.nanometer), cls.std_temperature,
+            openmm.MonteCarloMembraneBarostat.XYIsotropic, openmm.MonteCarloMembraneBarostat.ZFree
+        )
+        cls.membrane_barostat_alanine_gamma_nonzero.addForce(cls.membrane_barostat_gamma_nonzero)
+
+        # A system with a supported MonteCarloAnisotropicBarostat
+        cls.supported_anisotropic_barostat_alanine = copy.deepcopy(cls.alanine_explicit)
         pressure_in_bars = cls.std_pressure / unit.bar
         anisotropic_pressure = openmm.Vec3(pressure_in_bars, pressure_in_bars,
                                            pressure_in_bars)
-        cls.anisotropic_barostat = openmm.MonteCarloAnisotropicBarostat(anisotropic_pressure,
-                                                                        cls.std_temperature)
-        cls.unsupported_barostat_alanine.addForce(cls.anisotropic_barostat)
+        cls.supported_anisotropic_barostat = openmm.MonteCarloAnisotropicBarostat(anisotropic_pressure, cls.std_temperature)
+        cls.supported_anisotropic_barostat_alanine.addForce(cls.supported_anisotropic_barostat)
+
+        # A system with a supported MonteCarloMembraneBarostat
+        cls.membrane_barostat_alanine_gamma_zero = copy.deepcopy(cls.alanine_explicit)
+        cls.membrane_barostat_gamma_zero = openmm.MonteCarloMembraneBarostat(
+            cls.std_pressure, 0.0, cls.std_temperature,
+            openmm.MonteCarloMembraneBarostat.XYIsotropic, openmm.MonteCarloMembraneBarostat.ZFree
+        )
+        cls.membrane_barostat_alanine_gamma_zero.addForce(cls.membrane_barostat_gamma_zero)
 
         # A system with an inconsistent pressure in the barostat.
         cls.inconsistent_pressure_alanine = copy.deepcopy(cls.alanine_explicit)
@@ -164,10 +192,16 @@ class TestThermodynamicState(object):
         barostat = ThermodynamicState._find_barostat(self.barostated_alanine)
         assert isinstance(barostat, openmm.MonteCarloBarostat)
 
+        barostat = ThermodynamicState._find_barostat(self.supported_anisotropic_barostat_alanine)
+        assert isinstance(barostat, openmm.MonteCarloAnisotropicBarostat)
+
+        barostat = ThermodynamicState._find_barostat(self.membrane_barostat_alanine_gamma_zero)
+        assert isinstance(barostat, openmm.MonteCarloMembraneBarostat)
+
         # Raise exception if multiple or unsupported barostats found
         TE = ThermodynamicsError  # shortcut
         test_cases = [(self.multiple_barostat_alanine, TE.MULTIPLE_BAROSTATS),
-                      (self.unsupported_barostat_alanine, TE.UNSUPPORTED_BAROSTAT)]
+                      (self.unsupported_anisotropic_barostat_alanine, TE.UNSUPPORTED_ANISOTROPIC_BAROSTAT)]
         for system, err_code in test_cases:
             with nose.tools.assert_raises(ThermodynamicsError) as cm:
                 ThermodynamicState._find_barostat(system)
@@ -203,6 +237,9 @@ class TestThermodynamicState(object):
         barostat = openmm.MonteCarloBarostat(pressure, temperature + 10*unit.kelvin)
         assert not state._is_barostat_consistent(barostat)
 
+        assert not state._is_barostat_consistent(self.supported_anisotropic_barostat)
+        assert not state._is_barostat_consistent(self.membrane_barostat_gamma_zero)
+
     def test_method_set_system_temperature(self):
         """ThermodynamicState._set_system_temperature() method."""
         system = copy.deepcopy(self.alanine_no_thermostat)
@@ -220,29 +257,35 @@ class TestThermodynamicState(object):
 
     def test_property_temperature(self):
         """ThermodynamicState.temperature property."""
-        state = ThermodynamicState(self.barostated_alanine,
-                                   self.std_temperature)
-        assert state.temperature == self.std_temperature
+        for system in [self.barostated_alanine,
+                       self.supported_anisotropic_barostat_alanine,
+                       self.membrane_barostat_alanine_gamma_zero]:
+            state = ThermodynamicState(system,
+                                       self.std_temperature)
+            assert state.temperature == self.std_temperature
 
-        temperature = self.std_temperature + 10.0*unit.kelvin
-        state.temperature = temperature
-        assert state.temperature == temperature
-        assert get_barostat_temperature(state.barostat) == temperature
+            temperature = self.std_temperature + 10.0*unit.kelvin
+            state.temperature = temperature
+            assert state.temperature == temperature
+            assert get_barostat_temperature(state.barostat) == temperature
 
-        # Setting temperature to None raise error.
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
-            state.temperature = None
-        assert cm.exception.code == ThermodynamicsError.NONE_TEMPERATURE
+            # Setting temperature to None raise error.
+            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                state.temperature = None
+            assert cm.exception.code == ThermodynamicsError.NONE_TEMPERATURE
 
     def test_method_set_system_pressure(self):
         """ThermodynamicState._set_system_pressure() method."""
-        state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
-        system = state.system
-        assert state._find_barostat(system) is None
-        state._set_system_pressure(system, self.std_pressure)
-        assert state._find_barostat(system).getDefaultPressure() == self.std_pressure
-        state._set_system_pressure(system, None)
-        assert state._find_barostat(system) is None
+        for system in [self.barostated_alanine,
+                       self.supported_anisotropic_barostat_alanine,
+                       self.membrane_barostat_alanine_gamma_zero]:
+            state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
+            system = state.system
+            assert state._find_barostat(system) is None
+            state._set_system_pressure(system, self.std_pressure)
+            assert state._find_barostat(system).getDefaultPressure() == self.std_pressure
+            state._set_system_pressure(system, None)
+            assert state._find_barostat(system) is None
 
     def test_property_pressure_barostat(self):
         """ThermodynamicState.pressure and barostat properties."""
@@ -266,11 +309,14 @@ class TestThermodynamicState(object):
             assert state.barostat is None
 
         # Correctly reads and set system pressures
-        periodic_testcases = [self.alanine_explicit]
+        periodic_testcases = [self.alanine_explicit,
+                              self.supported_anisotropic_barostat_alanine,
+                              self.membrane_barostat_alanine_gamma_zero]
         for system in periodic_testcases:
-            state = ThermodynamicState(system, self.std_temperature)
-            assert state.pressure is None
-            assert state.barostat is None
+            if system is self.alanine_explicit:
+                state = ThermodynamicState(system, self.std_temperature)
+                assert state.pressure is None
+                assert state.barostat is None
 
             # Setting pressure adds a barostat
             state.pressure = self.std_pressure
@@ -317,11 +363,49 @@ class TestThermodynamicState(object):
 
             # Assign incompatible barostat raise error
             with nose.tools.assert_raises(ThermodynamicsError) as cm:
-                state.barostat = self.anisotropic_barostat
-            assert cm.exception.code == ThermodynamicsError.UNSUPPORTED_BAROSTAT
+                state.barostat = self.unsupported_anisotropic_barostat
+            assert cm.exception.code == ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT
+
+            # Assign barostat with different type raise error
+            if state.barostat is not None and type(state.barostat) != type(self.supported_anisotropic_barostat):
+                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                    state.barostat = self.supported_anisotropic_barostat
+                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTA
+            if state.barostat is not None and type(state.barostat) != type(self.membrane_barostat_gamma_zero):
+                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                    state.barostat = self.membrane_barostat_gamma_zero
+                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
 
             # After exception, state is left consistent
             assert state.pressure is None
+
+    def test_surface_tension(self):
+        """Test querying and setting surface tension"""
+        # test setting and getting surface tension for a system without barostat
+        state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
+        assert state.surface_tension is None
+        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            state.surface_tension = self.std_surface_tension
+        assert cm.exception.code == ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED
+
+        # test setting and getting surface tension for a system with a non-membrane barostat
+        state = ThermodynamicState(self.barostated_alanine, self.std_temperature)
+        assert state.surface_tension is None
+        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            state.surface_tension = self.std_surface_tension
+        assert cm.exception.code == ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED
+
+        # test setting and getting surface tension
+        state = ThermodynamicState(self.membrane_barostat_alanine_gamma_zero, self.std_temperature)
+        assert utils.is_quantity_close(state.surface_tension, 0.0 * unit.bar * unit.nanometer, rtol=0.0, atol=1e-10)
+        state.surface_tension = self.modified_surface_tension
+        assert utils.is_quantity_close(state.surface_tension, self.modified_surface_tension)
+        state.surface_tension = 0.0 * unit.bar * unit.nanometer
+        assert utils.is_quantity_close(state.surface_tension, 0.0 * unit.bar * unit.nanometer, rtol=0.0, atol=1e-10)
+
+        # test initial surface tension of nonzero-gamma barostat
+        state = ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero, self.std_temperature)
+        assert utils.is_quantity_close(state.surface_tension, self.modified_surface_tension)
 
     def test_property_volume(self):
         """Check that volume is computed correctly."""
@@ -353,6 +437,9 @@ class TestThermodynamicState(object):
         test_cases = [(self.toluene_vacuum, TE.NO_BAROSTAT),
                       (self.barostated_toluene, TE.BAROSTATED_NONPERIODIC),
                       (self.multiple_barostat_alanine, TE.MULTIPLE_BAROSTATS),
+                      (self.unsupported_anisotropic_barostat_alanine, TE.UNSUPPORTED_ANISOTROPIC_BAROSTAT),
+                      (self.supported_anisotropic_barostat_alanine, TE.INCONSISTENT_BAROSTAT),
+                      (self.membrane_barostat_alanine_gamma_zero, TE.INCONSISTENT_BAROSTAT),
                       (self.inconsistent_pressure_alanine, TE.INCONSISTENT_BAROSTAT),
                       (self.inconsistent_temperature_alanine, TE.INCONSISTENT_THERMOSTAT),
                       (inconsistent_barostat_temperature, TE.INCONSISTENT_BAROSTAT)]
@@ -420,7 +507,8 @@ class TestThermodynamicState(object):
         TE = ThermodynamicsError  # shortcut
         test_cases = [(self.barostated_toluene, TE.BAROSTATED_NONPERIODIC),
                       (self.multiple_barostat_alanine, TE.MULTIPLE_BAROSTATS),
-                      (self.unsupported_barostat_alanine, TE.UNSUPPORTED_BAROSTAT)]
+                      (self.unsupported_anisotropic_barostat_alanine, TE.UNSUPPORTED_ANISOTROPIC_BAROSTAT)
+                      ]
         for i, (system, err_code) in enumerate(test_cases):
             with nose.tools.assert_raises(TE) as cm:
                 ThermodynamicState(system=system, temperature=self.std_temperature)
@@ -582,6 +670,27 @@ class TestThermodynamicState(object):
             # Get rid of old context. This test can create a lot of them.
             del context, integrator
 
+        # test platform properties
+        state = ThermodynamicState(self.toluene_vacuum, self.std_temperature)
+        platform_properties = {"CpuThreads": "2"}
+        with nose.tools.assert_raises(ValueError) as cm:
+            state.create_context(
+                openmm.VerletIntegrator(0.001),
+                platform=None,
+                platform_properties=platform_properties
+            )
+        assert str(cm.exception) == "To set platform_properties, you need to also specify the platform."
+
+        platform = openmm.Platform.getPlatformByName("CPU")
+        context = state.create_context(
+                openmm.VerletIntegrator(0.001),
+                platform=platform,
+                platform_properties=platform_properties
+        )
+        assert context.getPlatform().getPropertyValue(context, "CpuThreads") == "2"
+        del context
+
+
     def test_method_is_compatible(self):
         """ThermodynamicState context and state compatibility methods."""
 
@@ -617,6 +726,17 @@ class TestThermodynamicState(object):
         barostated_alanine2 = copy.deepcopy(barostated_alanine)
         barostated_alanine2.pressure = barostated_alanine.pressure + 0.2*unit.bars
         check_compatibility(barostated_alanine, barostated_alanine2, True)
+
+        check_compatibility(
+            ThermodynamicState(self.membrane_barostat_alanine_gamma_zero),
+            ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero),
+            True
+        )
+        check_compatibility(
+            ThermodynamicState(self.barostated_alanine),
+            ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero),
+            False
+        )
 
     def test_method_apply_to_context(self):
         """ThermodynamicState.apply_to_context() method."""
@@ -679,9 +799,26 @@ class TestThermodynamicState(object):
             state2.apply_to_context(context)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
 
+        state3 = ThermodynamicState(self.membrane_barostat_alanine_gamma_zero, self.std_temperature)
+        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            state3.apply_to_context(context)
+        assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
+
+        # apply surface tension
+        gamma_context = openmm.Context(self.membrane_barostat_alanine_gamma_zero, openmm.VerletIntegrator(0.001))
+        state3.apply_to_context(gamma_context)
+        assert gamma_context.getParameter(self.membrane_barostat_gamma_nonzero.SurfaceTension()) == 0.0
+        state3.surface_tension = self.modified_surface_tension
+        state3.apply_to_context(gamma_context)
+        assert (gamma_context.getParameter(self.membrane_barostat_gamma_nonzero.SurfaceTension())
+                == self.modified_surface_tension.value_in_unit(unit.nanometer*unit.bar))
+        state3.surface_tension = 0.0 * unit.nanometer * unit.bar
+
+
         # Clean up contexts.
         del context, langevin_integrator
         del thermostated_context, verlet_integrator
+        del gamma_context
 
         verlet_integrator = openmm.VerletIntegrator(time_step)
         nvt_context = create_default_context(state2, verlet_integrator)
@@ -689,6 +826,9 @@ class TestThermodynamicState(object):
             state1.apply_to_context(nvt_context)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
         del nvt_context, verlet_integrator
+
+
+
 
     def test_method_reduced_potential(self):
         """ThermodynamicState.reduced_potential() method."""
@@ -720,6 +860,23 @@ class TestThermodynamicState(object):
         with nose.tools.assert_raises(ThermodynamicsError) as cm:
             state.reduced_potential(incompatible_sampler_state)
         assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE
+
+        # Compute constant surface tension reduced potential.
+        state = ThermodynamicState(self.membrane_barostat_alanine_gamma_nonzero, self.std_temperature)
+        integrator = openmm.VerletIntegrator(1.0 * unit.femtosecond)
+        context = create_default_context(state, integrator)
+        context.setPositions(self.alanine_positions)
+        sampler_state = SamplerState.from_context(context)
+        state.pressure = self.std_pressure
+        reduced_potential = state.reduced_potential(sampler_state)
+        pressure_volume_work = (self.std_pressure * sampler_state.volume *
+                                unit.AVOGADRO_CONSTANT_NA)
+        surface_work = (self.modified_surface_tension * sampler_state.area_xy *
+                        unit.AVOGADRO_CONSTANT_NA)
+        potential_energy = (reduced_potential / beta - pressure_volume_work + surface_work) / kj_mol
+
+        assert np.isclose(sampler_state.potential_energy / kj_mol, potential_energy)
+        assert np.isclose(reduced_potential, state.reduced_potential(context))
 
     def test_method_reduced_potential_at_states(self):
         """ThermodynamicState.reduced_potential_at_states() method.
@@ -760,7 +917,16 @@ class TestThermodynamicState(object):
 
             # Compute with multi-state method.
             obtained_energies.extend(ThermodynamicState.reduced_potential_at_states(context, compatible_group))
+        expected_energies = np.array(expected_energies)
         assert np.allclose(np.array(expected_energies), np.array(obtained_energies))
+
+        # Check that the utility function does the same.
+        sampler_state = SamplerState(positions=self.alanine_positions)
+        thermodynamic_states = [thermodynamic_states[i] for i in [0, 2]]
+        from openmmtools.cache import ContextCache
+        obtained_energies = reduced_potential_at_states(
+            sampler_state, thermodynamic_states, ContextCache())
+        assert np.allclose(expected_energies[:2], obtained_energies)
 
 
 # =============================================================================
@@ -972,6 +1138,7 @@ class TestSamplerState(object):
 
         # The other attributes are copied correctly.
         assert sliced_sampler_state.volume == sampler_state.volume
+        assert sliced_sampler_state.area_xy == sampler_state.area_xy
 
         # Energies are undefined for as subset of atoms.
         assert sliced_sampler_state.kinetic_energy is None

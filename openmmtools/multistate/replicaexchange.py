@@ -269,8 +269,8 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                 # otherwise fall back to Python-accelerated code.
                 try:
                     self._mix_all_replicas_cython()
-                except ValueError as e:
-                    logger.warning(e.message)
+                except (ValueError, ImportError) as e:
+                    logger.warning(str(e))
                     self._mix_all_replicas()
             else:
                 assert self.replica_mixing_scheme is None
