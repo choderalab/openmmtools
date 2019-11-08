@@ -1566,7 +1566,7 @@ class TestReplicaExchange(TestMultiStateSampler):
                 # Find the average number of states visited by
                 # the replicas assigned to this MPI process.
                 mpi_avg_thermo_state_counts[mpi_idx] = np.mean(replica_thermo_state_counts[replica_indices])
-                mpi_sem_thermo_state_counts[mpi_idx] = np.std(replica_thermo_state_counts[replica_indices], ddof=1) / len(replica_indices)
+                mpi_sem_thermo_state_counts[mpi_idx] = np.std(replica_thermo_state_counts[replica_indices], ddof=1) / np.sqrt(len(replica_indices))
 
             # These should be roughly equal.
             print('MPI process mean number of thermo states visited:')

@@ -13,10 +13,14 @@ New features
 Bugfixes
 --------
 - The multistate samplers now issue experimental API warnings via ``logger.warn()`` rather than ```warnings.warn()`` (`#446 <https://github.com/choderalab/openmmtools/pull/446>`_)
-
-Bugfixes
---------
 - Fix return value in ``states.reduced_potential_at_states`` (`#444 <https://github.com/choderalab/openmmtools/pull/444>`_).
+
+Known issues
+------------
+- Using parallel MPI processes causes poor mixing of the odd thermodynamic states while the mixing of the even states is
+  normal. We're still investigating whether the issue is caused by a change in the MPI library or an internal bug. For
+  now, we recommend running calculations using only 1 GPU (see also `# <https://github.com/choderalab/openmmtools/issues/>`_
+  and `yank#1130 <https://github.com/choderalab/yank/issues/1130>`_).
 
 0.18.3 - Storage enhancements and bugfixes
 ==========================================
