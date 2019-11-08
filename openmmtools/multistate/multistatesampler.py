@@ -1199,9 +1199,7 @@ class MultiStateSampler(object):
         # Update all sampler states. For non-0 nodes, this will update only the
         # sampler states associated to the replicas propagated by this node.
         for replica_id, propagated_state in zip(replica_ids, propagated_states):
-            propagated_positions, propagated_box_vectors = propagated_state  # Unpack.
-            self._sampler_states[replica_id].positions = propagated_positions
-            self._sampler_states[replica_id].box_vectors = propagated_box_vectors
+            self._sampler_states[replica_id].__setstate__(propagated_state, ignore_velocities=True)
 
         # Gather all MCMCMoves statistics. All nodes must have these up-to-date
         # since they are tied to the ThermodynamicState, not the replica.
@@ -1236,7 +1234,7 @@ class MultiStateSampler(object):
             raise SimulationNaNError(message)
 
         # Return new positions and box vectors.
-        return sampler_state.positions, sampler_state.box_vectors
+        return sampler_state.__getstate__(ignore_velocities=True)
 
     def _get_replica_move_statistics(self, replica_id):
         """Return the statistics of the MCMCMove currently associated to this replica."""

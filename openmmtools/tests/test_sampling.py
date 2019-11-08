@@ -23,21 +23,20 @@ import sys
 from io import StringIO
 
 import numpy as np
-import openmmtools as mmtools
 import scipy.integrate
 import yaml
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
-from openmmtools import testsystems
 from simtk import openmm, unit
-
 import mpiplus
+
+import openmmtools as mmtools
+from openmmtools import testsystems
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
 from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyzer
 from openmmtools.multistate import ParallelTemperingSampler, ParallelTemperingAnalyzer
 from openmmtools.multistate import SAMSSampler, SAMSAnalyzer
-
 from openmmtools.multistate.multistatereporter import _DictYamlLoader
 
 # quiet down some citation spam
@@ -564,7 +563,8 @@ class TestMultiStateSampler(object):
                             unsampled_states):
         """Helper function to call the create method for the sampler"""
         # Allows initial thermodynamic states to be handled by the built in methods
-        sampler.create(thermodynamic_states, sampler_states, reporter, unsampled_thermodynamic_states=unsampled_states)
+        sampler.create(thermodynamic_states, sampler_states, reporter,
+                       unsampled_thermodynamic_states=unsampled_states)
 
     # --------------------------------
     # Tests overwritten by sub-classes
@@ -1474,6 +1474,113 @@ class TestReplicaExchange(TestMultiStateSampler):
         additional_values = {}
         additional_values.update(self.property_creator('replica_mixing_scheme', 'replica_mixing_scheme', None, None))
         self.actual_stored_properties_check(additional_properties=additional_values)
+
+    @attr('slow')  # Skip on Travis-CI
+    def test_uniform_mixing(self):
+        """Test that mixing is uniform for a sequence of harmonic oscillators.
+
+        This test was implemented following choderalab/yank#1130. Briefly, when
+        a repex calculation was distributed over multiple MPI processes, the
+        odd replicas turned out to be much less diffusive than the even replicas.
+
+        """
+        temperature = 300.0 * unit.kelvin
+        sigma = 1.0 * unit.angstrom  # Distance between two oscillators.
+        n_states = 50  # Number of harmonic oscillators.
+
+        timestep = 2.0 * unit.femtosecond
+        n_steps = 5  # Number of steps per iteration.
+        number_of_iterations = 2000
+
+        # Build an equidistant sequence of harmonic oscillators.
+        sampler_states = []
+        thermodynamic_states = []
+
+        # The minima of the harmonic oscillators are 1 kT from each other.
+        k = mmtools.constants.kB * temperature / sigma**2  # Spring constant.
+        oscillator = testsystems.HarmonicOscillator(K=k)
+
+        for oscillator_idx in range(n_states):
+            system = copy.deepcopy(oscillator.system)
+            positions = copy.deepcopy(oscillator.positions)
+
+            # Determine the position of the harmonic oscillator minimum.
+            minimum_position = oscillator_idx * sigma
+            minimum_position_unitless = minimum_position.value_in_unit_system(unit.md_unit_system)
+            positions[0][0] = minimum_position
+
+            # Create an oscillator starting from its minimum.
+            force = system.getForce(0)
+            assert force.getGlobalParameterName(1) == 'testsystems_HarmonicOscillator_x0'
+            force.setGlobalParameterDefaultValue(1, minimum_position_unitless)
+
+            thermodynamic_states.append(mmtools.states.ThermodynamicState(
+                system=system, temperature=temperature))
+            sampler_states.append(mmtools.states.SamplerState(positions))
+
+        # Run a short repex simulation and gather data.
+        with self.temporary_storage_path() as storage_path:
+            # Create and run object.
+            sampler = self.SAMPLER(
+                mcmc_moves=mmtools.mcmc.LangevinDynamicsMove(timestep=timestep, n_steps=n_steps),
+                number_of_iterations=number_of_iterations,
+            )
+            reporter = self.REPORTER(storage_path, checkpoint_interval=number_of_iterations)
+            sampler.create(thermodynamic_states, sampler_states, reporter)
+            sampler.run()
+
+            # Retrieve from the reporter the mixing information before deleting.
+            # Only the reporter from MPI node 0 should be open.
+            n_accepted_matrix, n_proposed_matrix = mpiplus.run_single_node(
+                task=reporter.read_mixing_statistics,
+                rank=0, broadcast_result=True
+            )
+            replica_thermo_states = mpiplus.run_single_node(
+                task=reporter.read_replica_thermodynamic_states,
+                rank=0, broadcast_result=True
+            )
+            del sampler, reporter
+
+        # No need to analyze the same data in multiple MPI processes.
+        mpicomm = mpiplus.get_mpicomm()
+        if mpicomm is not None and mpicomm.rank == 0:
+            print('Acceptance matrix')
+            print(n_accepted_matrix)
+            print()
+
+            # Count the number of visited states by each replica.
+            replica_thermo_state_counts = np.empty(n_states)
+            for replica_idx in range(n_states):
+                n_visited_states = len(set(replica_thermo_states[:, replica_idx]))
+                replica_thermo_state_counts[replica_idx] = n_visited_states
+                print(replica_idx, ':', n_visited_states)
+            print()
+
+            # Count the number of visited states by each MPI process.
+            n_mpi_processes = mpicomm.size
+            mpi_avg_thermo_state_counts = np.empty(n_mpi_processes)
+            mpi_sem_thermo_state_counts = np.empty(n_mpi_processes)
+            for mpi_idx in range(n_mpi_processes):
+                # Find replicas assigned to this MPI process.
+                replica_indices = list(i for i in range(n_states) if i % n_mpi_processes == mpi_idx)
+                # Find the average number of states visited by
+                # the replicas assigned to this MPI process.
+                mpi_avg_thermo_state_counts[mpi_idx] = np.mean(replica_thermo_state_counts[replica_indices])
+                mpi_sem_thermo_state_counts[mpi_idx] = np.std(replica_thermo_state_counts[replica_indices], ddof=1) / len(replica_indices)
+
+            # These should be roughly equal.
+            print('MPI process mean number of thermo states visited:')
+            for mpi_idx, (mean, sem) in enumerate(zip(mpi_avg_thermo_state_counts,
+                                                      mpi_sem_thermo_state_counts)):
+                print('{}: {} +- {}'.format(mpi_idx, mean, 2*sem))
+
+            # Check if the confidence intervals overlap.
+            def are_overlapping(interval1, interval2):
+                return min(interval1[1], interval2[1]) - max(interval1[0], interval2[0]) > 0
+
+            cis = [(mean-2*sem, mean+2*sem) for mean, sem in zip(mpi_avg_thermo_state_counts, mpi_sem_thermo_state_counts)]
+            for i in range(1, len(cis)):
+                assert are_overlapping(cis[0], cis[i])
 
 
 class TestSingleReplicaSAMS(TestMultiStateSampler):
