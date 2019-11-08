@@ -1233,7 +1233,7 @@ class MultiStateSampler(object):
             logger.critical(message)
             raise SimulationNaNError(message)
 
-        # Return new positions and box vectors.
+        # Send the new state to the root node. We can ignore velocities as we're not saving them.
         return sampler_state.__getstate__(ignore_velocities=True)
 
     def _get_replica_move_statistics(self, replica_id):
