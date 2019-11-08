@@ -19,7 +19,7 @@ Known issues
 ------------
 - Using parallel MPI processes causes poor mixing of the odd thermodynamic states while the mixing of the even states is
   normal. We're still investigating whether the issue is caused by a change in the MPI library or an internal bug. For
-  now, we recommend running calculations using only 1 GPU (see also `# <https://github.com/choderalab/openmmtools/issues/>`_
+  now, we recommend running calculations using only 1 GPU (see also `#449 <https://github.com/choderalab/openmmtools/issues/449>`_
   and `yank#1130 <https://github.com/choderalab/yank/issues/1130>`_).
 
 0.18.3 - Storage enhancements and bugfixes
