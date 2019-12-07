@@ -214,7 +214,7 @@ class LJPairTestBox(testsystems.LennardJonesPair):
         self.context = Context(self.system, LangevinIntegrator(
             300.0*unit.kelvin, 5.0/unit.picosecond, 1.0*unit.femtosecond))
 
-    def get_energy(self, r_nm=1.0):
+    def calculate_energy(self, r_nm=1.0):
         self.context.setPositions(
             unit.Quantity(value=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, r_nm]]),
                           unit=unit.nanometer))
@@ -233,7 +233,7 @@ def test_use_custom_switch_function():
     custom_force.addParticle()
     ljpair.system.addForce(custom_force)
     ljpair.update_context()
-    assert abs(ljpair.get_energy(1.25) - 1.0) < 1e-8
+    assert abs(ljpair.calculate_energy(1.25) - 1.0) < 1e-8
 
     # add switch
     custom_force.setUseSwitchingFunction(True)
@@ -241,7 +241,7 @@ def test_use_custom_switch_function():
     apply_custom_switching_function(custom_force, 1.0*unit.nanometer, 1.5*unit.nanometer,
                                     switching_function="(r-cutoff)/(switch-cutoff)")
     ljpair.update_context()
-    assert abs(ljpair.get_energy(1.25) - 0.5) < 1e-8
+    assert abs(ljpair.calculate_energy(1.25) - 0.5) < 1e-8
 
 
 def test_use_vdw_with_charmm_vswitch():
@@ -273,7 +273,7 @@ def test_use_vdw_with_charmm_vswitch():
         return switch(r) * (4*epsilon*((sigma/r)**12 - (sigma/r)**6))
 
     for r in np.linspace(0.5, 2.0, 10, True):
-        assert abs(ljpair.get_energy(r) - lj_switch(r)) < 1e-7
+        assert abs(ljpair.calculate_energy(r) - lj_switch(r)) < 1e-7
 
 
 def test_use_vdw_with_charmm_force_switch():
@@ -302,7 +302,7 @@ def test_use_vdw_with_charmm_force_switch():
             return k12 * (r ** (-6) - cutoff ** (-6)) ** 2 - k6 * (r ** (-3) - cutoff ** (-3)) ** 2
 
     for r in np.linspace(0.8, 1.5, 200, True):
-        assert abs(target_energy(r) - ljpair.get_energy(r)) < 1e-7
+        assert abs(target_energy(r) - ljpair.calculate_energy(r)) < 1e-7
 
 
 def test_no_vdw_interactions_after_switch():
