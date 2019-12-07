@@ -2060,8 +2060,13 @@ class AbsoluteAlchemicalFactory(object):
             alchemical_region = alchemical_region[0]
         raise Exception("Not implemented; needs CustomMultipleForce")
 
-    def _alchemically_modify_CustomBondForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_CustomBondForce(self, reference_force, alchemical_regions, _):
         energy_function = reference_force.getEnergyFunction()
+
+        # this is a quick fix.
+        # TODO: extend to multiple alchemical regions
+        assert len(alchemical_regions) == 1
+        alchemical_region = alchemical_regions[0]
 
         # Reasons to not modify the force
         if (len(alchemical_region.alchemical_atoms) == 0
@@ -2108,9 +2113,14 @@ class AbsoluteAlchemicalFactory(object):
         else:
             return {'': [copy.deepcopy(reference_force)]}
 
-    def _alchemically_modify_CustomNonbondedForce(self, reference_force, alchemical_region):
+    def _alchemically_modify_CustomNonbondedForce(self, reference_force, alchemical_regions, _):
 
         energy_function = reference_force.getEnergyFunction()
+
+        # this is a quick fix
+        # TODO: extend to multiple alchemical regions
+        assert len(alchemical_regions) == 1
+        alchemical_region = alchemical_regions[0]
 
         # Reasons to not modify the force
         if (len(alchemical_region.alchemical_atoms) == 0
