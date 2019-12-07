@@ -141,8 +141,7 @@ class MultiStateSampler(object):
                  locality=None):
 
         # Warn that API is experimental
-        import warnings
-        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # These will be set on initialization. See function
         # create() for explanation of single variables.

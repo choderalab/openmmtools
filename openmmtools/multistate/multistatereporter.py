@@ -34,8 +34,8 @@ import copy
 import time
 import uuid
 import yaml
-import logging
 import warnings
+import logging
 import collections
 
 import numpy as np
@@ -112,9 +112,8 @@ class MultiStateReporter(object):
                  analysis_particle_indices=()):
 
         # Warn that API is experimental
-        import warnings
-        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
-                 
+        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+
         # Handle checkpointing
         if type(checkpoint_interval) != int:
             raise ValueError("checkpoint_interval must be an integer!")
