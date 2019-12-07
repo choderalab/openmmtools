@@ -17,7 +17,7 @@ from functools import partial
 
 from openmmtools.forcefactories import *
 from openmmtools import testsystems, states
-from simtk.openmm import Context, LangevinIntegrator
+from simtk.openmm import Context, LangevinIntegrator, Platform
 
 # =============================================================================
 # CONSTANTS
@@ -320,4 +320,33 @@ def test_no_vdw_interactions_after_switch():
                         getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole), rtol=0)
 
 
-#TODO: Testing vs CHARMM energies
+def test_switching_vs_charmm_energies():
+    """
+    Check the CHARMM reference energy.
+    """
+    for switch_string, switch in [
+        ("no", None),
+        ("vfswitch", use_vdw_with_charmm_force_switch),
+        ("vswitch", use_custom_vdw_switching_function)
+    ]:
+        testsystem = testsystems.CharmmSolvated(
+            ewald_tolerance=0.00005,
+            annihilate_vdw=False,
+            annihilate_charges=False,
+            hard_cutoff_at_10a=switch is None,
+        )
+        if switch is not None:
+            switch(testsystem.system, 1.0 * unit.nanometer, 1.2 * unit.nanometer)
+
+        context = Context(
+            testsystem.system,
+            openmm.VerletIntegrator(1.0*unit.femtosecond),
+            Platform.getPlatformByName("Reference")
+        )
+        context.setPositions(testsystem.positions)
+        energy = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+        reference = (testsystems.CharmmSolvated
+                     .charmm_reference(switch=switch_string, state_string="original")
+                     .value_in_unit(unit.kilojoules_per_mole))
+
+        assert np.isclose(energy, reference, atol=6, rtol=0)  # 4 kj ~ 1.5 kcal

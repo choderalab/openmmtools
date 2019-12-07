@@ -4620,11 +4620,22 @@ class CharmmSolvated(TestSystem):
     annihilate_subset: list
         A list of particle ids for which charges and van der Waals are to be annihilated in case annihilate_charges
         or annihilate_vdw is True. The default (None) means that all interactions are annihilated for all_particles.
+    hard_cutoff_at_10a: bool
+        If True, compute Lennard-Jones with a hard cutoff at 10 Angstrom
     """
-    def __init__(self, annihilate_charges=False, annihilate_vdw=False, ewald_tolerance=0.0005, annihilate_subset=None,
-                 **kwargs):
+    def __init__(
+            self,
+            annihilate_charges=False,
+            annihilate_vdw=False,
+            ewald_tolerance=0.0005,
+            annihilate_subset=None,
+            hard_cutoff_at_10a=False,
+            **kwargs
+    ):
 
         super(TestSystem, self).__init__(**kwargs)
+        self.annilate_charges = annihilate_charges
+        self.annihilate_vdw = annihilate_vdw
 
         with warnings.catch_warnings():
             warnings.simplefilter('ignore', openmm.app.internal.charmm.exceptions.CharmmPSFWarning)
@@ -4638,9 +4649,11 @@ class CharmmSolvated(TestSystem):
                 get_data_filename("data/charmm-solvated/m14.prm"),
             )
             self.psf.setBox(*([30.584*unit.angstrom]*3 + [90.0]*3))
-            self.system = self.psf.createSystem(
-                self.toppar, nonbondedMethod=openmm.app.PME, nonbondedCutoff=1.2*unit.nanometer,
-                switchDistance=1.0*unit.nanometer, constraints=openmm.app.HBonds, ewaldErrorTolerance=ewald_tolerance)
+            cutoff = 1.0 if hard_cutoff_at_10a else 1.2
+            cuton = None if hard_cutoff_at_10a else 1.0
+            self.system = self.psf.createSystem( #openmm.app.HBonds
+                self.toppar, nonbondedMethod=openmm.app.PME, nonbondedCutoff=cutoff,
+                switchDistance=cuton, constraints=None, ewaldErrorTolerance=ewald_tolerance)
         self.system.setDefaultPeriodicBoxVectors([3.0584, 0, 0], [0, 3.0584, 0], [0, 0, 3.0584])
         self.topology = self.psf.topology
         self.positions = self.pdb.getPositions()
@@ -4716,6 +4729,38 @@ class CharmmSolvated(TestSystem):
                     self.system.removeForce(i)
                     self.system.addForce(modified_force)
 
+    @staticmethod
+    def charmm_reference(switch, state_string):
+        """
+        Parameters:
+        -----------
+        switch: str
+            One of the following: "no" (hard cutoff at 10A), "vswitch", "vfswitch" (both between 10 and 12 A)
+        state_string: str
+            One of the following: "original", "uncharged", "annihilated".
+            "original" refers to the CHARMM energy for the original system using the VSWITCH function.
+            "uncharged" refers to the CHARMM energy with zero charges on the solute (atoms {0,1,...,29}).
+            "annihilated" refers to the CHARMM energy with zero charges and LJ on the solute (atoms {0,1,...,29}).
 
+        Returns:
+        --------
+        reference_energy: unit.Quantity
+            The reference energy.
 
-
+        Notes:
+        ------
+            See reference energies for the VSWITCH Lennard-Jones switching function
+            in https://github.com/Olllom/charmm-vs-openmm-energies.git/
+        """
+        reference_energies = {
+            ("no","original"): -10358.06,
+            ("no","uncharged"): -10271.68,
+            ("no","annihilated"): -10267.07,
+            ("vswitch","original"): -10370.17,
+            ("vswitch","uncharged"): -10283.79,
+            ("vswitch","annihilated"): -10278.77,
+            ("vfswitch","original"): -10333.46,
+            ("vfswitch","uncharged"): -10247.08,
+            ("vfswitch","annihilated"): -10243.32
+        }
+        return reference_energies[(switch, state_string)] * unit.kilocalories_per_mole
