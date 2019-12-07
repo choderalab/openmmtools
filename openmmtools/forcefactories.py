@@ -282,7 +282,7 @@ def get_forces_that_define_vdw(system):
                 continue
         # CUSTOM BOND FORCES (TYPICALLY FOR 1-4 INTERACTIONS)
         if isinstance(force, openmm.CustomBondForce):
-            bond_parameters = [force.getPerBondParameters()
+            bond_parameters = [force.getBondParameters()
                                for i in range(force.getNumPerBondParameters())]
             if ("epsilon" in bond_parameters) and ("sigma" in bond_parameters):
                 custom_bond_forces.append(force)
