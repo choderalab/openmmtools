@@ -513,10 +513,15 @@ def get_available_platforms():
             for i in range(openmm.Platform.getNumPlatforms())]
 
 
-def get_fastest_platform():
+def get_fastest_platform(double=False):
     """Return the fastest available platform.
 
     This relies on the hardcoded speed values in Platform.getSpeed().
+
+    Parameters
+    ----------
+    double : bool, default=False
+        if true, will return fastest platform that supports double precision
 
     Returns
     -------
@@ -525,6 +530,10 @@ def get_fastest_platform():
 
     """
     platforms = get_available_platforms()
+
+    if double is True:
+        # filering for platforms that support double
+        platforms = [p for p in platforms if p.supportsDoublePrecision()]
     fastest_platform = max(platforms, key=lambda x: x.getSpeed())
     return fastest_platform
 
