@@ -25,7 +25,7 @@ from simtk import openmm
 
 from openmmtools import integrators, testsystems
 from openmmtools.integrators import (ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator,
-                                     GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator)
+                                     GHMCIntegrator, NoseHooverChainVelocityVerletIntegrator,  LoopyAlchemicalNonequilibriumLangevinIntegrator)
 
 
 #=============================================================================================
@@ -774,10 +774,94 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
+def run_loopy_alchemical_langevin_integrator(integrator_flavor = LoopyAlchemicalNonequilibriumLangevinIntegrator,
+                                             nsteps=20,
+                                             nsteps_neq=10,
+                                             nsteps_eq=10):
+    """
+    Test different flavors of the LoopyAlchemicalNonequilibriumLangevinIntegrator (and perhaps subclasses thereof)
+
+    arguments
+        integrator_flavor : openmmtools.integrator.LoopyAlchemicalNonequilibriumLangevinIntegrator (or subclass)
+            integrator to run
+        nsteps : int, default 20
+            number of integrator.steps() to run
+        nsteps_neq : int, default 10
+            number of forward/backward annealing steps
+        nsteps_eq : int, default 10
+            number of equilibration steps to run at endstates before annealing
+    """
+    #max deviation from the calculated free energy
+    NSIGMA_MAX = 6
+    n_iterations = 200  # number of forward and reverse protocols
+
+    # These are the alchemical functions that will be used to control the system
+    temperature = 298.0 * unit.kelvin
+    sigma = 1.0 * unit.angstrom # stddev of harmonic oscillator
+    kT = kB * temperature # thermal energy
+    beta = 1.0 / kT # inverse thermal energy
+    K = kT / sigma**2 # spring constant corresponding to sigma
+    mass = 39.948 * unit.amu
+    period = unit.sqrt(mass/K) # period of harmonic oscillator
+    timestep = period / 20.0
+    collision_rate = 1.0 / period
+    dF_analytical = 1.0
+    parameters = dict()
+    parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, 2 * sigma)
+    parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 1 * kT)
+    integrator_kwargs = {'temperature':temperature,
+                         'collision_rate': collision_rate,
+                         'timestep': timestep,
+                         'measure_shadow_work': False,
+                         'measure_heat': False}
+    alchemical_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
+    # Create harmonic oscillator testsystem
+    testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
+    system = testsystem.system
+    positions = testsystem.positions
+
+    # Create integrator
+    integrator = LoopyAlchemicalNonequilibriumLangevinIntegrator(alchemical_functions=alchemical_functions,
+                                                                 nsteps_eq=nsteps_eq,
+                                                                 nsteps_neq=nsteps_neq,
+                                                                 **integrator_kwargs)
+    platform = openmm.Platform.getPlatformByName("Reference")
+    context = openmm.Context(system, integrator, platform)
+    context.setPositions(positions)
+
+    forward, backward = [], []
+    for _ in range(nsteps):
+        integrator.step(1)
+        forward.append(integrator.get_forward_work(dimensionless=True))
+        backward.append(integrator.get_backward_work(dimensionless=True))
+
+    dF, ddF = pymbar.BAR(np.array(forward), np.array(backward))
+    nsigma = np.abs(dF - dF_analytical) / ddF
+    current_lambda = integrator.getGlobalVariableByName('lambda')
+    assert current_lambda == 0.0, 'final lambda should be 0.0 (was %f)' % current_lambda
+    print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
+    if nsigma > NSIGMA_MAX:
+        raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
+
+    # Clean up
+    del context
+    del integrator
+
+
 def test_alchemical_langevin_integrator():
     for splitting in ["O { V R H R V } O", "O V R H R V O", "H R V O V R H"]:
         for nsteps in [0, 1, 10]:
             run_alchemical_langevin_integrator(nsteps=nsteps)
+
+def test_loopy_alchemical_integrators():
+    """
+    test loopy alchemical langevin integrators: see  run_loopy_alchemical_langevin_integrator
+    """
+    for integrator_flavor in [LoopyAlchemicalNonequilibriumLangevinIntegrator]:
+        run_loopy_alchemical_langevin_integrator(integrator_flavor = integrator_flavor,
+                                                 nsteps=20,
+                                                 nsteps_neq=10,
+                                                 nsteps_eq=10)
 
 if __name__=="__main__":
     test_alchemical_langevin_integrator()
