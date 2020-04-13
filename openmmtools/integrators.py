@@ -2072,7 +2072,6 @@ class LoopyIndependentAlchemicalNonequilibriumLangevinIntegrator(LoopyAlchemical
 
         self.addPerDofVariable('x_zero_endstate', zero_endstate_positions.value_in_unit_system(unit.md_unit_system))
         self.addPerDofVariable('x_one_endstate', zero_endstate_positions.value_in_unit_system(unit.md_unit_system))
-        self.addPerDofVariable('x_annealing', 0.)
 
     def _add_integrator_steps(self):
         """
@@ -2090,11 +2089,9 @@ class LoopyIndependentAlchemicalNonequilibriumLangevinIntegrator(LoopyAlchemical
         self.addComputeGlobal('eq_step', "eq_step + 1") #increment eq_step
         self.endBlock()
         self.addComputePerDof('x_zero_endstate', 'x')
-        self.addComputePerDof('x_annealing', 'x_zero_endstate')
 
 
         #forward anneal
-        self.addComputePerDof('x', 'x_annealing')
         self.beginWhileBlock("lambda_step < n_lambda_steps") #anneal forward until lambda step is n_lambda_steps (lambda = lambda_step / n_lambda_steps)
         self._add_canonical_integrator_steps() #add VRORV
         self._substep_function('H') #add the H step...
@@ -2111,7 +2108,6 @@ class LoopyIndependentAlchemicalNonequilibriumLangevinIntegrator(LoopyAlchemical
         self.addComputeGlobal('eq_step', "eq_step + 1") #increment eq_step
         self.endBlock()
         self.addComputePerDof('x_one_endstate', 'x')
-        self.addComputePerDof('x_annealing', 'x_one_endstate')
 
         #reverse anneal; don't reset lambda (it is annealing in backward direction)
         self.beginWhileBlock("lambda_step > 0") #anneal backward until lambda step is 0 again
