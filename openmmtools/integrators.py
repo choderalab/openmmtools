@@ -1952,7 +1952,7 @@ class LoopyAlchemicalNonequilibriumLangevinIntegrator(AlchemicalNonequilibriumLa
         #init/reset
         self.addConstrainPositions() #constrain positions
         self.addConstrainVelocities() #and velocities
-        self._add_reset_step() #reset lambda, protocol_works, heat, shadow, ghmc, step (unused), lambda_step, and alchemical_params
+        self._add_reset_step() #reset lambda, protocol_works, heat, shadow, ghmc, step (unused), lambda_step, eq_step, and alchemical_params
 
         #lambda_0 equilibration
         self.beginWhileBlock("eq_step < n_steps_eq")
