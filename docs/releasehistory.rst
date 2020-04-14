@@ -1,18 +1,27 @@
 Release History
 ***************
 
+
+0.19.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- Fixed a crash during the restraint unbiasing for systems with an unexpected order of atoms of receptor and ligands (`#462 <https://github.com/choderalab/openmmtools/pull/462>`_).
+
+
 0.19.0 - Multiple alchemical regions
 ====================================
 
 New features
 ------------
 - Added support in ``AbsoluteAlchemicalFactory`` for handling multiple independent alchemical regions (`#438 <https://github.com/choderalab/openmmtools/pull/438>`_).
-- Added support for anisotropic and membrane barostats in `ThermodynamicState` (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_)
-- Added support for platform properties in ContextCache (e.g. for mixed and double precision CUDA in multistate sampler) (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_)
+- Added support for anisotropic and membrane barostats in `ThermodynamicState` (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_).
+- Added support for platform properties in ContextCache (e.g. for mixed and double precision CUDA in multistate sampler) (`#437 <https://github.com/choderalab/openmmtools/pull/437>`_).
 
 Bugfixes
 --------
-- The multistate samplers now issue experimental API warnings via ``logger.warn()`` rather than ```warnings.warn()`` (`#446 <https://github.com/choderalab/openmmtools/pull/446>`_)
+- The multistate samplers now issue experimental API warnings via ``logger.warn()`` rather than ``warnings.warn()`` (`#446 <https://github.com/choderalab/openmmtools/pull/446>`_).
 - Fix return value in ``states.reduced_potential_at_states`` (`#444 <https://github.com/choderalab/openmmtools/pull/444>`_).
 
 Known issues
