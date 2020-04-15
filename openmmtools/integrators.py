@@ -1985,7 +1985,7 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         steps at endstates.
         """
         super()._add_global_variables()
-        self.addGlobalVariable('n_steps_eq', self._n_steps_eq)
+        self.addGlobalVariable('n_steps_eq', self._n_steps_eq) # number of steps per nonequilibrium switching phase (forward or backward)
 
     def _add_integrator_steps(self):
         """
@@ -2029,12 +2029,12 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         # Store initial potential energy
         self.addComputeGlobal("Eold", "energy")
 
-        # Update lambda and increment that tracks updates.
-        lambda_control_expression = "lambda"\
-            " + delta_lambda*step((step+0.5)-n_steps_eq)*step((n_steps_eq+n_steps_neq) - (step+0.5))"\
-            " - delta_lambda*step((step+0.5)-(n_steps_eq+n_steps_neq+n_steps_eq))*step(n_steps_per_cycle - (step+0.5));"\
-            "delta_lambda = 1/n_lambda_steps;" # Note that there may be multiple H per integrator string, so we correct for this here
-        self.addComputeGlobal('lambda', lambda_control_expression)
+        # Compute lambda increment (only nonzero in forward or backward switching phases)
+        lambda_increment_expression = "lambda + delta_lambda*is_forward_switch - delta_lambda*is_backward_switch;"\
+            "is_forward_switch = step((step+0.5)-n_steps_eq)*step((n_steps_eq+n_steps_neq) - (step+0.5));"\ # logic to identify forward switching steps
+            "is_backward_switch = step((step+0.5)-(n_steps_eq+n_steps_neq+n_steps_eq))*step(n_steps_per_cycle - (step+0.5));"\ # logic to identify backward switching steps
+            "delta_lambda = 1/n_lambda_steps;" # there may be multiple H per integrator string, so we need to use n_lambda_steps instead of n_steps_neq
+        self.addComputeGlobal('lambda', lambda_increment_expression) # increment lambda
         self.addComputeGlobal('lambda_step', 'lambda_step + 1')
 
         # Update all slaved alchemical parameters
