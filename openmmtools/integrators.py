@@ -1971,12 +1971,12 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
             { will cause Metropolization, and must be followed later by a }.
         """
         # Check that a valid set of steps has been specified
-        nsteps_per_period = nsteps_eq + nsteps_neq + nsteps_eq + nsteps_neq
-        if nsteps_per_period <= 0:
-            raise ValueError(f'nsteps_per_period = {nsteps_per_period} must be > 0')
+        n_steps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
+        if n_steps_per_cycle <= 0:
+            raise ValueError(f'nsteps_per_period = {n_steps_per_cycle} must be > 0')
 
         self._n_steps_eq = nsteps_eq # store number of equilibration steps to dwell within lambda = 0 or 1 when reached
-        self._n_steps_per_cycle = nsteps_eq + nsteps_neq + nsteps_eq + nsteps_neq
+        self._n_steps_per_cycle = n_steps_per_cycle
         super().__init__(alchemical_functions, splitting, nsteps_neq=nsteps_neq, **kwargs)
 
     def _add_global_variables(self):
@@ -2030,10 +2030,13 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self.addComputeGlobal("Eold", "energy")
 
         # Compute lambda increment (only nonzero in forward or backward switching phases)
-        lambda_increment_expression = "lambda + delta_lambda*is_forward_switch - delta_lambda*is_backward_switch;"\
-            "is_forward_switch = step((step+0.5)-n_steps_eq)*step((n_steps_eq+n_steps_neq) - (step+0.5));"\ # logic to identify forward switching steps
-            "is_backward_switch = step((step+0.5)-(n_steps_eq+n_steps_neq+n_steps_eq))*step(n_steps_per_cycle - (step+0.5));"\ # logic to identify backward switching steps
-            "delta_lambda = 1/n_lambda_steps;" # there may be multiple H per integrator string, so we need to use n_lambda_steps instead of n_steps_neq
+        is_forward_switch = "step((step+0.5)-n_steps_eq)*step((n_steps_eq+n_steps_neq) - (step+0.5))" #logic: define bool forward switch
+        is_backward_switch = "step((step+0.5)-(n_steps_eq+n_steps_neq+n_steps_eq))*step(n_steps_per_cycle - (step+0.5))" #logic: define bool backward switch
+        lambda_increment_expression = f"lambda + delta_lambda*is_forward_switch - delta_lambda*is_backward_switch;"
+        lambda_increment_expression += f"is_forward_switch = {is_forward_switch};"
+        lambda_increment_expression += f"is_backward_switch = {is_backward_switch};"
+        lambda_increment_expression += "delta_lambda = 1/n_lambda_steps;"
+
         self.addComputeGlobal('lambda', lambda_increment_expression) # increment lambda
         self.addComputeGlobal('lambda_step', 'lambda_step + 1')
 
