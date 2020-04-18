@@ -46,6 +46,7 @@ These integrators are available for nonequilibrium switching simulations, and pr
 
     NonequilibriumLangevinIntegrator
     AlchemicalNonequilibriumLangevinIntegrator
+    PeriodicNonequilibriumIntegrator
     ExternalPerturbationLangevinIntegrator
 
 |

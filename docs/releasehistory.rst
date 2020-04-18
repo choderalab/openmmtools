@@ -2,6 +2,13 @@ Release History
 ***************
 
 
+0.20.0 - Periodic alchemical integrators
+========================================
+
+Enhancements
+------------
+- Add `PeriodicNonequilibriumIntegrator`, a simple extension of `AlchemicalNonequilibriumLangevinIntegrator` that supports periodic alchemical protocols
+
 0.19.1 - Bugfix release
 =======================
 
