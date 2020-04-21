@@ -1993,9 +1993,10 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         """
         # First step: Constrain positions and velocities and reset work accumulators and alchemical integrators
         self.beginIfBlock('step = 0')
-        self._add_update_alchemical_parameters_step() # sets alchemical parameters based on master lambda
         self.addConstrainPositions()
         self.addConstrainVelocities()
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step() # set alchemical parameters too
         self.endBlock()
 
         # Main body
@@ -2004,7 +2005,7 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self.addComputeGlobal("step", "step + 1")
         self.endBlock()
 
-        # Reset step counter
+        # We allow this integrator to cycle instead of halting at the final step
         self.beginIfBlock("step >= n_steps_per_cycle")
         self.addComputeGlobal("step", "0")
         self.addComputeGlobal("lambda_step", "0")
