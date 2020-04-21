@@ -1995,8 +1995,6 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self.beginIfBlock('step = 0')
         self.addConstrainPositions()
         self.addConstrainVelocities()
-        self._add_reset_protocol_work_step()
-        self._add_alchemical_reset_step()
         self.endBlock()
 
         # Main body

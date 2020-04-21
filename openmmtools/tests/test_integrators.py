@@ -774,7 +774,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def test_periodic_langevin_integrator(splitting="V R H O R V", ncycles=40, nsteps_neq=1000, nsteps_eq=1000):
+def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nsteps_neq=1000, nsteps_eq=1000):
     """
     Test PeriodicNonequilibriumIntegrator
 
