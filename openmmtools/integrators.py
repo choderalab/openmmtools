@@ -1644,7 +1644,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         Manually reset protocol work and other statistics.
         """
         self.reset_protocol_work()
-        super(NonequilibriumLangevinIntegrator, self).reset()
+        super().reset()
 
 class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
@@ -1876,14 +1876,14 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         if self._n_steps_neq == 0:
             # If nsteps = 0, we need to force execution on the first step only.
             self.beginIfBlock('step = 0')
-            super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
+            super()._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
         else:
             #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
             self.beginIfBlock("step >= 0")
             self.beginIfBlock("step < n_steps_per_cycle")
-            super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
+            super()._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
             self.endBlock()
@@ -1996,16 +1996,16 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self.addConstrainPositions()
         self.addConstrainVelocities()
         self._add_reset_protocol_work_step()
-        self._add_alchemical_reset_step()
+        self._add_alchemical_reset_step() # set alchemical parameters too
         self.endBlock()
 
         # Main body
         self.beginIfBlock("step >= 0")
-        super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
+        NonequilibriumLangevinIntegrator._add_integrator_steps(self) # includes H step which updates alchemical state and accumulates work
         self.addComputeGlobal("step", "step + 1")
         self.endBlock()
 
-        # Reset step counter
+        # We allow this integrator to cycle instead of halting at the final step
         self.beginIfBlock("step >= n_steps_per_cycle")
         self.addComputeGlobal("step", "0")
         self.addComputeGlobal("lambda_step", "0")
@@ -2016,6 +2016,7 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self._add_reset_protocol_work_step()
         self._add_alchemical_reset_step() # sets step to 0
         self.endBlock()
+
     def _add_alchemical_perturbation_step(self):
         """
         Add alchemical perturbation step, accumulating protocol work.
