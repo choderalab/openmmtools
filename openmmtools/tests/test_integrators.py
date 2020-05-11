@@ -774,7 +774,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nsteps_neq=1000, nsteps_eq=1000):
+def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nsteps_neq=1000, nsteps_eq=1000, write_trajectory=False):
     """
     Test PeriodicNonequilibriumIntegrator
 
@@ -782,12 +782,14 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     ----------
     integrator_flavor : openmmtools.integrator.PeriodicNonequilibriumIntegrator (or subclass)
         integrator to run
-    ncycles : int, optional, default=20
+    ncycles : int, optional, default=40
         number of cycles
-    nsteps_neq : int, optional, default=10
+    nsteps_neq : int, optional, default=1000
         number of forward/backward annealing steps
-    nsteps_eq : int, optional, default=10
+    nsteps_eq : int, optional, default=1000
         number of equilibration steps to run at endstates before annealing
+    write_trajectory : bool, optional, default=True
+        If True, will generate a PDB file that contains the harmonic oscillator trajectory
     """
     #max deviation from the calculated free energy
     NSIGMA_MAX = 6
@@ -802,10 +804,11 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     period = unit.sqrt(mass/K) # period of harmonic oscillator
     timestep = period / 20.0
     collision_rate = 1.0 / period
-    dF_analytical = 1.0
+    dF_analytical = 5.0
     parameters = dict()
-    parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, 1 * sigma)
-    parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 1 * kT)
+    displacement = 10 * sigma
+    parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, displacement)
+    parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 5 * kT)
     integrator_kwargs = {'temperature':temperature,
                          'collision_rate': collision_rate,
                          'timestep': timestep,
@@ -816,6 +819,7 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
     system = testsystem.system
     positions = testsystem.positions
+    topology = testsystem.topology
 
     # Create integrator
     from openmmtools.integrators import PeriodicNonequilibriumIntegrator
@@ -830,6 +834,32 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
 
     nsteps_per_cycle = nsteps_eq + nsteps_neq + nsteps_eq + nsteps_neq
     assert integrator.getGlobalVariableByName("n_steps_per_cycle") == nsteps_per_cycle
+
+    if write_trajectory:
+        from simtk.openmm.app import PDBFile
+        filename = 'neq-trajectory.pdb'
+        print(f'Writing trajectory to {filename}')
+        with open(filename, 'wt') as outfile:
+            # Write reference
+            import copy
+            pos1 = copy.deepcopy(positions)
+            pos2 = copy.deepcopy(positions)
+            pos2[0,0] += displacement
+            PDBFile.writeModel(topology, pos1, outfile)
+            PDBFile.writeModel(topology, pos2, outfile)
+
+            interval = 10
+            PDBFile.writeModel(topology, positions, outfile, modelIndex=0)
+            for step in range(0,2*nsteps_per_cycle,interval):
+                integrator.step(interval)
+                positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+                PDBFile.writeModel(topology, positions, outfile, modelIndex=step)
+
+                PDBFile.writeModel(topology, pos1, outfile)
+                PDBFile.writeModel(topology, pos2, outfile)
+
+        # Reset the integrator
+        integrator.reset()
 
     step = 0
     for cycle in range(2):
@@ -890,7 +920,7 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     assert np.isclose(integrator.getGlobalVariableByName("lambda"), 0.0)
     print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
     if nsigma > NSIGMA_MAX:
-        raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
+        raise Exception(f"The free energy difference for the nonequilibrium switching for splitting {splitting} is not zero within statistical error.")
 
     # Clean up
     del context
