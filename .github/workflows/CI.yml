@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    branches:
+      - "master"
+  schedule:
+    # Nightly tests run on master by default:
+    #   Scheduled workflows run on the latest commit on the default or base branch.
+    #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
+    - cron: "0 0 * * *"
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macOS-latest, ubuntu-latest, windows-latest]
+        python-version: [3.7, 3.8]
+        openmm: [latest, beta, nightly, conda-forge]
+    env:
+      OPENMM: ${{ matrix.openmm }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Additional info about the build
+        shell: bash
+        run: |
+          uname -a
+          df -h
+          ulimit -a
+
+      # More info on options: https://github.com/goanpeca/setup-miniconda
+      - uses: goanpeca/setup-miniconda@v1
+        with:
+          python-version: ${{ matrix.python-version }}
+          environment-file: devtools/conda-envs/test_env.yaml
+          channels: conda-forge,defaults
+          activate-environment: test
+          auto-update-conda: true
+          auto-activate-base: false
+          show-channel-urls: true
+
+      - name: Install package
+        # conda setup requires this special shell
+        shell: bash -l {0}
+        run: |
+          # Install desired OpenMM version
+          if [ "$OPENMM" == "latest" ]; then
+            echo "Using latest release OpenMM."
+            conda install --yes -c omnia openmm
+          fi
+          if [ "$OPENMM" == "beta" ]; then
+            echo "Using OpenMM beta";
+            conda install --yes -c omnia/label/beta openmm
+          fi
+          if [ "$OPENMM" == "nightly" ]; then
+            echo "Using OpenMM nightly dev build.";
+            conda install --yes -c omnia-dev openmm
+          fi
+          if [ "$OPENMM" == "conda-forge" ]; then
+            echo "Using OpenMM conda-forge testing build.";
+            conda install --yes -c conda-forge/label/testing openmm
+            conda remove --force ocl-icd ocl-icd-system
+          fi
+          python -m pip install . --no-deps
+          conda list
+
+      - name: Run tests
+        shell: bash -l {0}
+        run: |
+          # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
+          nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
+
+      - name: CodeCov
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}
