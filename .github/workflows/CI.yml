@@ -23,7 +23,7 @@ jobs:
         cfg:
           - { os: macOS-latest, python-version: 3.7, openmm: latest }
           - { os: macOS-latest, python-version: 3.8, openmm: latest }
-          - { os: windows-latest, python-version: 3.8, openmm: latest }
+          - { os: windows-latest, python-version: 3.7, openmm: latest }
           - { os: windows-latest, python-version: 3.8, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
           - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
@@ -58,7 +58,7 @@ jobs:
 
       - name: Install OpenMM variants
         shell: bash -l {0}
-        if: startsWith(matrix.os, 'ubuntu')
+        if: startsWith(matrix.cfg.os, 'ubuntu')
         run: |
           # Install desired OpenMM version
           if [ "$OPENMM" == "latest" ]; then
