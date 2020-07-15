@@ -1999,6 +1999,9 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self._add_alchemical_reset_step() # set alchemical parameters too
         self.endBlock()
 
+        #intermediate
+        self._add_antecedent()
+
         # Main body
         self.beginIfBlock("step >= 0")
         NonequilibriumLangevinIntegrator._add_integrator_steps(self) # includes H step which updates alchemical state and accumulates work
@@ -2016,6 +2019,12 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         self._add_reset_protocol_work_step()
         self._add_alchemical_reset_step() # sets step to 0
         self.endBlock()
+
+    def _add_antecedent(self):
+        """
+        functionality to add stuff here
+        """
+        pass
 
     def _add_alchemical_perturbation_step(self):
         """
@@ -2047,6 +2056,57 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
         # Accumulate protocol work
         self.addComputeGlobal("Enew", "energy")
         self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)")
+
+class FAHCustomNEQIntegrator(PeriodicNonequilibriumIntegrator):
+    """
+    Copy of the PeriodicNonequilibriumIntegrator that retains equilibrium MD at either endstate by caching equilibrium snapshots between annealing protocols
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs) #call the PeriodicNonequilibriumIntegrator init
+        self.addPerDofVariable("x0_eq_cache", 0) #initialize cache variables
+        self.addPerDofVariable("x1_eq_cache", 0)
+
+    def equip_equilibrium_cache(self, endstate, positions):
+        """
+        in order to run independent MD at the endstates, we need to equip each endstate cache with an i.i.d. snapshot
+
+        Parameters:
+        -----------
+
+        endstate : int
+            the lambda achemical endstate to which the positions will equip
+        positions : np.ndarray(N,3) (in nm implicitly)
+            array of the positions to be equipped
+        """
+        assert endstate in [0,1]
+        cache = 'x0_eq_cache' if endstate==0 else 'x1_eq_cache'
+        self.setPerDofVariableByName(cache, positions.tolist())
+
+    def _add_antecedent(self):
+        """
+        cache equilibrium snapshots and recover caches
+        """
+        #cache an equilibrium snapshot from lambda=0 (after eq)
+        self.beginIfBlock("step = n_steps_eq")
+        self.addComputePerDof("x0_eq_cache", "x")
+        self.endBlock()
+
+        #cache an equilibrium snapshot at lambda=1 (after eq)
+        self.beginIfBlock("step = n_steps_per_cycle")
+        self.addComputePerDof("x1_eq_cache", "x")
+        self.endBlock()
+
+        #recover the cache at lambda=0 (before eq)
+        self.beginIfBlock("step = 0")
+        self.addComputePerDof("x", "x0_eq_cache")
+        self.endBlock()
+
+        #recover the cache at lambda=1 (before eq)
+        self.beginIfBlock("step = n_steps_eq + n_steps_neq")
+        self.addComputePerDof("x", "x1_eq_cache")
+        self.endBlock()
+
+
 
 class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """
