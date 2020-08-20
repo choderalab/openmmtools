@@ -1067,7 +1067,7 @@ class PhaseAnalyzer(ABC):
         # Reset self._sign
         self._sign = '+'
         if self.name is None:
-            names.append(utils.generate_phase_name(self.name, []))
+            names.append(multistate.utils.generate_phase_name(self.name, []))
         else:
             names.append(self.name)
         if isinstance(other, MultiPhaseAnalyzer):
@@ -1077,7 +1077,7 @@ class PhaseAnalyzer(ABC):
             final_new_names = []
             for name in new_names:
                 other_names = [n for n in new_names if n != name]
-                final_new_names.append(utils.generate_phase_name(name, other_names + names))
+                final_new_names.append(multistate.utils.generate_phase_name(name, other_names + names))
             names.extend(final_new_names)
             for new_sign in new_signs:
                 if operator != '+' and new_sign == '+':
@@ -1086,7 +1086,7 @@ class PhaseAnalyzer(ABC):
                     signs.append('+')
             phases.extend(new_phases)
         elif isinstance(other, PhaseAnalyzer):
-            names.append(utils.generate_phase_name(other.name, names))
+            names.append(multistate.utils.generate_phase_name(other.name, names))
             if operator != '+' and other._sign == '+':
                 signs.append('-')
             else:
@@ -1170,9 +1170,9 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     def __init__(self, *args, unbias_restraint=True, restraint_energy_cutoff='auto',
                  restraint_distance_cutoff='auto', **kwargs):
+
         # Warn that API is experimental
-        import warnings
-        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # super() calls clear() that initialize the cached variables.
         super().__init__(*args, **kwargs)
@@ -1688,11 +1688,19 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         restraint_force = copy.deepcopy(restraint_force)
         is_periodic = restraint_force.usesPeriodicBoundaryConditions()
 
-        # Store the original indices of the restrained atoms.
-        original_restrained_atom_indices1 = restraint_force.restrained_atom_indices1
-        original_restrained_atom_indices2 = restraint_force.restrained_atom_indices2
-        original_restrained_atom_indices = (original_restrained_atom_indices1 +
-                                            original_restrained_atom_indices2)
+        # Store the indices of the restrained atoms in the reduced system.
+        analysis_indices = self._reporter.analysis_particle_indices
+
+        mapped_restrained_indices1 = restraint_force.restrained_atom_indices1
+        mapped_restrained_indices2 = restraint_force.restrained_atom_indices2
+
+        mapped_restrained_indices1 = [analysis_indices.index(index)
+                                      for index in mapped_restrained_indices1]
+        mapped_restrained_indices2 = [analysis_indices.index(index)
+                                      for index in mapped_restrained_indices2]
+
+        mapped_restrained_indices = (mapped_restrained_indices1 +
+                                     mapped_restrained_indices2)
 
         # Create new system with only solute and restraint forces.
         reduced_system = openmm.System()
@@ -1745,7 +1753,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
                                                                 analysis_particles_only=True)
 
             for replica_idx, sampler_state in enumerate(sampler_states):
-                sliced_sampler_state = sampler_state[original_restrained_atom_indices]
+                sliced_sampler_state = sampler_state[mapped_restrained_indices]
                 sliced_sampler_state.apply_to_context(context)
                 potential_energy = context.getState(getEnergy=True).getPotentialEnergy()
                 self._restraint_energies[iteration][replica_idx] = potential_energy / _OPENMM_ENERGY_UNIT
@@ -1762,11 +1770,11 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
                                                                    dtype=np.float32)
                             trajectory.image_molecules(inplace=True, anchor_molecules=anchor_molecules,
                                                        other_molecules=imaged_molecules)
-                            positions_group1 = trajectory.xyz[0][original_restrained_atom_indices1]
-                            positions_group2 = trajectory.xyz[0][original_restrained_atom_indices2]
+                            positions_group1 = trajectory.xyz[0][mapped_restrained_indices1]
+                            positions_group2 = trajectory.xyz[0][mapped_restrained_indices2]
                         else:
-                            positions_group1 = sampler_state.positions[original_restrained_atom_indices1]
-                            positions_group2 = sampler_state.positions[original_restrained_atom_indices2]
+                            positions_group1 = sampler_state.positions[mapped_restrained_indices1]
+                            positions_group2 = sampler_state.positions[mapped_restrained_indices2]
                             positions_group1 /= _MDTRAJ_DISTANCE_UNIT
                             positions_group2 /= _MDTRAJ_DISTANCE_UNIT
 

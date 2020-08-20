@@ -1081,7 +1081,7 @@ class LangevinIntegrator(ThermostatedIntegrator):
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
-            "{" will cause metropolization, and must be followed later by a "}".
+            "{" will cause Metropolization, and must be followed later by a "}".
 
 
         temperature : np.unit.Quantity compatible with kelvin, default: 298.0*unit.kelvin
@@ -1644,7 +1644,7 @@ class NonequilibriumLangevinIntegrator(LangevinIntegrator):
         Manually reset protocol work and other statistics.
         """
         self.reset_protocol_work()
-        super(NonequilibriumLangevinIntegrator, self).reset()
+        super().reset()
 
 class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """Allows nonequilibrium switching based on force parameters specified in alchemical_functions.
@@ -1734,12 +1734,12 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
             If not specified, no alchemical functions will be used.
 
         splitting : string, default: "O { V R H R V } O"
-            Sequence of R, V, O (and optionally V{i}), and { }substeps to be executed each timestep. There is also an H option,
-            which increments the global parameter `lambda` by 1/nsteps_neq for each step.
+            Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
+            "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
 
             Forces are only used in V-step. Handle multiple force groups by appending the force group index
             to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
-            ( will cause metropolization, and must be followed later by a ).
+            { will cause Metropolization, and must be followed later by a }.
 
         temperature : np.unit.Quantity compatible with kelvin, default: 298.0*unit.kelvin
            Fictitious "bath" temperature
@@ -1772,6 +1772,8 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
         self._alchemical_functions = alchemical_functions
         self._n_steps_neq = nsteps_neq # number of integrator steps
+        if not hasattr(self, '_n_steps_per_cycle'): # for subclasses
+            self._n_steps_per_cycle = nsteps_neq # number of integrator steps per complete cycle
 
         # collect the system parameters.
         self._system_parameters = {system_parameter for system_parameter in alchemical_functions.keys()}
@@ -1779,6 +1781,9 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         # call the base class constructor
         kwargs['splitting'] = splitting
         super(AlchemicalNonequilibriumLangevinIntegrator, self).__init__(*args, **kwargs)
+
+        if self._ORV_counts['H'] == 0:
+            raise ValueError('Integrator splitting string must contain at least one "H"')
 
     @property
     def _step_dispatch_table(self):
@@ -1810,14 +1815,16 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         self.addGlobalVariable('Eold', 0) #old energy value before perturbation
         self.addGlobalVariable('Enew', 0) #new energy value after perturbation
         self.addGlobalVariable('lambda', 0.0) # parameter switched from 0 <--> 1 during course of integrating internal 'nsteps' of dynamics
-        self.addGlobalVariable('nsteps', self._n_steps_neq) # total number of NCMC steps to perform; this SHOULD NOT BE CHANGED during the protocol
+        self.addGlobalVariable('n_steps_neq', self._n_steps_neq)
+        self.addGlobalVariable('n_steps_per_cycle', self._n_steps_per_cycle) # total number of NCMC steps to perform; this SHOULD NOT BE CHANGED during the protocol
+        # TODO: Change 'step' to something that oesn't collide with the built-in lepton 'step()' function
         self.addGlobalVariable('step', 0) # step counter for handling initialization and terminating integration
 
         # Keep track of number of Hamiltonian updates per nonequilibrium switch
         n_H = self._ORV_counts['H'] # number of H updates per integrator step
         self._n_lambda_steps = self._n_steps_neq * n_H # number of Hamiltonian increments per switching step
         if self._n_steps_neq == 0:
-            self._n_lambda_steps = 1 # instantaneous switching
+            self._n_lambda_steps = n_H # instantaneous switching
         self.addGlobalVariable('n_lambda_steps', self._n_lambda_steps) # total number of NCMC steps to perform; this SHOULD NOT BE CHANGED during the protocol
         self.addGlobalVariable('lambda_step', 0)
 
@@ -1833,7 +1840,10 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         """
         Add alchemical perturbation step, accumulating protocol work.
 
-        TODO: Extend this to be able to handle force groups?
+        .. todo ::
+
+           This could be extended to only evaluate energies for force groups with global context parameters
+           to speed up work evaluations.
 
         """
         # Store initial potential energy
@@ -1866,14 +1876,14 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         if self._n_steps_neq == 0:
             # If nsteps = 0, we need to force execution on the first step only.
             self.beginIfBlock('step = 0')
-            super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
+            super()._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
         else:
             #call the superclass function to insert the appropriate steps, provided the step number is less than n_steps
             self.beginIfBlock("step >= 0")
-            self.beginIfBlock("step < nsteps")
-            super(AlchemicalNonequilibriumLangevinIntegrator, self)._add_integrator_steps()
+            self.beginIfBlock("step < n_steps_per_cycle")
+            super()._add_integrator_steps()
             self.addComputeGlobal("step", "step + 1")
             self.endBlock()
             self.endBlock()
@@ -1894,6 +1904,149 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
         self.addComputeGlobal("lambda_step", "0")
         # Add all dependent parameters
         self._add_update_alchemical_parameters_step()
+
+class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrator):
+    """
+    Periodic nonequilibrium integrator where master alchemical parameter ``lambda``
+    is driven through a periodic protocol:
+
+    eq 0 for nsteps_eq | neq 0->1 over nsteps_neq | eq 1 for nsteps_eq | neq 1->0 for nsteps_neq
+
+    Arbitrary Langevin splitting strings can be provided.
+
+    .. warning :: This API is experimental, and subject to change.
+
+    Examples
+    --------
+
+    Create a nonequilibrium integrator to switch the center of a harmonic oscillator between two locations, dwelling in either state to allow equilibration.
+    This example uses BAOAB (V R O R V) for integration.
+
+    >>> # Create harmonic oscillator testsystem
+    >>> from openmmtools import testsystems
+    >>> from simtk import openmm, unit
+    >>> testsystem = testsystems.HarmonicOscillator()
+    >>> # Create a nonequilibrium alchemical integrator
+    >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
+    >>> nsteps_eq = 100 # number of steps to dwell in equilibrium at lambda = 0 or 1
+    >>> nsteps_neq = 50 # number of steps in the switching trajectory where lambda is switched from 0 to 1
+    >>> integrator = PeriodicAlchemicalNonequilibriumLangevinIntegrator(
+    ...                  temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds,
+    ...                  alchemical_functions=alchemical_functions, splitting="V R H O R V",
+    ...                  nsteps_eq=nsteps_eq, nsteps_neq=nsteps_neq)
+    >>> # Create a Context
+    >>> context = openmm.Context(testsystem.system, integrator)
+    >>> # Run one periodic cycle: (eq 0) > (neq 0->1) > (eq 1) > (neq 1->0)
+    >>> context.setPositions(testsystem.positions)
+    >>> nsteps_per_period = 2*nsteps_eq + 2*nsteps_neq
+    >>> integrator.step(nsteps_per_period)
+    >>> protocol_work = integrator.protocol_work # retrieve protocol work (excludes shadow work)
+    >>> total_work = integrator.total_work # retrieve total work (includes shadow work, if requested)
+    >>> # Run another cycle
+    >>> integrator.step(nsteps_per_period)
+    >>> # Reset and run again
+    >>> context.setPositions(testsystem.positions)
+    >>> integrator.reset()
+    >>> integrator.step(nsteps_per_period)
+    """
+    def __init__(self,
+                 alchemical_functions=None,
+                 nsteps_eq=1000,
+                 nsteps_neq=100,
+                 splitting="V R H O R V",
+                 **kwargs):
+        """
+        Parameters
+        ----------
+        nsteps_eq : int, optional, default=1000
+            Number of equilibration steps to dwell within lambda = 0 or 1 when reached
+        nsteps_neq : int, optional, default=100
+            Number of nonequilibrium switching steps for 0->1 and 1->0 switches
+        splitting : string, default: "V R H O R V"
+            Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
+            "H" increments the global parameter `lambda` by 1/nsteps_neq for each step and accumulates protocol work.
+
+            Forces are only used in V-step. Handle multiple force groups by appending the force group index
+            to V-steps, e.g. "V0" will only use forces from force group 0. "V" will perform a step using all forces.
+            { will cause Metropolization, and must be followed later by a }.
+        """
+        # Check that a valid set of steps has been specified
+        n_steps_per_cycle = 2*nsteps_eq + 2*nsteps_neq
+        if n_steps_per_cycle <= 0:
+            raise ValueError(f'nsteps_per_period = {n_steps_per_cycle} must be > 0')
+
+        self._n_steps_eq = nsteps_eq # store number of equilibration steps to dwell within lambda = 0 or 1 when reached
+        self._n_steps_per_cycle = n_steps_per_cycle
+        super().__init__(alchemical_functions, splitting, nsteps_neq=nsteps_neq, **kwargs)
+
+    def _add_global_variables(self):
+        """
+        modify the super (_add_global_variables) to add a collector for forward and reverse annealing, as well as to specify the number of equilibration
+        steps at endstates.
+        """
+        super()._add_global_variables()
+        self.addGlobalVariable('n_steps_eq', self._n_steps_eq) # number of steps per nonequilibrium switching phase (forward or backward)
+
+    def _add_integrator_steps(self):
+        """
+        Override the base class to insert reset steps around the integrator.
+        """
+        # First step: Constrain positions and velocities and reset work accumulators and alchemical integrators
+        self.beginIfBlock('step = 0')
+        self.addConstrainPositions()
+        self.addConstrainVelocities()
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step() # set alchemical parameters too
+        self.endBlock()
+
+        # Main body
+        self.beginIfBlock("step >= 0")
+        NonequilibriumLangevinIntegrator._add_integrator_steps(self) # includes H step which updates alchemical state and accumulates work
+        self.addComputeGlobal("step", "step + 1")
+        self.endBlock()
+
+        # We allow this integrator to cycle instead of halting at the final step
+        self.beginIfBlock("step >= n_steps_per_cycle")
+        self.addComputeGlobal("step", "0")
+        self.addComputeGlobal("lambda_step", "0")
+        self.endBlock()
+
+        # Reset step
+        self.beginIfBlock('step = -1')
+        self._add_reset_protocol_work_step()
+        self._add_alchemical_reset_step() # sets step to 0
+        self.endBlock()
+
+    def _add_alchemical_perturbation_step(self):
+        """
+        Add alchemical perturbation step, accumulating protocol work.
+
+        .. todo ::
+
+           This could be extended to only evaluate energies for force groups with global context parameters
+           to speed up work evaluations.
+
+        """
+        # Store initial potential energy
+        self.addComputeGlobal("Eold", "energy")
+
+        # Compute lambda increment (only nonzero in forward or backward switching phases)
+        is_forward_switch = "step((step+0.5)-n_steps_eq)*step((n_steps_eq+n_steps_neq) - (step+0.5))" #logic: define bool forward switch
+        is_backward_switch = "step((step+0.5)-(n_steps_eq+n_steps_neq+n_steps_eq))*step(n_steps_per_cycle - (step+0.5))" #logic: define bool backward switch
+        lambda_increment_expression = f"lambda + delta_lambda*is_forward_switch - delta_lambda*is_backward_switch;"
+        lambda_increment_expression += f"is_forward_switch = {is_forward_switch};"
+        lambda_increment_expression += f"is_backward_switch = {is_backward_switch};"
+        lambda_increment_expression += "delta_lambda = 1/n_lambda_steps;"
+
+        self.addComputeGlobal('lambda', lambda_increment_expression) # increment lambda
+        self.addComputeGlobal('lambda_step', 'lambda_step + 1')
+
+        # Update all slaved alchemical parameters
+        self._add_update_alchemical_parameters_step()
+
+        # Accumulate protocol work
+        self.addComputeGlobal("Enew", "energy")
+        self.addComputeGlobal("protocol_work", "protocol_work + (Enew-Eold)")
 
 class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
     """
@@ -2125,22 +2278,29 @@ class GHMCIntegrator(LangevinIntegrator):
         kwargs['splitting'] = "O { V R V } O"
         super(GHMCIntegrator, self).__init__(*args, **kwargs)
 
+
 class FIREMinimizationIntegrator(mm.CustomIntegrator):
     """Fast Internal Relaxation Engine (FIRE) minimization.
+
     Notes
     -----
     This integrator is taken verbatim from Peter Eastman's example appearing in the CustomIntegrator header file documentation.
+
     References
     ----------
     Erik Bitzek, Pekka Koskinen, Franz Gaehler, Michael Moseler, and Peter Gumbsch.
     Structural Relaxation Made Simple. PRL 97:170201, 2006.
     http://dx.doi.org/10.1103/PhysRevLett.97.170201
+
     Examples
     --------
     >>> from openmmtools import testsystems
     >>> from simtk import openmm
     >>> t = testsystems.AlanineDipeptideVacuum()
     >>> system, positions = t.system, t.positions
+
+    Create a FIRE integrator with default parameters and minimize for 100 steps
+
     >>> integrator = FIREMinimizationIntegrator()
     >>> context = openmm.Context(system, integrator)
     >>> context.setPositions(positions)
