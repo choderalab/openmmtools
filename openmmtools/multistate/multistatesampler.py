@@ -141,8 +141,7 @@ class MultiStateSampler(object):
                  locality=None):
 
         # Warn that API is experimental
-        import warnings
-        warnings.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # These will be set on initialization. See function
         # create() for explanation of single variables.
@@ -1200,9 +1199,7 @@ class MultiStateSampler(object):
         # Update all sampler states. For non-0 nodes, this will update only the
         # sampler states associated to the replicas propagated by this node.
         for replica_id, propagated_state in zip(replica_ids, propagated_states):
-            propagated_positions, propagated_box_vectors = propagated_state  # Unpack.
-            self._sampler_states[replica_id].positions = propagated_positions
-            self._sampler_states[replica_id].box_vectors = propagated_box_vectors
+            self._sampler_states[replica_id].__setstate__(propagated_state, ignore_velocities=True)
 
         # Gather all MCMCMoves statistics. All nodes must have these up-to-date
         # since they are tied to the ThermodynamicState, not the replica.
@@ -1236,8 +1233,8 @@ class MultiStateSampler(object):
             logger.critical(message)
             raise SimulationNaNError(message)
 
-        # Return new positions and box vectors.
-        return sampler_state.positions, sampler_state.box_vectors
+        # Send the new state to the root node. We can ignore velocities as we're not saving them.
+        return sampler_state.__getstate__(ignore_velocities=True)
 
     def _get_replica_move_statistics(self, replica_id):
         """Return the statistics of the MCMCMove currently associated to this replica."""

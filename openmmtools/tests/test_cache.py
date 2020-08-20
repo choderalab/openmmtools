@@ -357,3 +357,69 @@ class TestContextCache(object):
         cache.get_context(self.compatible_states[0], integrator)
         with nose.tools.assert_raises(RuntimeError):
             cache.platform = platforms[0]
+
+    def test_platform_properties(self):
+        # Failure tests
+        # no platform specified
+        platform_properties = {"CpuThreads": "2"}
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=None, platform_properties=platform_properties)
+        # non-string value in properties
+        cpu_platform = openmm.Platform.getPlatformByName("CPU")
+        ref_platform = openmm.Platform.getPlatformByName("Reference")
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=cpu_platform, platform_properties={"CpuThreads": 2})
+        assert "All platform properties must be strings." in str(cm.exception)
+        # non-dict properties
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=cpu_platform, platform_properties="jambalaya")
+        assert str(cm.exception) == "platform_properties must be a dictionary"
+        # invalid property
+        with nose.tools.assert_raises(ValueError) as cm:
+            ContextCache(platform=cpu_platform, platform_properties={"jambalaya": "2"})
+        assert "Invalid platform property for this platform." in str(cm.exception)
+
+        # setter
+        cache = ContextCache(
+            platform=cpu_platform,
+            platform_properties=platform_properties
+        )
+        with nose.tools.assert_raises(ValueError) as cm:
+            cache.platform = ref_platform
+        assert "Invalid platform property for this platform." in str(cm.exception)
+        # this should work
+        cache.set_platform(ref_platform)
+        assert cache.platform == ref_platform
+        # assert errors are checked in set_platform
+        with nose.tools.assert_raises(ValueError) as cm:
+            cache.set_platform(cpu_platform, platform_properties={"jambalaya": "2"})
+        assert "Invalid platform property for this platform." in str(cm.exception)
+        # assert that resetting the platform resets the properties
+        cache = ContextCache(
+                platform=cpu_platform,
+                platform_properties=platform_properties
+        )
+        cache.platform = None
+        assert cache._platform_properties is None
+
+        # Functionality test
+        cache = ContextCache(
+                platform=cpu_platform,
+                platform_properties=platform_properties
+        )
+        thermodynamic_state = copy.deepcopy(self.water_300k)
+        integrator = integrators.LangevinIntegrator(temperature=300 * unit.kelvin, measure_heat=True,
+                                                    measure_shadow_work=True)
+        context, _ = cache.get_context(thermodynamic_state, integrator)
+        assert context.getPlatform().getPropertyValue(context, "CpuThreads") == "2"
+
+        # test serialization
+        cache.__setstate__(cache.__getstate__())
+        assert cache._platform_properties == {"CpuThreads": "2"}
+
+        # test serialization no 2
+        state = cache.__getstate__()
+        state["platform_properties"] = {"CpuThreads": "3"}
+        cache.__setstate__(state)
+        assert cache._platform_properties == {"CpuThreads": "3"}
+        del context
