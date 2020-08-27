@@ -2041,7 +2041,7 @@ class MCDihedralRotationMove(MetropolizedMove):
         return phi
 
     def rotate_positions(self, initial_positions):
-        """Apply random rotation to positions.
+        """Apply rotation to atom_subset positions.
 
         Parameters
         ----------
