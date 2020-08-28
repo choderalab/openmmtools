@@ -1,6 +1,14 @@
 Release History
 ***************
 
+0.27.0
+========================================
+
+Enhancements
+------------
+- Add `MCDihedralRotationMove`, an extension of MetropolizedMove that allows rigid rotation moves about a specified dihedral
+
+
 0.26.0
 ======
 
