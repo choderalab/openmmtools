@@ -1958,7 +1958,8 @@ class MCDihedralRotationMove(MetropolizedMove):
         self.n_proposed = 0
         self.proposed_positions = None
 
-    def generate_rotation_matrix(self, axis, theta):
+    @staticmethod
+    def generate_rotation_matrix(axis, theta):
         """Generate the rotation matrix associated with counterclockwise rotation
         about the given axis by theta radians.
 
@@ -1985,8 +1986,8 @@ class MCDihedralRotationMove(MetropolizedMove):
                           2 * (bd - ac)], [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
                          [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
 
-    @classmethod
-    def compute_dihedral(cls, dihedral):
+    @staticmethod
+    def compute_dihedral(dihedral):
         """Given the positions of four atoms that form a dihedral, compute the angle in radians.
 
         Parameters
