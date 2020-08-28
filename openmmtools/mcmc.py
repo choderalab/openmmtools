@@ -2046,7 +2046,7 @@ class MCDihedralRotationMove(MetropolizedMove):
             theta = random.uniform(-math.pi, math.pi)
         else:
             # If desired_angle is specified, determine rotation angle
-            if not (self.desired_angle < math.pi and self.desired_angle > -math.pi):
+            if not (self.desired_angle <= math.pi and self.desired_angle >= -math.pi):
                 raise Exception("Desired angle must be less than pi and greater than -pi")
             theta = self.desired_angle - old_angle
         logger.info(f"Rotating by {theta} radians")
