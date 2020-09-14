@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - "master"
+  pull_request:
+    branches:
+      - "master"
+  schedule:
+    # Nightly tests run on master by default:
+    #   Scheduled workflows run on the latest commit on the default or base branch.
+    #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
+    - cron: "0 0 * * *"
+
+jobs:
+  test:
+    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
+    runs-on: ${{ matrix.cfg.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        cfg:
+          - { os: macOS-latest, python-version: 3.6, openmm: latest }
+          - { os: macOS-latest, python-version: 3.7, openmm: latest }
+          # - { os: macOS-latest, python-version: 3.8, openmm: latest }
+          - { os: windows-latest, python-version: 3.6, openmm: latest }
+          - { os: windows-latest, python-version: 3.7, openmm: latest }
+          # - { os: windows-latest, python-version: 3.8, openmm: latest }
+          - { os: ubuntu-latest, python-version: 3.6, openmm: latest }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
+          # - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
+          - { os: ubuntu-latest, python-version: 3.6, openmm: nightly }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
+          # - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
+          - { os: ubuntu-latest, python-version: 3.6, openmm: conda-forge }
+          - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
+          # - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
+
+    env:
+      OPENMM: ${{ matrix.cfg.openmm }}
+
+    steps:
+      - uses: actions/checkout@v1
+
+      - name: Additional info about the build
+        shell: bash
+        run: |
+          uname -a
+          df -h
+          ulimit -a
+
+      # More info on options: https://github.com/goanpeca/setup-miniconda
+      - uses: goanpeca/setup-miniconda@v1
+        with:
+          python-version: ${{ matrix.cfg.python-version }}
+          environment-file: devtools/conda-envs/test_env.yaml
+          channels: conda-forge,defaults
+          activate-environment: test
+          auto-update-conda: true
+          auto-activate-base: false
+          show-channel-urls: true
+
+      - name: Install OpenMM variants
+        shell: bash -l {0}
+        if: startsWith(matrix.cfg.os, 'ubuntu')
+        run: |
+          # Install desired OpenMM version
+          if [ "$OPENMM" == "latest" ]; then
+            echo "Using latest release OpenMM."
+            conda install --yes -c omnia openmm
+          fi
+          if [ "$OPENMM" == "nightly" ]; then
+            echo "Using OpenMM nightly dev build.";
+            conda install --yes -c omnia-dev openmm
+          fi
+          if [ "$OPENMM" == "conda-forge" ]; then
+            echo "Using OpenMM conda-forge testing build.";
+            conda install --yes -c conda-forge/label/testing openmm
+            conda remove --force ocl-icd ocl-icd-system
+          fi
+
+      - name: Install package
+        # conda setup requires this special shell
+        shell: bash -l {0}
+        run: |
+          python -m pip install . --no-deps
+          conda list
+
+      - name: Run tests
+        shell: bash -l {0}
+        run: |
+          # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
+          nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
+
+      - name: CodeCov
+        uses: codecov/codecov-action@v1
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-${{ matrix.cfg.os }}-py${{ matrix.cfg.python-version }}
