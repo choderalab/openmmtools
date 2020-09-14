@@ -1948,6 +1948,27 @@ class MCDihedralRotationMove(MetropolizedMove):
     See Also
     --------
     MetropolizedMove
+
+    Examples
+    --------
+
+    >>> import numpy as np
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
+
+    Create and run an alanine dipeptide simulation with a sidechain dihedral move.
+
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=300*unit.kelvin)
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> # Create a dihedral move
+    >>> move = MCDihedralRotationMove([6, 8, 10, 11, 12, 13], desired_angle=-0.95549) # Rotate the sidechain by 2pi/3
+    >>> # Create an MCMC sampler instance and run 2 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
+    >>> sampler.minimize()
+    >>> sampler.run(n_iterations=2)
     """
 
     def __init__(self, atom_subset, desired_angle=-np.inf, context_cache=None):
