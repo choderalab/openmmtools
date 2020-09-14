@@ -116,6 +116,8 @@ import logging
 
 import numpy as np
 from simtk import openmm, unit
+import math
+import random
 
 from openmmtools import integrators, cache, utils
 from openmmtools.utils import SubhookedABCMeta, Timer
@@ -1893,6 +1895,213 @@ class MCRotationMove(MetropolizedMove):
     def _propose_positions(self, initial_positions):
         """Implement MetropolizedMove._propose_positions for apply()"""
         return self.rotate_positions(initial_positions)
+
+# =============================================================================
+# RANDOM DIHEDRAL ROTATION MOVE
+# =============================================================================
+
+class MCDihedralRotationMove(MetropolizedMove):
+    """A metropolized move that randomly rotates a subset of atoms about a specified bond.
+
+    Parameters
+    ----------
+    atom_subset : slice or list of int
+        Atom indices where the first four are the dihedral of interest. The rotatable bond is specified by
+        the 2nd and 3rd atom indices in the list. All atom indices after the 3rd correspond to the atoms to be rotated.
+        Example: [6, 8, 10, 18, 13, 14, 15, 16, 17, 19] means that the dihedral of interest is 6-8-10-18,
+        the rotatable bond is 8-10, and the atoms to be rotated are 18, 13, 14, 15, 16, 17, 19.
+    desired_angle : float, default -np.inf
+        Desired angle to rotate to. If not specified, this will be chosen randomly. Must be between -pi and pi.
+        Example: If the current angle is pi, and desired_angle is 0, the atoms will be rotated by -pi.
+    context_cache : openmmtools.cache.ContextCache, optional
+        The ContextCache to use for Context creation. If None, the global cache
+        openmmtools.cache.global_context_cache is used (default is None).
+
+    Attributes
+    ----------
+    atom_subset
+    desired_angle
+    context_cache
+    n_accepted : int
+        The number of proposals accepted.
+    n_proposed : int
+        The total number of attempted moves.
+    proposed_positions : np.array of floats
+        Proposed positions of atoms in atom_subset
+
+    See Also
+    --------
+    MetropolizedMove
+
+    Examples
+    --------
+
+    >>> import numpy as np
+    >>> from simtk import unit
+    >>> from openmmtools import testsystems
+    >>> from openmmtools.states import ThermodynamicState, SamplerState
+
+    Create and run an alanine dipeptide simulation with a sidechain dihedral move.
+
+    >>> test = testsystems.AlanineDipeptideVacuum()
+    >>> thermodynamic_state = ThermodynamicState(system=test.system,
+    ...                                          temperature=300*unit.kelvin)
+    >>> sampler_state = SamplerState(positions=test.positions)
+    >>> # Create a dihedral move
+    >>> move = MCDihedralRotationMove([6, 8, 10, 11, 12, 13], desired_angle=-0.95549) # Rotate the sidechain by 2pi/3
+    >>> # Create an MCMC sampler instance and run 2 iterations of the simulation.
+    >>> sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
+    >>> sampler.minimize()
+    >>> sampler.run(n_iterations=2)
+    """
+
+    def __init__(self, atom_subset, desired_angle=-np.inf, context_cache=None):
+        self.atom_subset = atom_subset
+        self.desired_angle = desired_angle
+        self.context_cache = context_cache
+        self.n_accepted = 0
+        self.n_proposed = 0
+        self.proposed_positions = None
+
+    @staticmethod
+    def generate_rotation_matrix(axis, theta):
+        """Generate the rotation matrix associated with counterclockwise rotation
+        about the given axis by theta radians.
+
+        Parameters
+        ----------
+        axis : np.array of three floats
+            The axis of rotation (unitless)
+        theta : float
+            Rotation angle in radians
+
+        Returns
+        -------
+        np.array of floats
+            Rotation matrix
+
+        """
+        axis = np.asarray(axis)
+        axis = axis / math.sqrt(np.dot(axis, axis))
+        a = math.cos(theta / 2.0)
+        b, c, d = -axis * math.sin(theta / 2.0)
+        aa, bb, cc, dd = a * a, b * b, c * c, d * d
+        bc, ad, ac, ab, bd, cd = b * c, a * d, a * c, a * b, b * d, c * d
+        return np.array([[aa + bb - cc - dd, 2 * (bc + ad),
+                          2 * (bd - ac)], [2 * (bc - ad), aa + cc - bb - dd, 2 * (cd + ab)],
+                         [2 * (bd + ac), 2 * (cd - ab), aa + dd - bb - cc]])
+
+    @staticmethod
+    def compute_dihedral(dihedral):
+        """Given the positions of four atoms that form a dihedral, compute the angle in radians.
+
+        Parameters
+        ----------
+        dihedral : np.array or list of floats
+            Positions of atoms forming the dihedral
+
+        Returns
+        -------
+        float
+            Dihedral angle in radians
+
+        """
+
+        def _cross_vec3(a, b):
+            c = np.zeros(3)
+            c[0] = a[1] * b[2] - a[2] * b[1]
+            c[1] = a[2] * b[0] - a[0] * b[2]
+            c[2] = a[0] * b[1] - a[1] * b[0]
+            return c
+
+        def _norm(a):
+            n_2 = np.dot(a, a)
+            return np.sqrt(n_2)
+
+        atom_position = dihedral[0] / dihedral[0].unit
+        bond_position = dihedral[1] / dihedral[1].unit
+        angle_position = dihedral[2] / dihedral[2].unit
+        torsion_position = dihedral[3] / dihedral[3].unit
+
+        a = atom_position - bond_position
+        b = angle_position - bond_position
+        c = angle_position - torsion_position
+        a_u = a / _norm(a)
+        b_u = b / _norm(b)
+        c_u = c / _norm(c)
+
+        plane1 = _cross_vec3(a_u, b_u)
+        plane2 = _cross_vec3(b_u, c_u)
+
+        cos_phi = np.dot(plane1, plane2) / (_norm(plane1) * _norm(plane2))
+        if cos_phi < -1.0:
+            cos_phi = -1.0
+        elif cos_phi > 1.0:
+            cos_phi = 1.0
+
+        phi = np.arccos(cos_phi)
+
+        if np.dot(a, plane2) <= 0:
+            phi = -phi
+
+        return phi
+
+    def rotate_positions(self, initial_positions):
+        """Apply rotation to atom_subset positions.
+
+        Parameters
+        ----------
+        initial_positions : numpy.ndarray simtk.unit.Quantity
+            The positions of all atoms in atom_subset.
+
+        Returns
+        -------
+        rotated_positions : numpy.ndarray simtk.unit.Quantity
+            The rotated positions.
+        """
+
+        old_angle = self.compute_dihedral(initial_positions[:4])
+
+        if self.desired_angle == -np.inf:
+            # Choose a random rotation angle
+            theta = random.uniform(-math.pi, math.pi)
+        else:
+            # If desired_angle is specified, determine rotation angle
+            if not (self.desired_angle <= math.pi and self.desired_angle >= -math.pi):
+                raise Exception("Desired angle must be less than pi and greater than -pi")
+            theta = self.desired_angle - old_angle
+        logger.info(f"Rotating by {theta} radians")
+
+        # Make a copy of the initial positions
+        new_positions = copy.deepcopy(initial_positions)
+
+        # Find the rotation axis using the initial positions
+        axis1 = 1
+        axis2 = 2
+        rotation_axis = (initial_positions[axis1] - initial_positions[axis2]) / initial_positions.unit
+
+        # Calculate the rotation matrix
+        rotation_matrix = self.generate_rotation_matrix(rotation_axis, theta)
+
+        # Apply the rotation matrix to the target atoms
+        for atom_index in range(3, len(self.atom_subset)):
+            # Find the reduced position (substract out axis)
+            reduced_position = (initial_positions[atom_index] - initial_positions[axis2])._value
+
+            # Find the new positions by multiplying by rot matrix
+            new_position = np.dot(rotation_matrix, reduced_position) * initial_positions.unit + initial_positions[axis2]
+
+            # Update the new positions
+            new_positions[atom_index][0] = new_position[0]
+            new_positions[atom_index][1] = new_position[1]
+            new_positions[atom_index][2] = new_position[2]
+
+        return new_positions
+
+    def _propose_positions(self, initial_positions):
+        """Implement MetropolizedMove._propose_positions for apply()"""
+        self.proposed_positions = self.rotate_positions(initial_positions)
+        return self.proposed_positions
 
 
 # =============================================================================

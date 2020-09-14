@@ -1,6 +1,12 @@
 Release History
 ***************
 
+0.21.0 - MC Dihedral Rotation Move
+========================================
+
+Enhancements
+------------
+- Add `MCDihedralRotationMove`, an extension of MetropolizedMove that allows rigid rotation moves about a specified dihedral
 
 0.20.0 - Periodic alchemical integrators
 ========================================
