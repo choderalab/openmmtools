@@ -89,10 +89,11 @@ jobs:
 
       - name: Run tests
         shell: bash -l {0}
-        working-directory: ./temp
         run: |
+          mkdir ../temp
+          cd ../temp
           # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
-          nosetests /home/runner/work/openmmtools/openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
+          nosetests ../openmmtools/openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
         uses: codecov/codecov-action@v1
