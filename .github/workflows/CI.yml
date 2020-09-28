@@ -89,6 +89,7 @@ jobs:
 
       - name: Run tests
         shell: bash -l {0}
+        working-directory: ./temp
         run: |
           # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
           nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
