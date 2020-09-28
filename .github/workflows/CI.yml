@@ -92,9 +92,7 @@ jobs:
         working-directory: ./temp
         run: |
           # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
-          pwd
-          ls
-          nosetests ../openmmtools/openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
+          nosetests /home/runner/work/openmmtools/openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
         uses: codecov/codecov-action@v1
