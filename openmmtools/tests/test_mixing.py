@@ -8,8 +8,6 @@ import copy
 
 import numpy as np
 import scipy.stats as stats
-import openmmtools.multistate.mixing._mix_replicas as mixing
-
 
 def mix_replicas(n_swaps=100, n_states=16, u_kl=None, nswap_attempts=None):
     """
@@ -38,8 +36,9 @@ def mix_replicas(n_swaps=100, n_states=16, u_kl=None, nswap_attempts=None):
     Nij_proposed =  np.zeros([n_states,n_states], dtype=np.int64)
     Nij_accepted = np.zeros([n_states,n_states], dtype=np.int64)
     permutation_list = []
+    from openmmtools.multistate import ReplicaExchangeSampler
     for i in range(n_swaps):
-        mixing._mix_replicas_cython(nswap_attempts, n_states, replica_states, u_kl, Nij_proposed, Nij_accepted)
+        ReplicaExchangeSampler._mix_all_replicas_numba(nswap_attempts, n_states, replica_states, u_kl, Nij_proposed, Nij_accepted)
         permutation_list.append(copy.deepcopy(replica_states))
     permutation_list_np = np.array(permutation_list, dtype=np.int64)
     return permutation_list_np

@@ -1,6 +1,12 @@
 Release History
 ***************
 
+0.20.1 - Bugfix release
+========================================
+
+Bugfixes
+--------
+- Replace the [`cython`](https://cython.org/) accelerated `all-swap` replica mixing scheme with a [`numba`](https://numba.pydata.org/) implementation for better stability, and portability, and speed
 
 0.20.0 - Periodic alchemical integrators
 ========================================

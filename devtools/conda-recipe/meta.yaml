@@ -32,6 +32,8 @@ requirements:
     - mpiplus
     - pymbar
     - pyyaml
+    - numba
+    - nose
 
 test:
   requires:
