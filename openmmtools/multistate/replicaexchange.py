@@ -35,7 +35,7 @@ import logging
 
 import numpy as np
 import mdtraj as md
-from numba import jit
+from numba import njit
 
 from openmmtools import multistate, utils
 from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
@@ -266,10 +266,10 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             if self.replica_mixing_scheme == 'swap-neighbors':
                 self._mix_neighboring_replicas()
             elif self.replica_mixing_scheme == 'swap-all':
-                # Try to use cython-accelerated mixing code if possible,
+                nswap_attempts = n_replicas**3
+                # Try to use numba-accelerated mixing code if possible,
                 # otherwise fall back to Python-accelerated code.
                 try:
-                    nswap_attempts = n_replicas**3  # Best compromise for pure Python?
                     self._mix_all_replicas_numba(
                         nswap_attempts, self.n_replicas,
                         self._replica_thermodynamic_states, self._energy_thermodynamic_states,
@@ -277,7 +277,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                         )
                 except (ValueError, ImportError) as e:
                     logger.warning(str(e))
-                    self._mix_all_replicas()
+                    self._mix_all_replicas(nswap_attempts)
             else:
                 assert self.replica_mixing_scheme is None
 
@@ -292,12 +292,34 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                                                                        swap_fraction_accepted * 100.0))
 
     @staticmethod
-    @jit(nopython=True)
-    def _mix_all_replicas_numba(nswap_attempts, n_replicas, _replica_thermodynamic_states, _energy_thermodynamic_states, _n_accepted_matrix, _n_proposed_matrix):
+    @njit
+    def _mix_all_replicas_numba(
+        nswap_attempts,
+        n_replicas, _replica_thermodynamic_states, _energy_thermodynamic_states,
+        _n_accepted_matrix, _n_proposed_matrix):
         """
         numba-accelerated version of _mix_all_replicas()
+
+        All arguments must be passed during the function call because of numba jit limitations.
+
+        Parameters
+        ----------
+        nswap_attempts : int
+            Number of swaps to attempt
+        n_replicas : int
+            Number of replicas
+        _replica_thermodynamic_states : array-like of int of shape [n_replicas]
+            _replica_thermodynamic_states[replica_index] is the thermodynamic state visited by that replica
+        _energy_thermodynamic_states : array-like of float of shape [n_replicas, n_replicas]
+            _energy_thermodynamic_states[replica_index,state_index] is the reduced potential of state ``state_index``
+            for replica ``replica_index``
+        _n_accepted_matrix : array-like of float of shape [n_replicas, n_replicas]
+            _n_accepted_matrix[from_state,to_state] is the number of accepted swaps
+        _n_proposed_matrix : array-like of float of shape [n_replicas, n_replicas]
+            _n_accepted_matrix[from_state,to_state] is the number of proposed swaps
         """
         for swap_attempt in range(nswap_attempts):
+
             # Choose random replicas uniformly to attempt to swap.
             replica_i = np.random.randint(n_replicas)
             replica_j = np.random.randint(n_replicas)
@@ -326,15 +348,12 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                 _n_accepted_matrix[thermodynamic_state_i, thermodynamic_state_j] += 1
                 _n_accepted_matrix[thermodynamic_state_j, thermodynamic_state_i] += 1
 
-    def _mix_all_replicas(self):
+    def _mix_all_replicas(self, nswap_attempts=100):
         """Exchange all replicas with Python."""
         # Determine number of swaps to attempt to ensure thorough mixing.
         # TODO: Replace this with analytical result computed to guarantee sufficient mixing, or
         # TODO:     adjust it  based on how many we can afford to do and not have mixing take a
         # TODO:     substantial fraction of iteration time.
-        nswap_attempts = self.n_replicas**5  # Number of swaps to attempt (ideal, but too slow!)
-        nswap_attempts = self.n_replicas**3  # Best compromise for pure Python?
-
         logger.debug("Will attempt to swap all pairs of replicas, using a total of %d attempts." % nswap_attempts)
 
         # Attempt swaps to mix replicas.
