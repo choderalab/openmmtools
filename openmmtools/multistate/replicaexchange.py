@@ -266,7 +266,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             if self.replica_mixing_scheme == 'swap-neighbors':
                 self._mix_neighboring_replicas()
             elif self.replica_mixing_scheme == 'swap-all':
-                nswap_attempts = n_replicas**3
+                nswap_attempts = self.n_replicas**3
                 # Try to use numba-accelerated mixing code if possible,
                 # otherwise fall back to Python-accelerated code.
                 try:

@@ -33,6 +33,7 @@ requirements:
     - pymbar
     - pyyaml
     - numba
+    - nose
 
 test:
   requires:
