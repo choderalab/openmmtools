@@ -1171,6 +1171,13 @@ class ThermodynamicState(object):
                 raise ValueError("To set platform_properties, you need to also specify the platform.")
             return openmm.Context(system, integrator)
         elif platform_properties is None:
+            # DEBUG BEGIN
+            print('state.create_context()')
+            print(' platform: ', platform)
+            print(' platform_properties: ', platform_properties)
+            if platform is not None:
+                print(' platform.getName(): ', platform.getName())
+            # DEBUG END
             return openmm.Context(system, integrator, platform)
         else:
             return openmm.Context(system, integrator, platform, platform_properties)

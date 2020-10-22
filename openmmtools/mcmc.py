@@ -652,6 +652,12 @@ class BaseIntegratorMove(MCMCMove):
 
         # Create context.
         timer.start("{}: Context request".format(move_name))
+        # DEBUG BEGIN
+        print('BaseIntegratorMove.apply()')
+        print(' thermodynamic_state:', thermodynamic_state)
+        print(' integrator: ', integrator)
+        print(' context_cache: ', context_cache)        
+        # DEBUG END
         context, integrator = context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
         #logger.debug("{}: Context obtained, platform is {}".format(
