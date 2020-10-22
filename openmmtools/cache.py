@@ -751,13 +751,6 @@ class DummyContextCache(object):
                 splitting="V R O R V",
                 temperature=thermodynamic_state.temperature
             )
-        # DEBUG BEGIN
-        print('DummyContextCache.get_context()')
-        print(' integrator: ', integrator)
-        print(' self.platform: ', self.platform)
-        if self.platform is not None:
-            print(' self.platform.getName(): ', self.platform.getName())
-        # DEBUG END
         context = thermodynamic_state.create_context(integrator, self.platform)
         return context, integrator
 

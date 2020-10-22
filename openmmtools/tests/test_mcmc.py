@@ -244,15 +244,9 @@ def test_context_cache():
 
     # DummyContextCache works for all platforms.
     platforms = utils.get_available_platforms()
-    # DEBUG BEGIN
-    print('platforms: ', platforms)
-    for platform in platforms:
-        print(' ', platform.getName())
-    # DEBUG END
     dummy_cache = cache.DummyContextCache()
     for platform in platforms:
         dummy_cache.platform = platform
-        print(' dummy_cache.platform.getName()', platform.getName())
         move = LangevinDynamicsMove(n_steps=5, context_cache=dummy_cache)
         move.apply(thermodynamic_state, sampler_state)
     assert len(cache.global_context_cache) == 0

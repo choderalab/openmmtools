@@ -510,16 +510,83 @@ def typename(atype):
 # OPENMM PLATFORM UTILITIES
 # =============================================================================
 
-def get_available_platforms():
-    """Return a list of the available OpenMM Platforms."""
-    return [openmm.Platform.getPlatform(i)
-            for i in range(openmm.Platform.getNumPlatforms())]
+def platform_supports_precision(platform, precision):
+    """Determine whether the specified OpenMM Platform supports the specified minimum precision.
 
+    Parameters
+    ----------
+    platform : str or openmm.Platform
+        The platform or platform name to check
+    precision : str
+        One of ['single', 'mixed', 'double']
 
-def get_fastest_platform():
+    Returns
+    -------
+    is_supported : bool
+        True if the platform supports the specified precision; False otherwise
+    """
+    SUPPORTED_PRECISIONS = ['single', 'mixed', 'double']
+    assert precision in SUPPORTED_PRECISIONS, f"Precision {precision} must be one of {SUPPORTED_PRECISIONS}"
+
+    if isinstance(platform, str):
+        # Get the actual Platform object if the platform_name was specified
+        platform = openmm.Platform.getPlatformByName(platform)
+
+    if platform.getName() == 'Reference':
+        # Reference is double precision
+        return True
+
+    if platform.getName() == 'CPU':
+        if 'precision' in ['single', 'mixed']:
+            return True
+        else:
+            return False
+
+    if platform.getName() in ['CUDA', 'OpenCL']:
+        from simtk import openmm
+        properties = { 'Precision' : precision }
+        system = openmm.System()
+        integrator = openmm.VerletIntegrator(0.001)
+        try:
+            context = openmm.Context(system, integrator, properties)
+            del context, integrator
+            return True
+        except Exception as e:
+            return False
+
+    raise Exception(f"Platform {platform.getName()} unknown")
+
+def get_available_platforms(minimum_precision='mixed'):
+    """Return a list of the available OpenMM Platforms that can satisfy the requested minimum precision.
+
+    Parameters
+    ----------
+    minimum_precision : str, optional, default='mixed'
+        One of [None, 'single', 'mixed', 'double']
+        If None, all available platforms will be returned.
+
+    Returns
+    -------
+    platforms : list of openmm.Platform
+        Platforms that support specified minimumprecision
+    """
+    platforms = [openmm.Platform.getPlatform(i) for i in range(openmm.Platform.getNumPlatforms())]
+
+    if minimum_precision is not None:
+        # Filter based on precision support
+        platforms = [ platform for platform in platforms if platform_supports_precision(platform, minimum_precision) ]
+
+    return platforms
+
+def get_fastest_platform(minimum_precision='mixed'):
     """Return the fastest available platform.
 
     This relies on the hardcoded speed values in Platform.getSpeed().
+
+    Parameters
+    ----------
+    minimum_precision : str, optional, default='mixed'
+        One of ['single', 'mixed', 'double']
 
     Returns
     -------
@@ -527,7 +594,7 @@ def get_fastest_platform():
        The fastest available platform.
 
     """
-    platforms = get_available_platforms()
+    platforms = get_available_platforms(minimum_precision=minimum_precision)
     fastest_platform = max(platforms, key=lambda x: x.getSpeed())
     return fastest_platform
 
