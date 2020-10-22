@@ -47,8 +47,11 @@ def temporary_directory():
     try:
         yield tmp_dir
     finally:
-        shutil.rmtree(tmp_dir)
-
+        try:
+            shutil.rmtree(tmp_dir)
+        except Exception as e:
+            # Warn that we weren't able to clean up completely
+            logger.warning(e)
 
 # =============================================================================
 # BENCHMARKING UTILITIES
