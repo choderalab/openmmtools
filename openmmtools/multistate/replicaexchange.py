@@ -35,6 +35,7 @@ import logging
 
 import numpy as np
 import mdtraj as md
+from numba import jit
 
 from openmmtools import multistate, utils
 from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
@@ -268,7 +269,12 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                 # Try to use cython-accelerated mixing code if possible,
                 # otherwise fall back to Python-accelerated code.
                 try:
-                    self._mix_all_replicas_cython()
+                    nswap_attempts = n_replicas**3  # Best compromise for pure Python?
+                    self._mix_all_replicas_numba(
+                        nswap_attempts, self.n_replicas,
+                        self._replica_thermodynamic_states, self._energy_thermodynamic_states,
+                        self._n_accepted_matrix, self._n_proposed_matrix
+                        )
                 except (ValueError, ImportError) as e:
                     logger.warning(str(e))
                     self._mix_all_replicas()
@@ -285,20 +291,40 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
 
-    def _mix_all_replicas_cython(self):
-        """Exchange all replicas with Cython-accelerated code."""
-        from openmmtools.multistate.mixing._mix_replicas import _mix_replicas_cython
+    @staticmethod
+    @jit(nopython=True)
+    def _mix_all_replicas_numba(nswap_attempts, n_replicas, _replica_thermodynamic_states, _energy_thermodynamic_states, _n_accepted_matrix, _n_proposed_matrix):
+        """
+        numba-accelerated version of _mix_all_replicas()
+        """
+        for swap_attempt in range(nswap_attempts):
+            # Choose random replicas uniformly to attempt to swap.
+            replica_i = np.random.randint(n_replicas)
+            replica_j = np.random.randint(n_replicas)
 
-        replica_states = md.utils.ensure_type(self._replica_thermodynamic_states, np.int64, 1, "Replica States")
-        u_kl = md.utils.ensure_type(self._energy_thermodynamic_states, np.float64, 2, "Reduced Potentials")
-        n_proposed_matrix = md.utils.ensure_type(self._n_proposed_matrix, np.int64, 2, "Nij Proposed Swaps")
-        n_accepted_matrix = md.utils.ensure_type(self._n_accepted_matrix, np.int64, 2, "Nij Accepted Swaps")
-        _mix_replicas_cython(self.n_replicas**4, self.n_replicas, replica_states,
-                             u_kl, n_proposed_matrix, n_accepted_matrix)
+            # Determine the thermodynamic states associated to these replicas.
+            thermodynamic_state_i = _replica_thermodynamic_states[replica_i]
+            thermodynamic_state_j = _replica_thermodynamic_states[replica_j]
 
-        self._replica_thermodynamic_states = replica_states
-        self._n_proposed_matrix = n_proposed_matrix
-        self._n_accepted_matrix = n_accepted_matrix
+            # Compute log probability of swap.
+            energy_ij = _energy_thermodynamic_states[replica_i, thermodynamic_state_j]
+            energy_ji = _energy_thermodynamic_states[replica_j, thermodynamic_state_i]
+            energy_ii = _energy_thermodynamic_states[replica_i, thermodynamic_state_i]
+            energy_jj = _energy_thermodynamic_states[replica_j, thermodynamic_state_j]
+            log_p_accept = - (energy_ij + energy_ji) + energy_ii + energy_jj
+
+            # Record that this move has been proposed.
+            _n_proposed_matrix[thermodynamic_state_i, thermodynamic_state_j] += 1
+            _n_proposed_matrix[thermodynamic_state_j, thermodynamic_state_i] += 1
+
+            # Accept or reject.
+            if log_p_accept >= 0.0 or np.random.rand() < np.exp(log_p_accept):
+                # Swap states in replica slots i and j.
+                _replica_thermodynamic_states[replica_i] = thermodynamic_state_j
+                _replica_thermodynamic_states[replica_j] = thermodynamic_state_i
+                # Accumulate statistics.
+                _n_accepted_matrix[thermodynamic_state_i, thermodynamic_state_j] += 1
+                _n_accepted_matrix[thermodynamic_state_j, thermodynamic_state_i] += 1
 
     def _mix_all_replicas(self):
         """Exchange all replicas with Python."""

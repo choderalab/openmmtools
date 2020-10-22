@@ -32,6 +32,7 @@ requirements:
     - mpiplus
     - pymbar
     - pyyaml
+    - numba
 
 test:
   requires:
