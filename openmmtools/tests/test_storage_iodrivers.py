@@ -13,26 +13,11 @@ import numpy as np
 from simtk import unit
 import contextlib
 import tempfile
-import shutil
 
 from nose import tools
 
 from openmmtools.storage import NetCDFIODriver
-
-
-# =============================================================================================
-# TEST HELPER FUNCTIONS
-# =============================================================================================
-
-@contextlib.contextmanager
-def temporary_directory():
-    """Context for safe creation of temporary directories."""
-    tmp_dir = tempfile.mkdtemp()
-    try:
-        yield tmp_dir
-    finally:
-        shutil.rmtree(tmp_dir)
-
+from openmmtools.utils import temporary_directory
 
 # =============================================================================================
 # NETCDFIODRIVER TESTING FUNCTIONS
