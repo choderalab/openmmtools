@@ -81,7 +81,7 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
 
     N_SAMPLERS = 3
     N_STATES = 5 # number of thermodynamic states to sample; two additional unsampled states will be added
-    N_ITERATIONS = 500 # number of iterations
+    N_ITERATIONS = 1000 # number of iterations
     SAMPLER = MultiStateSampler
     ANALYZER = MultiStateSamplerAnalyzer
 
@@ -222,7 +222,7 @@ class TestHarmonicOscillatorsSAMSSampler(TestHarmonicOscillatorsMultiStateSample
 
     N_SAMPLERS = 1
     N_STATES = 5
-    N_ITERATIONS = 500 * N_STATES # number of iterations
+    N_ITERATIONS = 1000 * N_STATES # number of iterations
     SAMPLER = SAMSSampler
     ANALYZER = SAMSAnalyzer
 
@@ -1449,8 +1449,8 @@ class TestExtraSamplersMultiStateSampler(TestMultiStateSampler):
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
 
-    N_SAMPLERS = 8
-    N_STATES = 5
+    N_SAMPLERS = 5
+    N_STATES = 3
     SAMPLER = MultiStateSampler
     REPORTER = MultiStateReporter
 
