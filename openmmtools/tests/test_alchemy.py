@@ -882,8 +882,8 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
                 # Add particle to Force..
                 parameters = reference_force.getParticleParameters(particle_index)
                 try:  # GBSAOBCForce
-                    force.addParticle(*parameters)                    
-                except TypeError:  # CustomGBForce
+                    force.addParticle(*parameters)
+                except (TypeError, NotImplementedError):  # CustomGBForce
                     force.addParticle(parameters)
 
         system.addForce(force)
