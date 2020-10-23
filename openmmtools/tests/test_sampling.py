@@ -222,6 +222,7 @@ class TestHarmonicOscillatorsSAMSSampler(TestHarmonicOscillatorsMultiStateSample
 
     N_SAMPLERS = 1
     N_STATES = 5
+    N_ITERATIONS = 500 * N_STATES # number of iterations
     SAMPLER = SAMSSampler
     ANALYZER = SAMSAnalyzer
 
