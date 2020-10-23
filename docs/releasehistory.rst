@@ -4,6 +4,10 @@ Release History
 0.20.1 - Bugfix release
 ========================================
 
+Enhancements
+------------
+- `openmmtools.utils.get_available_platforms()` and `.get_fastest_platform()` now filter OpenMM Platforms based on specified minimum precision support, which defaults to ``mixed``
+
 Bugfixes
 --------
 - Replace the [`cython`](https://cython.org/) accelerated `all-swap` replica mixing scheme with a [`numba`](https://numba.pydata.org/) implementation for better stability, and portability, and speed

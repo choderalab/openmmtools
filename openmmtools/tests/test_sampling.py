@@ -38,6 +38,7 @@ from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyz
 from openmmtools.multistate import ParallelTemperingSampler, ParallelTemperingAnalyzer
 from openmmtools.multistate import SAMSSampler, SAMSAnalyzer
 from openmmtools.multistate.multistatereporter import _DictYamlLoader
+from openmmtools.utils import temporary_directory
 
 # quiet down some citation spam
 MultiStateSampler._global_citation_silence = True
@@ -80,7 +81,7 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
 
     N_SAMPLERS = 3
     N_STATES = 5 # number of thermodynamic states to sample; two additional unsampled states will be added
-    N_ITERATIONS = 500 # number of iterations
+    N_ITERATIONS = 1000 # number of iterations
     SAMPLER = MultiStateSampler
     ANALYZER = MultiStateSamplerAnalyzer
 
@@ -139,7 +140,7 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
         simulation = self.SAMPLER(mcmc_moves=move, number_of_iterations=self.N_ITERATIONS)
 
         # Define file for temporary storage.
-        with mmtools.utils.temporary_directory() as tmp_dir:
+        with temporary_directory() as tmp_dir:
             storage = os.path.join(tmp_dir, 'test_storage.nc')
             reporter = MultiStateReporter(storage, checkpoint_interval=self.N_ITERATIONS)
 
@@ -221,6 +222,7 @@ class TestHarmonicOscillatorsSAMSSampler(TestHarmonicOscillatorsMultiStateSample
 
     N_SAMPLERS = 1
     N_STATES = 5
+    N_ITERATIONS = 1000 * N_STATES # number of iterations
     SAMPLER = SAMSSampler
     ANALYZER = SAMSAnalyzer
 
@@ -235,7 +237,7 @@ class TestReporter(object):
     @contextlib.contextmanager
     def temporary_reporter(checkpoint_interval=1, checkpoint_storage=None, analysis_particle_indices=()):
         """Create and initialize a reporter in a temporary directory."""
-        with mmtools.utils.temporary_directory() as tmp_dir_path:
+        with temporary_directory() as tmp_dir_path:
             storage_file = os.path.join(tmp_dir_path, 'temp_dir/test_storage.nc')
             assert not os.path.isfile(storage_file)
             reporter = MultiStateReporter(storage=storage_file, open_mode='w',
@@ -379,7 +381,7 @@ class TestReporter(object):
         set1_analysis_particles = (0, 1)
         set2_analysis_particles = (0, 2)
         # Does not use the temp reporter since we close and reopen reporter a few times
-        with mmtools.utils.temporary_directory() as tmp_dir_path:
+        with temporary_directory() as tmp_dir_path:
             # Test that starting with a blank analysis cannot be overwritten
             blank_file = os.path.join(tmp_dir_path, 'temp_dir/blank_analysis.nc')
             reporter = MultiStateReporter(storage=blank_file, open_mode='w',
@@ -672,7 +674,7 @@ class TestMultiStateSampler(object):
 
         """
         mpicomm = mpiplus.get_mpicomm()
-        with mmtools.utils.temporary_directory() as tmp_dir_path:
+        with temporary_directory() as tmp_dir_path:
             storage_file_path = os.path.join(tmp_dir_path, 'test_storage.nc')
             if mpicomm is not None:
                 storage_file_path = mpicomm.bcast(storage_file_path, root=0)
@@ -1447,8 +1449,8 @@ class TestExtraSamplersMultiStateSampler(TestMultiStateSampler):
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
 
-    N_SAMPLERS = 8
-    N_STATES = 5
+    N_SAMPLERS = 5
+    N_STATES = 3
     SAMPLER = MultiStateSampler
     REPORTER = MultiStateReporter
 
