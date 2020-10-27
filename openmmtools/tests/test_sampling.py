@@ -1487,27 +1487,35 @@ class TestReplicaExchange(TestMultiStateSampler):
 
         """
         temperature = 300.0 * unit.kelvin
-        sigma = 1.0 * unit.angstrom  # Distance between two oscillators.
-        n_states = 50  # Number of harmonic oscillators.
+        sigma = 1.0 * unit.angstrom  # Oscillator width
+        #n_states = 50  # Number of harmonic oscillators.
+        n_states = 6  # DEBUG
+        n_states = 20  # DEBUG
 
-        timestep = 2.0 * unit.femtosecond
-        n_steps = 5  # Number of steps per iteration.
+        collision_rate = 10.0 / unit.picoseconds
+
         number_of_iterations = 2000
+        number_of_iterations = 200 # DEBUG
 
         # Build an equidistant sequence of harmonic oscillators.
         sampler_states = []
         thermodynamic_states = []
 
         # The minima of the harmonic oscillators are 1 kT from each other.
-        k = mmtools.constants.kB * temperature / sigma**2  # Spring constant.
-        oscillator = testsystems.HarmonicOscillator(K=k)
+        K = mmtools.constants.kB * temperature / sigma**2  # spring constant
+        mass = 39.948*unit.amu # mass
+        period = 2*np.pi*np.sqrt(mass/K)
+        n_steps = 20  # Number of steps per iteration.
+        timestep = period / n_steps
+        spacing_sigma = 0.05
+        oscillator = testsystems.HarmonicOscillator(K=K, mass=mass)
 
         for oscillator_idx in range(n_states):
             system = copy.deepcopy(oscillator.system)
             positions = copy.deepcopy(oscillator.positions)
 
             # Determine the position of the harmonic oscillator minimum.
-            minimum_position = oscillator_idx * sigma
+            minimum_position = oscillator_idx * sigma * spacing_sigma
             minimum_position_unitless = minimum_position.value_in_unit_system(unit.md_unit_system)
             positions[0][0] = minimum_position
 
@@ -1524,11 +1532,13 @@ class TestReplicaExchange(TestMultiStateSampler):
         with self.temporary_storage_path() as storage_path:
             # Create and run object.
             sampler = self.SAMPLER(
-                mcmc_moves=mmtools.mcmc.LangevinDynamicsMove(timestep=timestep, n_steps=n_steps),
+                mcmc_moves=mmtools.mcmc.LangevinDynamicsMove(timestep=timestep, collision_rate=collision_rate, n_steps=n_steps),
                 number_of_iterations=number_of_iterations,
             )
             reporter = self.REPORTER(storage_path, checkpoint_interval=number_of_iterations)
             sampler.create(thermodynamic_states, sampler_states, reporter)
+            #sampler.replica_mixing_scheme = 'swap-neighbors'
+            sampler.replica_mixing_scheme = 'swap-all'
             sampler.run()
 
             # Retrieve from the reporter the mixing information before deleting.
@@ -1553,7 +1563,9 @@ class TestReplicaExchange(TestMultiStateSampler):
             # Count the number of visited states by each replica.
             replica_thermo_state_counts = np.empty(n_states)
             for replica_idx in range(n_states):
-                n_visited_states = len(set(replica_thermo_states[:, replica_idx]))
+                state_trajectory = replica_thermo_states[:, replica_idx]
+                #print(f"replica {replica_idx} : {''.join([ str(state) for state in state_trajectory ])}")
+                n_visited_states = len(set(state_trajectory))
                 replica_thermo_state_counts[replica_idx] = n_visited_states
                 print(replica_idx, ':', n_visited_states)
             print()
@@ -1746,4 +1758,8 @@ if __name__ == "__main__":
     # Test simple system of harmonic oscillators.
     # Disabled until we fix the test
     # test_replica_exchange()
-    quit()
+
+    print('Creating class')
+    repex = TestReplicaExchange()
+    print('testing...')
+    repex.test_uniform_mixing()
