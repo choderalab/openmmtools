@@ -1687,6 +1687,7 @@ class TestParallelTempering(TestMultiStateSampler):
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
 
+    from simtk import unit
     N_SAMPLERS = 3
     N_STATES = 3
     SAMPLER = ParallelTemperingSampler
@@ -1712,6 +1713,26 @@ class TestParallelTempering(TestMultiStateSampler):
         sampler.create(single_state, sampler_states, reporter,
                        min_temperature=cls.MIN_TEMP, max_temperature=cls.MAX_TEMP, n_temperatures=cls.N_STATES,
                        unsampled_thermodynamic_states=unsampled_states)
+
+    def test_temperatures(self):
+        """
+        Test temperatures are created with desired range
+        """
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+
+        with self.temporary_storage_path() as storage_path:
+            sampler = self.SAMPLER()
+            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
+
+            self.call_sampler_create(sampler, reporter,
+                thermodynamic_states, sampler_states,
+                unsampled_states)
+
+            from simtk import unit
+            temperatures = [state.temperature/unit.kelvin for state in sampler._thermodynamic_states] # in kelvin
+            assert len(temperatures) == self.N_STATES, f"There are {len(temperatures)} thermodynamic states; expected {self.N_STATES}"
+            assert np.isclose(min(temperatures), (self.MIN_TEMP/unit.kelvin)), f"Min temperature is {min(temperatures)} K; expected {(self.MIN_TEMP/unit.kelvin)} K"
+            assert np.isclose(max(temperatures), (self.MAX_TEMP/unit.kelvin)), f"Max temperature is {max(temperatures)} K; expected {(self.MAX_TEMP/unit.kelvin)} K"
 
     # ----------------------------------
     # Methods overwritten from the Super
