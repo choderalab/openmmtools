@@ -154,9 +154,9 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
         if temperatures is not None:
             logger.debug("Using provided temperatures")
         elif min_temperature is not None and max_temperature is not None and n_temperatures is not None:
-            temperatures = [min_temperature + (max_temperature - min_temperature) *
-                            (math.exp(i / n_temperatures-1) - 1.0) / (math.e - 1.0)
-                            for i in range(n_temperatures)]  # Python 3 uses true division for /
+            from simtk import unit
+            temperature_unit = unit.kelvin
+            temperatures = np.logspace(np.log10(min_temperature/temperature_unit), np.log10(max_temperature/temperature_unit), num=n_temperatures) * temperature_unit
             logger.debug('using temperatures {}'.format(temperatures))
         else:
             raise ValueError("Either 'temperatures' or ('min_temperature', 'max_temperature', "

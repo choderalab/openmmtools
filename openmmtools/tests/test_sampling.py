@@ -577,11 +577,15 @@ class TestMultiStateSampler(object):
         self.actual_stored_properties_check()
 
     @classmethod
-    def _compute_energies_independently(cls, thermodynamic_states, sampler_states, unsampled_states):
+    def _compute_energies_independently(cls, sampler):
         """
         Helper function to compute energies by hand.
         This is overwritten by subclasses
         """
+        thermodynamic_states = sampler._thermodynamic_states
+        unsampled_states = sampler._unsampled_states
+        sampler_states = sampler._sampler_states
+
         n_states = len(thermodynamic_states)
         n_replicas = len(sampler_states)
         # Compute the energies independently.
@@ -1054,25 +1058,17 @@ class TestMultiStateSampler(object):
             sampler._compute_energies()
 
             # Compute energies at all states
-            energy_thermodynamic_states = np.zeros((n_replicas, n_states))
-            energy_unsampled_states = np.zeros((n_replicas, len(unsampled_states)))
-            for energies, states in [(energy_thermodynamic_states, thermodynamic_states),
-                                     (energy_unsampled_states, unsampled_states)]:
-                for i, sampler_state in enumerate(sampler_states):
-                    for j, state in enumerate(states):
-                        context, integrator = mmtools.cache.global_context_cache.get_context(state)
-                        sampler_state.apply_to_context(context)
-                        energies[i][j] = state.reduced_potential(context)
-
-            energy_thermodynamic_states, energy_unsampled_states = \
-                self._compute_energies_independently(thermodynamic_states, sampler_states, unsampled_states)
+            energy_thermodynamic_states, energy_unsampled_states = self._compute_energies_independently(sampler)
 
             # Only node 0 has all the energies.
             mpicomm = mpiplus.get_mpicomm()
             if mpicomm is None or mpicomm.rank == 0:
                 for replica_index in range(n_replicas):
                     neighborhood = sampler._neighborhoods[replica_index,:]
-                    assert np.allclose(sampler._energy_thermodynamic_states[replica_index,neighborhood], energy_thermodynamic_states[replica_index,neighborhood])
+                    msg = f"{sampler} failed test_compute_energies:\n"
+                    msg += f"{sampler._energy_thermodynamic_states}\n"
+                    msg += f"{energy_thermodynamic_states}"
+                    assert np.allclose(sampler._energy_thermodynamic_states[replica_index,neighborhood], energy_thermodynamic_states[replica_index,neighborhood]), msg
                 assert np.allclose(sampler._energy_unsampled_states, energy_unsampled_states)
 
     def test_minimize(self):
@@ -1487,27 +1483,35 @@ class TestReplicaExchange(TestMultiStateSampler):
 
         """
         temperature = 300.0 * unit.kelvin
-        sigma = 1.0 * unit.angstrom  # Distance between two oscillators.
-        n_states = 50  # Number of harmonic oscillators.
+        sigma = 1.0 * unit.angstrom  # Oscillator width
+        #n_states = 50  # Number of harmonic oscillators.
+        n_states = 6  # DEBUG
+        n_states = 20  # DEBUG
 
-        timestep = 2.0 * unit.femtosecond
-        n_steps = 5  # Number of steps per iteration.
+        collision_rate = 10.0 / unit.picoseconds
+
         number_of_iterations = 2000
+        number_of_iterations = 200 # DEBUG
 
         # Build an equidistant sequence of harmonic oscillators.
         sampler_states = []
         thermodynamic_states = []
 
         # The minima of the harmonic oscillators are 1 kT from each other.
-        k = mmtools.constants.kB * temperature / sigma**2  # Spring constant.
-        oscillator = testsystems.HarmonicOscillator(K=k)
+        K = mmtools.constants.kB * temperature / sigma**2  # spring constant
+        mass = 39.948*unit.amu # mass
+        period = 2*np.pi*np.sqrt(mass/K)
+        n_steps = 20  # Number of steps per iteration.
+        timestep = period / n_steps
+        spacing_sigma = 0.05
+        oscillator = testsystems.HarmonicOscillator(K=K, mass=mass)
 
         for oscillator_idx in range(n_states):
             system = copy.deepcopy(oscillator.system)
             positions = copy.deepcopy(oscillator.positions)
 
             # Determine the position of the harmonic oscillator minimum.
-            minimum_position = oscillator_idx * sigma
+            minimum_position = oscillator_idx * sigma * spacing_sigma
             minimum_position_unitless = minimum_position.value_in_unit_system(unit.md_unit_system)
             positions[0][0] = minimum_position
 
@@ -1524,11 +1528,13 @@ class TestReplicaExchange(TestMultiStateSampler):
         with self.temporary_storage_path() as storage_path:
             # Create and run object.
             sampler = self.SAMPLER(
-                mcmc_moves=mmtools.mcmc.LangevinDynamicsMove(timestep=timestep, n_steps=n_steps),
+                mcmc_moves=mmtools.mcmc.LangevinDynamicsMove(timestep=timestep, collision_rate=collision_rate, n_steps=n_steps),
                 number_of_iterations=number_of_iterations,
             )
             reporter = self.REPORTER(storage_path, checkpoint_interval=number_of_iterations)
             sampler.create(thermodynamic_states, sampler_states, reporter)
+            #sampler.replica_mixing_scheme = 'swap-neighbors'
+            sampler.replica_mixing_scheme = 'swap-all'
             sampler.run()
 
             # Retrieve from the reporter the mixing information before deleting.
@@ -1553,7 +1559,9 @@ class TestReplicaExchange(TestMultiStateSampler):
             # Count the number of visited states by each replica.
             replica_thermo_state_counts = np.empty(n_states)
             for replica_idx in range(n_states):
-                n_visited_states = len(set(replica_thermo_states[:, replica_idx]))
+                state_trajectory = replica_thermo_states[:, replica_idx]
+                #print(f"replica {replica_idx} : {''.join([ str(state) for state in state_trajectory ])}")
+                n_visited_states = len(set(state_trajectory))
                 replica_thermo_state_counts[replica_idx] = n_visited_states
                 print(replica_idx, ':', n_visited_states)
             print()
@@ -1675,6 +1683,7 @@ class TestParallelTempering(TestMultiStateSampler):
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
 
+    from simtk import unit
     N_SAMPLERS = 3
     N_STATES = 3
     SAMPLER = ParallelTemperingSampler
@@ -1701,12 +1710,32 @@ class TestParallelTempering(TestMultiStateSampler):
                        min_temperature=cls.MIN_TEMP, max_temperature=cls.MAX_TEMP, n_temperatures=cls.N_STATES,
                        unsampled_thermodynamic_states=unsampled_states)
 
+    def test_temperatures(self):
+        """
+        Test temperatures are created with desired range
+        """
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+
+        with self.temporary_storage_path() as storage_path:
+            sampler = self.SAMPLER()
+            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
+
+            self.call_sampler_create(sampler, reporter,
+                thermodynamic_states, sampler_states,
+                unsampled_states)
+
+            from simtk import unit
+            temperatures = [state.temperature/unit.kelvin for state in sampler._thermodynamic_states] # in kelvin
+            assert len(temperatures) == self.N_STATES, f"There are {len(temperatures)} thermodynamic states; expected {self.N_STATES}"
+            assert np.isclose(min(temperatures), (self.MIN_TEMP/unit.kelvin)), f"Min temperature is {min(temperatures)} K; expected {(self.MIN_TEMP/unit.kelvin)} K"
+            assert np.isclose(max(temperatures), (self.MAX_TEMP/unit.kelvin)), f"Max temperature is {max(temperatures)} K; expected {(self.MAX_TEMP/unit.kelvin)} K"
+
     # ----------------------------------
     # Methods overwritten from the Super
     # ----------------------------------
 
     @classmethod
-    def _compute_energies_independently(cls, thermodynamic_states, sampler_states, unsampled_states):
+    def _compute_energies_independently(cls, sampler):
         """
         Helper function to compute energies by hand.
         This is overwritten from Super.
@@ -1714,17 +1743,15 @@ class TestParallelTempering(TestMultiStateSampler):
         There is faster way to compute sampled states with ParallelTempering that is O(N) as is done in production,
         but the O(N^2) way should get it right as well and serves as a decent check
         """
+        thermodynamic_states = sampler._thermodynamic_states
+        unsampled_states = sampler._unsampled_states
+        sampler_states = sampler._sampler_states
+
         n_states = len(thermodynamic_states)
         n_replicas = len(sampler_states)
-        reference_thermodynamic_state = thermodynamic_states[0]
-        temperatures = [cls.MIN_TEMP + (cls.MAX_TEMP - cls.MIN_TEMP) *
-                        (math.exp(i / n_states-1) - 1.0) / (math.e - 1.0)
-                        for i in range(n_states)]
 
-        thermodynamic_states = [copy.deepcopy(reference_thermodynamic_state) for _ in range(n_states)]
-        for temp, state in zip(temperatures, thermodynamic_states):
-            state.temperature = temp
-        # Compute the energies independently.
+        # Use the `ThermodynamicState.reduced_potential()` to ensure the fast
+        # parallel tempering specific subclass implementation works as desired
         energy_thermodynamic_states = np.zeros((n_replicas, n_states))
         energy_unsampled_states = np.zeros((n_replicas, len(unsampled_states)))
         for energies, states in [(energy_thermodynamic_states, thermodynamic_states),
@@ -1746,4 +1773,8 @@ if __name__ == "__main__":
     # Test simple system of harmonic oscillators.
     # Disabled until we fix the test
     # test_replica_exchange()
-    quit()
+
+    print('Creating class')
+    repex = TestReplicaExchange()
+    print('testing...')
+    repex.test_uniform_mixing()
