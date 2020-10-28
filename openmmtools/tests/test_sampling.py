@@ -577,11 +577,15 @@ class TestMultiStateSampler(object):
         self.actual_stored_properties_check()
 
     @classmethod
-    def _compute_energies_independently(cls, thermodynamic_states, sampler_states, unsampled_states):
+    def _compute_energies_independently(cls, sampler):
         """
         Helper function to compute energies by hand.
         This is overwritten by subclasses
         """
+        thermodynamic_states = sampler._thermodynamic_states
+        unsampled_states = sampelr._unsampled_states
+        sampler_states = sampler._sampler_states
+
         n_states = len(thermodynamic_states)
         n_replicas = len(sampler_states)
         # Compute the energies independently.
@@ -1054,18 +1058,7 @@ class TestMultiStateSampler(object):
             sampler._compute_energies()
 
             # Compute energies at all states
-            energy_thermodynamic_states = np.zeros((n_replicas, n_states))
-            energy_unsampled_states = np.zeros((n_replicas, len(unsampled_states)))
-            for energies, states in [(energy_thermodynamic_states, thermodynamic_states),
-                                     (energy_unsampled_states, unsampled_states)]:
-                for i, sampler_state in enumerate(sampler_states):
-                    for j, state in enumerate(states):
-                        context, integrator = mmtools.cache.global_context_cache.get_context(state)
-                        sampler_state.apply_to_context(context)
-                        energies[i][j] = state.reduced_potential(context)
-
-            energy_thermodynamic_states, energy_unsampled_states = \
-                self._compute_energies_independently(thermodynamic_states, sampler_states, unsampled_states)
+            energy_thermodynamic_states, energy_unsampled_states = self._compute_energies_independently(sampler)
 
             # Only node 0 has all the energies.
             mpicomm = mpiplus.get_mpicomm()
@@ -1742,7 +1735,7 @@ class TestParallelTempering(TestMultiStateSampler):
     # ----------------------------------
 
     @classmethod
-    def _compute_energies_independently(cls, thermodynamic_states, sampler_states, unsampled_states):
+    def _compute_energies_independently(cls, sampler):
         """
         Helper function to compute energies by hand.
         This is overwritten from Super.
@@ -1750,17 +1743,15 @@ class TestParallelTempering(TestMultiStateSampler):
         There is faster way to compute sampled states with ParallelTempering that is O(N) as is done in production,
         but the O(N^2) way should get it right as well and serves as a decent check
         """
+        thermodynamic_states = sampler._thermodynamic_states
+        unsampled_states = sampler._unsampled_states
+        sampler_states = sampler._sampler_states
+
         n_states = len(thermodynamic_states)
         n_replicas = len(sampler_states)
-        reference_thermodynamic_state = thermodynamic_states[0]
-        temperatures = [cls.MIN_TEMP + (cls.MAX_TEMP - cls.MIN_TEMP) *
-                        (math.exp(i / n_states-1) - 1.0) / (math.e - 1.0)
-                        for i in range(n_states)]
 
-        thermodynamic_states = [copy.deepcopy(reference_thermodynamic_state) for _ in range(n_states)]
-        for temp, state in zip(temperatures, thermodynamic_states):
-            state.temperature = temp
-        # Compute the energies independently.
+        # Use the `ThermodynamicState.reduced_potential()` to ensure the fast
+        # parallel tempering specific subclass implementation works as desired
         energy_thermodynamic_states = np.zeros((n_replicas, n_states))
         energy_unsampled_states = np.zeros((n_replicas, len(unsampled_states)))
         for energies, states in [(energy_thermodynamic_states, thermodynamic_states),
