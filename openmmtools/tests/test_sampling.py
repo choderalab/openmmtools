@@ -583,7 +583,7 @@ class TestMultiStateSampler(object):
         This is overwritten by subclasses
         """
         thermodynamic_states = sampler._thermodynamic_states
-        unsampled_states = sampelr._unsampled_states
+        unsampled_states = sampler._unsampled_states
         sampler_states = sampler._sampler_states
 
         n_states = len(thermodynamic_states)
