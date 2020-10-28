@@ -1072,7 +1072,10 @@ class TestMultiStateSampler(object):
             if mpicomm is None or mpicomm.rank == 0:
                 for replica_index in range(n_replicas):
                     neighborhood = sampler._neighborhoods[replica_index,:]
-                    assert np.allclose(sampler._energy_thermodynamic_states[replica_index,neighborhood], energy_thermodynamic_states[replica_index,neighborhood])
+                    msg = f"{sampler} failed test_compute_energies:\n"
+                    msg += f"{sampler._energy_thermodynamic_states}\n"
+                    msg += f"{energy_thermodynamic_states}"
+                    assert np.allclose(sampler._energy_thermodynamic_states[replica_index,neighborhood], energy_thermodynamic_states[replica_index,neighborhood]), msg
                 assert np.allclose(sampler._energy_unsampled_states, energy_unsampled_states)
 
     def test_minimize(self):
