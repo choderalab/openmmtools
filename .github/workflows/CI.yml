@@ -50,8 +50,8 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/goanpeca/setup-miniconda
-      - uses: goanpeca/setup-miniconda@v1
+      # More info on options: https://github.com/conda-incubator/setup-miniconda
+      - uses: conda-incubator/setup-miniconda@v2
         with:
           python-version: ${{ matrix.cfg.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
@@ -76,8 +76,7 @@ jobs:
           fi
           if [ "$OPENMM" == "conda-forge" ]; then
             echo "Using OpenMM conda-forge testing build.";
-            conda install --yes -c conda-forge/label/testing openmm
-            conda remove --force ocl-icd ocl-icd-system
+            conda install --yes -c conda-forge/label/test openmm
           fi
 
       - name: Install package
