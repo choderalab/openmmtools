@@ -76,8 +76,7 @@ jobs:
           fi
           if [ "$OPENMM" == "conda-forge" ]; then
             echo "Using OpenMM conda-forge testing build.";
-            conda install --yes -c conda-forge/label/testing openmm
-            conda remove --force ocl-icd ocl-icd-system
+            conda install --yes -c conda-forge/label/test openmm
           fi
 
       - name: Install package
