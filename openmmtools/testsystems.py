@@ -493,7 +493,7 @@ class TestSystem(object):
         self._system = openmm.System()
 
         # Store positions.
-        self._positions = unit.Quantity(np.zeros([0, 3], np.float), unit.nanometers)
+        self._positions = unit.Quantity(np.zeros([0, 3], float), unit.nanometers)
 
         # Empty topology.
         self._topology = app.Topology()
