@@ -207,8 +207,9 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
             The temperature of the heat bath in kelvins.
 
         """
-        kT = self.getGlobalVariableByName('kT') * _OPENMM_ENERGY_UNIT
-        temperature = kT / kB
+        # Do most unit conversion first for precision
+        conversion = _OPENMM_ENERGY_UNIT / kB
+        temperature = self.getGlobalVariableByName('kT') * conversion
         return temperature
 
     def setTemperature(self, temperature):
