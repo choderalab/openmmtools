@@ -21,21 +21,13 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { os: macOS-latest, python-version: 3.6, openmm: latest }
-          - { os: macOS-latest, python-version: 3.7, openmm: latest }
-          # - { os: macOS-latest, python-version: 3.8, openmm: latest }
-          - { os: windows-latest, python-version: 3.6, openmm: latest }
-          - { os: windows-latest, python-version: 3.7, openmm: latest }
-          # - { os: windows-latest, python-version: 3.8, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.6, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: latest }
-          # - { os: ubuntu-latest, python-version: 3.8, openmm: latest }
-          - { os: ubuntu-latest, python-version: 3.6, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: nightly }
-          # - { os: ubuntu-latest, python-version: 3.8, openmm: nightly }
-          - { os: ubuntu-latest, python-version: 3.6, openmm: conda-forge }
-          - { os: ubuntu-latest, python-version: 3.7, openmm: conda-forge }
-          # - { os: ubuntu-latest, python-version: 3.8, openmm: conda-forge }
+          - { os: macOS-latest,   python-version: 3.6, openmm: latest  }
+          - { os: windows-latest, python-version: 3.6, openmm: latest  }
+          - { os: ubuntu-latest,  python-version: 3.6, openmm: latest  }
+          - { os: ubuntu-latest,  python-version: 3.7, openmm: latest  }
+          - { os: ubuntu-latest,  python-version: 3.8, openmm: latest  }
+          - { os: ubuntu-latest,  python-version: 3.9, openmm: latest  }
+          - { os: ubuntu-latest,  python-version: 3.6, openmm: nightly }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
@@ -61,26 +53,13 @@ jobs:
           auto-activate-base: false
           show-channel-urls: true
 
-      - name: Install OpenMM variants
+      - name: Install OpenMM nightly
         shell: bash -l {0}
-        if: startsWith(matrix.cfg.os, 'ubuntu')
+        if: matrix.cfg.openmm == 'nightly'
         run: |
-          # Install desired OpenMM version
-          if [ "$OPENMM" == "latest" ]; then
-            echo "Using latest release OpenMM."
-            conda install --yes -c omnia openmm
-          fi
-          if [ "$OPENMM" == "nightly" ]; then
-            echo "Using OpenMM nightly dev build.";
-            conda install --yes -c omnia-dev openmm
-          fi
-          if [ "$OPENMM" == "conda-forge" ]; then
-            echo "Using OpenMM conda-forge testing build.";
-            conda install --yes -c conda-forge/label/test openmm
-          fi
+          conda install --yes -c omnia-dev openmm
 
       - name: Install package
-        # conda setup requires this special shell
         shell: bash -l {0}
         run: |
           python -m pip install . --no-deps
