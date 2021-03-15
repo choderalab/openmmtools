@@ -12,6 +12,7 @@ Bugfixes
 --------
 - Replace the `cython <https://cython.org/>`_ accelerated ``all-swap`` replica mixing scheme with a `numba <https://numba.pydata.org>`_ implementation for better stability, and portability, and speed
 - Fixes incorrect temperature spacing in ``ParallelTemperingSampler`` constructor
+- Do unit conversion first to improve precision PR #501 (fixes issue #500)
 
 Misc
 ----
