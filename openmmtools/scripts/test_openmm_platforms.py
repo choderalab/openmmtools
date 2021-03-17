@@ -91,7 +91,7 @@ def config_root_logger(verbose, log_file_path=None, mpicomm=None):
     n_handlers = len(logging.root.handlers)
     if n_handlers > 0:
         root_logger = logging.root
-        for i in xrange(n_handlers):
+        for i in range(n_handlers):
             root_logger.removeHandler(root_logger.handlers[0])
 
     # If this is a worker node, don't save any log file
@@ -318,7 +318,7 @@ def get_all_subclasses(cls):
        List of all subclasses of `cls`.
 
     """
-       
+
     all_subclasses = []
 
     for subclass in cls.__subclasses__():
@@ -457,7 +457,7 @@ def main():
             xml_file.write(state_xml)
             xml_file.close()
 
-            
+
             # Place forces into different force groups.
             forces = [ system.getForce(force_index) for force_index in range(system.getNumForces()) ]
             force_group_names = dict()
@@ -490,7 +490,7 @@ def main():
                     try:
                         platform = openmm.Platform.getPlatform(platform_index)
                         platform_name = platform.getName()
-                        
+
                         # Define precision models to test.
                         if platform_name == 'Reference':
                             precision_models = ['double']
@@ -505,7 +505,7 @@ def main():
                                 platform.setPropertyDefaultValue('CudaPrecision', precision_model)
                             if platform_name == 'OpenCL':
                                 platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
-                                
+
                             # Compute potential and force.
                             [platform_potential, platform_force] = compute_potential_and_force_by_force_group(system, positions, platform, force_group)
 

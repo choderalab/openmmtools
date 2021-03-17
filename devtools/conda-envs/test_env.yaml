@@ -14,7 +14,6 @@ dependencies:
   - python
   - numpy
   - scipy
-  - six
   - parmed
   - mdtraj
   - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
