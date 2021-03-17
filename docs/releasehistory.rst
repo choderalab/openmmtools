@@ -1,6 +1,10 @@
 Release History
 ***************
 
+0.20.2 - Remove leftover support for python 2.7
+
+- Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
+
 0.20.1 - Bugfix release
 ========================================
 

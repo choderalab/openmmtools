@@ -9,7 +9,6 @@ dependencies:
     - cython
     - numpy
     - scipy
-    - six
     - parmed
     - mdtraj
     - numpydoc

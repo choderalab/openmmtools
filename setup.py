@@ -1,9 +1,6 @@
 """
 Various Python tools for OpenMM.
 """
-import distutils.extension
-from Cython.Build import cythonize
-
 import sys
 from setuptools import setup, find_packages
 import versioneer
