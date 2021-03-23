@@ -534,18 +534,16 @@ def platform_supports_precision(platform, precision):
 
     if platform.getName() == 'Reference':
         # Reference is double precision
-        return True
+        return (precision == 'double')
 
     if platform.getName() == 'CPU':
-        if 'precision' in ['single', 'mixed']:
-            return True
-        else:
-            return False
+        return precision in ['mixed']
 
     if platform.getName() in ['CUDA', 'OpenCL']:
         from simtk import openmm
         properties = { 'Precision' : precision }
         system = openmm.System()
+        system.addParticle(1.0) # Cannot create Context on a system with no particles
         integrator = openmm.VerletIntegrator(0.001)
         try:
             context = openmm.Context(system, integrator, platform, properties)
