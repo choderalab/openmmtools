@@ -1,8 +1,20 @@
 Release History
 ***************
 
-0.20.2 - Remove leftover support for python 2.7
+0.20.3 - Bugfix release
+======================
 
+Bugfixes
+--------
+- Fixes [#505](https://github.com/choderalab/openmmtools/issues/505): GPU contexts would silently fail to enable 'mixed' precision; corrects reporting of available precisions
+
+0.20.2 - Bugfix release
+=======================
+
+Remove leftover support for python 2.7
+
+Cleanup
+-------
 - Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
 
 0.20.1 - Bugfix release
