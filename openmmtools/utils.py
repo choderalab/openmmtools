@@ -548,7 +548,7 @@ def platform_supports_precision(platform, precision):
         system = openmm.System()
         integrator = openmm.VerletIntegrator(0.001)
         try:
-            context = openmm.Context(system, integrator, properties)
+            context = openmm.Context(system, integrator, platform, properties)
             del context, integrator
             return True
         except Exception as e:
