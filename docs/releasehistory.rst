@@ -1,8 +1,15 @@
 Release History
 ***************
 
+0.2Y.Z - XXXXXX release
+=======================
+
+Known issues
+------------
+- Correctly raises an error when a ``CustomNonbondedForce`` made by OpenMM's ``LennardJonesGenerator`` is detected (`#511 <https://github.com/choderalab/openmmtools/pull/511>`_)
+
 0.20.3 - Bugfix release
-======================
+=======================
 
 Bugfixes
 --------
