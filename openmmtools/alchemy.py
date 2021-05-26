@@ -2031,6 +2031,37 @@ class AbsoluteAlchemicalFactory(object):
             forces_by_lambda[''] = [nonbonded_force]
         return forces_by_lambda
 
+    def _alchemically_modify_CustomNonbondedForce(self, reference_force, _, __):
+        """NYI: Create alchemically-modified version of a CustomNonbondedForce generated from the LennardJonesGenerator.
+
+        When working, this will correctly modify the CustomNonbondedForce made by the OpenMM forcefield.py file's
+        "LennardJonesGenerator" function which creates tabulated potentials for the C6 and C12 interactions
+        (i.e. Acoef = 4es^12 and Bcoef = 4es^6)
+
+        However, this has not been implemented as there are some technical problems which need to be resolved
+        both in this code (flow of converting "native" nonbonded interactions from multiple forces (NB + CustomNB)
+        into alchemical forces) and in the science (How do you softcore potential a "A/r^12 - B/r^6" form where A and B
+        are tabulated?).
+
+
+        See https://github.com/choderalab/openmmtools/issues/510 for more details on this problem.
+
+        """
+        # See https://github.com/openmm/openmm/blob/be19e0222ddf66f612016a3c1f687161a53c2396/wrappers/python/openmm/app/forcefield.py#L2548-L2572
+        lj_generator_expression = 'acoef(type1, type2)/r^12 - bcoef(type1, type2)/r^6'
+        reference_energy_expression = reference_force.getEnergyFunction()
+        if lj_generator_expression in reference_energy_expression:
+            error_msg = (f"Unsupported Native Lennard Jones representation!\n"
+                         f"There is a CustomNonbondedForce which contains the energy function:\n"
+                         f"\t{lj_generator_expression}\n"
+                         f"Which is likely from the OpenMM forcefield.py file for Tabulated Lennard Jones functions"
+                         f"such as the CHARMM36 FF. Supporting this type of LJ representation is not yet implemented.\n"
+                         f"See https://github.com/choderalab/openmmtools/issues/510 for more details."
+                         )
+            raise NotImplementedError(error_msg)
+        # Don't create a force if you made it here (remove when implemented)
+        return {'': [copy.deepcopy(reference_force)]}
+
     def _alchemically_modify_AmoebaMultipoleForce(self, reference_force, alchemical_region, _):
         if len(alchemical_region) > 1:
             raise NotImplementedError("Multiple regions does not work with AmoebaMultipoleForce")
