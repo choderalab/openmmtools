@@ -362,13 +362,6 @@ class MultiStateReporter(object):
         for attempt in range(n_attempts-1):
             try:
                 return netcdf.Dataset(*args, **kwargs)
-            except IOError as e:
-                # If the file does not exist, it doesn't make sense to try again.
-                if catch_io_error:
-                    if io_error_warning is not None:
-                        logger.warning(io_error_warning)
-                    return None
-                raise e
             except:
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
                              'in {} seconds'.format(attempt+1, n_attempts, sleep_time))
