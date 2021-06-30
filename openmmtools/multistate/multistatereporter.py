@@ -360,11 +360,14 @@ class MultiStateReporter(object):
         """
 
         # Check if file exists and warn if asked
-        if catch_io_error:
-            if not os.path.isfile(args[0]):
+        # raise IOError otherwise
+        if not os.path.isfile(args[0]):
+            if catch_io_error:
                 if io_error_warning is not None:
                     logger.warning(io_error_warning)
                 return None
+            raise IOError
+
 
         # Catch eventual errors n_attempts - 1 times.
         for attempt in range(n_attempts-1):
