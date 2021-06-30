@@ -366,7 +366,7 @@ class MultiStateReporter(object):
                 if io_error_warning is not None:
                     logger.warning(io_error_warning)
                 return None
-            raise IOError
+            raise IOError(f"{args[0]} does not exist")
 
 
         # Catch eventual errors n_attempts - 1 times.
