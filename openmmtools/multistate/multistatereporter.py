@@ -358,21 +358,24 @@ class MultiStateReporter(object):
 
         If the file is not found and catch_io_error is True, None is returned.
         """
+
         # Catch eventual errors n_attempts - 1 times.
         for attempt in range(n_attempts-1):
             try:
                 return netcdf.Dataset(*args, **kwargs)
-            except IOError as e:
-                # If the file does not exist, it doesn't make sense to try again.
-                if catch_io_error:
-                    if io_error_warning is not None:
-                        logger.warning(io_error_warning)
-                    return None
-                raise e
             except:
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
-                             'in {} seconds'.format(attempt+1, n_attempts, sleep_time))
+                             'in {} seconds'.format(attempt+1, n_attempts, args[0], sleep_time))
                 time.sleep(sleep_time)
+
+        # Check if file exists and warn if asked
+        # raise IOError otherwise
+        if not os.path.isfile(args[0]):
+            if catch_io_error:
+                if io_error_warning is not None:
+                    logger.warning(io_error_warning)
+                return None
+            raise IOError(f"{args[0]} does not exist")
 
         # At the very last attempt, we try setting the environment variable
         # controlling the locking mechanism of HDF5 (see choderalab/yank#1165).
