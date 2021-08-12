@@ -684,10 +684,10 @@ class MultiStateSampler(object):
             self._compute_energies()
 
             # Write iteration to storage file
-            self._report_iteration()
+            #self._report_iteration()
 
             # Update analysis
-            self._update_analysis()
+            #self._update_analysis()
 
             # Computing timing information
             iteration_time = timer.stop('Iteration')
