@@ -1279,6 +1279,21 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
                                               measure_shadow_work=self.measure_shadow_work,
                                               measure_heat=self.measure_heat)
 
+    def __deepcopy__(self, memo):
+        """Overriding default deep copy behavior to avoid creating new ContextCache objects without need."""
+
+        if memo is None:
+            memo = {}
+
+        cls = self.__class__
+        new_state = cls.__new__(cls)
+        memo[id(self)] = new_state
+        for k, v in self.__dict__.items():
+            if k != 'context_cache':
+                new_state.__dict__[k] = copy.deepcopy(v, memo)
+        new_state.__dict__['context_cache'] = self.context_cache
+        return new_state
+
 
 # =============================================================================
 # GENERALIZED HYBRID MONTE CARLO MOVE
