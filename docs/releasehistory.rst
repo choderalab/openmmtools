@@ -1,6 +1,13 @@
 Release History
 ***************
 
+0.20.4 - Bugfix release
+======================
+
+Enhancement
+-----------
+- Use of CODATA 2018 constants information (#522)
+
 0.20.3 - Bugfix release
 ======================
 
