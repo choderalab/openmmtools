@@ -1,6 +1,13 @@
 Release History
 ***************
 
+0.20.4 - Bugfix release
+======================
+
+Enhancement
+-----------
+- Use of CODATA 2018 constants information from OpenMM 7.6.0. (#522)
+
 0.20.3 - Bugfix release
 ======================
 
