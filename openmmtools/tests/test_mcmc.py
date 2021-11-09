@@ -13,7 +13,9 @@ Test State classes in mcmc.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
+import math
 import pickle
+import tempfile
 from functools import partial
 
 import nose
@@ -250,6 +252,57 @@ def test_context_cache():
         move = LangevinDynamicsMove(n_steps=5, context_cache=dummy_cache)
         move.apply(thermodynamic_state, sampler_state)
     assert len(cache.global_context_cache) == 0
+
+
+def test_mcmc_move_context_cache_shallow_copy():
+    """Test mcmc moves in different replicas use the same specified context_cache"""
+    from openmmtools.utils import get_fastest_platform
+    from openmmtools.multistate import ReplicaExchangeSampler
+    from openmmtools import multistate
+
+    platform = get_fastest_platform()
+    context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    testsystem = testsystems.AlanineDipeptideExplicit()
+    n_replicas = 5  # Number of temperature replicas.
+    T_min = 300.0 * unit.kelvin  # Minimum temperature.
+    T_max = 600.0 * unit.kelvin  # Maximum temperature.
+    temperatures = [
+        T_min
+        + (T_max - T_min)
+        * (math.exp(float(i) / float(n_replicas - 1)) - 1.0)
+        / (math.e - 1.0)
+        for i in range(n_replicas)
+    ]
+    thermodynamic_states = [
+        ThermodynamicState(system=testsystem.system, temperature=T) for T in temperatures
+    ]
+    move = LangevinSplittingDynamicsMove(
+        timestep=4.0 * unit.femtoseconds,
+        n_steps=1,
+        collision_rate=5.0 / unit.picosecond,
+        reassign_velocities=False,
+        n_restart_attempts=20,
+        constraint_tolerance=1e-06,
+        context_cache=context_cache,
+    )
+    simulation = ReplicaExchangeSampler(
+        mcmc_moves=move,
+        number_of_iterations=1,
+    )
+    # Create temporary reporter storage file
+    with tempfile.NamedTemporaryFile() as storage:
+        reporter = multistate.MultiStateReporter(storage.name, checkpoint_interval=999999)
+    simulation.create(
+        thermodynamic_states=thermodynamic_states,
+        sampler_states=SamplerState(
+            testsystem.positions,
+            box_vectors=testsystem.system.getDefaultPeriodicBoxVectors(),
+        ),
+        storage=reporter,
+    )
+    first_context_cache = simulation.mcmc_moves[0].context_cache
+    for mcmc_move in simulation.mcmc_moves:
+        assert mcmc_move.context_cache is first_context_cache
 
 
 def test_moves_serialization():
