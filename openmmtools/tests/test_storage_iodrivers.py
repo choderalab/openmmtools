@@ -10,7 +10,10 @@ Test iodrivers.py facility.
 # =============================================================================================
 
 import numpy as np
-from simtk import unit
+try:
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
 import contextlib
 import tempfile
 
@@ -212,7 +215,7 @@ def test_netcdf_array_type_codec():
 
 
 def test_netcdf_quantity_type_codec():
-    """Test that the simtk.unit.Quantity type codec can read/write/append with various unit and _value types"""
+    """Test that the openmm.unit.Quantity type codec can read/write/append with various unit and _value types"""
     input_data = 4 * unit.kelvin
     generic_type_codec_check(input_data)
     overwrite_data = 5 * unit.kelvin

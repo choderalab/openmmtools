@@ -23,7 +23,11 @@ import weakref
 import collections
 
 import numpy as np
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import utils, integrators, forces, constants
 
@@ -43,7 +47,7 @@ def create_thermodynamic_state_protocol(system, protocol, constants=None,
 
     Parameters
     ----------
-    reference_state : ThermodynamicState or simtk.openmm.System
+    reference_state : ThermodynamicState or openmm.System
         ``ThermodynamicState`` or The OpenMM ``System``. If a ``System`` the
         constants must specify the temperature.
     protocol : dict: str -> list
@@ -64,7 +68,7 @@ def create_thermodynamic_state_protocol(system, protocol, constants=None,
     Examples
     --------
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> system = testsystems.AlanineDipeptideExplicit().system
     >>> protocol = {'temperature': [300, 310, 330]*unit.kelvin,
@@ -220,13 +224,13 @@ def _box_vectors_volume(box_vectors):
 
     Parameters
     ----------
-    box_vectors : simtk.unit.Quantity
+    box_vectors : openmm.unit.Quantity
         Vectors defining the box.
 
     Returns
     -------
 
-    volume : simtk.unit.Quantity
+    volume : openmm.unit.Quantity
         The box volume in units of length^3.
 
     Examples
@@ -249,13 +253,13 @@ def _box_vectors_area_xy(box_vectors):
 
     Parameters
     ----------
-    box_vectors : simtk.unit.Quantity
+    box_vectors : openmm.unit.Quantity
         Vectors defining the box.
 
     Returns
     -------
 
-    area_xy : simtk.unit.Quantity
+    area_xy : openmm.unit.Quantity
         The box area in units of length^2.
     """
     return box_vectors[0][0] * box_vectors[1][1]
@@ -402,20 +406,20 @@ class ThermodynamicState(object):
 
     Parameters
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
         An OpenMM system in a particular thermodynamic state.
-    temperature : simtk.unit.Quantity, optional
+    temperature : openmm.unit.Quantity, optional
         The temperature for the system at constant temperature. If
         a MonteCarloBarostat is associated to the system, its
         temperature will be set to this. If None, the temperature
         is inferred from the system thermostat.
-    pressure : simtk.unit.Quantity, optional
+    pressure : openmm.unit.Quantity, optional
         The pressure for the system at constant pressure. If this
         is specified, a MonteCarloBarostat is added to the system,
         or just set to this pressure in case it already exists. If
         None, the pressure is inferred from the system barostat, and
         NVT ensemble is assumed if there is no barostat.
-    surface_tension : simtk.unit.Quantity, optional
+    surface_tension : openmm.unit.Quantity, optional
         The surface tension for the system at constant surface tension.
         If this is specified, the system must have a MonteCarloMembraneBarostat.
         If None, the surface_tension is inferred from the barostat and
@@ -546,7 +550,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to set.
         fix_state : bool, optional
             If True, a thermostat is added to the system (if not already
@@ -603,7 +607,7 @@ class ThermodynamicState(object):
 
         Returns
         -------
-        system : simtk.openmm.System
+        system : openmm.System
             The system of this ThermodynamicState.
 
         Examples
@@ -777,7 +781,7 @@ class ThermodynamicState(object):
 
         Returns
         -------
-        volume : simtk.unit.Quantity
+        volume : openmm.unit.Quantity
             The volume of the periodic box (units of length^3) or
             None if the system is not periodic or allowed to fluctuate.
 
@@ -816,7 +820,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        context_state : SamplerState or simtk.openmm.Context
+        context_state : SamplerState or openmm.Context
             Carry the configurational properties of the system.
 
         Returns
@@ -1018,7 +1022,7 @@ class ThermodynamicState(object):
         --------
         States in the same ensemble (NVT or NPT) are compatible.
 
-        >>> from simtk import unit
+        >>> from openmm import unit
         >>> from openmmtools import testsystems
         >>> alanine = testsystems.AlanineDipeptideExplicit()
         >>> state1 = ThermodynamicState(alanine.system, 273*unit.kelvin)
@@ -1055,7 +1059,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The OpenMM context to test.
 
         Returns
@@ -1104,11 +1108,11 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        integrator : simtk.openmm.Integrator
+        integrator : openmm.Integrator
            The integrator to use for Context creation. The eventual
            heat bath temperature must be consistent with the
            thermodynamic state.
-        platform : simtk.openmm.Platform, optional
+        platform : openmm.Platform, optional
            Platform to use. If None, OpenMM tries to select the fastest
            available platform. Default is None.
         platform_properties : dict, optional
@@ -1117,7 +1121,7 @@ class ThermodynamicState(object):
 
         Returns
         -------
-        context : simtk.openmm.Context
+        context : openmm.Context
            The created OpenMM Context object.
 
         Raises
@@ -1133,7 +1137,8 @@ class ThermodynamicState(object):
         When passing an integrator that does not expose getter and setter
         for the temperature, the context will be created with a thermostat.
 
-        >>> from simtk import openmm, unit
+        >>> import openmm
+        >>> from openmm import unit
         >>> from openmmtools import testsystems
         >>> toluene = testsystems.TolueneVacuum()
         >>> state = ThermodynamicState(toluene.system, 300*unit.kelvin)
@@ -1185,7 +1190,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
            The OpenMM Context to be set to this ThermodynamicState.
 
         Raises
@@ -1206,7 +1211,8 @@ class ThermodynamicState(object):
         the user's responsibility to do so, possibly with is_state_compatible
         rather than is_context_compatible which is slower.
 
-        >>> from simtk import openmm, unit
+        >>> import openmm
+        >>> from openmm import unit
         >>> from openmmtools import testsystems
         >>> toluene = testsystems.TolueneVacuum()
         >>> state1 = ThermodynamicState(toluene.system, 273.0*unit.kelvin)
@@ -1398,7 +1404,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to test.
 
         Raises
@@ -1459,7 +1465,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to standardize.
 
         See Also
@@ -1556,7 +1562,7 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The OpenMM Context to be set to this ThermodynamicState.
         thermodynamic_state : ThermodynamicState
             The ThermodynamicState of this context.
@@ -1741,9 +1747,9 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system's barostat will be added/configured.
-        pressure : simtk.unit.Quantity or None
+        pressure : openmm.unit.Quantity or None
             The pressure with units compatible to bars. If None, the
             barostat of the system is removed.
 
@@ -1879,9 +1885,9 @@ class ThermodynamicState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to modify.
-        temperature : simtk.unit.Quantity
+        temperature : openmm.unit.Quantity
             The temperature for the thermostat.
 
         """
@@ -1938,18 +1944,18 @@ class SamplerState(object):
 
     Parameters
     ----------
-    positions : Nx3 simtk.unit.Quantity
+    positions : Nx3 openmm.unit.Quantity
         Position vectors for N particles (length units).
-    velocities : Nx3 simtk.unit.Quantity, optional
+    velocities : Nx3 openmm.unit.Quantity, optional
         Velocity vectors for N particles (velocity units).
-    box_vectors : 3x3 simtk.unit.Quantity
+    box_vectors : 3x3 openmm.unit.Quantity
         Current box vectors (length units).
 
     Attributes
     ----------
     positions
     velocities
-    box_vectors : 3x3 simtk.unit.Quantity.
+    box_vectors : 3x3 openmm.unit.Quantity.
         Current box vectors (length units).
     potential_energy
     kinetic_energy
@@ -2041,7 +2047,7 @@ class SamplerState(object):
 
         Parameters
         ----------
-        context_state : simtk.openmm.Context or simtk.openmm.State
+        context_state : openmm.Context or openmm.State
             The object to read. If a State object, it must contain information
             about positions, velocities and energy.
         ignore_collective_variables : bool, optional
@@ -2067,7 +2073,7 @@ class SamplerState(object):
     def positions(self):
         """Particle positions.
 
-        An Nx3 simtk.unit.Quantity object, where N is the number of
+        An Nx3 openmm.unit.Quantity object, where N is the number of
         particles.
 
         Raises
@@ -2087,7 +2093,7 @@ class SamplerState(object):
     def velocities(self):
         """Particle velocities.
 
-        An Nx3 simtk.unit.Quantity object, where N is the number of
+        An Nx3 openmm.unit.Quantity object, where N is the number of
         particles.
 
         Raises
@@ -2107,7 +2113,7 @@ class SamplerState(object):
     def box_vectors(self):
         """Box vectors.
 
-        An 3x3 simtk.unit.Quantity object.
+        An 3x3 openmm.unit.Quantity object.
 
         """
         return self._box_vectors
@@ -2124,7 +2130,7 @@ class SamplerState(object):
 
     @property
     def potential_energy(self):
-        """simtk.unit.Quantity or None: Potential energy of this configuration."""
+        """openmm.unit.Quantity or None: Potential energy of this configuration."""
         if self._are_positions_valid:
             return None
         return self._potential_energy
@@ -2137,7 +2143,7 @@ class SamplerState(object):
 
     @property
     def kinetic_energy(self):
-        """simtk.unit.Quantity or None: Kinetic energy of this configuration."""
+        """openmm.unit.Quantity or None: Kinetic energy of this configuration."""
         if self.velocities is None or self.velocities.has_changed:
             return None
         return self._kinetic_energy
@@ -2191,7 +2197,7 @@ class SamplerState(object):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The context to test.
 
         Returns
@@ -2216,7 +2222,7 @@ class SamplerState(object):
 
         Parameters
         ----------
-        context_state : simtk.openmm.Context or simtk.openmm.State
+        context_state : openmm.Context or openmm.State
             The object to read. If a State, it must contain information
             on positions, velocities and energies. Collective
             variables can only be updated from a Context, NOT a State
@@ -2257,7 +2263,7 @@ class SamplerState(object):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The context to set.
         ignore_velocities : bool, optional
             If True, velocities are not set in the Context even if they
@@ -2431,7 +2437,7 @@ class SamplerState(object):
 
         Parameters
         ----------
-        context_state : simtk.openmm.Context or simtk.openmm.State
+        context_state : openmm.Context or openmm.State
             The object to read.
         check_consistency : bool
             If True, raise an error if the context system have a
@@ -2490,7 +2496,7 @@ class SamplerState(object):
 
         Parameters
         ----------
-        context_state : simtk.openmm.Context
+        context_state : openmm.Context
             The object to read. This only works with Context's for now,
             but in the future, this may support OpenMM State objects as well.
         """
@@ -2550,7 +2556,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to modify.
 
         Raises
@@ -2571,7 +2577,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to test.
 
         Raises
@@ -2588,7 +2594,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The context to set.
 
         Raises
@@ -2613,7 +2619,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to standardize.
 
         Raises
@@ -2635,7 +2641,7 @@ class IComposableState(utils.SubhookedABCMeta):
 
         Parameters
         ----------
-        standard_system : simtk.openmm.System
+        standard_system : openmm.System
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
@@ -2739,7 +2745,8 @@ class CompoundThermodynamicState(ThermodynamicState):
     used with CompoundThermodynamicState. All the alchemical parameters are
     accessible through the compound state.
 
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> thermodynamic_state = ThermodynamicState(system=alanine_alchemical_system,
     ...                                                 temperature=300*unit.kelvin)
     >>> compound_state = CompoundThermodynamicState(thermodynamic_state=thermodynamic_state,
@@ -2798,7 +2805,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         Returns
         -------
-        system : simtk.openmm.System
+        system : openmm.System
             The system of this ThermodynamicState.
 
         """
@@ -2819,7 +2826,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to set.
         fix_state : bool, optional
             The thermodynamic state of the state will be fixed by
@@ -2843,7 +2850,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The OpenMM context to test.
 
         Returns
@@ -3139,7 +3146,8 @@ class GlobalParameterState(object):
     function is controlled by two global variables called ``lambda_bonds``
     and ``gamma``.
 
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> # Define a diatomic molecule.
     >>> system = openmm.System()
     >>> particle_idx = system.addParticle(40.0*unit.amu)
@@ -3275,7 +3283,7 @@ class GlobalParameterState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             An OpenMM ``System`` object defining a non-empty subset
             of global parameters controlled by this state.
         parameters_name_suffix : str, optional
@@ -3480,7 +3488,7 @@ class GlobalParameterState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to modify.
 
         Raises
@@ -3520,7 +3528,7 @@ class GlobalParameterState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to test.
 
         Raises
@@ -3544,7 +3552,7 @@ class GlobalParameterState(object):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The context to set.
 
         Raises
@@ -3579,7 +3587,7 @@ class GlobalParameterState(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to standardize.
 
         Raises
@@ -3609,7 +3617,7 @@ class GlobalParameterState(object):
 
         Parameters
         ----------
-        standard_system : simtk.openmm.System
+        standard_system : openmm.System
             The standard system before setting the attribute.
         attribute_name : str
             The name of the attribute that has just been set or retrieved.
