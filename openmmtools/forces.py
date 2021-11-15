@@ -24,7 +24,11 @@ import re
 
 import scipy
 import numpy as np
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import utils
 from openmmtools.constants import ONE_4PI_EPS0, STANDARD_STATE_VOLUME
@@ -61,7 +65,7 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
 
     Parameters
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
         The system to search.
     force_type : str, or type
         The class of the force to search, or a regular expression that
@@ -172,17 +176,17 @@ def _compute_harmonic_volume(radius, spring_constant, beta):
 
     Parameters
     ----------
-    radius : simtk.unit.Quantity
+    radius : openmm.unit.Quantity
         The upper limit on the distance (units of length).
-    spring_constant : simtk.unit.Quantity
+    spring_constant : openmm.unit.Quantity
         The spring constant of the harmonic potential (units of
         energy/mole/length^2).
-    beta : simtk.unit.Quantity
+    beta : openmm.unit.Quantity
         Thermodynamic beta (units of mole/energy).
 
     Returns
     -------
-    volume : simtk.unit.Quantity
+    volume : openmm.unit.Quantity
         The volume of the harmonic potential (units of length^3).
 
     """
@@ -206,15 +210,15 @@ def _compute_harmonic_radius(spring_constant, potential_energy):
 
     Parameters
     ----------
-    spring_constant : simtk.unit.Quantity
+    spring_constant : openmm.unit.Quantity
         The spring constant of the harmonic potential (units of
         energy/mole/length^2).
-    potential_energy : simtk.unit.Quantity
+    potential_energy : openmm.unit.Quantity
         The energy of the harmonic restraint (units of energy/mole).
 
     Returns
     -------
-    radius : simtk.unit.Quantity
+    radius : openmm.unit.Quantity
         The radius at which the harmonic potential is energy.
 
     """
@@ -344,12 +348,12 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
         Parameters
         ----------
-        potential_energy : simtk.unit.Quantity
+        potential_energy : openmm.unit.Quantity
             The potential energy of the restraint (units of energy/mole).
 
         Returns
         -------
-        distance : simtk.unit.Quantity
+        distance : openmm.unit.Quantity
             The distance at which the potential energy is ``potential_energy``
             (units of length).
 
@@ -385,7 +389,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             If True, this computes the standard state correction assuming
             the restraint to obey a square well potential. The energy
             cutoff is still applied to the original energy potential.
-        radius_cutoff : simtk.unit.Quantity, optional
+        radius_cutoff : openmm.unit.Quantity, optional
             The maximum distance achievable by the restraint (units
             compatible with nanometers). This is equivalent to placing
             a hard wall potential at this distance.
@@ -393,7 +397,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             The maximum potential energy achievable by the restraint in kT.
             This is equivalent to placing a hard wall potential at a
             distance such that ``potential_energy(distance) == energy_cutoff``.
-        max_volume : simtk.unit.Quantity or 'system', optional
+        max_volume : openmm.unit.Quantity or 'system', optional
             The volume of the periodic box (units compatible with nanometer**3).
             This must be provided the thermodynamic state is in NPT. If the
             string 'system' is passed, the maximum volume is computed from
@@ -470,7 +474,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             If True, this computes the standard state correction assuming
             the restraint to obey a square well potential. The energy
             cutoff is still applied to the original energy potential.
-        radius_cutoff : simtk.unit.Quantity, optional
+        radius_cutoff : openmm.unit.Quantity, optional
             The maximum distance achievable by the restraint (units
             compatible with nanometers). This is equivalent to placing
             a hard wall potential at this distance.
@@ -481,7 +485,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
         Returns
         -------
-        restraint_volume : simtk.unit.Quantity
+        restraint_volume : openmm.unit.Quantity
             The volume of the restraint (units of length^3).
 
         """
@@ -502,7 +506,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             If True, this computes the standard state correction assuming
             the restraint to obey a square well potential. The energy
             cutoff is still applied to the original energy potential.
-        radius_cutoff : simtk.unit.Quantity, optional
+        radius_cutoff : openmm.unit.Quantity, optional
             The maximum distance achievable by the restraint (units
             compatible with nanometers). This is equivalent to placing
             a hard wall potential at this distance.
@@ -513,7 +517,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
         Returns
         -------
-        restraint_volume : simtk.unit.Quantity
+        restraint_volume : openmm.unit.Quantity
             The volume of the restraint (units of length^3).
 
         """
@@ -607,7 +611,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
             If True, this computes the standard state correction assuming
             the restraint to obey a square well potential. The energy
             cutoff is still applied to the original energy potential.
-        radius_cutoff : simtk.unit.Quantity, optional
+        radius_cutoff : openmm.unit.Quantity, optional
             The maximum distance achievable by the restraint (units
             compatible with nanometers). This is equivalent to placing
             a hard wall potential at this distance.
@@ -618,11 +622,11 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
 
         Returns
         -------
-        r_min : simtk.unit.Quantity
+        r_min : openmm.unit.Quantity
             The lower limit for numerical integration.
-        r_max : simtk.unit.Quantity
+        r_max : openmm.unit.Quantity
             The upper limit for numerical integration.
-        analytical_volume : simtk.unit.Quantity
+        analytical_volume : openmm.unit.Quantity
             Volume excluded from the numerical integration that has been
             computed analytically. This will be summed to the volume
             computed through numerical integration.
@@ -810,7 +814,7 @@ class HarmonicRestraintForceMixIn(object):
 
     @property
     def spring_constant(self):
-        """unit.simtk.Quantity: The spring constant K (units of energy/mole/distance^2)."""
+        """unit.openmm.Quantity: The spring constant K (units of energy/mole/distance^2)."""
         # This works for both CustomBondForce and CustomCentroidBondForce.
         parameters = self.getBondParameters(0)[-1]
         return parameters[0] * unit.kilojoule_per_mole/unit.nanometers**2
@@ -820,12 +824,12 @@ class HarmonicRestraintForceMixIn(object):
 
         Parameters
         ----------
-        potential_energy : simtk.unit.Quantity
+        potential_energy : openmm.unit.Quantity
             The potential energy of the restraint (units of energy/mole).
 
         Returns
         -------
-        distance : simtk.unit.Quantity
+        distance : openmm.unit.Quantity
             The distance at which the potential energy is ``potential_energy``
             (units of length).
 
@@ -871,7 +875,7 @@ class HarmonicRestraintForce(HarmonicRestraintForceMixIn,
 
     Parameters
     ----------
-    spring_constant : simtk.unit.Quantity
+    spring_constant : openmm.unit.Quantity
         The spring constant K (see energy expression above) in units
         compatible with joule/nanometer**2/mole.
     restrained_atom_indices1 : iterable of int
@@ -904,7 +908,7 @@ class HarmonicRestraintBondForce(HarmonicRestraintForceMixIn,
 
     Parameters
     ----------
-    spring_constant : simtk.unit.Quantity
+    spring_constant : openmm.unit.Quantity
         The spring constant K (see energy expression above) in units
         compatible with joule/nanometer**2/mole.
     restrained_atom_index1 : int
@@ -946,14 +950,14 @@ class FlatBottomRestraintForceMixIn(object):
 
     @property
     def spring_constant(self):
-        """unit.simtk.Quantity: The spring constant K (units of energy/mole/length^2)."""
+        """unit.openmm.Quantity: The spring constant K (units of energy/mole/length^2)."""
         # This works for both CustomBondForce and CustomCentroidBondForce.
         parameters = self.getBondParameters(0)[-1]
         return parameters[0] * unit.kilojoule_per_mole/unit.nanometers**2
 
     @property
     def well_radius(self):
-        """unit.simtk.Quantity: The distance at which the harmonic restraint is imposed (units of length)."""
+        """unit.openmm.Quantity: The distance at which the harmonic restraint is imposed (units of length)."""
         # This works for both CustomBondForce and CustomCentroidBondForce.
         parameters = self.getBondParameters(0)[-1]
         return parameters[1] * unit.nanometers
@@ -963,12 +967,12 @@ class FlatBottomRestraintForceMixIn(object):
 
         Parameters
         ----------
-        potential_energy : simtk.unit.Quantity
+        potential_energy : openmm.unit.Quantity
             The potential energy of the restraint (units of energy/mole).
 
         Returns
         -------
-        distance : simtk.unit.Quantity
+        distance : openmm.unit.Quantity
             The distance at which the potential energy is ``potential_energy``
             (units of length).
 
@@ -1034,10 +1038,10 @@ class FlatBottomRestraintForce(FlatBottomRestraintForceMixIn,
 
     Parameters
     ----------
-    spring_constant : simtk.unit.Quantity
+    spring_constant : openmm.unit.Quantity
         The spring constant K (see energy expression above) in units
         compatible with joule/nanometer**2/mole.
-    well_radius : simtk.unit.Quantity
+    well_radius : openmm.unit.Quantity
         The distance r0 (see energy expression above) at which the harmonic
         restraint is imposed in units of distance.
     restrained_atom_indices1 : iterable of int
@@ -1071,10 +1075,10 @@ class FlatBottomRestraintBondForce(FlatBottomRestraintForceMixIn,
 
     Parameters
     ----------
-    spring_constant : simtk.unit.Quantity
+    spring_constant : openmm.unit.Quantity
         The spring constant K (see energy expression above) in units
         compatible with joule/nanometer**2/mole.
-    well_radius : simtk.unit.Quantity
+    well_radius : openmm.unit.Quantity
         The distance r0 (see energy expression above) at which the harmonic
         restraint is imposed in units of distance.
     restrained_atom_index1 : int
@@ -1112,9 +1116,9 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
 
     Parameters
     ----------
-    cutoff_distance : simtk.unit.Quantity, default 15*angstroms
+    cutoff_distance : openmm.unit.Quantity, default 15*angstroms
         The cutoff distance (units of distance).
-    switch_width : simtk.unit.Quantity, default 1.0*angstrom
+    switch_width : openmm.unit.Quantity, default 1.0*angstrom
         Switch width for electrostatics (units of distance).
     reaction_field_dielectric : float
         The dielectric constant used for the solvent.
@@ -1163,9 +1167,9 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
 
         Parameters
         ----------
-        nonbonded_force : simtk.openmm.NonbondedForce
+        nonbonded_force : openmm.NonbondedForce
             The nonbonded force to copy.
-        switch_width : simtk.unit.Quantity
+        switch_width : openmm.unit.Quantity
             Switch width for electrostatics (units of distance).
 
         Returns
@@ -1205,9 +1209,9 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system containing the nonbonded force to copy.
-        switch_width : simtk.unit.Quantity
+        switch_width : openmm.unit.Quantity
             Switch width for electrostatics (units of distance).
 
         Returns
@@ -1229,9 +1233,9 @@ class SwitchedReactionFieldForce(openmm.CustomNonbondedForce):
 
     Parameters
     ----------
-    cutoff_distance : simtk.unit.Quantity, default 15*angstroms
+    cutoff_distance : openmm.unit.Quantity, default 15*angstroms
         The cutoff distance (units of distance).
-    switch_width : simtk.unit.Quantity, default 1.0*angstrom
+    switch_width : openmm.unit.Quantity, default 1.0*angstrom
         Switch width for electrostatics (units of distance).
     reaction_field_dielectric : float
         The dielectric constant used for the solvent.
@@ -1282,9 +1286,9 @@ class SwitchedReactionFieldForce(openmm.CustomNonbondedForce):
 
         Parameters
         ----------
-        nonbonded_force : simtk.openmm.NonbondedForce
+        nonbonded_force : openmm.NonbondedForce
             The nonbonded force to copy.
-        switch_width : simtk.unit.Quantity
+        switch_width : openmm.unit.Quantity
             Switch width for electrostatics (units of distance).
 
         Returns
@@ -1324,9 +1328,9 @@ class SwitchedReactionFieldForce(openmm.CustomNonbondedForce):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system containing the nonbonded force to copy.
-        switch_width : simtk.unit.Quantity
+        switch_width : openmm.unit.Quantity
             Switch width for electrostatics (units of distance).
 
         Returns

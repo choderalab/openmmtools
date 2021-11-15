@@ -27,7 +27,11 @@ import scipy.integrate
 import yaml
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 import mpiplus
 
 import openmmtools as mmtools
@@ -1682,8 +1686,10 @@ class TestParallelTempering(TestMultiStateSampler):
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
-
-    from simtk import unit
+    try:
+        from openmm import unit
+    except ImportError:  # OpenMM < 7.6
+        from simtk import unit
     N_SAMPLERS = 3
     N_STATES = 3
     SAMPLER = ParallelTemperingSampler
@@ -1723,8 +1729,10 @@ class TestParallelTempering(TestMultiStateSampler):
             self.call_sampler_create(sampler, reporter,
                 thermodynamic_states, sampler_states,
                 unsampled_states)
-
-            from simtk import unit
+            try:
+                from openmm import unit
+            except ImportError:  # OpenMM < 7.6
+                from simtk import unit
             temperatures = [state.temperature/unit.kelvin for state in sampler._thermodynamic_states] # in kelvin
             assert len(temperatures) == self.N_STATES, f"There are {len(temperatures)} thermodynamic states; expected {self.N_STATES}"
             assert np.isclose(min(temperatures), (self.MIN_TEMP/unit.kelvin)), f"Min temperature is {min(temperatures)} K; expected {(self.MIN_TEMP/unit.kelvin)} K"

@@ -138,8 +138,12 @@ import os.path
 import sys
 import math
 
-import simtk.unit as units
-import simtk.openmm as openmm
+try:
+    import openmm
+    import openmm.unit as units
+except ImportError:  # OpenMM < 7.6
+    import simtk.unit as units
+    import simtk.openmm as openmm
 
 from openmmtools import testsystems
 
@@ -157,12 +161,12 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
 
     ARGUMENTS
 
-    computed_potential (simtk.unit.Quantity in units of energy) - computed potential energy
-    expected_potential (simtk.unit.Quantity in units of energy) - expected
+    computed_potential (openmm.unit.Quantity in units of energy) - computed potential energy
+    expected_potential (openmm.unit.Quantity in units of energy) - expected
 
     OPTIONAL ARGUMENTS
 
-    tolerance (simtk.unit.Quantity in units of energy) - acceptable tolerance
+    tolerance (openmm.unit.Quantity in units of energy) - acceptable tolerance
 
     EXAMPLES
 
@@ -185,14 +189,14 @@ def compute_potential_and_force(system, positions, platform):
 
     ARGUMENTS
 
-    system (simtk.openmm.System) - the system for which the energy is to be computed
-    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
-    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    system (openmm.System) - the system for which the energy is to be computed
+    positions (openmm.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (openmm.Platform) - platform object to be used to compute the energy and force
 
     RETURNS
 
-    potential (simtk.unit.Quantity in energy/mole) - the potential
-    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+    potential (openmm.unit.Quantity in energy/mole) - the potential
+    force (openmm.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
 
     """
 
@@ -220,15 +224,15 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
 
     ARGUMENTS
 
-    system (simtk.openmm.System) - the system for which the energy is to be computed
-    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
-    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    system (openmm.System) - the system for which the energy is to be computed
+    positions (openmm.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (openmm.Platform) - platform object to be used to compute the energy and force
     force_index (int) - index of force to be computed (all others ignored)
 
     RETURNS
 
-    potential (simtk.unit.Quantity in energy/mole) - the potential
-    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+    potential (openmm.unit.Quantity in energy/mole) - the potential
+    force (openmm.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
 
     """
 
@@ -270,15 +274,15 @@ def compute_potential_and_force_by_force_group(system, positions, platform, forc
 
     ARGUMENTS
 
-    system (simtk.openmm.System) - the system for which the energy is to be computed
-    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
-    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    system (openmm.System) - the system for which the energy is to be computed
+    positions (openmm.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (openmm.Platform) - platform object to be used to compute the energy and force
     force_group (int) - index of force group to be computed (all others ignored)
 
     RETURNS
 
-    potential (simtk.unit.Quantity in energy/mole) - the potential
-    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+    potential (openmm.unit.Quantity in energy/mole) - the potential
+    force (openmm.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
 
     """
 

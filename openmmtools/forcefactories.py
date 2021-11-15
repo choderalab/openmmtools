@@ -18,7 +18,11 @@ import copy
 
 import numpy as np
 import mdtraj
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import forces
 
@@ -40,10 +44,10 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The system to use as a reference. This will be modified only if
         `return_copy` is `False`.
-    switch_width : simtk.unit.Quantity, default=1.0*angstrom
+    switch_width : openmm.unit.Quantity, default=1.0*angstrom
         Switch width for electrostatics (units of distance).
     return_copy : bool, optional, default=True
         If `True`, `reference_system` is not modified, and a copy is returned.
@@ -54,7 +58,7 @@ def replace_reaction_field(reference_system, switch_width=1.0*unit.angstrom,
 
     Returns
     -------
-    system : simtk.openmm.System
+    system : openmm.System
         System with reaction-field converted to c_rf = 0
 
     """
@@ -109,11 +113,11 @@ def restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms, sigma=3
         The thermodynamic state with the system. This will be modified.
     sampler_state : openmmtools.states.SamplerState
         The sampler state with the positions.
-    topology : mdtraj.Topology or simtk.openmm.Topology
+    topology : mdtraj.Topology or openmm.Topology
         The topology of the system.
     atoms_dsl : str
         The MDTraj DSL string for selecting the atoms to restrain.
-    sigma : simtk.unit.Quantity, optional
+    sigma : openmm.unit.Quantity, optional
         Controls the strength of the restrain. The smaller, the tighter
         (units of distance, default is 3.0*angstrom).
 

@@ -29,8 +29,12 @@ from typing import Optional, NamedTuple, Union
 
 import mdtraj
 import numpy as np
-from simtk import openmm
-import simtk.unit as units
+try:
+    import openmm
+    import openmm.unit as units
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm
+    import simtk.unit as units
 from scipy.special import logsumexp
 from pymbar import MBAR, timeseries
 
@@ -1143,7 +1147,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         be set to the 99.9-percentile of the distribution of the restraint energies
         in the bound state.
 
-    restraint_distance_cutoff : simtk.unit.Quantity or 'auto', optional
+    restraint_distance_cutoff : openmm.unit.Quantity or 'auto', optional
         When the restraint is unbiased, the analyzer discards all the samples
         for which the distance between the restrained atoms is above this cutoff.
         Effectively, this is equivalent to placing a hard wall potential at a
@@ -1321,9 +1325,9 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         -------
         restraint_force : forces.RadiallySymmetricRestraintForce
             The restraint force used in the bound state.
-        weights_group1 : list of simtk.unit.Quantity
+        weights_group1 : list of openmm.unit.Quantity
             The masses of the restrained atoms in the first centroid group.
-        weights_group2 : list of simtk.unit.Quantity
+        weights_group2 : list of openmm.unit.Quantity
             The masses of the restrained atoms in the second centroid group.
 
         Raises
@@ -1641,10 +1645,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
         Returns
         -------
-        restraint_energies_ln : simtk.unit.Quantity
+        restraint_energies_ln : openmm.unit.Quantity
             A (n_sampled_states * n_decorrelated_iterations)-long array with
             the restrain energies (units of energy/mole).
-        restraint_distances_ln : simtk.unit.Quantity or None
+        restraint_distances_ln : openmm.unit.Quantity or None
             If we are not applying a distance cutoff, this is None. Otherwise,
             a (n_sampled_states * n_decorrelated_iterations)-long array with
             the restrain distances (units of length) for each frame.

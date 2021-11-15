@@ -1,7 +1,11 @@
 import numpy as np
 
-from simtk import unit
-from simtk import openmm
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
+    from simtk import openmm
 
 import os, os.path
 import logging
@@ -128,9 +132,9 @@ def check_potential_energy(system, positions):
 
     Parameters
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
        The system
-    positions : simtk.unit.Quantity
+    positions : openmm.unit.Quantity
        The positions
 
     """

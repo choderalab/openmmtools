@@ -46,7 +46,7 @@ Jun S. Liu. Monte Carlo Strategies in Scientific Computing. Springer, 2008.
 
 Examples
 --------
->>> from simtk import unit
+>>> from openmm import unit
 >>> from openmmtools import testsystems, cache
 >>> from openmmtools.states import ThermodynamicState, SamplerState
 
@@ -115,7 +115,11 @@ import copy
 import logging
 
 import numpy as np
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import integrators, cache, utils
 from openmmtools.utils import SubhookedABCMeta, Timer
@@ -196,7 +200,7 @@ class MCMCSampler(object):
     --------
 
     >>> import numpy as np
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
 
@@ -256,7 +260,7 @@ class MCMCSampler(object):
 
         Parameters
         ----------
-        tolerance : simtk.unit.Quantity, optional
+        tolerance : openmm.unit.Quantity, optional
             Tolerance to use for minimization termination criterion (units of
             energy/(mole*distance), default is 1*kilocalories_per_mole/angstroms).
         max_iterations : int, optional
@@ -317,7 +321,7 @@ class SequenceMove(MCMCMove):
     NPT ensemble simulation of a Lennard Jones fluid with a sequence of moves.
 
     >>> import numpy as np
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.LennardJonesFluid(nparticles=200)
@@ -406,7 +410,7 @@ class WeightedMove(MCMCMove):
     Create and run an alanine dipeptide simulation with a weighted move.
 
     >>> import numpy as np
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -494,7 +498,7 @@ class IntegratorMoveError(Exception):
         A description of the error.
     move : MCMCMove
         The MCMCMove that raised the error.
-    context : simtk.openmm.Context, optional
+    context : openmm.Context, optional
         The context after the integration.
 
     """
@@ -590,7 +594,7 @@ class BaseIntegratorMove(MCMCMove):
     Create a VerletIntegratorMove class.
 
     >>> from openmmtools import testsystems, states
-    >>> from simtk.openmm import VerletIntegrator
+    >>> from openmm import VerletIntegrator
     >>> class VerletMove(BaseIntegratorMove):
     ...     def __init__(self, timestep, n_steps, **kwargs):
     ...         super(VerletMove, self).__init__(n_steps, **kwargs)
@@ -810,7 +814,7 @@ class MetropolizedMove(MCMCMove):
 
     Examples
     --------
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems, states
     >>> class AddOneVector(MetropolizedMove):
     ...     def __init__(self, **kwargs):
@@ -969,7 +973,7 @@ class IntegratorMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    integrator : simtk.openmm.Integrator
+    integrator : openmm.Integrator
         An instance of an OpenMM Integrator object to use for propagation.
     n_steps : int
         The number of integration steps to take each time the move is applied.
@@ -1030,12 +1034,12 @@ class LangevinDynamicsMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         The timestep to use for Langevin integration
-        (time units, default is 1*simtk.unit.femtosecond).
-    collision_rate : simtk.unit.Quantity, optional
+        (time units, default is 1*openmm.unit.femtosecond).
+    collision_rate : openmm.unit.Quantity, optional
         The collision rate with fictitious bath particles
-        (1/time units, default is 10/simtk.unit.picoseconds).
+        (1/time units, default is 10/openmm.unit.picoseconds).
     n_steps : int, optional
         The number of integration timesteps to take each time the
         move is applied (default is 1000).
@@ -1048,9 +1052,9 @@ class LangevinDynamicsMove(BaseIntegratorMove):
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
         The timestep to use for Langevin integration (time units).
-    collision_rate : simtk.unit.Quantity
+    collision_rate : openmm.unit.Quantity
         The collision rate with fictitious bath particles (1/time units).
     n_steps : int
         The number of integration timesteps to take each time the move
@@ -1068,7 +1072,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import SamplerState, ThermodynamicState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1155,12 +1159,12 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         The timestep to use for Langevin integration
-        (time units, default is 1*simtk.unit.femtosecond).
-    collision_rate : simtk.unit.Quantity, optional
+        (time units, default is 1*openmm.unit.femtosecond).
+    collision_rate : openmm.unit.Quantity, optional
         The collision rate with fictitious bath particles
-        (1/time units, default is 10/simtk.unit.picoseconds).
+        (1/time units, default is 10/openmm.unit.picoseconds).
     n_steps : int, optional
         The number of integration timesteps to take each time the
         move is applied (default is 1000).
@@ -1189,9 +1193,9 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
         The timestep to use for Langevin integration (time units).
-    collision_rate : simtk.unit.Quantity
+    collision_rate : openmm.unit.Quantity
         The collision rate with fictitious bath particles (1/time units).
     n_steps : int
         The number of integration timesteps to take each time the move
@@ -1217,7 +1221,7 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import SamplerState, ThermodynamicState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1307,12 +1311,12 @@ class GHMCMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         The timestep to use for Langevin integration (time units, default
-        is 1*simtk.unit.femtoseconds).
-    collision_rate : simtk.unit.Quantity, optional
+        is 1*openmm.unit.femtoseconds).
+    collision_rate : openmm.unit.Quantity, optional
         The collision rate with fictitious bath particles (1/time units,
-        default is 20/simtk.unit.picoseconds).
+        default is 20/openmm.unit.picoseconds).
     n_steps : int, optional
         The number of integration timesteps to take each time the move
         is applied (default is 1000).
@@ -1322,9 +1326,9 @@ class GHMCMove(BaseIntegratorMove):
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
         The timestep to use for Langevin integration (time units).
-    collision_rate : simtk.unit.Quantity
+    collision_rate : openmm.unit.Quantity
         The collision rate with fictitious bath particles (1/time units).
     n_steps : int
         The number of integration timesteps to take each time the move
@@ -1349,7 +1353,7 @@ class GHMCMove(BaseIntegratorMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1481,9 +1485,9 @@ class HMCMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
        The timestep to use for HMC dynamics, which uses velocity Verlet following
-       velocity randomization (time units, default is 1*simtk.unit.femtosecond)
+       velocity randomization (time units, default is 1*openmm.unit.femtosecond)
     n_steps : int, optional
        The number of dynamics steps to take before Metropolis acceptance/rejection
        (default is 1000).
@@ -1493,7 +1497,7 @@ class HMCMove(BaseIntegratorMove):
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
        The timestep to use for HMC dynamics, which uses velocity Verlet following
        velocity randomization (time units).
     n_steps : int
@@ -1508,7 +1512,7 @@ class HMCMove(BaseIntegratorMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1610,7 +1614,7 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     force. The class ThermodynamicState takes care of adding one when
     we specify the pressure in its constructor.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideExplicit()
@@ -1697,7 +1701,7 @@ class MCDisplacementMove(MetropolizedMove):
 
     Parameters
     ----------
-    displacement_sigma : simtk.unit.Quantity
+    displacement_sigma : openmm.unit.Quantity
         The standard deviation of the normal distribution used to propose the
         random displacement (units of length, default is 1.0*nanometer).
     atom_subset : slice or list of int, optional
@@ -1733,15 +1737,15 @@ class MCDisplacementMove(MetropolizedMove):
 
         Parameters
         ----------
-        positions : nx3 numpy.ndarray simtk.unit.Quantity
+        positions : nx3 numpy.ndarray openmm.unit.Quantity
             The positions to displace.
-        displacement_sigma : simtk.unit.Quantity
+        displacement_sigma : openmm.unit.Quantity
             The standard deviation of the normal distribution used to propose
             the random displacement (units of length, default is 1.0*nanometer).
 
         Returns
         -------
-        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+        rotated_positions : nx3 numpy.ndarray openmm.unit.Quantity
             The displaced positions.
 
         """
@@ -1805,12 +1809,12 @@ class MCRotationMove(MetropolizedMove):
 
         Parameters
         ----------
-        positions : nx3 numpy.ndarray simtk.unit.Quantity
+        positions : nx3 numpy.ndarray openmm.unit.Quantity
             The positions to rotate.
 
         Returns
         -------
-        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+        rotated_positions : nx3 numpy.ndarray openmm.unit.Quantity
             The rotated positions.
 
         """
