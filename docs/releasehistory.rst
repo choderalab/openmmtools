@@ -7,6 +7,7 @@ Release History
 Enhancement
 -----------
 - Use of CODATA 2018 constants information from OpenMM 7.6.0. (#522)
+- Use new way of importing OpenMM >= 7.6. (#528)
 
 0.20.3 - Bugfix release
 ======================

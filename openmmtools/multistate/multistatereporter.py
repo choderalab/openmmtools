@@ -43,7 +43,10 @@ import netCDF4 as netcdf
 
 from typing import Union, Any
 
-from simtk import unit
+try:
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
 
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
 from openmmtools import states
@@ -1781,7 +1784,7 @@ class _DictYamlLoader(yaml.CLoader):
 
 
 class _DictYamlDumper(yaml.CDumper):
-    """PyYAML Dumper that handle simtk Quantities through !Quantity tags."""
+    """PyYAML Dumper that handle openmm Quantities through !Quantity tags."""
 
     def __init__(self, *args, **kwargs):
         super(_DictYamlDumper, self).__init__(*args, **kwargs)

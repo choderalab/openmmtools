@@ -9,9 +9,14 @@ Retrieve a PDB file from the RCSB, solvate it, and minimize.
 # IMPORTS
 ################################################################################
 
-from simtk import unit
-from simtk import openmm
-from simtk.openmm import app
+try:
+    import openmm
+    from openmm import unit
+    from openmm import app
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
+    from simtk import openmm
+    from simtk.openmm import app
 from pdbfixer import PDBFixer
 
 ################################################################################

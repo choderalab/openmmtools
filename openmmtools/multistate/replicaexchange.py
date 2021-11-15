@@ -119,7 +119,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     Create the system.
 
     >>> import math
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems, states, mcmc
     >>> testsystem = testsystems.AlanineDipeptideImplicit()
     >>> import os

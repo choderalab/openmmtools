@@ -13,7 +13,10 @@ Testing the storage handlers themselves should be left to the test_storage_iodri
 # =============================================================================================
 
 import numpy as np
-from simtk import unit
+try:
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
 import contextlib
 import tempfile
 from openmmtools.utils import temporary_directory

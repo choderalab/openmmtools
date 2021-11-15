@@ -26,8 +26,11 @@ from openmmtools.utils import *
 
 def test_platform_supports_precision():
     """Test that platform_supports_precision works correctly."""
-    from simtk import openmm
-    
+    try:
+        import openmm
+    except ImportError:  # OpenMM < 7.6
+        from simtk import openmm
+
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
         platform_name = platform.getName()
