@@ -37,7 +37,11 @@ import logging
 import datetime
 
 import numpy as np
-from simtk import unit, openmm
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit, openmm
 
 from openmmtools import multistate, utils, states, mcmc, cache
 import mpiplus
@@ -551,7 +555,7 @@ class MultiStateSampler(object):
 
         Parameters
         ----------
-        tolerance : simtk.unit.Quantity, optional
+        tolerance : openmm.unit.Quantity, optional
             Minimization tolerance (units of energy/mole/length, default is
             ``1.0 * unit.kilojoules_per_mole / unit.nanometers``).
         max_iterations : int, optional

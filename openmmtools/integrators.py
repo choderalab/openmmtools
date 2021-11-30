@@ -37,8 +37,12 @@ import logging
 import re
 
 import numpy as np
-import simtk.unit as unit
-import simtk.openmm as mm
+try:
+    import openmm.unit as unit
+    import openmm as mm
+except ImportError:  # OpenMM < 7.6
+    import simtk.unit as unit
+    import simtk.openmm as mm
 
 from openmmtools.constants import kB
 from openmmtools import respa, utils
@@ -150,7 +154,8 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
     setters and getters for the temperature and to add a per-DOF constant
     "sigma" that we need to update only when the temperature is changed.
 
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> class TestIntegrator(ThermostatedIntegrator):
     ...     def __init__(self, temperature=298.0*unit.kelvin, timestep=1.0*unit.femtoseconds):
     ...         super(TestIntegrator, self).__init__(temperature, timestep)
@@ -207,8 +212,9 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
             The temperature of the heat bath in kelvins.
 
         """
-        kT = self.getGlobalVariableByName('kT') * _OPENMM_ENERGY_UNIT
-        temperature = kT / kB
+        # Do most unit conversion first for precision
+        conversion = _OPENMM_ENERGY_UNIT / kB
+        temperature = self.getGlobalVariableByName('kT') * conversion
         return temperature
 
     def setTemperature(self, temperature):
@@ -256,7 +262,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
         Parameters
         ----------
-        integrator : simtk.openmm.Integrator
+        integrator : openmm.Integrator
             The integrator to check.
 
         Returns
@@ -280,7 +286,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
         Parameters
         ----------
-        integrator : simtk.openmm.CustomIntegrator
+        integrator : openmm.CustomIntegrator
             The integrator to which add methods.
 
         Returns
@@ -304,7 +310,7 @@ class ThermostatedIntegrator(utils.RestorableOpenMMObject, PrettyPrintableIntegr
 
     @property
     def kT(self):
-        """The thermal energy in simtk.openmm.Quantity"""
+        """The thermal energy in openmm.Quantity"""
         return self.getGlobalVariableByName("kT") * _OPENMM_ENERGY_UNIT
 
 
@@ -1688,7 +1694,8 @@ class AlchemicalNonequilibriumLangevinIntegrator(NonequilibriumLangevinIntegrato
 
     >>> # Create harmonic oscillator testsystem
     >>> from openmmtools import testsystems
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create a nonequilibrium alchemical integrator
     >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
@@ -1924,7 +1931,8 @@ class PeriodicNonequilibriumIntegrator(AlchemicalNonequilibriumLangevinIntegrato
 
     >>> # Create harmonic oscillator testsystem
     >>> from openmmtools import testsystems
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create a nonequilibrium alchemical integrator
     >>> alchemical_functions = { 'testsystems_HarmonicOscillator_x0' : 'lambda' }
@@ -2058,7 +2066,8 @@ class ExternalPerturbationLangevinIntegrator(NonequilibriumLangevinIntegrator):
 
     >>> # Create harmonic oscillator testsystem
     >>> from openmmtools import testsystems
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> testsystem = testsystems.HarmonicOscillator()
     >>> # Create an external perturbation integrator
     >>> integrator = ExternalPerturbationLangevinIntegrator(temperature=300*unit.kelvin, collision_rate=1.0/unit.picoseconds, timestep=1.0*unit.femtoseconds)
@@ -2295,7 +2304,7 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
     Examples
     --------
     >>> from openmmtools import testsystems
-    >>> from simtk import openmm
+    >>> import openmm
     >>> t = testsystems.AlanineDipeptideVacuum()
     >>> system, positions = t.system, t.positions
 

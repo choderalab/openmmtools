@@ -3,8 +3,12 @@ Generate PDB file containing periodic box data.
 
 """
 
-from simtk import openmm, unit
-from simtk.openmm import app
+try:
+    import openmm
+    from openmm import unit, app
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
+    from simtk.openmm import app
 
 prmtop_filename = 'alanine-dipeptide.prmtop'
 crd_filename = 'alanine-dipeptide.crd'
