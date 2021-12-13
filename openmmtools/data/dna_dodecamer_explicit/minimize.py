@@ -2,8 +2,12 @@
 Script to minimize and coarsely thermalize the Drew-Dickinson B-DNA dodecamer.
 """
 
-from simtk import openmm, unit
-from simtk.openmm import app
+try:
+    import openmm
+    from openmm import app, unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
+    from simtk.openmm import app
 
 # Thermodynamic and simulation control parameters
 temperature = 300.0 * unit.kelvin

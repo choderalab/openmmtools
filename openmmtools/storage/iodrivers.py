@@ -31,7 +31,10 @@ try:
 except ImportError:
     from yaml import Loader, Dumper
 
-from simtk import unit
+try:
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
 
 from ..utils import typename, quantity_from_string
 
@@ -774,8 +777,8 @@ class NCVariableCodec(Codec):
             _bind_write methods should pass a 0
             _bind_append methods should pass 1
         store_unit_string : String, optional, Default: 'NoneType'
-            String representation of the simtk.unit attached to this data. This string should be able to be fed into
-            quantity_from_string(store_unit_string) and return a valid simtk.Unit object. Typically generated from
+            String representation of the openmm.unit attached to this data. This string should be able to be fed into
+            quantity_from_string(store_unit_string) and return a valid openmm.Unit object. Typically generated from
                 str(unit).
             If no unit is assigned to the data, then the default of 'NoneType' should be given.
 
@@ -1396,7 +1399,7 @@ class NCIterable(NCVariableCodec):
 
 class NCQuantity(NCVariableCodec):
     """
-    NetCDF codec for ALL simtk.unit.Quantity's
+    NetCDF codec for ALL openmm.unit.Quantity's
     """
     @property
     def dtype(self):

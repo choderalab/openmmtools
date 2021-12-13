@@ -17,8 +17,12 @@ import re
 import inspect
 from functools import partial
 
-from simtk import unit
-from simtk import openmm
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
+    from simtk import openmm
 
 #=============================================================================================
 # CONSTANTS
@@ -36,7 +40,7 @@ def check_combination(integrator, test, platform=None):
 
     Parameters
     ----------
-    integrator : simtk.openmm.Integrator
+    integrator : openmm.Integrator
        The integrator to test.
     test : testsystem
        The testsystem to test.
