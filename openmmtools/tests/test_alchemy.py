@@ -70,7 +70,7 @@ def compute_energy(system, positions, platform=None, force_group=-1):
 
     Parameters
     ----------
-    platform : simtk.openmm.Platform or None, optional
+    platform : openmm.Platform or None, optional
         If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
     force_group : int flag or set of int, optional
         Passed to the groups argument of Context.getState().
@@ -91,16 +91,16 @@ def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_p
 
     Parameters
     ----------
-    platform : simtk.openmm.Platform or None, optional
+    platform : openmm.Platform or None, optional
         If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
-    tolerance : simtk.unit.Quantity with units compatible with energy/distance, optional, default = 1*kilocalories_per_mole/angstroms
+    tolerance : openmm.unit.Quantity with units compatible with energy/distance, optional, default = 1*kilocalories_per_mole/angstroms
         Minimization tolerance
     maxIterations : int, optional, default=50
         Maximum number of iterations for minimization
 
     Returns
     -------
-    minimized_positions : simtk.openmm.Quantity with shape [nparticle,3] with units compatible with distance
+    minimized_positions : openmm.Quantity with shape [nparticle,3] with units compatible with distance
         The energy-minimized positions.
 
     """
@@ -220,9 +220,9 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference system with the NonbondedForce to dissect.
-    positions : simtk.openmm.unit.Quantity of dimension [nparticles,3] with units compatible with Angstroms
+    positions : openmm.unit.Quantity of dimension [nparticles,3] with units compatible with Angstroms
         The positions to test.
     alchemical_atoms : set of int
         The indices of the alchemical atoms.
@@ -231,7 +231,7 @@ def dissect_nonbonded_energy(reference_system, positions, alchemical_atoms, othe
 
     Returns
     -------
-    tuple of simtk.openmm.unit.Quantity with units compatible with kJ/mol
+    tuple of openmm.unit.Quantity with units compatible with kJ/mol
         All contributions to the potential energy of NonbondedForce in the order:
         nn_particle_sterics: particle sterics interactions between nonalchemical atoms
         aa_particle_sterics: particle sterics interactions between alchemical atoms
@@ -376,7 +376,7 @@ def compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions
 
     Parameters
     ----------
-    nonbonded_force : simtk.openmm.NonbondedForce
+    nonbonded_force : openmm.NonbondedForce
         The nonbonded force to compute the direct space correction.
     alchemical_atoms : set
         Set of alchemical particles in the force.
@@ -385,9 +385,9 @@ def compute_direct_space_correction(nonbonded_force, alchemical_atoms, positions
 
     Returns
     -------
-    aa_correction : simtk.openmm.unit.Quantity with units compatible with kJ/mol
+    aa_correction : openmm.unit.Quantity with units compatible with kJ/mol
         The correction to the direct spaced caused by exceptions between alchemical atoms.
-    na_correction : simtk.openmm.unit.Quantity with units compatible with kJ/mol
+    na_correction : openmm.unit.Quantity with units compatible with kJ/mol
         The correction to the direct spaced caused by exceptions between nonalchemical-alchemical atoms.
 
     """
@@ -525,13 +525,13 @@ def check_multi_interacting_energy_components(reference_system, alchemical_syste
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference system.
-    alchemical_system : simtk.openmm.System
+    alchemical_system : openmm.System
         The alchemically modified system to test.
     alchemical_regions : AlchemicalRegion.
        The alchemically modified region.
-    positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
+    positions : n_particlesx3 array-like of openmm.unit.Quantity
         The positions to test (units of length).
 
     Note
@@ -556,13 +556,13 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference system.
-    alchemical_system : simtk.openmm.System
+    alchemical_system : openmm.System
         The alchemically modified system to test.
     alchemical_regions : AlchemicalRegion.
        The alchemically modified region.
-    positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
+    positions : n_particlesx3 array-like of openmm.unit.Quantity
         The positions to test (units of length).
     multi_regions : boolean
         Indicates if mutiple regions are being tested
@@ -747,13 +747,13 @@ def check_multi_noninteracting_energy_components(reference_system, alchemical_sy
     """wrapper around check_noninteracting_energy_components for multiple regions
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference system (not alchemically modified).
-    alchemical_system : simtk.openmm.System
+    alchemical_system : openmm.System
         The alchemically modified system to test.
     alchemical_regions : AlchemicalRegion.
        The alchemically modified region.
-    positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
+    positions : n_particlesx3 array-like of openmm.unit.Quantity
         The positions to test (units of length).
     """
     for region in alchemical_regions:
@@ -764,13 +764,13 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
     """Check non-interacting energy components are zero when appropriate.
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference system (not alchemically modified).
-    alchemical_system : simtk.openmm.System
+    alchemical_system : openmm.System
         The alchemically modified system to test.
     alchemical_regions : AlchemicalRegion.
        The alchemically modified region.
-    positions : n_particlesx3 array-like of simtk.openmm.unit.Quantity
+    positions : n_particlesx3 array-like of openmm.unit.Quantity
         The positions to test (units of length).
     multi_regions : boolean
         Indicates if mutiple regions are being tested
@@ -883,7 +883,7 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
                 parameters = reference_force.getParticleParameters(particle_index)
                 try:  # GBSAOBCForce
                     force.addParticle(*parameters)
-                except NotImplementedError:  # CustomGBForce
+                except (TypeError, NotImplementedError):  # CustomGBForce
                     force.addParticle(parameters)
 
         system.addForce(force)
@@ -952,15 +952,15 @@ def benchmark(reference_system, alchemical_regions, positions, nsteps=500,
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference System object to compare with.
     alchemical_regions : AlchemicalRegion
         The region to alchemically modify.
-    positions : n_particlesx3 array-like of simtk.unit.Quantity
+    positions : n_particlesx3 array-like of openmm.unit.Quantity
         The initial positions (units of distance).
     nsteps : int, optional
         Number of molecular dynamics steps to use for benchmarking (default is 500).
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         Timestep to use for benchmarking (units of time, default is 1.0*unit.femtoseconds).
 
     """
@@ -1018,7 +1018,10 @@ def benchmark_alchemy_from_pdb():
 
     import mdtraj
     import argparse
-    from simtk.openmm import app
+    try:
+        from openmm import app
+    except ImportError:  # OpenMM < 7.6
+        from simtk.openmm import app
 
     parser = argparse.ArgumentParser(description='Benchmark performance of alchemically-modified system.')
     parser.add_argument('-p', '--pdb', metavar='PDBFILE', type=str, action='store', required=True,
@@ -1058,11 +1061,11 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         The reference System object to compare with.
-    alchemical_system : simtk.openmm.System
+    alchemical_system : openmm.System
         Alchemically-modified system.
-    positions : n_particlesx3 array-like of simtk.unit.Quantity
+    positions : n_particlesx3 array-like of openmm.unit.Quantity
         The initial positions (units of distance).
     nsteps : int, optional
         Number of molecular dynamics steps between samples (default is 50).
@@ -1360,7 +1363,7 @@ class TestAbsoluteAlchemicalFactory(object):
         cls.test_regions['Toluene'] = AlchemicalRegion(alchemical_atoms=range(6))  # Only partially modified.
         cls.test_regions['AlanineDipeptide'] = AlchemicalRegion(alchemical_atoms=range(22))
         cls.test_regions['HostGuestExplicit'] = AlchemicalRegion(alchemical_atoms=range(126, 156))
-        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(0,3))        
+        cls.test_regions['TIP3P WaterBox'] = AlchemicalRegion(alchemical_atoms=range(0,3))
 
         # Modify ions.
         for atom in cls.test_systems['TIP4P-EW WaterBox and NaCl with PME'].topology.atoms():

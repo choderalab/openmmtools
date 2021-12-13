@@ -21,6 +21,31 @@ from openmmtools.utils import *
 
 
 # =============================================================================
+# TEST CONTEXT UTILITIES
+# =============================================================================
+
+def test_platform_supports_precision():
+    """Test that platform_supports_precision works correctly."""
+    try:
+        import openmm
+    except ImportError:  # OpenMM < 7.6
+        from simtk import openmm
+
+    for platform_index in range(openmm.Platform.getNumPlatforms()):
+        platform = openmm.Platform.getPlatform(platform_index)
+        platform_name = platform.getName()
+        supported_precisions = { precision for precision in ['single', 'mixed', 'double'] if platform_supports_precision(platform, precision) }
+        if platform_name == 'Reference':
+            if supported_precisions != set(['double']):
+                raise Exception(f"'Reference' platform should only support 'double' precision, but platform_supports_precision reports {supported_precisions}")
+        if platform_name == 'CUDA':
+            if supported_precisions != set(['single', 'mixed', 'double']):
+                raise Exception(f"'CUDA' platform should support 'mixed' precision, but platform_supports_precision reports {supported_precisions}")
+        if platform_name == 'CPU':
+            if supported_precisions != set(['mixed']):
+                raise Exception(f"'CPU' platform should support 'mixed' precision, but platform_supports_precision reports {supported_precisions}")
+
+# =============================================================================
 # TEST STRING MATHEMATICAL EXPRESSION PARSING UTILITIES
 # =============================================================================
 

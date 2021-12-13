@@ -1,9 +1,6 @@
 """
 Various Python tools for OpenMM.
 """
-import distutils.extension
-from Cython.Build import cythonize
-
 import sys
 from setuptools import setup, find_packages
 import versioneer
@@ -23,9 +20,6 @@ except:
 ################################################################################
 # SETUP
 ################################################################################
-
-extensions = distutils.extension.Extension("openmmtools.multistate.mixing._mix_replicas",
-                                           ['./openmmtools/multistate/mixing/_mix_replicas.pyx'])
 
 CLASSIFIERS = """\
 Development Status :: 3 - Alpha
@@ -79,7 +73,6 @@ setup(
     # Manual control if final package is compressible or not, set False to prevent the .egg from being made
     zip_safe=False,
 
-    ext_modules=cythonize(extensions),
     entry_points={'console_scripts': [
         'test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main',
         'benchmark-alchemy = openmmtools.tests.test_alchemy:benchmark_alchemy_from_pdb',

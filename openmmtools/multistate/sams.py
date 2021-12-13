@@ -81,7 +81,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     Create the system:
 
     >>> import math
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems, states, mcmc
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
     >>> import os

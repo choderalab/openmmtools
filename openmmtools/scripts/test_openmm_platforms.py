@@ -91,7 +91,7 @@ def config_root_logger(verbose, log_file_path=None, mpicomm=None):
     n_handlers = len(logging.root.handlers)
     if n_handlers > 0:
         root_logger = logging.root
-        for i in xrange(n_handlers):
+        for i in range(n_handlers):
             root_logger.removeHandler(root_logger.handlers[0])
 
     # If this is a worker node, don't save any log file
@@ -138,8 +138,12 @@ import os.path
 import sys
 import math
 
-import simtk.unit as units
-import simtk.openmm as openmm
+try:
+    import openmm
+    import openmm.unit as units
+except ImportError:  # OpenMM < 7.6
+    import simtk.unit as units
+    import simtk.openmm as openmm
 
 from openmmtools import testsystems
 
@@ -157,12 +161,12 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
 
     ARGUMENTS
 
-    computed_potential (simtk.unit.Quantity in units of energy) - computed potential energy
-    expected_potential (simtk.unit.Quantity in units of energy) - expected
+    computed_potential (openmm.unit.Quantity in units of energy) - computed potential energy
+    expected_potential (openmm.unit.Quantity in units of energy) - expected
 
     OPTIONAL ARGUMENTS
 
-    tolerance (simtk.unit.Quantity in units of energy) - acceptable tolerance
+    tolerance (openmm.unit.Quantity in units of energy) - acceptable tolerance
 
     EXAMPLES
 
@@ -185,14 +189,14 @@ def compute_potential_and_force(system, positions, platform):
 
     ARGUMENTS
 
-    system (simtk.openmm.System) - the system for which the energy is to be computed
-    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
-    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    system (openmm.System) - the system for which the energy is to be computed
+    positions (openmm.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (openmm.Platform) - platform object to be used to compute the energy and force
 
     RETURNS
 
-    potential (simtk.unit.Quantity in energy/mole) - the potential
-    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+    potential (openmm.unit.Quantity in energy/mole) - the potential
+    force (openmm.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
 
     """
 
@@ -220,15 +224,15 @@ def compute_potential_and_force_by_force_index(system, positions, platform, forc
 
     ARGUMENTS
 
-    system (simtk.openmm.System) - the system for which the energy is to be computed
-    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
-    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    system (openmm.System) - the system for which the energy is to be computed
+    positions (openmm.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (openmm.Platform) - platform object to be used to compute the energy and force
     force_index (int) - index of force to be computed (all others ignored)
 
     RETURNS
 
-    potential (simtk.unit.Quantity in energy/mole) - the potential
-    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+    potential (openmm.unit.Quantity in energy/mole) - the potential
+    force (openmm.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
 
     """
 
@@ -270,15 +274,15 @@ def compute_potential_and_force_by_force_group(system, positions, platform, forc
 
     ARGUMENTS
 
-    system (simtk.openmm.System) - the system for which the energy is to be computed
-    positions (simtk.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
-    platform (simtk.openmm.Platform) - platform object to be used to compute the energy and force
+    system (openmm.System) - the system for which the energy is to be computed
+    positions (openmm.unit.Quantity of Nx3 numpy.array in units of distance) - positions for which energy and force are to be computed
+    platform (openmm.Platform) - platform object to be used to compute the energy and force
     force_group (int) - index of force group to be computed (all others ignored)
 
     RETURNS
 
-    potential (simtk.unit.Quantity in energy/mole) - the potential
-    force (simtk.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
+    potential (openmm.unit.Quantity in energy/mole) - the potential
+    force (openmm.unit.Quantity of Nx3 numpy.array in units of energy/mole/distance) - the force
 
     """
 
@@ -318,7 +322,7 @@ def get_all_subclasses(cls):
        List of all subclasses of `cls`.
 
     """
-       
+
     all_subclasses = []
 
     for subclass in cls.__subclasses__():
@@ -457,7 +461,7 @@ def main():
             xml_file.write(state_xml)
             xml_file.close()
 
-            
+
             # Place forces into different force groups.
             forces = [ system.getForce(force_index) for force_index in range(system.getNumForces()) ]
             force_group_names = dict()
@@ -490,7 +494,7 @@ def main():
                     try:
                         platform = openmm.Platform.getPlatform(platform_index)
                         platform_name = platform.getName()
-                        
+
                         # Define precision models to test.
                         if platform_name == 'Reference':
                             precision_models = ['double']
@@ -505,7 +509,7 @@ def main():
                                 platform.setPropertyDefaultValue('CudaPrecision', precision_model)
                             if platform_name == 'OpenCL':
                                 platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
-                                
+
                             # Compute potential and force.
                             [platform_potential, platform_force] = compute_potential_and_force_by_force_group(system, positions, platform, force_group)
 

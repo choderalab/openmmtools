@@ -5,9 +5,14 @@ Benchmark various integrators provided in openmmtools on some test systems.
 
 """
 
-from simtk import openmm
-from simtk import unit
-from simtk.openmm import app
+try:
+    import openmm
+    from openmm import unit
+    from openmm import app
+except ImportError: # OpenMM < 7.6
+    from simtk import openmm
+    from simtk import unit
+    from simtk.openmm import app
 from openmmtools import testsystems
 from openmmtools import integrators
 import numpy as np

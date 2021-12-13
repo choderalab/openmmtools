@@ -1,6 +1,46 @@
 Release History
 ***************
 
+0.20.4 - Bugfix release
+======================
+
+Enhancement
+-----------
+- Use of CODATA 2018 constants information from OpenMM 7.6.0. (#522)
+- Use new way of importing OpenMM >= 7.6. (#528)
+
+0.20.3 - Bugfix release
+======================
+
+Bugfixes
+--------
+- Fixes [#505](https://github.com/choderalab/openmmtools/issues/505): GPU contexts would silently fail to enable 'mixed' precision; corrects reporting of available precisions
+
+0.20.2 - Bugfix release
+=======================
+
+Remove leftover support for python 2.7
+
+Cleanup
+-------
+- Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
+
+0.20.1 - Bugfix release
+========================================
+
+Enhancements
+------------
+- ``openmmtools.utils.get_available_platforms()`` and ``.get_fastest_platform()`` now filter OpenMM Platforms based on specified minimum precision support, which defaults to ``mixed``
+
+Bugfixes
+--------
+- Replace the `cython <https://cython.org/>`_ accelerated ``all-swap`` replica mixing scheme with a `numba <https://numba.pydata.org>`_ implementation for better stability, and portability, and speed
+- Fixes incorrect temperature spacing in ``ParallelTemperingSampler`` constructor
+- Do unit conversion first to improve precision PR #501 (fixes issue #500)
+
+Misc
+----
+- Resolve ``numpy 1.20`` ``DeprecationWarning`` about ``np.float``
 
 0.20.0 - Periodic alchemical integrators
 ========================================
