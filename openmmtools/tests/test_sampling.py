@@ -756,6 +756,9 @@ class TestMultiStateSampler(object):
             else:
                 assert not sampler._reporter.is_open()
 
+            # Ensure reporter is closed. Windows based system testing seems to get upset about this.
+            reporter.close()
+
             # Open reporter to read stored data.
             reporter = self.REPORTER(storage_path, open_mode='r', checkpoint_interval=1)
 
