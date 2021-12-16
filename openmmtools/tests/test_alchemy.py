@@ -86,7 +86,7 @@ def compute_energy(system, positions, platform=None, force_group=-1):
     return potential
 
 
-def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms, maxIterations=50):
+def minimize(system, positions, platform=None, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms, maxIterations=500):
     """Minimize the energy of the given system.
 
     Parameters
