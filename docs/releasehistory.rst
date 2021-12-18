@@ -1,16 +1,30 @@
 Release History
 ***************
 
+0.2Y.Z - XXXXXX release
+=======================
+
 0.20.4 - Bugfix release
 ======================
 
+Bugfixes
+--------
+- Fixes TestAbsoluteAlchemicalFactory.test_overlap NaNs (`#534 <https://github.com/choderalab/openmmtools/pull/534>`_)
+- Try closing reporter in test for windows fix (`#535 <https://github.com/choderalab/openmmtools/pull/535>`_) 
+
+
+Known issues
+------------
+- Correctly raises an error when a ``CustomNonbondedForce`` made by OpenMM's ``LennardJonesGenerator`` is detected (`#511 <https://github.com/choderalab/openmmtools/pull/511>`_)
+
 Enhancement
 -----------
-- Use of CODATA 2018 constants information from OpenMM 7.6.0. (#522)
-- Use new way of importing OpenMM >= 7.6. (#528)
+- Use of CODATA 2018 constants information from OpenMM 7.6.0. (`#522 <https://github.com/choderalab/openmmtools/pull/522>`_)
+- Use new way of importing OpenMM >= 7.6. (`#528 <https://github.com/choderalab/openmmtools/pull/528>`_)
+- Remove logic for missing file when retrying to open a dataset (`#515 <https://github.com/choderalab/openmmtools/pull/515>`_) 
 
 0.20.3 - Bugfix release
-======================
+=======================
 
 Bugfixes
 --------
