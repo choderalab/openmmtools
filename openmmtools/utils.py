@@ -13,10 +13,10 @@ General utility functions for the repo.
 # =============================================================================
 # GLOBAL IMPORTS
 # =============================================================================
-
 import re
 import ast
 import abc
+import os
 import time
 import math
 import copy
@@ -56,6 +56,20 @@ def temporary_directory():
         except Exception as e:
             # Warn that we weren't able to clean up completely
             logger.warning(e)
+
+
+@contextlib.contextmanager
+def enter_temp_directory():
+    """Create and enter a temporary directory; used as context manager."""
+    temp_dir = tempfile.mkdtemp()
+    cwd = os.getcwd()
+    try:
+        os.chdir(temp_dir)
+        yield temp_dir
+    finally:
+        os.chdir(cwd)
+        shutil.rmtree(temp_dir)
+
 
 # =============================================================================
 # BENCHMARKING UTILITIES
