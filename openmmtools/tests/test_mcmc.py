@@ -256,53 +256,20 @@ def test_context_cache():
 
 def test_mcmc_move_context_cache_shallow_copy():
     """Test mcmc moves in different replicas use the same specified context_cache"""
-    from openmmtools.utils import get_fastest_platform
-    from openmmtools.multistate import ReplicaExchangeSampler
-    from openmmtools import multistate
+    from openmmtools.utils import enter_temp_directory
+    from openmmtools.tests.utils import dipeptide_toy_simulation
 
-    platform = get_fastest_platform()
-    context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
-    testsystem = testsystems.AlanineDipeptideExplicit()
-    n_replicas = 5  # Number of temperature replicas.
-    T_min = 300.0 * unit.kelvin  # Minimum temperature.
-    T_max = 600.0 * unit.kelvin  # Maximum temperature.
-    temperatures = [
-        T_min
-        + (T_max - T_min)
-        * (math.exp(float(i) / float(n_replicas - 1)) - 1.0)
-        / (math.e - 1.0)
-        for i in range(n_replicas)
-    ]
-    thermodynamic_states = [
-        ThermodynamicState(system=testsystem.system, temperature=T) for T in temperatures
-    ]
-    move = LangevinSplittingDynamicsMove(
-        timestep=4.0 * unit.femtoseconds,
-        n_steps=1,
-        collision_rate=5.0 / unit.picosecond,
-        reassign_velocities=False,
-        n_restart_attempts=20,
-        constraint_tolerance=1e-06,
-        context_cache=context_cache,
-    )
-    simulation = ReplicaExchangeSampler(
-        mcmc_moves=move,
-        number_of_iterations=1,
-    )
-    # Create temporary reporter storage file
-    with tempfile.NamedTemporaryFile() as storage:
-        reporter = multistate.MultiStateReporter(storage.name, checkpoint_interval=999999)
-    simulation.create(
-        thermodynamic_states=thermodynamic_states,
-        sampler_states=SamplerState(
-            testsystem.positions,
-            box_vectors=testsystem.system.getDefaultPeriodicBoxVectors(),
-        ),
-        storage=reporter,
-    )
-    first_context_cache = simulation.mcmc_moves[0].context_cache
-    for mcmc_move in simulation.mcmc_moves:
-        assert mcmc_move.context_cache is first_context_cache
+    # Create simulation in temporary directory
+    with enter_temp_directory() as tmpdir:
+        simulation, storage = dipeptide_toy_simulation(n_replicas=5,
+                                                       n_steps=1,
+                                                       n_iterations=1,
+                                                       checkpoint_interval=999999,
+                                                       do_run=False)
+        first_context_cache = simulation.mcmc_moves[0].context_cache
+        # Check context cache are the same between the different mcmc_moves objects
+        for mcmc_move in simulation.mcmc_moves:
+            assert mcmc_move.context_cache is first_context_cache
 
 
 def test_moves_serialization():
@@ -327,6 +294,29 @@ def test_moves_serialization():
         deserialized_move = utils.deserialize(serialized_move)
         deserialized_pickle = pickle.dumps(deserialized_move)
         assert original_pickle == deserialized_pickle
+
+
+def test_moves_shared_contextcache_resume():
+    """
+    Test ContextCache is shared upon resuming from deserialized object.
+    """
+    from openmmtools.utils import enter_temp_directory
+    from openmmtools.tests.utils import dipeptide_toy_simulation
+    from openmmtools.multistate import MultiStateReporter
+
+    # Perform small simulation in temporary directory
+    with enter_temp_directory() as tmpdir:
+        simulation, storage_path = dipeptide_toy_simulation(n_replicas=2,
+                                                       n_steps=10,
+                                                       n_iterations=10,
+                                                       checkpoint_interval=5,
+                                                       do_run=True)
+        # Resume simulation from storage and check identity
+        reporter = MultiStateReporter(storage_path, 'r')
+        moves = reporter.read_mcmc_moves()
+        id_1 = id(moves[0].context_cache)
+        id_2 = id(moves[1].context_cache)
+        assert id_1 == id_2, f"Identities mismatch between context cache objects."
 
 
 def test_move_restart():
