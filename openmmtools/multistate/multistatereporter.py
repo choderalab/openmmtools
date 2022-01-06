@@ -762,9 +762,18 @@ class MultiStateReporter(object):
 
         # Retrieve all moves in order.
         mcmc_moves = list()
-        for move_id in range(n_moves):
+        # manually add first move and get context from it
+        serialized_move = self.read_dict('mcmc_moves/move0')  # first serialized move
+        deserialized_move = deserialize(serialized_move)
+        mcmc_moves.append(deserialized_move)
+        # get context_cache of first move to use in the rest of the moves
+        first_context_cache = deserialized_move.context_cache
+        # loop through the rest of the moves
+        for move_id in range(1, n_moves):
             serialized_move = self.read_dict('mcmc_moves/move{}'.format(move_id))
-            mcmc_moves.append(deserialize(serialized_move))
+            deserialized_move = deserialize(serialized_move)
+            deserialized_move.context_cache = first_context_cache  # Use same context_cache in all the moves
+            mcmc_moves.append(deserialized_move)
         return mcmc_moves
 
     def write_mcmc_moves(self, mcmc_moves):

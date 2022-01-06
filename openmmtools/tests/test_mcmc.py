@@ -304,13 +304,13 @@ def test_moves_shared_contextcache_resume():
     from openmmtools.tests.utils import dipeptide_toy_simulation
     from openmmtools.multistate import MultiStateReporter
 
-    # Perform small simulation in temporary directory
+    # Create and run small simulation in temporary directory
     with enter_temp_directory() as tmpdir:
         simulation, storage_path = dipeptide_toy_simulation(n_replicas=2,
-                                                       n_steps=10,
-                                                       n_iterations=10,
-                                                       checkpoint_interval=5,
-                                                       do_run=True)
+                                                            n_steps=10,
+                                                            n_iterations=10,
+                                                            checkpoint_interval=5,
+                                                            do_run=True)
         # Resume simulation from storage and check identity
         reporter = MultiStateReporter(storage_path, 'r')
         moves = reporter.read_mcmc_moves()

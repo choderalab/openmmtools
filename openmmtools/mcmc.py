@@ -761,6 +761,7 @@ class BaseIntegratorMove(MCMCMove):
         self.n_steps = serialization['n_steps']
         self.reassign_velocities = serialization['reassign_velocities']
         self.n_restart_attempts = serialization['n_restart_attempts']
+        # TODO: self.context_cache defaults to None in constructor, do we need this check?
         if serialization['context_cache'] is None:
             self.context_cache = None
         else:
