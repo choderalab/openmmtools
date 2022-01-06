@@ -310,7 +310,31 @@ def test_moves_shared_contextcache_resume():
                                                             n_steps=10,
                                                             n_iterations=10,
                                                             checkpoint_interval=5,
-                                                            do_run=True)
+                                                            do_run=True,
+                                                            local_context_cache=True)
+        # Resume simulation from storage and check identity
+        reporter = MultiStateReporter(storage_path, 'r')
+        moves = reporter.read_mcmc_moves()
+        id_1 = id(moves[0].context_cache)
+        id_2 = id(moves[1].context_cache)
+        assert id_1 == id_2, f"Identities mismatch between context cache objects."
+
+
+def test_moves_shared_none_contextcache_resume():
+    """Test if global ContextCache is shared when context cache keyword is None."""
+    # TODO: Figure a way to do this with parameters in Nosetests, reusing previous code.
+    from openmmtools.utils import enter_temp_directory
+    from openmmtools.tests.utils import dipeptide_toy_simulation
+    from openmmtools.multistate import MultiStateReporter
+
+    # Create and run small simulation in temporary directory
+    with enter_temp_directory() as tmpdir:
+        simulation, storage_path = dipeptide_toy_simulation(n_replicas=2,
+                                                            n_steps=10,
+                                                            n_iterations=10,
+                                                            checkpoint_interval=5,
+                                                            do_run=True,
+                                                            local_context_cache=False)  # None/global context_cache
         # Resume simulation from storage and check identity
         reporter = MultiStateReporter(storage_path, 'r')
         moves = reporter.read_mcmc_moves()
