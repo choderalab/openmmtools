@@ -1,7 +1,8 @@
 import math
 
 
-def dipeptide_toy_simulation(n_replicas=2, n_steps=10, n_iterations=10, checkpoint_interval=5, do_run=False):
+def dipeptide_toy_simulation(n_replicas=2, n_steps=10, n_iterations=10, checkpoint_interval=5, do_run=False,
+                             local_context_cache=True):
     """
     Performs a small replica exchange toy simulation for Alanine dipeptide system.
 
@@ -21,6 +22,8 @@ def dipeptide_toy_simulation(n_replicas=2, n_steps=10, n_iterations=10, checkpoi
             Interval in steps to be used for storing checkpoints.
         do_run: bool, optional, default=False
             Tells if simulation will be actually run, instead of just getting created.
+        local_context_cache: bool, optional, default=True
+            Specifies whether to create a local context_cache. If False, uses global context cache.
 
     Returns
     -------
@@ -44,8 +47,11 @@ def dipeptide_toy_simulation(n_replicas=2, n_steps=10, n_iterations=10, checkpoi
     testsystem = testsystems.AlanineDipeptideExplicit()
 
     # Specifying context cache
-    platform = get_fastest_platform()
-    context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    if local_context_cache:
+        platform = get_fastest_platform()
+        context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    else:
+        context_cache = None
 
     # Simulation parameters
     n_replicas = n_replicas  # Number of temperature replicas.
