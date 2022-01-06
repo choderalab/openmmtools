@@ -13,9 +13,7 @@ Test State classes in mcmc.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
-import math
 import pickle
-import tempfile
 from functools import partial
 
 import nose
