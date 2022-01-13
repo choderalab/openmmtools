@@ -33,15 +33,15 @@ from openmmtools.mcmc import *
 # Test various combinations of systems and MCMC schemes
 analytical_testsystems = [
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
+     GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-        WeightedMove([(GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100), 0.5),
-                      (HMCMove(timestep=10*unit.femtosecond, n_steps=10), 0.5)])),
+     WeightedMove([(GHMCMove(timestep=10.0 * unit.femtoseconds, n_steps=100), 0.5),
+                   (HMCMove(timestep=10 * unit.femtosecond, n_steps=10), 0.5)])),
     ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
-        LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
+     LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
     ("IdealGas", testsystems.IdealGas(nparticles=216),
-        SequenceMove([HMCMove(timestep=10*unit.femtosecond, n_steps=10),
-                      MonteCarloBarostatMove()]))
+     SequenceMove([HMCMove(timestep=10*unit.femtosecond, n_steps=10),
+                   MonteCarloBarostatMove()]))
     ]
 
 NSIGMA_CUTOFF = 6.0  # cutoff for significance testing
