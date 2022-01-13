@@ -148,7 +148,7 @@ class MCMCMove(SubhookedABCMeta):
     """
 
     @abc.abstractmethod
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache):
         """Apply the MCMC move.
 
         Depending on the implementation, this can alter the thermodynamic
@@ -162,6 +162,7 @@ class MCMCMove(SubhookedABCMeta):
         sampler_state : openmmtools.states.SamplerState
            The initial sampler state before applying the move. This may
            be modified depending on the implementation.
+        context_cache : opemmtools.cache.ContextCache
 
         """
         pass
@@ -631,7 +632,7 @@ class BaseIntegratorMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
-        context_cache : openmmtools.context.ContextCache
+        context_cache : openmmtools.cache.ContextCache
             context cache to be used during propagation with the integrator.
 
         See Also
