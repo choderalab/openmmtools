@@ -254,6 +254,7 @@ class MCMCSampler(object):
         for iteration in range(n_iterations):
             self.move.apply(self.thermodynamic_state, self.sampler_state)
 
+    # TODO: This method is only used in test_mcmc.py, what do we need it for?
     def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
                  max_iterations=100, context_cache=None):
         """Minimize the current configuration.
@@ -568,9 +569,6 @@ class BaseIntegratorMove(MCMCMove):
     ----------
     n_steps : int
         The number of integration steps to take each time the move is applied.
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
@@ -585,7 +583,6 @@ class BaseIntegratorMove(MCMCMove):
     Attributes
     ----------
     n_steps : int
-    context_cache : openmmtools.cache.ContextCache
     reassign_velocities : bool
     n_restart_attempts : int or None
 
@@ -617,14 +614,12 @@ class BaseIntegratorMove(MCMCMove):
 
     """
 
-    def __init__(self, n_steps, context_cache=None,
-                 reassign_velocities=False, n_restart_attempts=4):
+    def __init__(self, n_steps, reassign_velocities=False, n_restart_attempts=4):
         self.n_steps = n_steps
-        self.context_cache = context_cache
         self.reassign_velocities = reassign_velocities
         self.n_restart_attempts = n_restart_attempts
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache):
         """Propagate the state through the integrator.
 
         This updates the SamplerState after the integration. It also logs
@@ -636,6 +631,8 @@ class BaseIntegratorMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.context.ContextCache
+            context cache to be used during propagation with the integrator.
 
         See Also
         --------
@@ -644,12 +641,6 @@ class BaseIntegratorMove(MCMCMove):
         """
         move_name = self.__class__.__name__  # shortcut
         timer = Timer()
-
-        # Check if we have to use the global cache.
-        if self.context_cache is None:
-            context_cache = cache.global_context_cache
-        else:
-            context_cache = self.context_cache
 
         # Create integrator.
         integrator = self._get_integrator(thermodynamic_state)
@@ -749,11 +740,7 @@ class BaseIntegratorMove(MCMCMove):
         pass
 
     def __getstate__(self):
-        if self.context_cache is None:
-            context_cache_serialized = None
-        else:
-            context_cache_serialized = utils.serialize(self.context_cache)
-        return dict(n_steps=self.n_steps, context_cache=context_cache_serialized,
+        return dict(n_steps=self.n_steps,
                     reassign_velocities=self.reassign_velocities,
                     n_restart_attempts=self.n_restart_attempts)
 
@@ -761,25 +748,6 @@ class BaseIntegratorMove(MCMCMove):
         self.n_steps = serialization['n_steps']
         self.reassign_velocities = serialization['reassign_velocities']
         self.n_restart_attempts = serialization['n_restart_attempts']
-        if serialization['context_cache'] is None:
-            self.context_cache = None
-        else:
-            self.context_cache = utils.deserialize(serialization['context_cache'])
-
-    def __deepcopy__(self, memo):
-        """Overriding default deep copy behavior to avoid creating new ContextCache objects without need."""
-
-        if memo is None:
-            memo = {}
-
-        cls = self.__class__
-        new_state = cls.__new__(cls)
-        memo[id(self)] = new_state
-        for k, v in self.__dict__.items():
-            if k != 'context_cache':
-                new_state.__dict__[k] = copy.deepcopy(v, memo)
-        new_state.__dict__['context_cache'] = self.context_cache
-        return new_state
 
 
 # =============================================================================
