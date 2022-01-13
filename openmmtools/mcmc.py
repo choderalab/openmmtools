@@ -339,11 +339,8 @@ class SequenceMove(MCMCMove):
     False
 
     """
-    def __init__(self, move_list, context_cache=None):
+    def __init__(self, move_list):
         self.move_list = list(move_list)
-        if context_cache is not None:
-            for move in self.move_list:
-                move.context_cache = context_cache
 
     @property
     def statistics(self):
@@ -362,7 +359,7 @@ class SequenceMove(MCMCMove):
             if hasattr(move, 'statistics'):
                 move.statistics = value[i]
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache):
         """Apply the sequence of MCMC move in order.
 
         Parameters
@@ -374,7 +371,7 @@ class SequenceMove(MCMCMove):
 
         """
         for move in self.move_list:
-            move.apply(thermodynamic_state, sampler_state)
+            move.apply(thermodynamic_state, sampler_state, context_cache)
 
     def __str__(self):
         return str(self.move_list)
