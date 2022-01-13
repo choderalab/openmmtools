@@ -308,9 +308,6 @@ class SequenceMove(MCMCMove):
     ----------
     move_list : list-like of MCMCMove
         The sequence of MCMC moves to apply.
-    context_cache : openmmtools.cache.ContextCache, optional
-        If not None, the context_cache of all the moves in the sequence
-        will be set to this (default is None).
 
     Attributes
     ----------
@@ -396,9 +393,6 @@ class WeightedMove(MCMCMove):
     move_set : list of tuples (MCMCMove, float_
         Each tuple associate an MCMCMoves to its probability of being
         selected on apply().
-    context_cache : openmmtools.cache.ContextCache, optional
-        If not None, the context_cache of all the moves in the set will be
-        set to this (default is None).
 
     Attributes
     ----------
@@ -426,11 +420,8 @@ class WeightedMove(MCMCMove):
     False
 
     """
-    def __init__(self, move_set, context_cache=None):
+    def __init__(self, move_set):
         self.move_set = move_set
-        if context_cache is not None:
-            for move, weight in self.move_set:
-                move.context_cache = context_cache
 
     @property
     def statistics(self):
@@ -449,7 +440,7 @@ class WeightedMove(MCMCMove):
             if hasattr(move, 'statistics'):
                 move.statistics = value[i]
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache):
         """Apply one of the MCMC moves in the set to the state.
 
         The probability that a move is picked is given by its weight.
@@ -460,11 +451,13 @@ class WeightedMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to.
+        context_cache : openmmtools.cache.ContextCache
+            The ContextCache to use for Context creation.
 
         """
         moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
-        move.apply(thermodynamic_state, sampler_state)
+        move.apply(thermodynamic_state, sampler_state, context_cache)
 
     def __getstate__(self):
         serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
