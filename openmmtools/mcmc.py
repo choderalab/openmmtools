@@ -146,9 +146,15 @@ class MCMCMove(SubhookedABCMeta):
     statistics such as number of attempted moves and acceptance rates.
 
     """
+    def __init__(self, context_cache=None):
+        if context_cache is not None:
+            logger.warning("Ignoring context_cache argument. Specifying context_cache on" 
+                           "initialization of an MCMCMove is deprecated; please pass to"
+                           " apply() method instead")
+
 
     @abc.abstractmethod
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the MCMC move.
 
         Depending on the implementation, this can alter the thermodynamic
@@ -243,7 +249,7 @@ class MCMCSampler(object):
         self.move = move
         # Create context caches for energy minimization and integrator
         self._energy_context_cache = energy_context_cache
-        self._integrator_context_cache = integrator_context_cache
+        self._propagation_context_cache = integrator_context_cache
         self._create_context_caches()
 
     def run(self, n_iterations=1):
@@ -258,7 +264,7 @@ class MCMCSampler(object):
         """
         # Apply move for n_iterations.
         for iteration in range(n_iterations):
-            self.move.apply(self.thermodynamic_state, self.sampler_state, self._integrator_context_cache)
+            self.move.apply(self.thermodynamic_state, self.sampler_state, context_cache=self._propagation_context_cache)
 
     def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
                  max_iterations=100, context_cache=None):
@@ -310,8 +316,8 @@ class MCMCSampler(object):
         if self._energy_context_cache is None:
             self._energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
         # Create independent unlimited context cache for move/integrator, if None
-        if self._integrator_context_cache is None:
-            self._integrator_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+        if self._propagation_context_cache is None:
+            self._propagation_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
 
 
 # =============================================================================
@@ -373,7 +379,7 @@ class SequenceMove(MCMCMove):
             if hasattr(move, 'statistics'):
                 move.statistics = value[i]
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the sequence of MCMC move in order.
 
         Parameters
@@ -382,10 +388,12 @@ class SequenceMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to.
+        context_cache : opemmtools.cache.ContextCache, optional
+
 
         """
         for move in self.move_list:
-            move.apply(thermodynamic_state, sampler_state, context_cache)
+            move.apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     def __str__(self):
         return str(self.move_list)
@@ -457,7 +465,7 @@ class WeightedMove(MCMCMove):
             if hasattr(move, 'statistics'):
                 move.statistics = value[i]
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply one of the MCMC moves in the set to the state.
 
         The probability that a move is picked is given by its weight.
@@ -474,7 +482,7 @@ class WeightedMove(MCMCMove):
         """
         moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
-        move.apply(thermodynamic_state, sampler_state, context_cache)
+        move.apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     def __getstate__(self):
         serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
@@ -616,7 +624,7 @@ class BaseIntegratorMove(MCMCMove):
     >>> sampler_state = states.SamplerState(alanine.positions)
     >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
     >>> move = VerletMove(timestep=1.0*unit.femtosecond, n_steps=2)
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     Setting velocities
     Reading statistics
 
@@ -627,7 +635,7 @@ class BaseIntegratorMove(MCMCMove):
         self.reassign_velocities = reassign_velocities
         self.n_restart_attempts = n_restart_attempts
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Propagate the state through the integrator.
 
         This updates the SamplerState after the integration. It also logs
@@ -800,7 +808,7 @@ class MetropolizedMove(MCMCMove):
     >>> sampler_state = states.SamplerState(alanine.positions)
     >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
     >>> move = AddOneVector(atom_subset=list(range(sampler_state.n_particles)))
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     Propose new positions
     >>> move.n_accepted
     1
@@ -823,7 +831,7 @@ class MetropolizedMove(MCMCMove):
         self.n_accepted = value['n_accepted']
         self.n_proposed = value['n_proposed']
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply a metropolized move to the sampler state.
 
         Total number of acceptances and proposed move are updated.
@@ -1040,7 +1048,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1050,7 +1058,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1064,7 +1072,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         self.timestep = timestep
         self.collision_rate = collision_rate
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the Langevin dynamics MCMC move.
 
         This modifies the given sampler_state. The temperature of the
@@ -1081,7 +1089,8 @@ class LangevinDynamicsMove(BaseIntegratorMove):
 
         """
         # Explicitly implemented just to have more specific docstring.
-        super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state, context_cache)
+        super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state,
+                                                context_cache=context_cache)
 
     def __getstate__(self):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
@@ -1189,7 +1198,7 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1199,7 +1208,7 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1311,7 +1320,7 @@ class GHMCMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1321,7 +1330,7 @@ class GHMCMove(BaseIntegratorMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1362,7 +1371,7 @@ class GHMCMove(BaseIntegratorMove):
         self.n_accepted = 0
         self.n_proposed = 0
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the GHMC MCMC move.
 
         This modifies the given sampler_state. The temperature of the
@@ -1379,7 +1388,7 @@ class GHMCMove(BaseIntegratorMove):
 
         """
         # Explicitly implemented just to have more specific docstring.
-        super(GHMCMove, self).apply(thermodynamic_state, sampler_state, context_cache)
+        super(GHMCMove, self).apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     def __getstate__(self):
         serialization = super(GHMCMove, self).__getstate__()
@@ -1465,7 +1474,7 @@ class HMCMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1475,7 +1484,7 @@ class HMCMove(BaseIntegratorMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1485,7 +1494,7 @@ class HMCMove(BaseIntegratorMove):
         super(HMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the MCMC move.
 
         This modifies the given sampler_state.
@@ -1499,7 +1508,7 @@ class HMCMove(BaseIntegratorMove):
 
         """
         # Explicitly implemented just to have more specific docstring.
-        super(HMCMove, self).apply(thermodynamic_state, sampler_state, context_cache)
+        super(HMCMove, self).apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     def __getstate__(self):
         serialization = super(HMCMove, self).__getstate__()
@@ -1561,7 +1570,7 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state,sampler_state,context_cache)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1579,7 +1588,7 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     def n_attempts(self, value):
         self.n_steps = value
 
-    def apply(self, thermodynamic_state, sampler_state, context_cache):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the MCMC move.
 
         The thermodynamic state must be barostated by a MonteCarloBarostat
@@ -1610,7 +1619,8 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
             barostat.setFrequency(1)
         thermodynamic_state.barostat = barostat
 
-        super(MonteCarloBarostatMove, self).apply(thermodynamic_state, sampler_state, context_cache)
+        super(MonteCarloBarostatMove, self).apply(thermodynamic_state, sampler_state,
+                                                  context_cache=context_cache)
 
         # Restore frequency of barostat.
         if old_barostat_frequency != 1:
