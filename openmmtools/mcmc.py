@@ -235,11 +235,16 @@ class MCMCSampler(object):
 
     """
 
-    def __init__(self, thermodynamic_state, sampler_state, move):
+    def __init__(self, thermodynamic_state, sampler_state, move,
+                 energy_context_cache=None, integrator_context_cache=None):
         # Make a deep copy of the state so that initial state is unchanged.
         self.thermodynamic_state = copy.deepcopy(thermodynamic_state)
         self.sampler_state = copy.deepcopy(sampler_state)
         self.move = move
+        # Create context caches for energy minimization and integrator
+        self._energy_context_cache = energy_context_cache
+        self._integrator_context_cache = integrator_context_cache
+        self._create_context_caches()
 
     def run(self, n_iterations=1):
         """
@@ -253,9 +258,8 @@ class MCMCSampler(object):
         """
         # Apply move for n_iterations.
         for iteration in range(n_iterations):
-            self.move.apply(self.thermodynamic_state, self.sampler_state, context_cache)
+            self.move.apply(self.thermodynamic_state, self.sampler_state, self._integrator_context_cache)
 
-    # TODO: This method is only used in test_mcmc.py, what do we need it for?
     def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
                  max_iterations=100, context_cache=None):
         """Minimize the current configuration.
@@ -295,6 +299,19 @@ class MCMCSampler(object):
         self.sampler_state.update_from_context(context)
 
         #timer.report_timing()
+
+    def _create_context_caches(self):
+        """
+        Handle the creation of context cache for energy minimization and move integrator.
+
+        Useful private method if we want to change the default behavior.
+        """
+        # Create independent unlimited context cache for energy minimization, if None
+        if self._energy_context_cache is None:
+            self._energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+        # Create independent unlimited context cache for move/integrator, if None
+        if self._integrator_context_cache is None:
+            self._integrator_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
 
 
 # =============================================================================
