@@ -175,7 +175,7 @@ class MCMCMove(SubhookedABCMeta):
         pass
 
     @staticmethod
-    def _get_context_cache(self, context_cache_input):
+    def _get_context_cache(context_cache_input):
         """
         Method to return context to be used for move propagation.
 
@@ -418,7 +418,6 @@ class SequenceMove(MCMCMove):
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to.
         context_cache : opemmtools.cache.ContextCache, optional
-
 
         """
         for move in self.move_list:
@@ -692,9 +691,12 @@ class BaseIntegratorMove(MCMCMove):
         # Create integrator.
         integrator = self._get_integrator(thermodynamic_state)
 
+        # Get context cache
+        local_context_cache = self._get_context_cache(context_cache)
+
         # Create context.
         timer.start("{}: Context request".format(move_name))
-        context, integrator = context_cache.get_context(thermodynamic_state, integrator)
+        context, integrator = local_context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
         #logger.debug("{}: Context obtained, platform is {}".format(
         #    move_name, context.getPlatform().getName()))
@@ -882,8 +884,11 @@ class MetropolizedMove(MCMCMove):
         benchmark_id = 'Applying {}'.format(self.__class__.__name__ )
         timer.start(benchmark_id)
 
+        # Get context cache
+        local_context_cache = self._get_context_cache(context_cache)
+
         # Create context, any integrator works.
-        context, unused_integrator = context_cache.get_context(thermodynamic_state)
+        context, unused_integrator = local_context_cache.get_context(thermodynamic_state)
 
         # Compute initial energy. We don't need to set velocities to compute the potential.
         # TODO assume sampler_state.potential_energy is the correct potential if not None?
@@ -1537,6 +1542,8 @@ class HMCMove(BaseIntegratorMove):
            The thermodynamic state to use when applying the MCMC move.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            Context cache to be used during propagation with the integrator.
 
         """
         # Explicitly implemented just to have more specific docstring.
