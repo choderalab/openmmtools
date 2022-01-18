@@ -150,7 +150,8 @@ class MCMCMove(SubhookedABCMeta):
         if context_cache is not None:
             logger.warning("Ignoring context_cache argument. Specifying context_cache on" 
                            "initialization of an MCMCMove is deprecated; please pass to"
-                           " apply() method instead")
+                           " apply() method as kwarg instead.")
+        self.context_cache = None  # hardcoding unused parameter to None. Kept for compatibility.
 
 
     @abc.abstractmethod
@@ -172,6 +173,33 @@ class MCMCMove(SubhookedABCMeta):
 
         """
         pass
+
+    @staticmethod
+    def _get_context_cache(self, context_cache_input):
+        """
+        Method to return context to be used for move propagation.
+
+        .. note:: centralized API point to deal with context cache behavior.
+
+        Parameters
+        ----------
+        context_cache_input : openmmtools.cache.ContextCache or None
+            Context cache to be used in the propagation of the mcmc move. If None,
+            it will create a new unlimited ContextCache object.
+
+        Returns
+        -------
+        context_cache : openmmtools.cache.ContextCache
+            Context cache object to be used for propagation.
+        """
+        if context_cache_input is None:
+            # Default behavior, unlimited ContextCache
+            context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+        elif isinstance(context_cache_input, cache.ContextCache):
+            context_cache = context_cache_input
+        else:
+            raise ValueError("Context cache input is not a valid ContextCache or None type.")
+        return context_cache
 
 
 # =============================================================================
