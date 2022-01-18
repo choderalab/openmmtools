@@ -359,7 +359,8 @@ class SequenceMove(MCMCMove):
     False
 
     """
-    def __init__(self, move_list):
+    def __init__(self, move_list, **kwargs):
+        super(SequenceMove, self).__init__(**kwargs)
         self.move_list = list(move_list)
 
     @property
@@ -445,7 +446,8 @@ class WeightedMove(MCMCMove):
     False
 
     """
-    def __init__(self, move_set):
+    def __init__(self, move_set, **kwargs):
+        super(WeightedMove, self).__init__(**kwargs)
         self.move_set = move_set
 
     @property
@@ -630,7 +632,8 @@ class BaseIntegratorMove(MCMCMove):
 
     """
 
-    def __init__(self, n_steps, reassign_velocities=False, n_restart_attempts=4):
+    def __init__(self, n_steps, reassign_velocities=False, n_restart_attempts=4, **kwargs):
+        super(BaseIntegratorMove, self).__init__(**kwargs)
         self.n_steps = n_steps
         self.reassign_velocities = reassign_velocities
         self.n_restart_attempts = n_restart_attempts
@@ -816,7 +819,8 @@ class MetropolizedMove(MCMCMove):
     1
 
     """
-    def __init__(self, atom_subset=None):
+    def __init__(self, atom_subset=None, **kwargs):
+        super(MetropolizedMove, self).__init__(**kwargs)
         self.n_accepted = 0
         self.n_proposed = 0
         self.atom_subset = atom_subset
