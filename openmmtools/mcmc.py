@@ -201,7 +201,7 @@ class MCMCMove(SubhookedABCMeta):
             context_cache = context_cache_input
         else:
             raise ValueError("Context cache input is not a valid ContextCache or None type.")
-        # update private attribute
+        # update private attribute - expected ONLY to be updated by this method!
         self._propagation_context_cache = context_cache
         return context_cache
 
