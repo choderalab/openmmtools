@@ -151,7 +151,8 @@ class MCMCMove(SubhookedABCMeta):
             logger.warning("Ignoring context_cache argument. Specifying context_cache on" 
                            "initialization of an MCMCMove is deprecated; please pass to"
                            " apply() method as kwarg instead.")
-        self.context_cache = None  # hardcoding unused parameter to None. Kept for compatibility.
+        # hardcoding unused attribute to global context cache. For compatibility.
+        self.context_cache = cache.global_context_cache
 
 
     @abc.abstractmethod
@@ -421,10 +422,10 @@ class SequenceMove(MCMCMove):
 
         """
         # Get context cache to be used and update attribute
-        self.context_cache = self._get_context_cache(context_cache)
+        local_context_cache = self._get_context_cache(context_cache)
         for move in self.move_list:
             # Apply each move with the specified local context
-            move.apply(thermodynamic_state, sampler_state, context_cache=self.context_cache)
+            move.apply(thermodynamic_state, sampler_state, context_cache=local_context_cache)
 
     def __str__(self):
         return str(self.move_list)
@@ -515,8 +516,8 @@ class WeightedMove(MCMCMove):
         moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
         # Get context cache to be used and update attribute
-        self.context_cache = self._get_context_cache(context_cache)
-        move.apply(thermodynamic_state, sampler_state, context_cache=self.context_cache)
+        local_context_cache = self._get_context_cache(context_cache)
+        move.apply(thermodynamic_state, sampler_state, context_cache=local_context_cache)
 
     def __getstate__(self):
         serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
@@ -697,12 +698,12 @@ class BaseIntegratorMove(MCMCMove):
         integrator = self._get_integrator(thermodynamic_state)
 
         # Get context cache and update attribute
-        self.context_cache = self._get_context_cache(context_cache)
+        local_context_cache = self._get_context_cache(context_cache)
 
         # Create context.
         timer.start("{}: Context request".format(move_name))
         # TODO: Is this still needed now that we are specifying the context?
-        context, integrator = self.context_cache.get_context(thermodynamic_state, integrator)
+        context, integrator = local_context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
         #logger.debug("{}: Context obtained, platform is {}".format(
         #    move_name, context.getPlatform().getName()))
@@ -891,11 +892,11 @@ class MetropolizedMove(MCMCMove):
         timer.start(benchmark_id)
 
         # Get context cach and update attribute
-        self.context_cache = self._get_context_cache(context_cache)
+        local_context_cache = self._get_context_cache(context_cache)
 
         # TODO: Is this still needed now that we are specifying the context?
         # Create context, any integrator works.
-        context, unused_integrator = self.context_cache.get_context(thermodynamic_state)
+        context, unused_integrator = local_context_cache.get_context(thermodynamic_state)
 
         # Compute initial energy. We don't need to set velocities to compute the potential.
         # TODO assume sampler_state.potential_energy is the correct potential if not None?
