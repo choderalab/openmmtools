@@ -153,6 +153,8 @@ class MCMCMove(SubhookedABCMeta):
                            " apply() method as kwarg instead.")
         # hardcoding unused attribute to global context cache. For compatibility.
         self.context_cache = cache.global_context_cache
+        # private attribute for propagation context cache - useful for testing
+        self._propagation_context_cache = None
 
 
     @abc.abstractmethod
@@ -175,8 +177,7 @@ class MCMCMove(SubhookedABCMeta):
         """
         pass
 
-    @staticmethod
-    def _get_context_cache(context_cache_input):
+    def _get_context_cache(self, context_cache_input):
         """
         Method to return context to be used for move propagation.
 
@@ -200,6 +201,8 @@ class MCMCMove(SubhookedABCMeta):
             context_cache = context_cache_input
         else:
             raise ValueError("Context cache input is not a valid ContextCache or None type.")
+        # update private attribute
+        self._propagation_context_cache = context_cache
         return context_cache
 
 
@@ -421,7 +424,7 @@ class SequenceMove(MCMCMove):
         context_cache : opemmtools.cache.ContextCache, optional
 
         """
-        # Get context cache to be used and update attribute
+        # Get context cache to be used
         local_context_cache = self._get_context_cache(context_cache)
         for move in self.move_list:
             # Apply each move with the specified local context
@@ -515,7 +518,7 @@ class WeightedMove(MCMCMove):
         """
         moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
-        # Get context cache to be used and update attribute
+        # Get context cache to be used
         local_context_cache = self._get_context_cache(context_cache)
         move.apply(thermodynamic_state, sampler_state, context_cache=local_context_cache)
 
@@ -697,7 +700,7 @@ class BaseIntegratorMove(MCMCMove):
         # Create integrator.
         integrator = self._get_integrator(thermodynamic_state)
 
-        # Get context cache and update attribute
+        # Get context cache
         local_context_cache = self._get_context_cache(context_cache)
 
         # Create context.
@@ -891,7 +894,7 @@ class MetropolizedMove(MCMCMove):
         benchmark_id = 'Applying {}'.format(self.__class__.__name__ )
         timer.start(benchmark_id)
 
-        # Get context cach and update attribute
+        # Get context cache
         local_context_cache = self._get_context_cache(context_cache)
 
         # TODO: Is this still needed now that we are specifying the context?
