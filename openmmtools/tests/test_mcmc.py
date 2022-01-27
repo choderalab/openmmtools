@@ -437,9 +437,10 @@ def test_move_restart():
     # We use a local context cache with Reference platform since on the
     # CPU platform CustomIntegrators raises an error with NaN particles.
     reference_platform = openmm.Platform.getPlatformByName('Reference')
-    move = MyMove(context_cache=cache.ContextCache(platform=reference_platform))
+    context_cache = cache.ContextCache(platform=reference_platform)
+    move = MyMove(context_cache=context_cache)
     with nose.tools.assert_raises(IntegratorMoveError) as cm:
-        move.apply(thermodynamic_state, sampler_state)
+        move.apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     # We have counted the correct number of restart attempts.
     assert move.attempted_count == n_restart_attempts + 1
