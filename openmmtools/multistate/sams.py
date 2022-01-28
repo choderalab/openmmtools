@@ -363,8 +363,10 @@ class SAMSSampler(multistate.MultiStateSampler):
         # Update log weights
         self._update_log_weights()
 
-    def _restore_sampler_from_reporter(self, reporter):
-        super()._restore_sampler_from_reporter(reporter)
+    def _restore_sampler_from_reporter(self, reporter, energy_context_cache=None, propagation_context_cache=None):
+        super()._restore_sampler_from_reporter(reporter,
+                                               energy_context_cache=energy_context_cache,
+                                               propagation_context_cache=propagation_context_cache)
         self._cached_state_histogram = self._compute_state_histogram(reporter=reporter)
         logger.debug('Restored state histogram: {}'.format(self._cached_state_histogram))
         data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0')
