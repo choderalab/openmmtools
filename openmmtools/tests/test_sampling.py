@@ -36,6 +36,7 @@ import mpiplus
 
 import openmmtools as mmtools
 from openmmtools import testsystems
+from openmmtools import cache
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
 from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyzer
@@ -945,6 +946,23 @@ class TestMultiStateSampler(object):
                         restored_value = restored_dict.pop(attr)
                         assert np.all(original_value == restored_value), '{}: {}\t{}'.format(
                             attr, original_value, restored_value)
+
+                # Check context caches have the same original attributes
+                for attr, original_value in list(original_dict.items()):
+                    if isinstance(original_value, cache.ContextCache):
+                        original_value = original_dict.pop(attr)
+                        restored_value = restored_dict.pop(attr)
+                        # Make sure they have the same public attributes (excluding methods)
+                        original_inner_attrs = [attr_ for attr_ in dir(original_value) if not attr_.startswith('_')
+                                                and not callable(getattr(original_value, attr_))]
+                        restored_inner_attrs = [attr_ for attr_ in dir(restored_value) if not attr_.startswith('_')
+                                                and not callable(getattr(original_value, attr_))]
+                        assert original_inner_attrs == restored_inner_attrs
+                        # Iterate over cache object attributes and check they have the same values
+                        for inner_attr in original_inner_attrs:
+                            original_inner_value = getattr(original_value, inner_attr)
+                            restored_inner_value = getattr(restored_value, inner_attr)
+                            assert original_inner_value == restored_inner_value
 
                 # Everything else should be a dict of builtins.
                 assert original_dict == restored_dict

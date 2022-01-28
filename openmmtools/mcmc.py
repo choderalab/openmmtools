@@ -216,7 +216,9 @@ class MCMCMove(SubhookedABCMeta):
         for k, v in self.__dict__.items():
             if k != 'context_cache':
                 new_state.__dict__[k] = copy.deepcopy(v, memo)
-        new_state.__dict__['context_cache'] = self.context_cache
+        # TODO: This hacky conditional is needed when deserializing - no context_cache is serialized. Better way?
+        if hasattr(self, "context_cache"):
+            new_state.__dict__['context_cache'] = self.context_cache
         return new_state
 
 
