@@ -225,15 +225,13 @@ def test_default_context_cache_apply():
     sampler_state = SamplerState(testsystem.positions)
     thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
 
-    # By default a local context cache is used.
+    # By default the global context cache is used.
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
-    # make sure there is no specified context cache for propagation before apply
-    assert move._propagation_context_cache is None, "Previously defined context cache. Expected None."
-    # Apply move without specifying context_cache (default)
+    # Apply move without specifying context_cache (default behavior)
     move.apply(thermodynamic_state, sampler_state)
-    # get context cache from private attribute
-    default_context_cache = move._propagation_context_cache
-    assert len(default_context_cache) == 2, f"Context cache does not match dimensions."
+    # Make sure global context cache is used
+    global_cache = cache.global_context_cache
+    assert len(global_cache) == 2, f"Context cache does not match dimensions."
 
 
 def test_context_cache_specific_apply():
@@ -260,9 +258,11 @@ def test_context_cache_sequence_apply():
     # Test local context cache is propagated to moves in sequence
     local_cache = cache.ContextCache()
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
+    # Context cache before apply without access
+    assert local_cache._lru._n_access == 0, f"Expected no access in local context cache."
     move.apply(thermodynamic_state, sampler_state, context_cache=local_cache)
-    for m in move:
-        assert m._propagation_context_cache == local_cache
+    # Context cache now must have 2 accesses
+    assert local_cache._lru._n_access == 2, "Expected two accesses in local context cache."
 
 
 def test_context_cache_compatibility():
