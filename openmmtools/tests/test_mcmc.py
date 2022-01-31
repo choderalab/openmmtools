@@ -215,8 +215,8 @@ def test_default_context_cache():
     # By default an independent local context cache is used
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
     context_cache = move._get_context_cache(context_cache_input=None)  # get default context cache
-    # Assert the default context_cache is not the global one
-    assert context_cache is not cache.global_context_cache
+    # Assert the default context_cache is the global one
+    assert context_cache is cache.global_context_cache
 
 
 def test_default_context_cache_apply():
@@ -226,11 +226,12 @@ def test_default_context_cache_apply():
     thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
 
     # By default the global context cache is used.
+    # emptying global cache - could be "dirty" from previous uses in other tests
+    global_cache = cache.global_context_cache
+    global_cache.empty()
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
     # Apply move without specifying context_cache (default behavior)
     move.apply(thermodynamic_state, sampler_state)
-    # Make sure global context cache is used
-    global_cache = cache.global_context_cache
     assert len(global_cache) == 2, f"Context cache does not match dimensions."
 
 
