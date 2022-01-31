@@ -148,14 +148,10 @@ class MCMCMove(SubhookedABCMeta):
     """
     def __init__(self, context_cache=None):
         if context_cache is not None:
-            logger.warning("Ignoring context_cache argument. Specifying context_cache on" 
-                           "initialization of an MCMCMove is deprecated; please pass to"
-                           " apply() method as kwarg instead.")
-        # hardcoding unused attribute to global context cache. For compatibility.
-        self.context_cache = cache.global_context_cache
+            logger.warning("Ignoring context_cache argument. The MCMCMove.context_cache field has been deprecated."
+                           " The API now requires context_cache be passed to apply(). Please update your code.'")
         # private attribute for propagation context cache - useful for testing
         self._propagation_context_cache = None
-
 
     @abc.abstractmethod
     def apply(self, thermodynamic_state, sampler_state, context_cache=None):
@@ -176,6 +172,13 @@ class MCMCMove(SubhookedABCMeta):
 
         """
         pass
+
+    @property
+    def context_cache(self):
+        logger.warning('The MCMCMove.context_cache field has been deprecated. The API now requires context_cache '
+                       'be passed to apply(). Please update your code.')
+        from openmmtools import cache
+        return cache.global_context_cache
 
     def _get_context_cache(self, context_cache_input):
         """
