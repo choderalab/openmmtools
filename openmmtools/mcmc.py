@@ -150,8 +150,6 @@ class MCMCMove(SubhookedABCMeta):
         if context_cache is not None:
             logger.warning("Ignoring context_cache argument. The MCMCMove.context_cache field has been deprecated."
                            " The API now requires context_cache be passed to apply(). Please update your code.'")
-        # private attribute for propagation context cache - useful for testing
-        self._propagation_context_cache = None
 
     @abc.abstractmethod
     def apply(self, thermodynamic_state, sampler_state, context_cache=None):
@@ -198,14 +196,12 @@ class MCMCMove(SubhookedABCMeta):
             Context cache object to be used for propagation.
         """
         if context_cache_input is None:
-            # Default behavior, unlimited ContextCache
-            context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+            # Default behavior, gobal Context Cache
+            context_cache = cache.global_context_cache
         elif isinstance(context_cache_input, cache.ContextCache):
             context_cache = context_cache_input
         else:
             raise ValueError("Context cache input is not a valid ContextCache or None type.")
-        # update private attribute - expected ONLY to be updated by this method!
-        self._propagation_context_cache = context_cache
         return context_cache
 
     def __deepcopy__(self, memo):
