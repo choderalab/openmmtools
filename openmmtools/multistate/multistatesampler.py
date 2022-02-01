@@ -1648,17 +1648,17 @@ class MultiStateSampler(object):
         raise RestorationError(message)
 
     @staticmethod
-    def _create_context_caches(energy_context_cache_input, propagation_context_cache_input):
+    def _create_context_caches(energy_context_cache=None, propagation_context_cache=None):
         """Handle energy and propagation context cache default behavior.
 
         .. note:: As of 01-Jan-22 default behavior is to use independent local caches.
 
         Parameters
         ----------
-        energy_context_cache_input : openmmtools.cache.ContextCache or None
+        energy_context_cache : openmmtools.cache.ContextCache or None
             Context cache to be used in energy computations. If None,
             it will create a new unlimited ContextCache object.
-        propagation_context_cache_input : openmmtools.cache.ContextCache or None
+        propagation_context_cache : openmmtools.cache.ContextCache or None
             Context cache to be used in the propagation of the mcmc moves. If None,
             it will create a new unlimited ContextCache object.
 
@@ -1670,19 +1670,19 @@ class MultiStateSampler(object):
             Context cache to be used in the propagation of the mcmc moves.
         """
         # Handling energy context cache
-        if energy_context_cache_input is None:
+        if energy_context_cache is None:
             # Default behavior, unlimited ContextCache
             energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
-        elif isinstance(energy_context_cache_input, cache.ContextCache):
-            energy_context_cache = energy_context_cache_input
+        elif isinstance(energy_context_cache, cache.ContextCache):
+            energy_context_cache = energy_context_cache
         else:
             raise ValueError("Energy context cache input is not a valid ContextCache or None type.")
         # Handling propagation context cache
-        if propagation_context_cache_input is None:
+        if propagation_context_cache is None:
             # Default behavior, unlimited ContextCache
             propagation_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
-        elif isinstance(propagation_context_cache_input, cache.ContextCache):
-            propagation_context_cache = propagation_context_cache_input
+        elif isinstance(propagation_context_cache, cache.ContextCache):
+            propagation_context_cache = propagation_context_cache
         else:
             raise ValueError("MCMC move context cache input is not a valid ContextCache or None type.")
         return energy_context_cache, propagation_context_cache
