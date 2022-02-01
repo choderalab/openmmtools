@@ -167,7 +167,8 @@ class MCMCMove(SubhookedABCMeta):
            The initial sampler state before applying the move. This may
            be modified depending on the implementation.
         context_cache : opemmtools.cache.ContextCache
-
+            Context cache to be used in the propagation of the mcmc move. If None,
+            it will use the global context cache.
         """
         pass
 
