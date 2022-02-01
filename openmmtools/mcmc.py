@@ -179,7 +179,8 @@ class MCMCMove(SubhookedABCMeta):
         from openmmtools import cache
         return cache.global_context_cache
 
-    def _get_context_cache(self, context_cache_input):
+    @staticmethod
+    def _get_context_cache(context_cache_input):
         """
         Method to return context to be used for move propagation.
 
