@@ -1673,17 +1673,13 @@ class MultiStateSampler(object):
         if energy_context_cache is None:
             # Default behavior, unlimited ContextCache
             energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
-        elif isinstance(energy_context_cache, cache.ContextCache):
-            energy_context_cache = energy_context_cache
-        else:
+        elif not isinstance(energy_context_cache, cache.ContextCache):
             raise ValueError("Energy context cache input is not a valid ContextCache or None type.")
         # Handling propagation context cache
         if propagation_context_cache is None:
             # Default behavior, unlimited ContextCache
             propagation_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
-        elif isinstance(propagation_context_cache, cache.ContextCache):
-            propagation_context_cache = propagation_context_cache
-        else:
+        elif not isinstance(propagation_context_cache, cache.ContextCache):
             raise ValueError("MCMC move context cache input is not a valid ContextCache or None type.")
         return energy_context_cache, propagation_context_cache
 
