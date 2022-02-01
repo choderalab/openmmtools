@@ -25,7 +25,6 @@ jobs:
           - { os: windows-latest, python-version: '3.8', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.8', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.10', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
 
     env:
