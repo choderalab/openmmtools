@@ -151,7 +151,7 @@ def test_restrain_atoms():
     restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms)
 
     # Compute host center_of_geometry.
-    centroid = np.mean(sampler_state.positions[:126], axis=0)
+    centroid = np.mean(sampler_state.positions[restrained_atoms], axis=0)
     assert np.allclose(centroid, np.zeros(3))
 
 def test_replace_reaction_field():
