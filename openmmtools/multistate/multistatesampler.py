@@ -596,8 +596,8 @@ class MultiStateSampler(object):
         # The other nodes, only need the positions that they use for propagation and
         # computation of the energy matrix entries.
         minimized_positions, sampler_state_ids = mpiplus.distribute(self._minimize_replica, range(self.n_replicas),
-                                                                tolerance, max_iterations,
-                                                                send_results_to=0)
+                                                                    tolerance, max_iterations,
+                                                                    send_results_to=0)
 
         # Update all sampler states. For non-0 nodes, this will update only the
         # sampler states associated to the replicas propagated by this node.
@@ -1294,8 +1294,8 @@ class MultiStateSampler(object):
         # Use the FIRE minimizer
         integrator = FIREMinimizationIntegrator(tolerance=tolerance)
 
-        # Create context
-        context = thermodynamic_state.create_context(integrator)
+        # Get context and bound integrator from energy_context_cache
+        context, integrator = self._energy_context_cache.get_context(thermodynamic_state, integrator)
 
         # Set initial positions and box vectors.
         sampler_state.apply_to_context(context)
@@ -1329,7 +1329,7 @@ class MultiStateSampler(object):
         final_energy = thermodynamic_state.reduced_potential(sampler_state)
         logger.debug('Replica {}/{}: final energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, final_energy))
-	# TODO if energy > 0, use slower openmm minimizer
+        # TODO if energy > 0, use slower openmm minimizer
 
         # Clean up the integrator
         del context
