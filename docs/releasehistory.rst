@@ -14,7 +14,7 @@ Bugfixes
 - Try closing reporter in test for windows fix (`#535 <https://github.com/choderalab/openmmtools/pull/535>`_) 
 - Follow NEP 29 and test newer python versions and drop old ones (`#542 <https://github.com/choderalab/openmmtools/pull/542>`_)
 - Update to handle the new OpenMM 7.6 package namespace (`#528 <https://github.com/choderalab/openmmtools/pull/528>`_)
-- Context cache fixes (`#524 <https://github.com/choderalab/openmmtools/pull/524>`_) & (`#538 <https://github.com/choderalab/openmmtools/pull/538>_`)
+- Context cache usage cleanup (`#538 <https://github.com/choderalab/openmmtools/pull/538>_`). Avoiding memory issues and more streamlined API usage of `ContextCache` objects.
 
 
 Known issues
