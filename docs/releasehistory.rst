@@ -4,7 +4,7 @@ Release History
 0.2Y.Z - XXXXXX release
 =======================
 
-0.20.4 - Bugfix release
+0.21.0 - Bugfix release
 =======================
 
 
@@ -14,7 +14,7 @@ Bugfixes
 - Try closing reporter in test for windows fix (`#535 <https://github.com/choderalab/openmmtools/pull/535>`_) 
 - Follow NEP 29 and test newer python versions and drop old ones (`#542 <https://github.com/choderalab/openmmtools/pull/542>`_)
 - Update to handle the new OpenMM 7.6 package namespace (`#528 <https://github.com/choderalab/openmmtools/pull/528>`_)
-- Context cache fixes (`#524 <https://github.com/choderalab/openmmtools/pull/524>`_)
+- Context cache fixes (`#524 <https://github.com/choderalab/openmmtools/pull/524>`_) & (`#538 <https://github.com/choderalab/openmmtools/pull/538>_`)
 
 
 Known issues
