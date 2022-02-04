@@ -326,6 +326,7 @@ def test_dummy_context_cache():
     assert len(cache.global_context_cache) == 0
 
 
+# TODO: This test might not be needed now that MCMCMove objs don't have context_cache attr
 def test_mcmc_move_context_cache_shallow_copy():
     """Test mcmc moves in different replicas use the same specified context_cache"""
     from openmmtools.utils import get_fastest_platform
