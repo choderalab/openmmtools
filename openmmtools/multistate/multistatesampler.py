@@ -557,8 +557,8 @@ class MultiStateSampler(object):
                                initial_thermodynamic_states=initial_thermodynamic_states,
                                unsampled_thermodynamic_states=unsampled_thermodynamic_states,
                                metadata=metadata,
-                               energy_context_cache=None,
-                               sampler_context_cache=None)
+                               energy_context_cache=energy_context_cache,
+                               sampler_context_cache=sampler_context_cache)
 
         # Display papers to be cited.
         self._display_citations()
