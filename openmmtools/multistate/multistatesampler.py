@@ -195,8 +195,7 @@ class MultiStateSampler(object):
         self._have_displayed_citations_before = False
 
         # Initializing context cache attributes to global cache
-        self.energy_context_cache = cache.global_context_cache
-        self.sampler_context_cache = cache.global_context_cache
+        self.energy_context_cache, self.sampler_context_cache = cache.global_context_cache, cache.global_context_cache
 
         # Check convergence.
         if self.number_of_iterations == np.inf:
@@ -534,9 +533,9 @@ class MultiStateSampler(object):
         metadata : dict, optional, default=None
            Simulation metadata to be stored in the file.
         energy_context_cache : openmmtools.cache.ContextCache or None, optional, default None
-            Context cache to be used for energy computations. If None, a new fresh cache will be used.
+            Context cache to be used for energy computations. If None, global context cache will be used.
         sampler_context_cache : openmmtools.cache.ContextCache or None, optional, default None
-            Context cache to be used for move/integrator propagation. If None, a new fresh cache will be used.
+            Context cache to be used for move/integrator propagation. If None, global context cache will be used.
         """
         # Handle case in which storage is a string and not a Reporter object.
         self._reporter = self._reporter_from_storage(storage, check_exist=False)
