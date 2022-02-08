@@ -642,7 +642,15 @@ class MultiStateSampler(object):
         for iteration in range(1, 1 + n_iterations):
             logger.debug("Equilibration iteration {}/{}".format(iteration, n_iterations))
             timer.start('Equilibration Iteration')
+
+            # Propagate replicas.
             self._propagate_replicas()
+
+            # Compute energies of all replicas at all states
+            self._compute_energies()
+
+            # Update thermodynamic states
+            self._mix_replicas()
 
             # Computing timing information
             iteration_time = timer.stop('Equilibration Iteration')
