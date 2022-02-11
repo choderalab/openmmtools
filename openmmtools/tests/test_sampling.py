@@ -35,6 +35,7 @@ except ImportError:  # OpenMM < 7.6
 import mpiplus
 
 import openmmtools as mmtools
+from openmmtools import cache
 from openmmtools import testsystems
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
@@ -1441,6 +1442,58 @@ class TestMultiStateSampler(object):
             sampler.run()
             assert sampler._iteration < n_iterations
             assert sampler.is_completed
+
+    def test_context_cache_default(self):
+        """Test default behavior of context cache attributes."""
+        sampler = self.SAMPLER()
+        global_context_cache = cache.global_context_cache
+        # Default is to use global context cache for both context cache attributes
+        assert sampler.sampler_context_cache is global_context_cache
+        assert sampler.energy_context_cache is global_context_cache
+
+    def test_context_cache_energy_propagation(self):
+        """Test specifying different context caches for energy and propagation in a short simulation."""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+        n_replicas = len(sampler_states)
+        if n_replicas == 1:
+            # This test is intended for use with more than one replica
+            return
+
+        with self.temporary_storage_path() as storage_path:
+            # For this test to work, positions should be the same but
+            # translated, so that minimized positions should satisfy
+            # the same condition.
+            original_diffs = [np.average(sampler_states[i].positions - sampler_states[i + 1].positions)
+                              for i in range(n_replicas - 1)]
+            assert not np.allclose(original_diffs,
+                                   [0 for _ in range(n_replicas - 1)]), "sampler %s failed" % self.SAMPLER
+
+            # Create a replica exchange that propagates only 1 femtosecond
+            # per iteration so that positions won't change much.
+            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+            sampler = self.SAMPLER(mcmc_moves=move)
+            reporter = self.REPORTER(storage_path)
+            self.call_sampler_create(sampler, reporter,
+                                     thermodynamic_states, sampler_states,
+                                     unsampled_states)
+            # Set context cache attributes
+            sampler.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+            sampler.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+            # Compute energies
+            sampler._compute_energies()
+            # Check only energy context cache has been accessed
+            assert sampler.energy_context_cache._lru._n_access == sampler.n_replicas
+            assert sampler.sampler_context_cache._lru._n_access == 0
+
+            # Propagate replicas
+            sampler._propagate_replicas()
+            # Check only propagation context cache has been accessed
+            assert sampler.energy_context_cache._lru._n_access == sampler.n_replicas
+            assert sampler.sampler_context_cache._lru._n_access == sampler.n_states
+
+            # Check that global context cache was never accessed/used
+            assert cache.global_context_cache._lru._n_access == 0
+
 
 
 #############
