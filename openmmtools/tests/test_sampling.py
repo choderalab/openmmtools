@@ -1460,14 +1460,6 @@ class TestMultiStateSampler(object):
             return
 
         with self.temporary_storage_path() as storage_path:
-            # For this test to work, positions should be the same but
-            # translated, so that minimized positions should satisfy
-            # the same condition.
-            original_diffs = [np.average(sampler_states[i].positions - sampler_states[i + 1].positions)
-                              for i in range(n_replicas - 1)]
-            assert not np.allclose(original_diffs,
-                                   [0 for _ in range(n_replicas - 1)]), "sampler %s failed" % self.SAMPLER
-
             # Create a replica exchange that propagates only 1 femtosecond
             # per iteration so that positions won't change much.
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
@@ -1482,18 +1474,16 @@ class TestMultiStateSampler(object):
             # Compute energies
             sampler._compute_energies()
             # Check only energy context cache has been accessed
-            assert sampler.energy_context_cache._lru._n_access == sampler.n_replicas
-            assert sampler.sampler_context_cache._lru._n_access == 0
+            assert sampler.energy_context_cache._lru._n_access > 0, \
+                f"Expected more than 0 accesses, received {sampler.energy_context_cache._lru._n_access }."
+            assert sampler.sampler_context_cache._lru._n_access == 0, \
+                f"{sampler.sampler_context_cache._lru._n_access} accesses, expected 0."
 
             # Propagate replicas
             sampler._propagate_replicas()
-            # Check only propagation context cache has been accessed
-            assert sampler.energy_context_cache._lru._n_access == sampler.n_replicas
-            assert sampler.sampler_context_cache._lru._n_access == sampler.n_states
-
-            # Check that global context cache was never accessed/used
-            assert cache.global_context_cache._lru._n_access == 0
-
+            # Check propagation context cache has been accessed after propagation
+            assert sampler.sampler_context_cache._lru._n_access > 0, \
+                f"Expected more than 0 accesses, received {sampler.energy_context_cache._lru._n_access }."
 
 
 #############
