@@ -1,8 +1,13 @@
 Release History
 ***************
 
-0.2Y.Z - XXXXXX release
+0.21.1 - Bugfix release
 =======================
+
+Bugfixes
+--------
+- More streamlined context cache usage using instance attributes (`#547 <https://github.com/choderalab/openmmtools/pull/547>`_).
+- Improved docstring and examples for ``MultiStateSampler`` object.
 
 0.21.0 - Bugfix release
 =======================
