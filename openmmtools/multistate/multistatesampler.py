@@ -126,15 +126,56 @@ class MultiStateSampler(object):
     sampler_states
     metadata
     is_completed
+    energy_context_cache : openmmtools.cache.ContextCache, default=openmmtools.cache.global_context_cache
+        Context cache to be used for energy computations. Defaults to using global context cache.
+    sampler_context_cache : openmmtools.cache.ContextCache, default=openmmtools.cache.global_context_cache
+        Context cache to be used for propagation. Defaults to using global context cache.
 
-    :param number_of_iterations: Maximum number of integer iterations that will be run
+    Examples
+    --------
+    Sampling multiple states of an alanine dipeptide in implicit solvent system.
 
-    :param online_analysis_interval: How frequently to carry out online analysis in number of iterations
+    >>> import math
+    >>> import tempfile
+    >>> from openmm import unit
+    >>> from openmmtools import testsystems, states, mcmc
+    >>> from openmmtools.multistate import MultiStateSampler, MultiStateReporter
+    >>> testsystem = testsystems.AlanineDipeptideImplicit()
 
-    :param online_analysis_target_error: Target free energy difference error float at which simulation will be stopped during online analysis, in dimensionless energy
+    Create thermodynamic states
 
-    :param online_analysis_minimum_iterations: Minimum number of iterations needed before online analysis is run as int
+    >>> n_replicas = 3
+    >>> T_min = 298.0 * unit.kelvin  # Minimum temperature.
+    >>> T_max = 600.0 * unit.kelvin  # Maximum temperature.
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+    ...                 for i in range(n_replicas)]
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+    ...                 for i in range(n_replicas)]
+    >>> thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
+    ...                         for T in temperatures]
 
+    Initialize simulation object with options. Run with a GHMC integrator.
+
+    >>> move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
+    >>> simulation = MultiStateSampler(mcmc_moves=move, number_of_iterations=2)
+
+    Create simulation and store output in temporary file
+
+    >>> storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
+    >>> reporter = MultiStateReporter(storage_path, checkpoint_interval=1)
+    >>> simulation.create(thermodynamic_states=thermodynamic_states,
+    ...                   sampler_states=states.SamplerState(testsystem.positions), storage=reporter)
+
+    Optionally, specify unlimited context cache attributes using the fastest mixed precision platform
+
+    >>> from openmmtools.cache import ContextCache
+    >>> from openmmtools.utils import get_fastest_platform
+    >>> platform = get_fastest_platform(minimum_precision='mixed')
+    >>> simulation.energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+
+    Run the simulation
+    >>> simulation.run()
     """
 
     # -------------------------------------------------------------------------
