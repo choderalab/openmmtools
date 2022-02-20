@@ -481,6 +481,17 @@ class ContextCache(object):
             self._platform_properties = serialization["platform_properties"]
         self._lru = LRUCache(serialization['capacity'], serialization['time_to_live'])
 
+    def __eq__(self, other):
+        """Two ContextCache objects are equal if they have the same values in their public attributes."""
+        # Check types are compatible
+        if isinstance(other, ContextCache):
+            # Check all inner public attributes have the same values (excluding methods)
+            my_inner_attrs = [attr_ for attr_ in dir(self) if not attr_.startswith('_')
+                              and not callable(getattr(self, attr_))]
+            return all([getattr(self, attr) == getattr(other, attr) for attr in my_inner_attrs])
+        else:
+            return False
+
     # -------------------------------------------------------------------------
     # Internal usage
     # -------------------------------------------------------------------------

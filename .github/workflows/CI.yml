@@ -3,10 +3,10 @@ name: CI
 on:
   push:
     branches:
-      - "master"
+      - "main"
   pull_request:
     branches:
-      - "master"
+      - "main"
   schedule:
     # Nightly tests run on master by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
@@ -21,13 +21,11 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { os: macOS-latest,   python-version: 3.6, openmm: latest  }
-          - { os: windows-latest, python-version: 3.6, openmm: latest  }
-          - { os: ubuntu-latest,  python-version: 3.6, openmm: latest  }
-          - { os: ubuntu-latest,  python-version: 3.7, openmm: latest  }
-          - { os: ubuntu-latest,  python-version: 3.8, openmm: latest  }
-          - { os: ubuntu-latest,  python-version: 3.9, openmm: latest  }
-          - { os: ubuntu-latest,  python-version: 3.6, openmm: nightly }
+          - { os: macOS-latest,   python-version: '3.8', openmm: latest  }
+          - { os: windows-latest, python-version: '3.8', openmm: latest  }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest  }
+          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
