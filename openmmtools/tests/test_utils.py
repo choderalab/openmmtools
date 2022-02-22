@@ -45,6 +45,11 @@ def test_platform_supports_precision():
             if supported_precisions != set(['mixed']):
                 raise Exception(f"'CPU' platform should support 'mixed' precision, but platform_supports_precision reports {supported_precisions}")
 
+
+def test_string_platform_supports_precision():
+    """Test that if we use a string for the platform name, it works"""
+    assert platform_supports_precision("CPU", "mixed")
+
 # =============================================================================
 # TEST STRING MATHEMATICAL EXPRESSION PARSING UTILITIES
 # =============================================================================
