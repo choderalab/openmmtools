@@ -1395,33 +1395,20 @@ class MultiStateSampler(object):
         logger.debug('energy {:8.3f}kT box_volume {:6.4f}nm**3 bxx {:2.4f}nm  byy {:2.4f}nm  bzz {:2.4f}nm'.format(
             energy, volume, bxx, byy, bzz))
 
-        # Use the FIRE minimizer
-        integrator = FIREMinimizationIntegrator(tolerance=tolerance)
-
         # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(thermodynamic_state, integrator)
+        context, integrator = self.energy_context_cache.get_context(thermodynamic_state, integrator_grad)
         # inform of platform used in current context
         logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
         # Set initial positions and box vectors.
         sampler_state.apply_to_context(context)
 
-        # Minimize energy.
-        try:
-            if max_iterations == 0:
-                logger.debug('Using FIRE: tolerance {} minimizing to convergence'.format(tolerance))
-                while integrator.getGlobalVariableByName('converged') < 1:
-                    integrator.step(50)
-            else:
-                logger.debug('Using FIRE: tolerance {} max_iterations {}'.format(tolerance, max_iterations))
-                integrator.step(max_iterations)
-        except Exception as e:
-            if str(e) == 'Particle coordinate is nan':
-                logger.debug('NaN encountered in FIRE minimizer; falling back to L-BFGS after resetting positions')
-                sampler_state.apply_to_context(context)
-                openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
-            else:
-                raise e
+        # Use L-BFGS minimizer because (if pressure is not None) FIRE modifies
+        # the box vectors and can be unstable.
+        logger.debug('Using L-BFGS: tolerance {} max_iterations {}'.format(tolerance, max_iterations))
+        openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
+        sampler_state.update_from_context(context)
+
 
         # Restore the barostat
         thermodynamic_state.pressure = pressure
