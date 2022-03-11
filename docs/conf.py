@@ -195,3 +195,6 @@ texinfo_documents = [
      author, 'openmmtools', 'One line description of project.',
      'Miscellaneous'),
 ]
+
+# -- Options for bibtex --------------------------------------------------
+bibtex_bibfiles = ['references.bib']

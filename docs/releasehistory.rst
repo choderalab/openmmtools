@@ -1,8 +1,21 @@
 Release History
 ***************
 
-0.2Y.Z - XXXXXX release
+0.21.2 - Bugfix release
 =======================
+
+Bugfixes
+--------
+- Fixed UnboundLocalError when using a string to specify platform in ``platform_supports_precision`` (`#551 <https://github.com/choderalab/openmmtools/pull/551>`_). 
+
+
+0.21.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- More streamlined context cache usage using instance attributes (`#547 <https://github.com/choderalab/openmmtools/pull/547>`_).
+- Improved docstring and examples for ``MultiStateSampler`` object.
 
 0.21.0 - Bugfix release
 =======================
