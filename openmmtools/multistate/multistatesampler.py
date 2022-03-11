@@ -643,6 +643,9 @@ class MultiStateSampler(object):
             logger.debug("Equilibration iteration {}/{}".format(iteration, n_iterations))
             timer.start('Equilibration Iteration')
 
+            # NOTE: Unlike run(), do NOT increment iteration counter.
+            # self._iteration += 1
+
             # Propagate replicas.
             self._propagate_replicas()
 

@@ -1177,8 +1177,8 @@ class TestMultiStateSampler(object):
             if len(node_replica_ids) == n_replicas:
                 reporter = self.REPORTER(storage_path, open_mode='r', checkpoint_interval=1)
                 stored_sampler_states = reporter.read_sampler_states(iteration=0)
-                for new_state, stored_state in zip(sampler._sampler_states, stored_sampler_states):
-                    assert np.allclose(new_state.positions, stored_state.positions)
+                for stored_state in stored_sampler_states:
+                    assert any([np.allclose(new_state.positions, stored_state.positions) for new_state in sampler._sampler_states])
 
             # We are still at iteration 0.
             assert sampler._iteration == 0
