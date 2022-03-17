@@ -9,13 +9,11 @@ dependencies:
   - pip
 
   - setuptools
-  - openmm >=7.3.1
+  - openmm >=7.5.0
   - cython
   - python
   - numpy
   - scipy
-  - six
-  - openmm >=7.3.1
   - parmed
   - mdtraj
   - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
@@ -25,6 +23,7 @@ dependencies:
   - sphinxcontrib-bibtex
   - mpiplus
   - pymbar
+  - numba
 
     # Testing
   - nose

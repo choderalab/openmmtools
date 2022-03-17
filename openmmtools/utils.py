@@ -31,7 +31,11 @@ import contextlib
 import zlib
 
 import numpy as np
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 logger = logging.getLogger(__name__)
 
@@ -47,8 +51,11 @@ def temporary_directory():
     try:
         yield tmp_dir
     finally:
-        shutil.rmtree(tmp_dir)
-
+        try:
+            shutil.rmtree(tmp_dir)
+        except Exception as e:
+            # Warn that we weren't able to clean up completely
+            logger.warning(e)
 
 # =============================================================================
 # BENCHMARKING UTILITIES
@@ -380,7 +387,7 @@ class TrackedQuantityView(unit.Quantity):
 
 
 
-# List of simtk.unit methods that are actually units and functions instead of base classes
+# List of openmm.unit methods that are actually units and functions instead of base classes
 # Pre-computed to reduce run-time cost
 # Get the built-in units
 _VALID_UNITS = {method: getattr(unit, method) for method in dir(unit) if type(getattr(unit, method)) is unit.Unit}
@@ -394,9 +401,9 @@ def is_quantity_close(quantity1, quantity2, rtol=1e-10, atol=0.0):
 
     Parameters
     ----------
-    quantity1 : simtk.unit.Quantity
+    quantity1 : openmm.unit.Quantity
         The first quantity to compare.
-    quantity2 : simtk.unit.Quantity
+    quantity2 : openmm.unit.Quantity
         The second quantity to compare.
     rtol : float, optional
         Relative tolerance (default is 1e-10).
@@ -428,10 +435,10 @@ def is_quantity_close(quantity1, quantity2, rtol=1e-10, atol=0.0):
 
 
 def quantity_from_string(expression):
-    """Special call to the math_eval function designed to handle simtk.unit Quantity strings
+    """Special call to the math_eval function designed to handle openmm.unit Quantity strings
 
     All the functions in the standard module math are available together with
-    most of the methods inside the simtk.unit module.
+    most of the methods inside the openmm.unit module.
 
     Parameters
     ----------
@@ -454,7 +461,7 @@ def quantity_from_string(expression):
     # Supported functions, not defined in math.
     functions = _VALID_UNIT_FUNCTIONS
 
-    # Define the units from simtk.unit as the variables
+    # Define the units from openmm.unit as the variables
     variables = _VALID_UNITS
 
     # Eliminate nested quotes and excess whitespace
@@ -507,24 +514,88 @@ def typename(atype):
 # OPENMM PLATFORM UTILITIES
 # =============================================================================
 
-def get_available_platforms():
-    """Return a list of the available OpenMM Platforms."""
-    return [openmm.Platform.getPlatform(i)
-            for i in range(openmm.Platform.getNumPlatforms())]
+def platform_supports_precision(platform, precision):
+    """Determine whether the specified OpenMM Platform supports the specified minimum precision.
 
+    Parameters
+    ----------
+    platform : str or openmm.Platform
+        The platform or platform name to check
+    precision : str
+        One of ['single', 'mixed', 'double']
 
-def get_fastest_platform():
+    Returns
+    -------
+    is_supported : bool
+        True if the platform supports the specified precision; False otherwise
+    """
+    SUPPORTED_PRECISIONS = ['single', 'mixed', 'double']
+    assert precision in SUPPORTED_PRECISIONS, f"Precision {precision} must be one of {SUPPORTED_PRECISIONS}"
+
+    if isinstance(platform, str):
+        # Get the actual Platform object if the platform_name was specified
+        platform = openmm.Platform.getPlatformByName(platform)
+
+    if platform.getName() == 'Reference':
+        # Reference is double precision
+        return (precision == 'double')
+
+    if platform.getName() == 'CPU':
+        return precision in ['mixed']
+
+    if platform.getName() in ['CUDA', 'OpenCL']:
+        properties = { 'Precision' : precision }
+        system = openmm.System()
+        system.addParticle(1.0) # Cannot create Context on a system with no particles
+        integrator = openmm.VerletIntegrator(0.001)
+        try:
+            context = openmm.Context(system, integrator, platform, properties)
+            del context, integrator
+            return True
+        except Exception as e:
+            return False
+
+    raise Exception(f"Platform {platform.getName()} unknown")
+
+def get_available_platforms(minimum_precision='mixed'):
+    """Return a list of the available OpenMM Platforms that can satisfy the requested minimum precision.
+
+    Parameters
+    ----------
+    minimum_precision : str, optional, default='mixed'
+        One of [None, 'single', 'mixed', 'double']
+        If None, all available platforms will be returned.
+
+    Returns
+    -------
+    platforms : list of openmm.Platform
+        Platforms that support specified minimumprecision
+    """
+    platforms = [openmm.Platform.getPlatform(i) for i in range(openmm.Platform.getNumPlatforms())]
+
+    if minimum_precision is not None:
+        # Filter based on precision support
+        platforms = [ platform for platform in platforms if platform_supports_precision(platform, minimum_precision) ]
+
+    return platforms
+
+def get_fastest_platform(minimum_precision='mixed'):
     """Return the fastest available platform.
 
     This relies on the hardcoded speed values in Platform.getSpeed().
 
+    Parameters
+    ----------
+    minimum_precision : str, optional, default='mixed'
+        One of ['single', 'mixed', 'double']
+
     Returns
     -------
-    platform : simtk.openmm.Platform
+    platform : openmm.Platform
        The fastest available platform.
 
     """
-    platforms = get_available_platforms()
+    platforms = get_available_platforms(minimum_precision=minimum_precision)
     fastest_platform = max(platforms, key=lambda x: x.getSpeed())
     return fastest_platform
 

@@ -20,8 +20,12 @@ import pymbar
 from unittest import TestCase
 
 import numpy as np
-from simtk import unit
-from simtk import openmm
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
+    from simtk import openmm
 
 from openmmtools import integrators, testsystems
 from openmmtools.integrators import (ThermostatedIntegrator, AlchemicalNonequilibriumLangevinIntegrator,
@@ -70,7 +74,7 @@ def check_stability(integrator, test, platform=None, nsteps=100, temperature=300
 
     Parameters
     ----------
-    integrator : simtk.openmm.Integrator
+    integrator : openmm.Integrator
        The integrator to test.
     test : testsystem
        The testsystem to test.
@@ -419,7 +423,10 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         """
         Ensure the protocol work is initially zero and remains zero after a number of integrator steps.
         """
-        from simtk.openmm import app
+        try:
+            from openmm import app
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm import app
         parameter_name = 'lambda_electrostatics'
         temperature = 298.0 * unit.kelvin
         parameter_initial = 1.0
@@ -440,7 +447,11 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         Make sure the protocol work that is accumulated internally by the langevin integrator matches the protocol
         is correctly reset with the reset_protocol_work() command.
         """
-        from simtk.openmm import app
+        try:
+            from openmm import app
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm import app
+
         parameter_name = 'lambda_electrostatics'
         temperature = 298.0 * unit.kelvin
         parameter_initial = 1.0
@@ -471,7 +482,11 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         context.updateParametersInContext() and the integrator is a compound integrator. The NCMC scheme tested below
         is based on the one used by the saltswap and protons code-bases.
         """
-        from simtk.openmm import app
+        try:
+            from openmm import app
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm import app
+
         from openmmtools.constants import kB
 
         size = 20.0
@@ -541,7 +556,10 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
     def test_protocol_work_accumulation_waterbox(self):
         """Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicalWaterBox
         """
-        from simtk.openmm import app
+        try:
+            from openmm import app
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm import app
         parameter_name = 'lambda_electrostatics'
         parameter_initial = 1.0
         parameter_final = 0.0
@@ -557,7 +575,10 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         Testing protocol work accumulation for ExternalPerturbationLangevinIntegrator with AlchemicalWaterBox with barostat.
         For brevity, only using CutoffPeriodic as the non-bonded method.
         """
-        from simtk.openmm import app
+        try:
+            from openmm import app
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm import app
         parameter_name = 'lambda_electrostatics'
         parameter_initial = 1.0
         parameter_final = 0.0
@@ -856,7 +877,10 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     assert integrator.getGlobalVariableByName("n_steps_per_cycle") == nsteps_per_cycle
 
     if write_trajectory:
-        from simtk.openmm.app import PDBFile
+        try:
+            from openmm.app import PDBFile
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm.app import PDBFile
         filename = 'neq-trajectory.pdb'
         print(f'Writing trajectory to {filename}')
         with open(filename, 'wt') as outfile:

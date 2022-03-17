@@ -13,10 +13,13 @@ Testing the storage handlers themselves should be left to the test_storage_iodri
 # =============================================================================================
 
 import numpy as np
-from simtk import unit
+try:
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
 import contextlib
 import tempfile
-import shutil
+from openmmtools.utils import temporary_directory
 
 from nose import tools
 
@@ -30,16 +33,6 @@ from openmmtools.storage import StorageInterface, NetCDFIODriver
 def spawn_driver(path):
     """Create a driver that is used to test the StorageInterface class at path location"""
     return NetCDFIODriver(path)
-
-
-@contextlib.contextmanager
-def temporary_directory():
-    """Context for safe creation of temporary directories."""
-    tmp_dir = tempfile.mkdtemp()
-    try:
-        yield tmp_dir
-    finally:
-        shutil.rmtree(tmp_dir)
 
 # =============================================================================================
 # STORAGE INTERFACE TESTING FUNCTIONS

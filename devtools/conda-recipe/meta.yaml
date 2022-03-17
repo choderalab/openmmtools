@@ -20,7 +20,6 @@ requirements:
     - python
     - numpy
     - scipy
-    - six
     - openmm >=7.3.1
     - parmed
     - mdtraj
@@ -32,6 +31,8 @@ requirements:
     - mpiplus
     - pymbar
     - pyyaml
+    - numba
+    - nose
 
 test:
   requires:

@@ -16,7 +16,10 @@ Test Context cache classes in cache.py.
 import itertools
 
 import nose
-from simtk import unit
+try:
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit
 
 from openmmtools import testsystems, states
 

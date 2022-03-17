@@ -1,6 +1,80 @@
 Release History
 ***************
 
+0.21.2 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- Fixed UnboundLocalError when using a string to specify platform in ``platform_supports_precision`` (`#551 <https://github.com/choderalab/openmmtools/pull/551>`_). 
+
+
+0.21.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- More streamlined context cache usage using instance attributes (`#547 <https://github.com/choderalab/openmmtools/pull/547>`_).
+- Improved docstring and examples for ``MultiStateSampler`` object.
+
+0.21.0 - Bugfix release
+=======================
+
+
+Bugfixes
+--------
+- Fixes TestAbsoluteAlchemicalFactory.test_overlap NaNs (`#534 <https://github.com/choderalab/openmmtools/pull/534>`_)
+- Try closing reporter in test for windows fix (`#535 <https://github.com/choderalab/openmmtools/pull/535>`_) 
+- Follow NEP 29 and test newer python versions and drop old ones (`#542 <https://github.com/choderalab/openmmtools/pull/542>`_)
+- Update to handle the new OpenMM 7.6 package namespace (`#528 <https://github.com/choderalab/openmmtools/pull/528>`_)
+- Context cache usage cleanup (`#538 <https://github.com/choderalab/openmmtools/pull/538>_`). Avoiding memory issues and more streamlined API usage of `ContextCache` objects.
+
+
+Known issues
+------------
+- Correctly raises an error when a ``CustomNonbondedForce`` made by OpenMM's ``LennardJonesGenerator`` is detected (`#511 <https://github.com/choderalab/openmmtools/pull/511>`_)
+
+Enhancement
+-----------
+- Use of CODATA 2018 constants information from OpenMM 7.6.0. (`#522 <https://github.com/choderalab/openmmtools/pull/522>`_) & (`#525 <https://github.com/choderalab/openmmtools/pull/525>_`)
+- Use new way of importing OpenMM >= 7.6. (`#528 <https://github.com/choderalab/openmmtools/pull/528>`_)
+- Remove logic for missing file when retrying to open a dataset (`#515 <https://github.com/choderalab/openmmtools/pull/515>`_) 
+
+
+`Full Changelog <https://github.com/choderalab/openmmtools/compare/0.20.3...0.20.4>`_
+
+0.20.3 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- Fixes [#505](https://github.com/choderalab/openmmtools/issues/505): GPU contexts would silently fail to enable 'mixed' precision; corrects reporting of available precisions
+
+0.20.2 - Bugfix release
+=======================
+
+Remove leftover support for python 2.7
+
+Cleanup
+-------
+- Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
+
+0.20.1 - Bugfix release
+========================================
+
+Enhancements
+------------
+- ``openmmtools.utils.get_available_platforms()`` and ``.get_fastest_platform()`` now filter OpenMM Platforms based on specified minimum precision support, which defaults to ``mixed``
+
+Bugfixes
+--------
+- Replace the `cython <https://cython.org/>`_ accelerated ``all-swap`` replica mixing scheme with a `numba <https://numba.pydata.org>`_ implementation for better stability, and portability, and speed
+- Fixes incorrect temperature spacing in ``ParallelTemperingSampler`` constructor
+- Do unit conversion first to improve precision PR #501 (fixes issue #500)
+
+Misc
+----
+- Resolve ``numpy 1.20`` ``DeprecationWarning`` about ``np.float``
 
 0.20.0 - Periodic alchemical integrators
 ========================================

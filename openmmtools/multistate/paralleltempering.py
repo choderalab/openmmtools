@@ -55,7 +55,7 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
 
     Create the system.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems, states, mcmc
     >>> import tempfile
     >>> testsystem = testsystems.AlanineDipeptideImplicit()
@@ -126,14 +126,14 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
             If str: path to the storage file, checkpoint options are default
             If Reporter: Instanced :class:`Reporter` class, checkpoint information is read from
             In the future this will be able to take a Storage class as well.
-        min_temperature : simtk.unit.Quantity, optional
+        min_temperature : openmm.unit.Quantity, optional
            Minimum temperature (units of temperature, default is None).
-        max_temperature : simtk.unit.Quantity, optional
+        max_temperature : openmm.unit.Quantity, optional
            Maximum temperature (units of temperature, default is None).
         n_temperatures : int, optional
            Number of exponentially-spaced temperatures between ``min_temperature``
            and ``max_temperature`` (default is None).
-        temperatures : list of simtk.unit.Quantity, optional
+        temperatures : list of openmm.unit.Quantity, optional
            If specified, this list of temperatures will be used instead of
            ``min_temperature``, ``max_temperature``, and ``n_temperatures`` (units of temperature,
            default is None).
@@ -154,9 +154,12 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
         if temperatures is not None:
             logger.debug("Using provided temperatures")
         elif min_temperature is not None and max_temperature is not None and n_temperatures is not None:
-            temperatures = [min_temperature + (max_temperature - min_temperature) *
-                            (math.exp(i / n_temperatures-1) - 1.0) / (math.e - 1.0)
-                            for i in range(n_temperatures)]  # Python 3 uses true division for /
+            try:
+                from openmm import unit
+            except ImportError: # OpenMM < 7.6
+                from simtk import unit
+            temperature_unit = unit.kelvin
+            temperatures = np.logspace(np.log10(min_temperature/temperature_unit), np.log10(max_temperature/temperature_unit), num=n_temperatures) * temperature_unit
             logger.debug('using temperatures {}'.format(temperatures))
         else:
             raise ValueError("Either 'temperatures' or ('min_temperature', 'max_temperature', "
@@ -194,7 +197,7 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
         reference_thermodynamic_state = self._thermodynamic_states[0]
 
         # Get the context, any Integrator works.
-        context, integrator = cache.global_context_cache.get_context(reference_thermodynamic_state)
+        context, integrator = self.energy_context_cache.get_context(reference_thermodynamic_state)
 
         # Update positions and box vectors.
         sampler_state.apply_to_context(context)
