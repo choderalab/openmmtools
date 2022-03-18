@@ -1317,6 +1317,19 @@ class MultiStateReporter(object):
         # All elements are one dimensional, return only the first element
         return {k: v.data[0] for k, v in nc_data.items()}
 
+    def write_real_time_yaml(self, data):
+        """
+        Write real time YAML file with analysis data.
+
+        Parameters
+        ----------
+        data: dict
+            Dictionary with the key, value pairs to store in YAML format.
+        """
+        reporter_dir, _ = os.path.split(self._storage_analysis_file_path)
+        with open(f"{reporter_dir}/real_time_analysis.yaml", "a") as out_file:
+            out_file.write(yaml.dump([data], sort_keys=False))
+
     # -------------------------------------------------------------------------
     # Internal-usage.
     # -------------------------------------------------------------------------

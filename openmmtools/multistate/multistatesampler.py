@@ -1519,6 +1519,15 @@ class MultiStateSampler(object):
                                                             f_k=self._last_mbar_f_k,
                                                             free_energy=(free_energy, self._last_err_free_energy),
                                                             max_iterations=self.number_of_iterations)
+        # Write real time offline analysis YAML file
+        yaml_data_dict = {"iteration": self._iteration,
+                          "progress_pct": self._iteration*100/self.number_of_iterations,
+                          "free_energy": {"dDDG": float(free_energy),
+                                          "uncorrelated_samples": float(analysis._equilibration_data[-1])
+                                          },
+                          "timing_data": self._timing_data
+                          }
+        self._reporter.write_real_time_yaml(yaml_data_dict)
 
         return self._last_err_free_energy
 
