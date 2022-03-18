@@ -163,6 +163,7 @@ class MultiStateSampler(object):
         self._n_proposed_matrix = None
         self._reporter = None
         self._metadata = None
+        self._timing_data = dict()
 
         # Handling default propagator.
         if mcmc_moves is None:
@@ -712,23 +713,19 @@ class MultiStateSampler(object):
             # Update analysis
             self._update_analysis()
 
-            # Computing timing information
+            # Computing and transmitting timing information
             iteration_time = timer.stop('Iteration')
             partial_total_time = timer.partial('Run ReplicaExchange')
-            time_per_iteration = partial_total_time / (self._iteration - run_initial_iteration)
-            estimated_time_remaining = time_per_iteration * (iteration_limit - self._iteration)
-            estimated_total_time = time_per_iteration * iteration_limit
-            estimated_finish_time = time.time() + estimated_time_remaining
-            # TODO: Transmit timing information
+            self._update_timing(iteration_time, partial_total_time, run_initial_iteration, iteration_limit)
 
             # Show timing statistics if debug level is activated.
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
-                if estimated_time_remaining != float('inf'):
+                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_time"]))
+                if self._timing_data["estimated_time_remaining"] != float('inf'):
                     logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
-                        str(datetime.timedelta(seconds=estimated_time_remaining)),
-                        time.ctime(estimated_finish_time),
-                        str(datetime.timedelta(seconds=estimated_total_time))))
+                        str(datetime.timedelta(seconds=self._timing_data["estimated_time_remaining"])),
+                        time.ctime(self._timing_data["estimated_finish_time"]),
+                        str(datetime.timedelta(seconds=self._timing_data["estimated_total_time"]))))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
@@ -1502,7 +1499,8 @@ class MultiStateSampler(object):
         # Write out the numbers
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
                                                             f_k=self._last_mbar_f_k,
-                                                            free_energy=(free_energy, self._last_err_free_energy))
+                                                            free_energy=(free_energy, self._last_err_free_energy),
+                                                            max_iterations=self.number_of_iterations)
 
         return self._last_err_free_energy
 
@@ -1687,6 +1685,30 @@ class MultiStateSampler(object):
         elif not isinstance(propagation_context_cache, cache.ContextCache):
             raise ValueError("MCMC move context cache input is not a valid ContextCache or None type.")
         return energy_context_cache, propagation_context_cache
+
+    def _update_timing(self, iteration_time, partial_total_time, run_initial_iteration, iteration_limit):
+        """
+        Function that computes and transmits timing information to reporter.
+
+        Parameters
+        ----------
+        iteration_time : float
+            Time took in the iteration.
+        partial_total_time : float
+            Partial total time elapsed.
+        run_initial_iteration : int
+            Iteration where to start/resume the simulation.
+        iteration_limit : int
+            Hard limit on number of iterations to be run by the sampler.
+        """
+        self._timing_data["iteration_time"] = iteration_time
+        self._timing_data["time_per_iteration"] = partial_total_time / (self._iteration - run_initial_iteration)
+        self._timing_data["estimated_time_remaining"] = \
+            self._timing_data["time_per_iteration"] * (iteration_limit - self._iteration)
+        self._timing_data["estimated_total_time"] = self._timing_data["time_per_iteration"] * iteration_limit
+        self._timing_data["estimated_finish_time"] = time.time() + self._timing_data["estimated_time_remaining"]
+        # Write timing data to analysis group in reporter
+        self._reporter.write_online_data_dynamic_and_static(self._iteration, **self._timing_data)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
