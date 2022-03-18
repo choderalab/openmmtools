@@ -1307,6 +1307,16 @@ class MultiStateReporter(object):
         self.write_online_analysis_data(None, **kwargs)
         self.write_online_analysis_data(iteration, **kwargs)
 
+    def read_online_analysis_timing_info(self):
+        """Reads timing information from online_analysis group in reporter."""
+        # Timing keys in reporter
+        # TODO: Maybe a way not to have to manually specify the keys?
+        keys = ('iteration_time', 'time_per_iteration', 'estimated_time_remaining', 'estimated_total_time',
+                'estimated_finish_time')
+        nc_data = self.read_online_analysis_data(None, *keys)
+        # All elements are one dimensional, return only the first element
+        return {k: v.data[0] for k, v in nc_data.items()}
+
     # -------------------------------------------------------------------------
     # Internal-usage.
     # -------------------------------------------------------------------------
@@ -1751,7 +1761,6 @@ class MultiStateReporter(object):
             packed_data = np.empty(1, 'O')
             packed_data[0] = data_str
         nc_variable[:] = packed_data
-
 
 # ==============================================================================
 # MODULE INTERNAL USAGE UTILITIES
