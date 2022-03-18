@@ -1317,7 +1317,7 @@ class MultiStateReporter(object):
         # All elements are one dimensional, return only the first element
         return {k: v.data[0] for k, v in nc_data.items()}
 
-    def write_real_time_yaml(self, data):
+    def write_current_statistics(self, data):
         """
         Write real time YAML file with analysis data.
 
