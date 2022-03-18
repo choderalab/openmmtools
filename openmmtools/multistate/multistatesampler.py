@@ -126,15 +126,56 @@ class MultiStateSampler(object):
     sampler_states
     metadata
     is_completed
+    energy_context_cache : openmmtools.cache.ContextCache, default=openmmtools.cache.global_context_cache
+        Context cache to be used for energy computations. Defaults to using global context cache.
+    sampler_context_cache : openmmtools.cache.ContextCache, default=openmmtools.cache.global_context_cache
+        Context cache to be used for propagation. Defaults to using global context cache.
 
-    :param number_of_iterations: Maximum number of integer iterations that will be run
+    Examples
+    --------
+    Sampling multiple states of an alanine dipeptide in implicit solvent system.
 
-    :param online_analysis_interval: How frequently to carry out online analysis in number of iterations
+    >>> import math
+    >>> import tempfile
+    >>> from openmm import unit
+    >>> from openmmtools import testsystems, states, mcmc
+    >>> from openmmtools.multistate import MultiStateSampler, MultiStateReporter
+    >>> testsystem = testsystems.AlanineDipeptideImplicit()
 
-    :param online_analysis_target_error: Target free energy difference error float at which simulation will be stopped during online analysis, in dimensionless energy
+    Create thermodynamic states
 
-    :param online_analysis_minimum_iterations: Minimum number of iterations needed before online analysis is run as int
+    >>> n_replicas = 3
+    >>> T_min = 298.0 * unit.kelvin  # Minimum temperature.
+    >>> T_max = 600.0 * unit.kelvin  # Maximum temperature.
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+    ...                 for i in range(n_replicas)]
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+    ...                 for i in range(n_replicas)]
+    >>> thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
+    ...                         for T in temperatures]
 
+    Initialize simulation object with options. Run with a GHMC integrator.
+
+    >>> move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
+    >>> simulation = MultiStateSampler(mcmc_moves=move, number_of_iterations=2)
+
+    Create simulation and store output in temporary file
+
+    >>> storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
+    >>> reporter = MultiStateReporter(storage_path, checkpoint_interval=1)
+    >>> simulation.create(thermodynamic_states=thermodynamic_states,
+    ...                   sampler_states=states.SamplerState(testsystem.positions), storage=reporter)
+
+    Optionally, specify unlimited context cache attributes using the fastest mixed precision platform
+
+    >>> from openmmtools.cache import ContextCache
+    >>> from openmmtools.utils import get_fastest_platform
+    >>> platform = get_fastest_platform(minimum_precision='mixed')
+    >>> simulation.energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+
+    Run the simulation
+    >>> simulation.run()
     """
 
     # -------------------------------------------------------------------------
@@ -195,8 +236,8 @@ class MultiStateSampler(object):
 
         self._have_displayed_citations_before = False
 
-        # Initializing context cache attributes to global cache
-        self.energy_context_cache, self.sampler_context_cache = cache.global_context_cache, cache.global_context_cache
+        # Initializing context cache attributes
+        self._initialize_context_caches()
 
         # Check convergence.
         if self.number_of_iterations == np.inf:
@@ -208,7 +249,7 @@ class MultiStateSampler(object):
                                "specified maximum number of iterations!")
 
     @classmethod
-    def from_storage(cls, storage, energy_context_cache=None, propagation_context_cache=None):
+    def from_storage(cls, storage):
         """Constructor from an existing storage file.
 
         Parameters
@@ -217,12 +258,6 @@ class MultiStateSampler(object):
             If str: The path to the storage file.
             If :class:`Reporter`: uses the :class:`Reporter` options
             In the future this will be able to take a Storage class as well.
-
-        energy_context_cache : openmmtools.cache.ContextCache or None, optional, default None
-            Context cache to be used for energy computations. If None, a new fresh cache will be used.
-
-        propagation_context_cache : openmmtools.cache.ContextCache or None, optional, default None
-            Context cache to be used for move/integrator propagation. If None, a new fresh cache will be used.
 
         Returns
         -------
@@ -238,9 +273,7 @@ class MultiStateSampler(object):
             # Open the reporter to read the data.
             reporter.open(mode='r')
             sampler = cls._instantiate_sampler_from_reporter(reporter)
-            sampler._restore_sampler_from_reporter(reporter,
-                                                   energy_context_cache=energy_context_cache,
-                                                   propagation_context_cache=propagation_context_cache)
+            sampler._restore_sampler_from_reporter(reporter)
         finally:
             # Close reporter in reading mode.
             reporter.close()
@@ -248,7 +281,7 @@ class MultiStateSampler(object):
         # We open the reporter only in node 0 in append mode ready for use
         sampler._reporter = reporter
         mpiplus.run_single_node(0, sampler._reporter.open, mode='a',
-                            broadcast_result=False, sync_nodes=False)
+                                broadcast_result=False, sync_nodes=False)
         # Don't write the new last iteration, we have not technically
         # written anything yet, so there is no "junk".
         return sampler
@@ -492,7 +525,7 @@ class MultiStateSampler(object):
 
     def create(self, thermodynamic_states: list, sampler_states, storage,
                initial_thermodynamic_states=None, unsampled_thermodynamic_states=None,
-               metadata=None, energy_context_cache=None, sampler_context_cache=None):
+               metadata=None):
         """Create new multistate sampler simulation.
 
         Parameters
@@ -533,10 +566,6 @@ class MultiStateSampler(object):
             is None).
         metadata : dict, optional, default=None
            Simulation metadata to be stored in the file.
-        energy_context_cache : openmmtools.cache.ContextCache or None, optional, default None
-            Context cache to be used for energy computations. If None, global context cache will be used.
-        sampler_context_cache : openmmtools.cache.ContextCache or None, optional, default None
-            Context cache to be used for move/integrator propagation. If None, global context cache will be used.
         """
         # Handle case in which storage is a string and not a Reporter object.
         self._reporter = self._reporter_from_storage(storage, check_exist=False)
@@ -557,9 +586,7 @@ class MultiStateSampler(object):
         self._pre_write_create(thermodynamic_states, sampler_states, storage,
                                initial_thermodynamic_states=initial_thermodynamic_states,
                                unsampled_thermodynamic_states=unsampled_thermodynamic_states,
-                               metadata=metadata,
-                               energy_context_cache=energy_context_cache,
-                               sampler_context_cache=sampler_context_cache)
+                               metadata=metadata)
 
         # Display papers to be cited.
         self._display_citations()
@@ -766,9 +793,7 @@ class MultiStateSampler(object):
                           storage,
                           initial_thermodynamic_states=None,
                           unsampled_thermodynamic_states=None,
-                          metadata=None,
-                          energy_context_cache=None,
-                          sampler_context_cache=None):
+                          metadata=None,):
         """
         Internal function which allocates and sets up ALL variables prior to actually using them.
         This is helpful to ensure subclasses have all variables created prior to writing them out with
@@ -804,13 +829,6 @@ class MultiStateSampler(object):
         elif 'title' not in metadata:
             metadata['title'] = default_title
         self._metadata = metadata
-
-        # Handling context cache parameters and attributes
-        # update context caches attributes handling inputs
-        self.energy_context_cache, self.sampler_context_cache = self._initialize_context_caches(
-            energy_context_cache,
-            sampler_context_cache
-        )
 
         # Save thermodynamic states. This sets n_replicas.
         self._thermodynamic_states = copy.deepcopy(thermodynamic_states)
@@ -889,7 +907,7 @@ class MultiStateSampler(object):
         sampler._display_citations()
         return sampler
 
-    def _restore_sampler_from_reporter(self, reporter, energy_context_cache=None, propagation_context_cache=None):
+    def _restore_sampler_from_reporter(self, reporter):
         """
         (Re-)initialize the instanced sampler from the reporter. Intended to be called as the second half of a
         :func:`from_storage` method after the :class:`MultiStateSampler` has been instanced from disk.
@@ -975,12 +993,8 @@ class MultiStateSampler(object):
         self._last_mbar_f_k = last_mbar_f_k
         self._last_err_free_energy = last_err_free_energy
 
-        # Handle with context caches as specified
-        # update context caches attributes handling inputs
-        self.energy_context_cache, self.sampler_context_cache = self._initialize_context_caches(
-            energy_context_cache,
-            propagation_context_cache
-        )
+        # Initialize context caches
+        self._initialize_context_caches()
 
     def _check_nan_energy(self):
         """Checks that energies are finite and abort otherwise.
@@ -1650,41 +1664,16 @@ class MultiStateSampler(object):
 
         raise RestorationError(message)
 
-    @staticmethod
-    def _initialize_context_caches(energy_context_cache=None, propagation_context_cache=None):
+    def _initialize_context_caches(self):
         """Handle energy and propagation context cache default behavior.
 
+        Centralized API point where to initialize the context cache instance attributes.
+
         .. note:: As of 03-Feb-22 default behavior is to use the global cache.
-
-        Parameters
-        ----------
-        energy_context_cache : openmmtools.cache.ContextCache or None
-            Context cache to be used in energy computations. If None,
-            it will use the global context cache.
-        propagation_context_cache : openmmtools.cache.ContextCache or None
-            Context cache to be used in the propagation of the mcmc moves. If None,
-            it will use the global context cache.
-
-        Returns
-        -------
-        energy_context_cache : openmmtools.cache.ContextCache
-            Context cache to be used in energy computations.
-        propagation_context_cache : openmmtools.cache.ContextCache
-            Context cache to be used in the propagation of the mcmc moves.
         """
-        # Handling energy context cache
-        if energy_context_cache is None:
-            # Default behavior, global context cache
-            energy_context_cache = cache.global_context_cache
-        elif not isinstance(energy_context_cache, cache.ContextCache):
-            raise ValueError("Energy context cache input is not a valid ContextCache or None type.")
-        # Handling propagation context cache
-        if propagation_context_cache is None:
-            # Default behavior, global context cache
-            propagation_context_cache = cache.global_context_cache
-        elif not isinstance(propagation_context_cache, cache.ContextCache):
-            raise ValueError("MCMC move context cache input is not a valid ContextCache or None type.")
-        return energy_context_cache, propagation_context_cache
+        # Default is using global context cache
+        self.energy_context_cache = cache.global_context_cache
+        self.sampler_context_cache = cache.global_context_cache
 
     def _update_timing(self, iteration_time, partial_total_time, run_initial_iteration, iteration_limit):
         """

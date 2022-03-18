@@ -197,7 +197,7 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
         reference_thermodynamic_state = self._thermodynamic_states[0]
 
         # Get the context, any Integrator works.
-        context, integrator = cache.global_context_cache.get_context(reference_thermodynamic_state)
+        context, integrator = self.energy_context_cache.get_context(reference_thermodynamic_state)
 
         # Update positions and box vectors.
         sampler_state.apply_to_context(context)
