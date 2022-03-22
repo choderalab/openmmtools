@@ -1,7 +1,7 @@
 [![GH Actions Status](https://github.com/choderalab/openmmtools/workflows/CI/badge.svg)](https://github.com/choderalab/openmmtools/actions?query=branch%3Amain)
 [![Anaconda Badge](https://anaconda.org/omnia/openmmtools/badges/version.svg)](https://anaconda.org/omnia/openmmtools)
 [![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
-[![ReadTheDocs Badge](https://readthedocs.org/projects/openmmtools/badge/?version=master)](https://openmmtools.readthedocs.io/en/master/)
+[![Documentation Status](https://readthedocs.org/projects/openmmtools/badge/?version=latest)](https://openmmtools.readthedocs.io/en/latest/?badge=latest)
 [![Zenodo DOI Badge](https://zenodo.org/badge/25416166.svg)](https://zenodo.org/badge/latestdoi/25416166)
 
 ## OpenMMTools
