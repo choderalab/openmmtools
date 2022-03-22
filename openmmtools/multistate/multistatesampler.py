@@ -747,12 +747,12 @@ class MultiStateSampler(object):
 
             # Show timing statistics if debug level is activated.
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_time"]))
+                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
                 if self._timing_data["estimated_time_remaining"] != float('inf'):
                     logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
-                        str(datetime.timedelta(seconds=self._timing_data["estimated_time_remaining"])),
-                        time.ctime(self._timing_data["estimated_finish_time"]),
-                        str(datetime.timedelta(seconds=self._timing_data["estimated_total_time"]))))
+                        self._timing_data["estimated_time_remaining"],
+                        self._timing_data["estimated_iso_finish_date"],
+                        self._timing_data["estimated_total_iso_time"]))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
@@ -1522,7 +1522,7 @@ class MultiStateSampler(object):
         # Estimate performance
         # TODO: use units for timing information to easily convert between seconds and days
         current_simulated_time = self.mcmc_moves[0].timestep*self._iteration*self.mcmc_moves[0].n_steps
-        partial_total_time = self._iteration*self._timing_data["time_per_iteration"]
+        partial_total_time = self._iteration*self._timing_data["average_seconds_per_iteration"]
         performance = current_simulated_time.in_units_of(unit.nanosecond)/(partial_total_time/86400)
         # Write real time offline analysis YAML file
         # TODO: Specify units
@@ -1711,14 +1711,22 @@ class MultiStateSampler(object):
         iteration_limit : int
             Hard limit on number of iterations to be run by the sampler.
         """
-        self._timing_data["iteration_time"] = iteration_time
-        self._timing_data["time_per_iteration"] = partial_total_time / (self._iteration - run_initial_iteration)
-        self._timing_data["estimated_time_remaining"] = \
-            self._timing_data["time_per_iteration"] * (iteration_limit - self._iteration)
-        self._timing_data["estimated_total_time"] = self._timing_data["time_per_iteration"] * iteration_limit
-        self._timing_data["estimated_finish_time"] = time.time() + self._timing_data["estimated_time_remaining"]
+        self._timing_data["iteration_seconds"] = iteration_time
+        self._timing_data["average_seconds_per_iteration"] = \
+            partial_total_time / (self._iteration - run_initial_iteration)
+        estimated_timedelta_remaining = datetime.timedelta(
+            seconds=self._timing_data["average_seconds_per_iteration"] * (iteration_limit - self._iteration)
+        )
+        estimated_finish_date = datetime.datetime.now() + estimated_timedelta_remaining
+        self._timing_data["estimated_time_remaining"] = str(estimated_timedelta_remaining)  # Putting it in dict as str
+        self._timing_data["estimated_iso_finish_date"] = estimated_finish_date.strftime("%Y-%b-%d-%H:%M:%S")
+        total_time_in_seconds = datetime.timedelta(
+            seconds=self._timing_data["average_seconds_per_iteration"] * iteration_limit
+        )
+        self._timing_data["estimated_total_iso_time"] = str(total_time_in_seconds)
+
         # Write timing data to analysis group in reporter
-        self._reporter.write_online_data_dynamic_and_static(self._iteration, **self._timing_data)
+        # self._reporter.write_online_data_dynamic_and_static(self._iteration, **self._timing_data)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
