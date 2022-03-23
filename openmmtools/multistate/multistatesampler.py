@@ -1517,13 +1517,22 @@ class MultiStateSampler(object):
         # Write out the numbers
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
                                                             f_k=self._last_mbar_f_k,
-                                                            free_energy=(free_energy, self._last_err_free_energy),
-                                                            max_iterations=self.number_of_iterations)
+                                                            free_energy=(free_energy, self._last_err_free_energy))
         # Estimate performance
         # TODO: use units for timing information to easily convert between seconds and days
-        current_simulated_time = self.mcmc_moves[0].timestep*self._iteration*self.mcmc_moves[0].n_steps
-        partial_total_time = self._iteration*self._timing_data["average_seconds_per_iteration"]
-        performance = current_simulated_time.in_units_of(unit.nanosecond)/(partial_total_time/86400)
+        # there are some mcmc_moves that have no timestep attribute, catch exception
+        try:
+            current_simulated_time = self.mcmc_moves[0].timestep*self._iteration*self.mcmc_moves[0].n_steps
+        except AttributeError:
+            current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
+
+        # There's no timing data dictionary for 1st iteration, catch exception
+        try:
+            partial_total_time = self._iteration*self._timing_data["average_seconds_per_iteration"]
+            performance = current_simulated_time.in_units_of(unit.nanosecond)/(partial_total_time/86400)
+            performance = performance.value_in_unit(unit.nanosecond)
+        except KeyError:
+            performance = None
         # Write real time offline analysis YAML file
         # TODO: Specify units
         data_dict = {"iteration": self._iteration,
@@ -1533,7 +1542,7 @@ class MultiStateSampler(object):
                                        "uncorrelated_samples": float(analysis._equilibration_data[-1])
                                        },
                      "timing_data": self._timing_data,
-                     "ns_per_day": performance.value_in_unit(unit.nanosecond)
+                     "ns_per_day": performance
                      }
         self._reporter.write_current_statistics(data_dict)
 
@@ -1598,30 +1607,18 @@ class MultiStateSampler(object):
         """Update online analysis of free energies"""
 
         # TODO: Currently, this just calls the offline analysis at certain intervals, if requested.
-        # TODO: Refactor this to always compute fast online analysis, updating with offline analysis infrequently.
-
-        # TODO: Simplify this
         if self.online_analysis_interval is None:
             logger.debug('No online analysis requested')
             analysis_to_perform = None
-        elif self._iteration < self.online_analysis_minimum_iterations:
-            logger.debug('Not enough iterations for online analysis (self.online_analysis_minimum_iterations = %d)' % self.online_analysis_minimum_iterations)
-            analysis_to_perform = 'online'
-        elif self._iteration % self.online_analysis_interval != 0:
-            logger.debug('Not an online analysis iteration')
-            analysis_to_perform = 'online'
-        elif self.locality is not None:
-            logger.debug('Not a global locality')
-            analysis_to_perform = 'online'
-        else:
-            logger.debug('Will perform offline analysis')
-            # All conditions are met for offline analysis
-            analysis_to_perform = 'offline'
+            # Perform no analysis and exit function
+            return
 
-        # Execute selected analysis (only runs on node 0)
-        if analysis_to_perform == 'online':
-            self._last_err_free_energy = self._online_analysis()
-        elif analysis_to_perform == 'offline':
+        # Always perform fast online analysis
+        self._last_err_free_energy = self._online_analysis()
+
+        # Perform offline infrequently
+        # TODO: dictated by the online_analysis_interval, maybe we want a specific offline interval.
+        if self._iteration % self.online_analysis_interval == 0:
             self._last_err_free_energy = self._offline_analysis()
 
         return
@@ -1724,9 +1721,6 @@ class MultiStateSampler(object):
             seconds=self._timing_data["average_seconds_per_iteration"] * iteration_limit
         )
         self._timing_data["estimated_total_iso_time"] = str(total_time_in_seconds)
-
-        # Write timing data to analysis group in reporter
-        # self._reporter.write_online_data_dynamic_and_static(self._iteration, **self._timing_data)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
