@@ -1609,7 +1609,6 @@ class MultiStateSampler(object):
         # TODO: Currently, this just calls the offline analysis at certain intervals, if requested.
         if self.online_analysis_interval is None:
             logger.debug('No online analysis requested')
-            analysis_to_perform = None
             # Perform no analysis and exit function
             return
 
