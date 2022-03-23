@@ -851,9 +851,12 @@ class TestMultiStateSampler(object):
 
         Checks that the static constructor MultiStateSampler.from_storage()
         restores the simulation object in the exact same state as the last
-        iteration.
+        iteration. Except from the reporter and timing data attributes, that
+        is _reporter and _timing_data, respectively.
 
         """
+        # We don't want to restore reporter and timing data attributes
+        __NON_RESTORABLE_ATTRIBUTES__ = ("_reporter", "_timing_data")
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.hostguest_test)
         n_replicas = len(sampler_states)
 
@@ -874,14 +877,16 @@ class TestMultiStateSampler(object):
             for iteration in range(2):
                 # Store the state of the initial repex object (its __dict__). We leave the
                 # reporter out because when the NetCDF file is copied, it runs into issues.
-                original_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items() if not k == '_reporter'})
+                original_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items()
+                                               if k not in __NON_RESTORABLE_ATTRIBUTES__})
 
                 # Delete repex to close reporter before creating a new one
                 # to avoid weird issues with multiple NetCDF files open.
                 del sampler
                 reporter.close()
                 sampler = self.SAMPLER.from_storage(reporter)
-                restored_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items() if not k == '_reporter'})
+                restored_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items()
+                                               if k not in __NON_RESTORABLE_ATTRIBUTES__})
 
                 # Check thermodynamic states.
                 original_ts = original_dict.pop('_thermodynamic_states')

@@ -932,7 +932,6 @@ class MultiStateSampler(object):
         logger.debug("Reading storage file {}...".format(reporter.filepath))
         metadata = reporter.read_dict('metadata')
         thermodynamic_states, unsampled_states = reporter.read_thermodynamic_states()
-        timing_data = reporter.read_online_analysis_timing_info()
 
         def _read_options(check_iteration):
             internal_sampler_states = reporter.read_sampler_states(iteration=check_iteration)
@@ -995,7 +994,7 @@ class MultiStateSampler(object):
         self._last_err_free_energy = last_err_free_energy
 
         # initialize timing dictionary
-        self._timing_data = timing_data
+        self._timing_data = dict()
 
         # Initialize context caches
         self._initialize_context_caches()
