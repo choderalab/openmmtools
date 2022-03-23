@@ -661,12 +661,46 @@ class MultiStateSampler(object):
             raise RuntimeError('The number of MCMCMoves ({}) and ThermodynamicStates ({}) for equilibration'
                                ' must be the same.'.format(len(self._mcmc_moves), self.n_states))
 
+        timer = utils.Timer()
+        timer.start('Run Equilibration')
+
         # Temporarily set the equilibration MCMCMoves.
         production_mcmc_moves = self._mcmc_moves
         self._mcmc_moves = mcmc_moves
-        for iteration in range(n_iterations):
+        for iteration in range(1, 1 + n_iterations):
             logger.debug("Equilibration iteration {}/{}".format(iteration, n_iterations))
+            timer.start('Equilibration Iteration')
+
+            # NOTE: Unlike run(), do NOT increment iteration counter.
+            # self._iteration += 1
+
+            # Propagate replicas.
             self._propagate_replicas()
+
+            # Compute energies of all replicas at all states
+            self._compute_energies()
+
+            # Update thermodynamic states
+            self._mix_replicas()
+
+            # Computing timing information
+            iteration_time = timer.stop('Equilibration Iteration')
+            partial_total_time = timer.partial('Run Equilibration')
+            time_per_iteration = partial_total_time / iteration
+            estimated_time_remaining = time_per_iteration * (n_iterations - iteration)
+            estimated_total_time = time_per_iteration * n_iterations
+            estimated_finish_time = time.time() + estimated_time_remaining
+            # TODO: Transmit timing information
+
+            # Show timing statistics if debug level is activated.
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
+                if estimated_time_remaining != float('inf'):
+                    logger.debug("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
+                        str(datetime.timedelta(seconds=estimated_time_remaining)),
+                        time.ctime(estimated_finish_time),
+                        str(datetime.timedelta(seconds=estimated_total_time))))
+        timer.report_timing()
 
         # Restore production MCMCMoves.
         self._mcmc_moves = production_mcmc_moves
