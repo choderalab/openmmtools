@@ -426,11 +426,13 @@ class SAMSSampler(multistate.MultiStateSampler):
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
 
-        # Update logZ estimates
-        self._update_logZ_estimates(replicas_log_P_k)
+        # Do not update and/or write to disk during equilibration
+        if self._iteration > 0:
+            # Update logZ estimates
+            self._update_logZ_estimates(replicas_log_P_k)
 
-        # Update log weights based on target probabilities
-        self._update_log_weights()
+            # Update log weights based on target probabilities
+            self._update_log_weights()
 
     def _local_jump(self, replicas_log_P_k):
         n_replica, n_states, locality = self.n_replicas, self.n_states, self.locality
