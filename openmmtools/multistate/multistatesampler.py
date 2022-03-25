@@ -204,6 +204,7 @@ class MultiStateSampler(object):
         self._n_proposed_matrix = None
         self._reporter = None
         self._metadata = None
+        self._timing_data = dict()
 
         # Handling default propagator.
         if mcmc_moves is None:
@@ -773,23 +774,19 @@ class MultiStateSampler(object):
             # Update analysis
             self._update_analysis()
 
-            # Computing timing information
+            # Computing and transmitting timing information
             iteration_time = timer.stop('Iteration')
             partial_total_time = timer.partial('Run ReplicaExchange')
-            time_per_iteration = partial_total_time / (self._iteration - run_initial_iteration)
-            estimated_time_remaining = time_per_iteration * (iteration_limit - self._iteration)
-            estimated_total_time = time_per_iteration * iteration_limit
-            estimated_finish_time = time.time() + estimated_time_remaining
-            # TODO: Transmit timing information
+            self._update_timing(iteration_time, partial_total_time, run_initial_iteration, iteration_limit)
 
             # Show timing statistics if debug level is activated.
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
-                if estimated_time_remaining != float('inf'):
+                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
+                if self._timing_data["estimated_time_remaining"] != float('inf'):
                     logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
-                        str(datetime.timedelta(seconds=estimated_time_remaining)),
-                        time.ctime(estimated_finish_time),
-                        str(datetime.timedelta(seconds=estimated_total_time))))
+                        self._timing_data["estimated_time_remaining"],
+                        self._timing_data["estimated_localtime_finish_date"],
+                        self._timing_data["estimated_total_time"]))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
@@ -1029,6 +1026,9 @@ class MultiStateSampler(object):
 
         self._last_mbar_f_k = last_mbar_f_k
         self._last_err_free_energy = last_err_free_energy
+
+        # initialize timing dictionary
+        self._timing_data = dict()
 
         # Initialize context caches
         self._initialize_context_caches()
@@ -1551,6 +1551,17 @@ class MultiStateSampler(object):
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
                                                             f_k=self._last_mbar_f_k,
                                                             free_energy=(free_energy, self._last_err_free_energy))
+        # Write real time offline analysis YAML file
+        # TODO: Specify units
+        data_dict = {"iteration": self._iteration,
+                     "percent_complete": self._iteration*100/self.number_of_iterations,
+                     "mbar_analysis": {"free_energy_in_kT": float(free_energy),
+                                       "standard_error_in_kT": float(self._last_err_free_energy),
+                                       "number_of_uncorrelated_samples": float(analysis._equilibration_data[-1])
+                                       },
+                     "timing_data": self._timing_data
+                     }
+        self._reporter.write_current_statistics(data_dict)
 
         return self._last_err_free_energy
 
@@ -1613,30 +1624,17 @@ class MultiStateSampler(object):
         """Update online analysis of free energies"""
 
         # TODO: Currently, this just calls the offline analysis at certain intervals, if requested.
-        # TODO: Refactor this to always compute fast online analysis, updating with offline analysis infrequently.
-
-        # TODO: Simplify this
         if self.online_analysis_interval is None:
             logger.debug('No online analysis requested')
-            analysis_to_perform = None
-        elif self._iteration < self.online_analysis_minimum_iterations:
-            logger.debug('Not enough iterations for online analysis (self.online_analysis_minimum_iterations = %d)' % self.online_analysis_minimum_iterations)
-            analysis_to_perform = 'online'
-        elif self._iteration % self.online_analysis_interval != 0:
-            logger.debug('Not an online analysis iteration')
-            analysis_to_perform = 'online'
-        elif self.locality is not None:
-            logger.debug('Not a global locality')
-            analysis_to_perform = 'online'
-        else:
-            logger.debug('Will perform offline analysis')
-            # All conditions are met for offline analysis
-            analysis_to_perform = 'offline'
+            # Perform no analysis and exit function
+            return
 
-        # Execute selected analysis (only runs on node 0)
-        if analysis_to_perform == 'online':
-            self._last_err_free_energy = self._online_analysis()
-        elif analysis_to_perform == 'offline':
+        # Always perform fast online analysis
+        self._last_err_free_energy = self._online_analysis()
+
+        # Perform offline infrequently
+        # TODO: dictated by the online_analysis_interval, maybe we want a specific offline interval.
+        if self._iteration % self.online_analysis_interval == 0:
             self._last_err_free_energy = self._offline_analysis()
 
         return
@@ -1710,6 +1708,45 @@ class MultiStateSampler(object):
         # Default is using global context cache
         self.energy_context_cache = cache.global_context_cache
         self.sampler_context_cache = cache.global_context_cache
+
+    def _update_timing(self, iteration_time, partial_total_time, run_initial_iteration, iteration_limit):
+        """
+        Function that computes and transmits timing information to reporter.
+
+        Parameters
+        ----------
+        iteration_time : float
+            Time took in the iteration.
+        partial_total_time : float
+            Partial total time elapsed.
+        run_initial_iteration : int
+            Iteration where to start/resume the simulation.
+        iteration_limit : int
+            Hard limit on number of iterations to be run by the sampler.
+        """
+        self._timing_data["iteration_seconds"] = iteration_time
+        self._timing_data["average_seconds_per_iteration"] = \
+            partial_total_time / (self._iteration - run_initial_iteration)
+        estimated_timedelta_remaining = datetime.timedelta(
+            seconds=self._timing_data["average_seconds_per_iteration"] * (iteration_limit - self._iteration)
+        )
+        estimated_finish_date = datetime.datetime.now() + estimated_timedelta_remaining
+        self._timing_data["estimated_time_remaining"] = str(estimated_timedelta_remaining)  # Putting it in dict as str
+        self._timing_data["estimated_localtime_finish_date"] = estimated_finish_date.strftime("%Y-%b-%d-%H:%M:%S")
+        total_time_in_seconds = datetime.timedelta(
+            seconds=self._timing_data["average_seconds_per_iteration"] * iteration_limit
+        )
+        self._timing_data["estimated_total_time"] = str(total_time_in_seconds)
+
+        # Estimate performance
+        # TODO: use units for timing information to easily convert between seconds and days
+        # there are some mcmc_moves that have no timestep attribute, catch exception
+        try:
+            current_simulated_time = self.mcmc_moves[0].timestep * self._iteration * self.mcmc_moves[0].n_steps
+        except AttributeError:
+            current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
+        performance = current_simulated_time.in_units_of(unit.nanosecond) / (partial_total_time / 86400)
+        self._timing_data["ns_per_day"] = performance.value_in_unit(unit.nanosecond)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
