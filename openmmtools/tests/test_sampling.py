@@ -1494,7 +1494,6 @@ class TestMultiStateSampler(object):
         """Test expected number of entries in real time analysis output yaml file."""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
         with self.temporary_storage_path() as storage_path:
-            print(storage_path)
             n_iterations = 13
             online_interval = 3
             expected_yaml_entries = int(n_iterations/online_interval)
