@@ -470,3 +470,28 @@ certain atoms. In this case, the ``initial_positions`` will be the positions of 
     1
     >>> move.n_proposed
     1
+
+Real time analysis output
+=========================
+
+The ``MultiStateReporter`` outputs a file with analysis statistics every few interactions dictated by the
+`online_analysis_interval` option from the ``MultiStateSampler`` object. The format of this file consists of several
+entries as the following:
+
+.. doctest::
+
+    - iteration: 4
+      percent_complete: 25.0
+      mbar_analysis:
+        free_energy_in_kT: 20.747354877367165
+        standard_error_in_kT: 0.7055846807301683
+        number_of_uncorrelated_samples: 5.0
+      timing_data:
+        iteration_seconds: 0.04654264450073242
+        average_seconds_per_iteration: 0.05740888913472494
+        estimated_time_remaining: '0:00:00.746316'
+        estimated_localtime_finish_date: 2022-Mar-24-20:07:21
+        estimated_total_time: '0:00:00.918542'
+        ns_per_day: 150.49934130799824
+
+This is intended to be used for monitoring performance of currently running simulations.
