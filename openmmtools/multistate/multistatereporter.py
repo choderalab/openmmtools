@@ -1313,6 +1313,9 @@ class MultiStateReporter(object):
         """
         Write real time YAML file with analysis data.
 
+        A real_time_analysis.yaml file will be generated in the same directory for the reporter netcdf file
+        (see :func:`~multistatereporter.MultiStateReporter` for more information).
+
         Overwrites file if it already exists.
 
         Parameters

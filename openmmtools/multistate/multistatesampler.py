@@ -785,8 +785,8 @@ class MultiStateSampler(object):
                 if self._timing_data["estimated_time_remaining"] != float('inf'):
                     logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
                         self._timing_data["estimated_time_remaining"],
-                        self._timing_data["estimated_iso_finish_date"],
-                        self._timing_data["estimated_total_iso_time"]))
+                        self._timing_data["estimated_localtime_finish_date"],
+                        self._timing_data["estimated_total_time"]))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
@@ -1551,31 +1551,15 @@ class MultiStateSampler(object):
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
                                                             f_k=self._last_mbar_f_k,
                                                             free_energy=(free_energy, self._last_err_free_energy))
-        # Estimate performance
-        # TODO: use units for timing information to easily convert between seconds and days
-        # there are some mcmc_moves that have no timestep attribute, catch exception
-        try:
-            current_simulated_time = self.mcmc_moves[0].timestep*self._iteration*self.mcmc_moves[0].n_steps
-        except AttributeError:
-            current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
-
-        # There's no timing data dictionary for 1st iteration, catch exception
-        try:
-            partial_total_time = self._iteration*self._timing_data["average_seconds_per_iteration"]
-            performance = current_simulated_time.in_units_of(unit.nanosecond)/(partial_total_time/86400)
-            performance = performance.value_in_unit(unit.nanosecond)
-        except KeyError:
-            performance = None
         # Write real time offline analysis YAML file
         # TODO: Specify units
         data_dict = {"iteration": self._iteration,
                      "percent_complete": self._iteration*100/self.number_of_iterations,
                      "mbar_analysis": {"free_energy_in_kT": float(free_energy),
                                        "standard_error_in_kT": float(self._last_err_free_energy),
-                                       "uncorrelated_samples": float(analysis._equilibration_data[-1])
+                                       "number_of_uncorrelated_samples": float(analysis._equilibration_data[-1])
                                        },
-                     "timing_data": self._timing_data,
-                     "ns_per_day": performance
+                     "timing_data": self._timing_data
                      }
         self._reporter.write_current_statistics(data_dict)
 
@@ -1748,11 +1732,21 @@ class MultiStateSampler(object):
         )
         estimated_finish_date = datetime.datetime.now() + estimated_timedelta_remaining
         self._timing_data["estimated_time_remaining"] = str(estimated_timedelta_remaining)  # Putting it in dict as str
-        self._timing_data["estimated_iso_finish_date"] = estimated_finish_date.strftime("%Y-%b-%d-%H:%M:%S")
+        self._timing_data["estimated_localtime_finish_date"] = estimated_finish_date.strftime("%Y-%b-%d-%H:%M:%S")
         total_time_in_seconds = datetime.timedelta(
             seconds=self._timing_data["average_seconds_per_iteration"] * iteration_limit
         )
-        self._timing_data["estimated_total_iso_time"] = str(total_time_in_seconds)
+        self._timing_data["estimated_total_time"] = str(total_time_in_seconds)
+
+        # Estimate performance
+        # TODO: use units for timing information to easily convert between seconds and days
+        # there are some mcmc_moves that have no timestep attribute, catch exception
+        try:
+            current_simulated_time = self.mcmc_moves[0].timestep * self._iteration * self.mcmc_moves[0].n_steps
+        except AttributeError:
+            current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
+        performance = current_simulated_time.in_units_of(unit.nanosecond) / (partial_total_time / 86400)
+        self._timing_data["ns_per_day"] = performance.value_in_unit(unit.nanosecond)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
