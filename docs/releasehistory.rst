@@ -6,6 +6,13 @@ Release History
 
 Bugfixes
 --------
+- Fixed bug with samplers not broadcasting mixed replicas to MPI context (`#449 <https://github.com/choderalab/openmmtools/pull/449>`_).
+
+0.21.2 - Bugfix release
+=======================
+
+Bugfixes
+--------
 - Fixed UnboundLocalError when using a string to specify platform in ``platform_supports_precision`` (`#551 <https://github.com/choderalab/openmmtools/pull/551>`_). 
 
 
