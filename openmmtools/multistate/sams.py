@@ -434,6 +434,10 @@ class SAMSSampler(multistate.MultiStateSampler):
             # Update log weights based on target probabilities
             self._update_log_weights()
 
+        # Return replica thermodynamic states
+        # TODO: Do we need to return and broadcast something else?
+        return self._replica_thermodynamic_states
+
     def _local_jump(self, replicas_log_P_k):
         n_replica, n_states, locality = self.n_replicas, self.n_states, self.locality
         for (replica_index, current_state_index) in enumerate(self._replica_thermodynamic_states):

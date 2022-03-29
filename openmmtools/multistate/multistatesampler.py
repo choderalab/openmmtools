@@ -1471,6 +1471,7 @@ class MultiStateSampler(object):
             swap_fraction_accepted = n_swaps_accepted / n_swaps_proposed  # Python 3 uses true division for /
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
+        return self._replica_thermodynamic_states
 
     # -------------------------------------------------------------------------
     # Internal-usage: Offline and online analysis
