@@ -290,6 +290,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             swap_fraction_accepted = float(n_swaps_accepted) / n_swaps_proposed
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
+        return self._replica_thermodynamic_states
 
     @staticmethod
     @njit

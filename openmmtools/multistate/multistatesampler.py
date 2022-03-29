@@ -760,7 +760,7 @@ class MultiStateSampler(object):
             timer.start('Iteration')
 
             # Update thermodynamic states
-            self._mix_replicas()
+            self._replica_thermodynamic_states = self._mix_replicas()
 
             # Propagate replicas.
             self._propagate_replicas()
