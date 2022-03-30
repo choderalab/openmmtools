@@ -421,18 +421,20 @@ class SAMSSampler(multistate.MultiStateSampler):
         n_swaps_accepted = self._n_accepted_matrix.sum()
         swap_fraction_accepted = 0.0
         if n_swaps_proposed > 0:
-            # TODO drop casting to float when dropping Python 2 support.
-            swap_fraction_accepted = float(n_swaps_accepted) / n_swaps_proposed
+            swap_fraction_accepted = n_swaps_accepted / n_swaps_proposed
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
 
         # Do not update and/or write to disk during equilibration
         if self._iteration > 0:
-            # Update logZ estimates
+            # Update logZ estimates. Must be up to date in node 0!
             self._update_logZ_estimates(replicas_log_P_k)
 
-            # Update log weights based on target probabilities
+            # Update log weights based on target probabilities. Must be up to date in node 0!
             self._update_log_weights()
+
+        # Return replica thermodynamic states
+        return self._replica_thermodynamic_states
 
     def _local_jump(self, replicas_log_P_k):
         n_replica, n_states, locality = self.n_replicas, self.n_states, self.locality
