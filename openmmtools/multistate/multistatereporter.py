@@ -137,6 +137,8 @@ class MultiStateReporter(object):
         self._analysis_particle_indices = tuple(analysis_particle_indices)
         if open_mode is not None:
             self.open(open_mode)
+        # Flag to check whether to overwrite real time statistics file
+        self._overwrite_statistics = True
 
     @property
     def filepath(self):
@@ -1311,6 +1313,32 @@ class MultiStateReporter(object):
         self.write_online_analysis_data(None, **kwargs)
         self.write_online_analysis_data(iteration, **kwargs)
 
+    def write_current_statistics(self, data):
+        """
+        Write real time YAML file with analysis data.
+
+        A real_time_analysis.yaml file will be generated in the same directory for the reporter netcdf file
+        (see :func:`~multistatereporter.MultiStateReporter` for more information).
+
+        Overwrites file if it already exists.
+
+        Parameters
+        ----------
+        data: dict
+            Dictionary with the key, value pairs to store in YAML format.
+        """
+        reporter_dir, _ = os.path.split(self._storage_analysis_file_path)
+        output_filepath = f"{reporter_dir}/real_time_analysis.yaml"
+        # Remove if it is a fresh reporter session
+        if self._overwrite_statistics:
+            try:
+                os.remove(output_filepath)
+            except FileNotFoundError:
+                pass
+            self._overwrite_statistics = False # Append from now on
+        with open(output_filepath, "a") as out_file:
+            out_file.write(yaml.dump([data], sort_keys=False))
+
     # -------------------------------------------------------------------------
     # Internal-usage.
     # -------------------------------------------------------------------------
@@ -1778,7 +1806,6 @@ class MultiStateReporter(object):
             packed_data = np.empty(1, 'O')
             packed_data[0] = data_str
         nc_variable[:] = packed_data
-
 
 # ==============================================================================
 # MODULE INTERNAL USAGE UTILITIES
