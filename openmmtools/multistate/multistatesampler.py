@@ -184,6 +184,7 @@ class MultiStateSampler(object):
     >>> simulation = HybridRepexSampler.from_storage(reporter)
     >>> simulation.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
     >>> simulation.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.extend(n_iterations=1)
     """
 
     # -------------------------------------------------------------------------
