@@ -21,11 +21,11 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { os: macOS-latest,   python-version: '3.8', openmm: latest  }
+          - { os: macOS-latest,   python-version: '3.8', openmm: latest, continue-on-error: false }
           - { os: windows-latest, python-version: '3.8', openmm: latest, continue-on-error: true  }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest, continue-on-error: false }
+          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest, continue-on-error: false }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly, continue-on-error: false }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
