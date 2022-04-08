@@ -30,7 +30,7 @@ jobs:
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
 
-    continue-on-error: ${{ matrix.continue-on-error }}
+    continue-on-error: ${{ matrix.cfg.continue-on-error }}
     steps:
       - uses: actions/checkout@v1
 
