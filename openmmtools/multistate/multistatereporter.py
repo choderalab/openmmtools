@@ -693,7 +693,11 @@ class MultiStateReporter(object):
                 # Need the [arg, :] to get uniform behavior with tuple and list for arg
                 # since a ndarray[tuple] is different than ndarray[list]
                 position_subset = positions[self._analysis_particle_indices, :]
-                sampler_subset.append(states.SamplerState(position_subset,
+                velocities_subset = None
+                if sampler_state._unitless_velocities is not None:
+                    velocities = sampler_state.velocities
+                    velocities_subset = velocities[self._analysis_particle_indices, :]
+                sampler_subset.append(states.SamplerState(position_subset, velocities=velocities_subset,
                                                                   box_vectors=sampler_state.box_vectors))
             self._write_sampler_states_to_given_file(sampler_subset, iteration, storage_file='analysis',
                                                      obey_checkpoint_interval=False)
@@ -1323,8 +1327,10 @@ class MultiStateReporter(object):
         data: dict
             Dictionary with the key, value pairs to store in YAML format.
         """
-        reporter_dir, _ = os.path.split(self._storage_analysis_file_path)
-        output_filepath = f"{reporter_dir}/real_time_analysis.yaml"
+        reporter_dir, reporter_filename = os.path.split(self._storage_analysis_file_path)
+        # remove extension from filename
+        yaml_prefix = os.path.splitext(reporter_filename)[0]
+        output_filepath = f"{reporter_dir}/{yaml_prefix}_real_time_analysis.yaml"
         # Remove if it is a fresh reporter session
         if self._overwrite_statistics:
             try:
@@ -1583,6 +1589,15 @@ class MultiStateReporter(object):
                                          "coordinate 'spatial' of atom 'atom' from replica 'replica' for "
                                          "iteration 'iteration'.")
 
+            # Define velocities variables.
+            ncvar_velocities = dataset.createVariable('velocities', 'f4',
+                                                     ('iteration', 'replica', 'atom', 'spatial'),
+                                                     zlib=True, chunksizes=(1, n_replicas, n_atoms, 3))
+            ncvar_velocities.units = 'nm / ps'
+            ncvar_velocities.long_name = ("velocities[iteration][replica][atom][spatial] is velocity of "
+                                         "coordinate 'spatial' of atom 'atom' from replica 'replica' for "
+                                         "iteration 'iteration'.")
+
             # Define variables for periodic systems
             if is_periodic:
                 ncvar_box_vectors = dataset.createVariable('box_vectors', 'f4',
@@ -1641,6 +1656,16 @@ class MultiStateReporter(object):
             # Store positions
             storage.variables['positions'][write_iteration, :, :, :] = positions
 
+            # Create a numpy array to avoid making multiple (possibly inefficient) calls to netCDF assignments
+            velocities = np.zeros([n_replicas, n_particles, 3])
+            for replica_index, sampler_state in enumerate(sampler_states):
+                if sampler_state._unitless_velocities is not None:
+                    # Store velocities in memory first
+                    x = sampler_state.velocities / (unit.nanometer/unit.picoseconds) # _unitless_velocities
+                    velocities[replica_index, :, :] = x[:, :]
+             # Store velocites
+            storage.variables['velocities'][write_iteration, :, :, :] = velocities
+
             if is_periodic:
                 # Store box vectors and volume.
                 # Allocate whole write to memory first
@@ -1696,6 +1721,10 @@ class MultiStateReporter(object):
                 x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
                 positions = unit.Quantity(x, unit.nanometers)
 
+                # Restore velocities.
+                x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
+                velocities = unit.Quantity(x, unit.nanometer/unit.picoseconds)
+
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.
                     x = storage.variables['box_vectors'][read_iteration, replica_index, :, :].astype(np.float64)
@@ -1704,7 +1733,7 @@ class MultiStateReporter(object):
                     box_vectors = None
 
                 # Create SamplerState.
-                sampler_states.append(states.SamplerState(positions=positions, box_vectors=box_vectors))
+                sampler_states.append(states.SamplerState(positions=positions, velocities=velocities, box_vectors=box_vectors))
 
             return sampler_states
         else:
