@@ -1754,7 +1754,7 @@ class MultiStateSampler(object):
 
     @staticmethod
     def _display_cuda_devices():
-        """Query system nvidia-smi to get avaliable GPUs indices and names in debug log."""
+        """Query system nvidia-smi to get available GPUs indices and names in debug log."""
         # Read nvidia-smi query, should return empty strip if no GPU is found.
         cuda_query_output = os.popen("nvidia-smi --query-gpu=index,gpu_name --format=csv,noheader").read().strip()
         # Split by line jump and comma
