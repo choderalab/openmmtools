@@ -1327,8 +1327,10 @@ class MultiStateReporter(object):
         data: dict
             Dictionary with the key, value pairs to store in YAML format.
         """
-        reporter_dir, _ = os.path.split(self._storage_analysis_file_path)
-        output_filepath = f"{reporter_dir}/real_time_analysis.yaml"
+        reporter_dir, reporter_filename = os.path.split(self._storage_analysis_file_path)
+        # remove extension from filename
+        yaml_prefix = os.path.splitext(reporter_filename)[0]
+        output_filepath = f"{reporter_dir}/{yaml_prefix}_real_time_analysis.yaml"
         # Remove if it is a fresh reporter session
         if self._overwrite_statistics:
             try:
