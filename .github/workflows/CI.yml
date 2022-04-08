@@ -22,13 +22,18 @@ jobs:
       matrix:
         cfg:
           - { os: macOS-latest,   python-version: '3.8', openmm: latest  }
+          - { os: windows-latest, python-version: '3.8', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.8', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
+      include:
+         os: windows-latest
+         continue-on-error: true
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
 
+    continue-on-error: ${{ matrix.continue-on-error }}
     steps:
       - uses: actions/checkout@v1
 
