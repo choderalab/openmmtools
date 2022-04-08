@@ -1035,9 +1035,9 @@ class PhaseAnalyzer(ABC):
         Parameters
         ----------
         energy_matrix : array of numpy.float64, optional, default=None
-           Reduced potential energies of the replicas; if None, will be extracted from the ncfile
+           Reduced potential energies of the replicas.
         samples_per_state : array of ints, optional, default=None
-           Number of samples drawn from each kth state; if None, will be extracted from the ncfile
+           Number of samples drawn from each kth state.
 
         """
         # Initialize MBAR (computing free energy estimates, which may take a while)
@@ -2131,6 +2131,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     @mbar.default
     def mbar(self, instance):
+        # u_ln[l,n] is the reduced potential for concatenated decorrelated snapshot n evaluated at thermodynamic state l
+        # Shape is (n_states + n_unsampled_states, n_samples)
+        # N_l[l] is the number of decorrelated samples sampled from thermodynamic state l, some can be 0.
+        # Shape is (n_states + n_unsampled_states, )
         return instance._create_mbar(instance._unbiased_decorrelated_u_ln,
                                      instance._unbiased_decorrelated_N_l)
 
