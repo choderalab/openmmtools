@@ -176,6 +176,15 @@ class MultiStateSampler(object):
 
     Run the simulation
     >>> simulation.run()
+
+    Note that to avoid the repex cycling problem upon resuming a simulation, make sure to specify do the optional
+    energy and sampler context caches.
+
+    >>> reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
+    >>> simulation = HybridRepexSampler.from_storage(reporter)
+    >>> simulation.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.extend(n_iterations=1)
     """
 
     # -------------------------------------------------------------------------
