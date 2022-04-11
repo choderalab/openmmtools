@@ -199,6 +199,9 @@ class MultiStateSampler(object):
         # Warn that API is experimental
         logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
+        # Display cuda device in debug log
+        self._display_cuda_devices()
+
         # These will be set on initialization. See function
         # create() for explanation of single variables.
         self._thermodynamic_states = None
@@ -1757,6 +1760,15 @@ class MultiStateSampler(object):
             current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
         performance = current_simulated_time.in_units_of(unit.nanosecond) / (partial_total_time / 86400)
         self._timing_data["ns_per_day"] = performance.value_in_unit(unit.nanosecond)
+
+    @staticmethod
+    def _display_cuda_devices():
+        """Query system nvidia-smi to get available GPUs indices and names in debug log."""
+        # Read nvidia-smi query, should return empty strip if no GPU is found.
+        cuda_query_output = os.popen("nvidia-smi --query-gpu=index,gpu_name --format=csv,noheader").read().strip()
+        # Split by line jump and comma
+        cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
+        logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
