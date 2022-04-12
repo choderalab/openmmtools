@@ -1527,6 +1527,8 @@ class MultiStateSampler(object):
         try:  # Trap errors for MBAR being under sampled and the W_nk matrix not being normalized correctly
             mbar = analysis.mbar
             free_energy, err_free_energy = analysis.get_free_energy()
+            n_equilibration_iterations = analysis.n_equilibration_iterations
+            statistical_inefficiency = analysis.statistical_inefficiency
         except ParameterError as e:
             # We don't update self._last_err_free_energy here since if it
             # wasn't below the target threshold before, it won't stop MultiStateSampler now.
@@ -1570,7 +1572,9 @@ class MultiStateSampler(object):
                      "percent_complete": self._iteration*100/self.number_of_iterations,
                      "mbar_analysis": {"free_energy_in_kT": float(free_energy),
                                        "standard_error_in_kT": float(self._last_err_free_energy),
-                                       "number_of_uncorrelated_samples": float(analysis._equilibration_data[-1])
+                                       "number_of_uncorrelated_samples": float(analysis._equilibration_data[-1]),
+                                       "n_equilibrium_iterations": int(n_equilibration_iterations),
+                                       "statistical_inefficiency": float(statistical_inefficiency)
                                        },
                      "timing_data": self._timing_data
                      }
