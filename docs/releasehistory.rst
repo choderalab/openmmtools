@@ -6,7 +6,7 @@ Release History
 
 Bugfixes
 --------
-- Fixed bug with samplers not broadcasting mixed replicas to MPI context (`#449 <https://github.com/choderalab/openmmtools/pull/449>`_).
+- Fixed long-standing bug with replica mixing using multiple GPUs  (`#449 <https://github.com/choderalab/openmmtools/pull/449>`_).
 - Add velocities to checkpoint file (`#555 <https://github.com/choderalab/openmmtools/pull/555>`_).
 
 Enhancements
