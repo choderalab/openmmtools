@@ -1,12 +1,19 @@
 Release History
 ***************
 
-0.21.2 - Bugfix release
+0.21.3 - Bugfix release
 =======================
 
 Bugfixes
 --------
 - Fixed bug with samplers not broadcasting mixed replicas to MPI context (`#449 <https://github.com/choderalab/openmmtools/pull/449>`_).
+- Add velocities to checkpoint file (`#555 <https://github.com/choderalab/openmmtools/pull/555>`_).
+
+Enhancements
+------------
+- Real time MBA analysis and timing information output in yaml format (`#565 <https://github.com/choderalab/openmmtools/pull/565>`_).
+- Information of what CUDA devices are available in log output (`#570 <https://github.com/choderalab/openmmtools/pull/570>`_).
+
 
 0.21.2 - Bugfix release
 =======================
