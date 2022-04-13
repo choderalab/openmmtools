@@ -6,17 +6,17 @@ Release History
 
 Bugfixes
 --------
-- Fixed long-standing bug with replica mixing using multiple GPUs  (`#449 <https://github.com/choderalab/openmmtools/pull/449>`_) & (`#562  <https://github.com/choderalab/openmmtools/pull/562>`_).
-- Add velocities to checkpoint file (`#555 <https://github.com/choderalab/openmmtools/pull/555>`_).
-- Fix documentation building (`#554 <https://github.com/choderalab/openmmtools/pull/554>`_).
-- Fix failing windows CI (`#573 <https://github.com/choderalab/openmmtools/pull/573>`_)
+- Bug in replica mixing in MPI multi-GPU runs--where some replicas were simulated in incorrect states--was fixed (`#449 <https://github.com/choderalab/openmmtools/pull/449>`_) & (`#562  <https://github.com/choderalab/openmmtools/pull/562>`_).
+- Velocities are now stored in the checkpoint file to eliminate issue with "cold restart". Fixes issue `#531 <https://github.com/choderalab/openmmtools/issues/531>`_ (`#555 <https://github.com/choderalab/openmmtools/pull/555>`_).
+- Documentation now correctly builds via CI. Fixes issue `#548 <https://github.com/choderalab/openmmtools/issues/548>`_ (`#554 <https://github.com/choderalab/openmmtools/pull/554>`_).
+- Failing windows CI (issue `#567 <https://github.com/choderalab/openmmtools/issues/567>`_) is fixed. (`#573 <https://github.com/choderalab/openmmtools/pull/573>`_)
 
 Enhancements
 ------------
-- Real time MBA analysis and timing information output in yaml format (`#565 <https://github.com/choderalab/openmmtools/pull/565>`_), (`#561 <https://github.com/choderalab/openmmtools/pull/561>`_) & (`#572 <https://github.com/choderalab/openmmtools/pull/572>`_).
-- Information of what CUDA devices are available in log output (`#570 <https://github.com/choderalab/openmmtools/pull/570>`_).
-- Add replica exchange attempts during equilibration phase (`#556 <https://github.com/choderalab/openmmtools/pull/556>`_).
-- Add example when resuming simulation (`#569 <https://github.com/choderalab/openmmtools/pull/569>`_)
+- Real time MBAR analysis and timing information is now produced in yaml format at user-specified intervals (`#565 <https://github.com/choderalab/openmmtools/pull/565>`_), (`#561 <https://github.com/choderalab/openmmtools/pull/561>`_) & (`#572 <https://github.com/choderalab/openmmtools/pull/572>`_).
+- Information of what CUDA devices are available is now provided in log output (`#570 <https://github.com/choderalab/openmmtools/pull/570>`_).
+- Replica exchanges are now attempted during equilibration phase to enhance mixing (`#556 <https://github.com/choderalab/openmmtools/pull/556>`_).
+- An example of resuming a MultiStateSampler simulation using API is now provided (`#569 <https://github.com/choderalab/openmmtools/pull/569>`_)
 
 
 0.21.2 - Bugfix release
