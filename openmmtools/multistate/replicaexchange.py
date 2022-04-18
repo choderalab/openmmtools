@@ -286,10 +286,10 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         n_swaps_accepted = self._n_accepted_matrix.sum()
         swap_fraction_accepted = 0.0
         if n_swaps_proposed > 0:
-            # TODO drop casting to float when dropping Python 2 support.
-            swap_fraction_accepted = float(n_swaps_accepted) / n_swaps_proposed
+            swap_fraction_accepted = n_swaps_accepted / n_swaps_proposed
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
+        return self._replica_thermodynamic_states
 
     @staticmethod
     @njit
