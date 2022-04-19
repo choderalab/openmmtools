@@ -1759,7 +1759,8 @@ class MultiStateSampler(object):
         # TODO: use units for timing information to easily convert between seconds and days
         # there are some mcmc_moves that have no timestep attribute, catch exception
         try:
-            current_simulated_time = self.mcmc_moves[0].timestep * self._iteration * self.mcmc_moves[0].n_steps
+            current_simulated_time = self.mcmc_moves[0].timestep * self._iteration * self.mcmc_moves[0].n_steps * \
+                                     self.n_replicas
         except AttributeError:
             current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
         performance = current_simulated_time.in_units_of(unit.nanosecond) / (partial_total_time / 86400)
