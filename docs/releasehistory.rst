@@ -1,6 +1,14 @@
 Release History
 ***************
 
+0.21.4 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- Bug in statistical inefficiency computation -- where self.max_n_iterations wasn't being used -- was fixed (`#577 <https://github.com/choderalab/openmmtools/pull/577>`_).
+
+
 0.21.3 - Bugfix release
 =======================
 
