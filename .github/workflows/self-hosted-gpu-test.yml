@@ -90,14 +90,6 @@ jobs:
           conda info -a
           conda list
 
-      - name: Decrypt OpenEye license
-        shell: bash -l {0}
-        env:
-          OE_LICENSE_TEXT: ${{ secrets.OE_LICENSE }}
-        run: |
-          echo "${OE_LICENSE_TEXT}" > ${OE_LICENSE}
-          python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
-
       - name: Test the package
         shell: bash -l {0}
         run: |
