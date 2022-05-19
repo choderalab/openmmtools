@@ -1442,11 +1442,18 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         logger.debug("Done.")
         return u_n
 
-    def _compute_mbar_decorrelated_energies(self):
+    def _compute_mbar_decorrelated_energies(self, t0=None, subsample_rate=None):
         """Return an MBAR-ready decorrelated energy matrix.
 
         The data is returned after discarding equilibration and truncating
         the iterations to self.max_n_iterations.
+        
+        Parameters
+        ---------- 
+        t0 : int, optional
+            the number of equilibrated iterations to override number_equilibrated
+        subsample_rate : int, optional
+            the subsample rate to override g_t
 
         Returns
         -------
@@ -1464,6 +1471,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         # Use the cached information to generate the equilibration data.
         sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = energy_data
         number_equilibrated, g_t, Neff_max = self._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+        number_equilibrated = t0 if t0 is not None else number_equilibrated
+        g_t = subsample_rate if subsample_rate is not None else g_t
 
         logger.debug("Assembling uncorrelated energies...")
 
