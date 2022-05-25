@@ -1758,13 +1758,10 @@ class MultiStateSampler(object):
         # Estimate performance
         # TODO: use units for timing information to easily convert between seconds and days
         # there are some mcmc_moves that have no timestep attribute, catch exception
-        try:
-            current_simulated_time = self.mcmc_moves[0].timestep * self._iteration * self.mcmc_moves[0].n_steps * \
-                                     self.n_replicas
-        except AttributeError:
-            current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
-        performance = current_simulated_time.in_units_of(unit.nanosecond) / (partial_total_time / 86400)
-        self._timing_data["ns_per_day"] = performance.value_in_unit(unit.nanosecond)
+        moves_iterator = self._flatten_moves_iterator()
+        current_simulated_nanoseconds = sum([move.timestep.value_in_unit(unit.nanosecond) * move.n_steps for
+                                             move in moves_iterator if hasattr(move, "timestep") and hasattr(move, "n_steps")])
+        self._timing_data["ns_per_day"] = current_simulated_nanoseconds / (partial_total_time / 86400)
 
     @staticmethod
     def _display_cuda_devices():
@@ -1774,6 +1771,15 @@ class MultiStateSampler(object):
         # Split by line jump and comma
         cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
         logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+
+    def _flatten_moves_iterator(self):
+        def flatten(iterator):
+            try:
+                yield from [inner_move for move in iterator for inner_move in flatten(move)]
+            except TypeError:
+                logger.warning(f"Could not flatten {type(iterator).__name__} object!")
+                yield iterator
+        return flatten(self.mcmc_moves)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
