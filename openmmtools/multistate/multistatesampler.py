@@ -693,7 +693,7 @@ class MultiStateSampler(object):
             self._compute_energies()
 
             # Update thermodynamic states
-            self._mix_replicas()
+            self._replica_thermodynamic_states = self._mix_replicas()
 
             # Computing timing information
             iteration_time = timer.stop('Equilibration Iteration')
