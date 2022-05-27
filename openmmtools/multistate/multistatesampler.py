@@ -50,6 +50,7 @@ from openmmtools.multistate.utils import SimulationNaNError
 from openmmtools.multistate.pymbar import ParameterError
 
 from openmmtools.integrators import FIREMinimizationIntegrator, GradientDescentMinimizationIntegrator
+from openmmtools.utils import get_fastest_platform
 
 logger = logging.getLogger(__name__)
 
@@ -1366,7 +1367,12 @@ class MultiStateSampler(object):
 
         # Use Gradient Descent first for numerical stability
         integrator_grad = GradientDescentMinimizationIntegrator()
-        context_grad = thermodynamic_state.create_context(integrator_grad)
+        # platform = self.energy_context_cache.platform # This is None, causes:
+        # "ValueError: To set platform_properties, you need to also specify the platform."
+        platform = get_fastest_platform(minimum_precision='mixed')
+        if 'Precision' in platform.getPropertyNames():
+            platform.setPropertyDefaultValue('Precision', 'mixed')
+        context_grad = thermodynamic_state.create_context(integrator_grad, platform)
         # Initialize sampler_state.potential_energy using a context
         sampler_state.apply_to_context(context_grad)
         sampler_state.update_from_context(context_grad)
