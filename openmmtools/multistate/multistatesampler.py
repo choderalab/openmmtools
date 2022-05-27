@@ -1756,14 +1756,14 @@ class MultiStateSampler(object):
         self._timing_data["estimated_total_time"] = str(total_time_in_seconds)
 
         # Estimate performance
-        # TODO: use units for timing information to easily convert between seconds and days
-        # there are some mcmc_moves that have no timestep attribute, catch exception
-        try:
-            current_simulated_time = self.mcmc_moves[0].timestep * self._iteration * self.mcmc_moves[0].n_steps
-        except AttributeError:
-            current_simulated_time = 0.0 * unit.nanosecond  # Hardcoding to 0 ns
-        performance = current_simulated_time.in_units_of(unit.nanosecond) / (partial_total_time / 86400)
-        self._timing_data["ns_per_day"] = performance.value_in_unit(unit.nanosecond)
+        moves_iterator = self._flatten_moves_iterator()
+        # Only consider "dynamic" moves (timestep and n_steps attributes)
+        moves_times = [move.timestep.value_in_unit(unit.nanosecond) * move.n_steps for move in moves_iterator if
+                       hasattr(move, "timestep") and hasattr(move, "n_steps")]
+        iteration_simulated_nanoseconds = sum(moves_times)
+        seconds_in_a_day = (1 * unit.day).value_in_unit(unit.seconds)
+        self._timing_data["ns_per_day"] = iteration_simulated_nanoseconds / (
+                    self._timing_data["average_seconds_per_iteration"] / seconds_in_a_day)
 
     @staticmethod
     def _display_cuda_devices():
@@ -1773,6 +1773,16 @@ class MultiStateSampler(object):
         # Split by line jump and comma
         cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
         logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+
+    def _flatten_moves_iterator(self):
+        """Recursively flatten MCMC moves. Handles the cases where each move can be a set of moves, for example with
+        SequenceMove or WeightedMove objects."""
+        def flatten(iterator):
+            try:
+                yield from [inner_move for move in iterator for inner_move in flatten(move)]
+            except TypeError:  # Inner object is not iterable, finish flattening.
+                yield iterator
+        return flatten(self.mcmc_moves)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals

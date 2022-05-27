@@ -7,6 +7,7 @@ Release History
 Bugfixes
 --------
 - Bug in statistical inefficiency computation -- where self.max_n_iterations wasn't being used -- was fixed (`#577 <https://github.com/choderalab/openmmtools/pull/577>`_).
+- Bug in estimated performance in realtime yaml file -- fixed by iterating through all MCMC moves (`#578 <https://github.com/choderalab/openmmtools/pull/578>`_)
 
 
 0.21.3 - Bugfix release
