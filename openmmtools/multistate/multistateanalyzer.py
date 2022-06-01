@@ -1998,6 +1998,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
     def _get_equilibration_data(self, energies=None, neighborhoods=None, replica_state_indices=None):
         """Generate the equilibration data from best practices.
 
+        Note that many of the variable names (e.g. t0, g_t) in this function are named after the equations in
+        https://pubs.acs.org/doi/10.1021/acs.jctc.5b00784
+        These equations are summarized here: http://getyank.org/latest/algorithms.html#autocorrelate-algorithm
+
         Parameters
         ----------
         energies : ndarray of shape (K,L,N), optional, Default: None
