@@ -9,7 +9,6 @@ dependencies:
     - cython
     - numpy
     - scipy
-    - parmed
     - mdtraj
     - numpydoc
     - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"

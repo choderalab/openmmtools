@@ -13,7 +13,6 @@ dependencies:
   - numba
   - numpy
   - openmm >=7.5.0
-  - parmed
   - pip
   - pymbar
   - python
