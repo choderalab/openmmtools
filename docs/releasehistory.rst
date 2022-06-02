@@ -8,6 +8,12 @@ Bugfixes
 --------
 - Bug in statistical inefficiency computation -- where self.max_n_iterations wasn't being used -- was fixed (`#577 <https://github.com/choderalab/openmmtools/pull/577>`_).
 - Bug in estimated performance in realtime yaml file -- fixed by iterating through all MCMC moves (`#578 <https://github.com/choderalab/openmmtools/pull/578>`_)
+- Explicit update and broadcast of thermodynamic states when running equilibration. Issue `#579 <https://github.com/choderalab/openmmtools/issues/579>`_ (`#587 <https://github.com/choderalab/openmmtools/pull/587>`_).
+
+Enhancements
+------------
+- Eliminate parmed dependency from ``DHFRExplicit``. Issue `#539 <https://github.com/choderalab/openmmtools/issues/539>`_ (`#588 <https://github.com/choderalab/openmmtools/pull/588>`_).
+- ``MultiStateSamplerAnalyzer`` now allows to manually specify equilibrium iterations and statistical inefficiency (`#586 <https://github.com/choderalab/openmmtools/pull/586>`_).
 
 
 0.21.3 - Bugfix release
