@@ -1514,9 +1514,14 @@ class MultiStateSampler(object):
         bump_error_counter = False
         # Set up analyzer
         # Unbias restraints is False because this will quickly accumulate large time to re-read the trajectories
-        # and unbias the restraints every online-analysis. Current model is to use the last_mbar_f_k as a
-        # hot-start to the analysis. Once we store unbias info as part of a CustomCVForce, we can revisit this choice.
-        analysis = MultiStateSamplerAnalyzer(self._reporter, analysis_kwargs={'initial_f_k': self._last_mbar_f_k},
+        # and unbias the restraints every online-analysis. Current model is to initialize the last_mbar_f_k_offline
+        # attribute to zeros the first time, and then using its last result to produce the subsequent ones.
+        # Once we store unbias info as part of a CustomCVForce, we can revisit this choice.
+        # Initialize with zeros on first run including unsampled states
+        if not hasattr(self, "_last_mbar_f_k_offline"):
+            self._last_mbar_f_k_offline = np.zeros(len(self._thermodynamic_states) + len(self._unsampled_states))
+        analysis = MultiStateSamplerAnalyzer(self._reporter,
+                                             analysis_kwargs={'initial_f_k': self._last_mbar_f_k_offline},
                                              unbias_restraint=False)
 
         # Indices for online analysis, "i'th index, j'th index"
@@ -1532,6 +1537,7 @@ class MultiStateSampler(object):
         except ParameterError as e:
             # We don't update self._last_err_free_energy here since if it
             # wasn't below the target threshold before, it won't stop MultiStateSampler now.
+            logger.debug(f"ParameterError computing MBAR. {e}.")
             bump_error_counter = True
             self._online_error_bank.append(e)
             if len(self._online_error_bank) > 6:
@@ -1539,7 +1545,7 @@ class MultiStateSampler(object):
                 self._online_error_bank.pop(0)
             free_energy = None
         else:
-            self._last_mbar_f_k = mbar.f_k
+            self._last_mbar_f_k_offline = mbar.f_k
             free_energy = free_energy[idx, jdx]
             self._last_err_free_energy = err_free_energy[idx, jdx]
             logger.debug("Current Free Energy Estimate is {} +- {} kT".format(free_energy,
@@ -1564,7 +1570,7 @@ class MultiStateSampler(object):
 
         # Write out the numbers
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
-                                                            f_k=self._last_mbar_f_k,
+                                                            f_k_offline=self._last_mbar_f_k_offline,
                                                             free_energy=(free_energy, self._last_err_free_energy))
         # Write real time offline analysis YAML file
         # TODO: Specify units
