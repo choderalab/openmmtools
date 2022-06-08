@@ -8,6 +8,13 @@ Bugfixes
 --------
 - Bug in statistical inefficiency computation -- where self.max_n_iterations wasn't being used -- was fixed (`#577 <https://github.com/choderalab/openmmtools/pull/577>`_).
 - Bug in estimated performance in realtime yaml file -- fixed by iterating through all MCMC moves (`#578 <https://github.com/choderalab/openmmtools/pull/578>`_)
+- Potential bug fixed by explicitly updating and broadcasting thermodynamic states in replicas, when used in an MPI (distributed) context. Issue `#579 <https://github.com/choderalab/openmmtools/issues/579>`_ (`#587 <https://github.com/choderalab/openmmtools/pull/587>`_).
+- Bug in handling unsampled states in realtime/offline analysis -- fixed by using ``MultiStateSampler._unsampled_states`` to build the mbar estimate array. Issue `#592 <https://github.com/choderalab/openmmtools/issues/592>`_ (`#593 <https://github.com/choderalab/openmmtools/pull/593>`_)
+
+Enhancements
+------------
+- DHFR test system does not require ``parmed`` as dependency, since OpenMM can now handle prmtop/inpcrd files. Issue `#539 <https://github.com/choderalab/openmmtools/issues/539>`_ (`#588 <https://github.com/choderalab/openmmtools/pull/588>`_).
+- ``MultiStateSamplerAnalyzer`` now allows to manually specify ``n_equilibrium_iterations`` and ``statistical_inefficiency`` parameters. (`#586 <https://github.com/choderalab/openmmtools/pull/586>`_).
 
 
 0.21.3 - Bugfix release
