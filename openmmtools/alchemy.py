@@ -409,6 +409,30 @@ class AlchemicalState(states.GlobalParameterState):
         # The function is redefined here only to provide more specific documentation for this method.
         super().apply_to_context(context)
 
+class NNPProtocol():
+    """
+    protocol for perturbing the `lambda_interpolate` parameter of an openmm-ml mixed system
+    """
+    default_functions = {'lambda_interpolate' : lambda x:x}
+    def __init__(self, **unused_kwargs):
+        self.functions = copy.deepcopy(self.default_functions)
+
+class NNPAlchemicalState(AlchemicalState):
+    """
+    neural network potential flavor of `AlchemicalState` for perturbing the `lambda_interpolate` value
+    """
+    class _LambdaParameter(AlchemicalState._LambdaParameter):
+        pass
+    
+    lambda_interpolate = _LambdaParameter('lambda_interpolate')
+
+    def set_alchemical_parameters(self, global_lambda, lambda_protocol = NNPProtocol(), **unused_kwargs):
+        self.global_lambda = global_lambda
+        for parameter_name in lambda_protocol.functions:
+            lambda_value = lambda_protocol.functions[parameter_name](global_lambda)
+            setattr(self, parameter_name, lambda_value)
+
+
 
 # =============================================================================
 # ALCHEMICAL REGION
