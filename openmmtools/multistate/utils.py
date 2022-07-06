@@ -281,3 +281,48 @@ def subsample_data_along_axis(data, subsample_rate, axis):
     indices = timeseries.subsampleCorrelatedData(np.zeros(data_shape[axis]), g=subsample_rate)
     subsampled_data = np.take(cast_data, indices, axis=axis)
     return subsampled_data
+
+# =============================================================================================
+# SPECIAL MIXINS
+# =============================================================================================
+
+class NNPCompatibilityMixin(object):
+    """
+    Mixin for subclasses of `MultistateSampler` that supports `openmm-ml` exchanges of `lambda_interpolate`
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def setup(self, n_states, mixed_system, 
+              init_positions, temperature, storage_file, 
+              minimisation_steps=1000, n_replicas=None, lambda_schedule=None, 
+              lambda_protocol=NNPProtocol(), **unused_kwargs):
+        from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
+        from copy import deepcopy
+
+        lambda_zero_alchemical_state = NNPAlchemicalState.from_system(mixed_system)
+        thermostate = ThermodynamicState(mixed_system, temperature=temperature)
+        compound_thermostate = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
+        thermostate_list, sampler_state_list = [], []
+        if n_replicas is None:
+            n_replicas = n_states
+        else:
+            raise NotImplementedError(f"""the number of states was given as {n_states} 
+                                        but the number of replicas was given as {n_replicas}. 
+                                        We currently only support equal states and replicas""")
+        if lambda_schedule is None:
+            lambda_schedule = np.linspace(0., 1., n_states)
+        else:
+            assert len(lambda_schedule) == n_states
+            assert np.isclose(lambda_schedule[0], 0.)
+            assert np.isclose(lambda_schedule[-1], 1.)
+        
+        init_sampler_state = SamplerState(init_positions, box_vectors = mixed_system.getDefaultPeriodicBoxVectors())
+        logger.info(f"making lambda states...")
+        for lambda_val in lambda_schedule:
+            compound_thermostate_copy = deepcopy(compound_thermostate)
+            compound_thermostate_copy.set_alchemical_parameters(lambda_val, lambda_protocol)
+            thermostate_list.append(compound_thermostate_copy)
+            sampler_state_list.append(deepcopy(init_sampler_state))
+
+        self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=storage_file)
