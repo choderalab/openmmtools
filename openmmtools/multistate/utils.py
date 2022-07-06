@@ -296,7 +296,7 @@ class NNPCompatibilityMixin(object):
     def setup(self, n_states, mixed_system, 
               init_positions, temperature, storage_file, 
               minimisation_steps=1000, n_replicas=None, lambda_schedule=None, 
-              lambda_protocol=NNPProtocol(), **unused_kwargs):
+              lambda_protocol=None, **unused_kwargs):
         from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
         from copy import deepcopy
 
@@ -316,6 +316,13 @@ class NNPCompatibilityMixin(object):
             assert len(lambda_schedule) == n_states
             assert np.isclose(lambda_schedule[0], 0.)
             assert np.isclose(lambda_schedule[-1], 1.)
+        
+        if lambda_protocol is None:
+            from openmmtools.alchemy import NNPProtocol
+            lambda_protocol = NNPProtocol()
+        else:
+            raise NotImplementedError(f"""`lambda_protocol` is currently placeholding; only default `None` 
+                                      is allowed until the `lambda_protocol` class is appropriately generalized""")
         
         init_sampler_state = SamplerState(init_positions, box_vectors = mixed_system.getDefaultPeriodicBoxVectors())
         logger.info(f"making lambda states...")
