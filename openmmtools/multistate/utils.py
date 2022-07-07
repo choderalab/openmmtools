@@ -298,6 +298,7 @@ class NNPCompatibilityMixin(object):
               minimisation_steps=1000, n_replicas=None, lambda_schedule=None, 
               lambda_protocol=None, **unused_kwargs):
         from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
+        from openmmtools.alchemy import NNPAlchemicalState
         from copy import deepcopy
 
         lambda_zero_alchemical_state = NNPAlchemicalState.from_system(mixed_system)
