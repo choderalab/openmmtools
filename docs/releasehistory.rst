@@ -1,6 +1,124 @@
 Release History
 ***************
 
+0.21.5 - Bugfix release
+======================
+
+Changed behaviors
+-----------------
+-   ``LangevinDynamicsMove`` now uses ``openmm.LangevinMiddleIntegrator`` (a BAOAB integrator) instead of `openmm.LangevinIntegrator`` (an OBABO integrator).
+    (`Issue #599 <https://github.com/choderalab/openmmtools/issues/579>`_) (`PR #600 <https://github.com/choderalab/openmmtools/pull/5600>`_)
+
+
+0.21.4 - Bugfix release
+======================
+
+Bugfixes
+--------
+
+-   Bug in statistical inefficiency computation where ``self.max_n_iterations`` wasn't being used was fixed. (`PR #577 <https://github.com/choderalab/openmmtools/pull/577>`_)
+-   Bug in estimated performance in realtime yaml file fixed by iterating through all MCMC moves. (`PR #578 <https://github.com/choderalab/openmmtools/pull/578>`_)
+-   Potential bug fixed by explicitly updating and broadcasting thermodynamic states in replicas, when used in an MPI (distributed) context.
+    (`Issue #579 <https://github.com/choderalab/openmmtools/issues/579>`_) (`PR #587 <https://github.com/choderalab/openmmtools/pull/587>`_)
+-   Bug in handling unsampled states in realtime/offline analysis fixed by using ``MultiStateSampler._unsampled_states`` to build the mbar estimate array. 
+    (`Issue #592 <https://github.com/choderalab/openmmtools/issues/592`_) (`PR #593 <https://github.com/choderalab/openmmtools/pull/593>`_)
+
+Enhancements
+------------
+
+-   DHFR test system does not require ``parmed`` as dependency, since OpenMM can now handle prmtop/inpcrd files. 
+    (`Issue #539 <https://github.com/choderalab/openmmtools/issues/539>`_) (`PR #588 <https://github.com/choderalab/openmmtools/pull/588>`_)
+-   ``MultiStateSamplerAnalyzer`` now allows to manually specify ``n_equilibrium_iterations`` and ``statistical_inefficiency`` parameters. 
+    (`PR #586 <https://github.com/choderalab/openmmtools/pull/586>`_)
+
+0.21.3 - Bugfix release
+======================
+## What's Changed
+### Bugfixes
+
+-   Bug in replica mixing in MPI multi-GPU runs---where some replicas were simulated in incorrect states---was fixed.
+    (`PR #449 <https://github.com/choderalab/openmmtools/pull/449>`_) (`PR #562 <https://github.com/choderalab/openmmtools/pull/562>`_)
+-   Velocities are now stored in the checkpoint file to eliminate issue with "cold restart". 
+    (`Issue #531 <https://github.com/choderalab/openmmtools/issues/531>`_) (`PR #555 <https://github.com/choderalab/openmmtools/pull/555>`_)
+-   Documentation now correctly builds via CI. 
+    (`Issue #548 <https://github.com/choderalab/openmmtools/issues/548>`_) (`PR #554 <https://github.com/choderalab/openmmtools/pull/554>`_)
+-   Fix failing windows CI.
+    (`Issue #567 <https://github.com/choderalab/openmmtools/issues/567>`_) (`PR #573 <https://github.com/choderalab/openmmtools/pull/573>`_)
+
+### Enhancements
+
+-   Real time MBAR analysis and timing information is now produced in yaml format at user-specified intervals.
+    (`PR #565 <https://github.com/choderalab/openmmtools/pull/565>`_) (`PR #561 <https://github.com/choderalab/openmmtools/pull/561>`_) (`PR #572 <https://github.com/choderalab/openmmtools/pull/572>`_)
+-   Information of what CUDA devices are available is now provided in log output.
+    (`PR #570 <https://github.com/choderalab/openmmtools/pull/570>`_)
+-   Replica exchanges are now attempted during equilibration phase to enhance mixing.
+    (`PR #556 <https://github.com/choderalab/openmmtools/pull/556>`_)
+-   An example of resuming a MultiStateSampler simulation using API is now provided.
+    (`PR #569 <https://github.com/choderalab/openmmtools/pull/569>`_)
+
+## New Contributors
+* ``@jfennick`` made their first contribution in https://github.com/choderalab/openmmtools/pull/556
+
+**Full Changelog**: https://github.com/choderalab/openmmtools/compare/0.21.2...0.21.3
+
+
+0.21.2 - Bugfix release
+=======================
+## What's Changed
+* Add test to check platform precision using a string + fix error by ``@mikemhenry`` 
+  (`PR #551 <https://github.com/choderalab/openmmtools/pull/551>`_)
+
+
+**Full Changelog**: https://github.com/choderalab/openmmtools/compare/0.21.1...0.21.2
+
+
+0.21.1 - Bugfix release
+=======================
+
+## What's Changed
+* More streamlined context caches usage by ``@ijpulidos`` 
+  (`PR #547 <https://github.com/choderalab/openmmtools/pull/547>`_)
+
+
+**Full Changelog**: https://github.com/choderalab/openmmtools/compare/0.21.0...0.21.1
+
+
+0.21.0 - Multiple new features
+==============================
+
+## What's Changed
+* Catch ``LennardJonesGenerator`` made NB functions. by ``@Lnaden``
+  (`PR #511 <https://github.com/choderalab/openmmtools/pull/511>`_)
+* Remove logic for missing file when retrying to open a dataset by ``@mikemhenry``
+  (`PR #515 <https://github.com/choderalab/openmmtools/pull/515>`_)
+* Constants codata 2018 update by ``@ijpulidos`` 
+  (`PR #525 <https://github.com/choderalab/openmmtools/pull/525>`_)
+* deal with openmm 7.6 package unwrapping by ``@sroet`` 
+  (`PR #528 <https://github.com/choderalab/openmmtools/pull/528>`_)
+* Overriding deepcopying behavior to avoid creating new ``ContextCache`` objects by ``@ijpulidos`` 
+  (`PR #524 <https://github.com/choderalab/openmmtools/pull/524>`_)
+* Try closing reporter in test for windows fix by ``@Lnaden`` 
+  (`PR #535 <https://github.com/choderalab/openmmtools/pull/535>`_)
+* Add Git Attributes File Required by Versioneer by ``@SimonBoothroyd`` 
+  (`PR #496 <https://github.com/choderalab/openmmtools/pull/496>`_)
+* Fix for issue #435 by ``@mjw99`` 
+  (`Issue #435 <https://github.com/choderalab/openmmtools/issue/435>`_) (`PR #534 <https://github.com/choderalab/openmmtools/pull/534>`_)
+* Update changelog for #511 by ``@Lnaden`` 
+  (`PR #512 <https://github.com/choderalab/openmmtools/pull/512>`)
+* Testing updated python versions by ``@ijpulidos``
+  (`PR #542 <https://github.com/choderalab/openmmtools/pull/542>`_)
+* ``ContextCache`` usage cleanup by ``@ijpulidos`` 
+  (`PR #538 <https://github.com/choderalab/openmmtools/pull/538>`_)
+* Release 0.21.0 by ``@mikemhenry`` 
+  (`PR #545 <https://github.com/choderalab/openmmtools/pull/545>`_)
+
+## New Contributors
+* ``@ijpulidos`` made their first contribution in https://github.com/choderalab/openmmtools/pull/525
+* ``@SimonBoothroyd`` made their first contribution in https://github.com/choderalab/openmmtools/pull/496
+* ``@mjw99`` made their first contribution in https://github.com/choderalab/openmmtools/pull/534
+
+**Full Changelog**: https://github.com/choderalab/openmmtools/compare/0.20.3...0.21.0
+
 0.20.3 - Bugfix release
 ======================
 
