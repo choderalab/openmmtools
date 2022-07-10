@@ -41,7 +41,11 @@ import itertools
 import re
 
 import numpy as np
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import states, forcefactories, utils
 from openmmtools.constants import ONE_4PI_EPS0
@@ -155,7 +159,8 @@ class AlchemicalState(states.GlobalParameterState):
     used with CompoundThermodynamicState. All the alchemical parameters are
     accessible through the compound state.
 
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> thermodynamic_state = states.ThermodynamicState(system=alanine_alchemical_system,
     ...                                                 temperature=300*unit.kelvin)
     >>> compound_state = states.CompoundThermodynamicState(thermodynamic_state=thermodynamic_state,
@@ -225,7 +230,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             An alchemically modified system in a defined alchemical state.
         parameters_name_suffix : str, optional
             If specified, the state will search for a modified
@@ -355,7 +360,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to modify.
 
         Raises
@@ -375,7 +380,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system to test.
 
         Raises
@@ -392,7 +397,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         Parameters
         ----------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The context to set.
 
         Raises
@@ -590,7 +595,8 @@ class AbsoluteAlchemicalFactory(object):
 
     You can also modify its Hamiltonian directly into a context
 
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> integrator = openmm.VerletIntegrator(1.0*unit.femtosecond)
     >>> context = openmm.Context(alchemical_system, integrator)
     >>> alchemical_state.set_alchemical_parameters(0.0)  # Set all lambda to 0
@@ -636,7 +642,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        reference_system : simtk.openmm.System
+        reference_system : openmm.System
             The system to use as a reference for the creation of the
             alchemical system. This will not be modified.
         alchemical_regions : AlchemicalRegion
@@ -648,7 +654,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        alchemical_system : simtk.openmm.System
+        alchemical_system : openmm.System
             Alchemically-modified version of reference_system.
 
         """
@@ -755,19 +761,19 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        alchemical_system : simtk.openmm.AlchemicalSystem
+        alchemical_system : openmm.AlchemicalSystem
             An alchemically modified system.
         alchemical_state : AlchemicalState
             The alchemical state to set the Context to.
-        positions : simtk.unit.Quantity of dimension (natoms, 3)
+        positions : openmm.unit.Quantity of dimension (natoms, 3)
             Coordinates to use for energy test (units of distance).
-        platform : simtk.openmm.Platform, optional
+        platform : openmm.Platform, optional
             The OpenMM platform to use to compute the energy. If None,
             OpenMM tries to select the fastest available.
 
         Returns
         -------
-        energy_components : dict str: simtk.unit.Quantity
+        energy_components : dict str: openmm.unit.Quantity
             A string label describing the role of the force associated to
             its contribution to the potential energy.
 
@@ -815,7 +821,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system.
         alchemical_region : AlchemicalRegion
             The alchemical region of the system.
@@ -903,7 +909,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        system : simtk.openmm.System
+        system : openmm.System
             The system for which bonds are to be tabulated.
 
         Returns
@@ -947,7 +953,7 @@ class AbsoluteAlchemicalFactory(object):
             The set of alchemically modified atoms.
         reference_forces : dict str: force
             A dictionary of cached forces in the system accessible by names.
-        system : simtk.openmm.System
+        system : openmm.System
             The system.
 
         Returns
@@ -992,7 +998,7 @@ class AbsoluteAlchemicalFactory(object):
             The set of alchemically modified atoms.
         reference_forces : dict str: force
             A dictionary of cached forces in the system accessible by names.
-        system : simtk.openmm.System
+        system : openmm.System
             The system (unused).
 
         Returns
@@ -1021,7 +1027,7 @@ class AbsoluteAlchemicalFactory(object):
             The set of alchemically modified atoms.
         reference_forces : dict str: force
             A dictionary of cached forces in the system accessible by names.
-        system : simtk.openmm.System
+        system : openmm.System
             The system (unused).
 
         Returns
@@ -1111,7 +1117,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        reference_force : simtk.openmm.PeriodicTorsionForce
+        reference_force : openmm.PeriodicTorsionForce
             The reference PeriodicTorsionForce to be alchemically modify.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the torsions to
@@ -1123,9 +1129,9 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        force : simtk.openmm.PeriodicTorsionForce
+        force : openmm.PeriodicTorsionForce
             The force responsible for the non-alchemical torsions.
-        custom_force : simtk.openmm.CustomTorsionForce
+        custom_force : openmm.CustomTorsionForce
             The force responsible for the alchemically-softened torsions.
             This will not be present if there are not alchemical torsions
             in alchemical_region.
@@ -1195,7 +1201,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        reference_force : simtk.openmm.HarmonicAngleForce
+        reference_force : openmm.HarmonicAngleForce
             The reference HarmonicAngleForce to be alchemically modify.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the angles to
@@ -1207,9 +1213,9 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        force : simtk.openmm.HarmonicAngleForce
+        force : openmm.HarmonicAngleForce
             The force responsible for the non-alchemical angles.
-        custom_force : simtk.openmm.CustomAngleForce
+        custom_force : openmm.CustomAngleForce
             The force responsible for the alchemically-softened angles.
             This will not be present if there are not alchemical angles
             in alchemical_region.
@@ -1274,7 +1280,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        reference_force : simtk.openmm.HarmonicBondForce
+        reference_force : openmm.HarmonicBondForce
             The reference HarmonicBondForce to be alchemically modify.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the bonds to
@@ -1286,9 +1292,9 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        force : simtk.openmm.HarmonicBondForce
+        force : openmm.HarmonicBondForce
             The force responsible for the non-alchemical bonds.
-        custom_force : simtk.openmm.CustomBondForce
+        custom_force : openmm.CustomBondForce
             The force responsible for the alchemically-softened bonds.
             This will not be present if there are not alchemical bonds
             in alchemical_region.
@@ -1535,7 +1541,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        reference_force : simtk.openmm.NonbondedForce
+        reference_force : openmm.NonbondedForce
             The reference NonbondedForce to be alchemically modify.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the atoms to
@@ -1547,26 +1553,26 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        nonbonded_force : simtk.openmm.NonbondedForce
+        nonbonded_force : openmm.NonbondedForce
             The force responsible for interactions and exceptions of non-alchemical atoms.
-        aa_sterics_custom_nonbonded_force : simtk.openmm.CustomNonbondedForce
+        aa_sterics_custom_nonbonded_force : openmm.CustomNonbondedForce
             The force responsible for sterics interactions of alchemical/alchemical atoms.
-        aa_electrostatics_custom_nonbonded_force : simtk.openmm.CustomNonbondedForce
+        aa_electrostatics_custom_nonbonded_force : openmm.CustomNonbondedForce
             The force responsible for electrostatics interactions of alchemical/alchemical
             atoms.
-        na_sterics_custom_nonbonded_force : simtk.openmm.CustomNonbondedForce
+        na_sterics_custom_nonbonded_force : openmm.CustomNonbondedForce
             The force responsible for sterics interactions of non-alchemical/alchemical atoms.
-        na_electrostatics_custom_nonbonded_force : simtk.openmm.CustomNonbondedForce
+        na_electrostatics_custom_nonbonded_force : openmm.CustomNonbondedForce
             The force responsible for electrostatics interactions of non-alchemical/alchemical
             atoms.
-        aa_sterics_custom_bond_force : simtk.openmm.CustomBondForce
+        aa_sterics_custom_bond_force : openmm.CustomBondForce
             The force responsible for sterics exceptions of alchemical/alchemical atoms.
-        aa_electrostatics_custom_bond_force : simtk.openmm.CustomBondForce
+        aa_electrostatics_custom_bond_force : openmm.CustomBondForce
             The force responsible for electrostatics exceptions of alchemical/alchemical
             atoms.
-        na_sterics_custom_bond_force : simtk.openmm.CustomBondForce
+        na_sterics_custom_bond_force : openmm.CustomBondForce
             The force responsible for sterics exceptions of non-alchemical/alchemical atoms.
-        na_electrostatics_custom_bond_force : simtk.openmm.CustomBondForce
+        na_electrostatics_custom_bond_force : openmm.CustomBondForce
             The force responsible for electrostatics exceptions of non-alchemical/alchemical
             atoms.
 
@@ -2135,12 +2141,12 @@ class AbsoluteAlchemicalFactory(object):
         return [softcore_force]
 
     @staticmethod
-    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, _, sasa_model='ACE'): 
+    def _alchemically_modify_GBSAOBCForce(reference_force, alchemical_region, _, sasa_model='ACE'):
         """Create alchemically-modified version of GBSAOBCForce.
 
         Parameters
         ----------
-        reference_force : simtk.openmm.GBSAOBCForce
+        reference_force : openmm.GBSAOBCForce
             The reference GBSAOBCForce to be alchemically modify.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the atoms to
@@ -2150,7 +2156,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        custom_force : simtk.openmm.CustomGBForce
+        custom_force : openmm.CustomGBForce
             The alchemical version of the reference force.
 
         TODO
@@ -2241,7 +2247,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Parameters
         ----------
-        reference_force : simtk.openmm.GBSAOBCForce
+        reference_force : openmm.GBSAOBCForce
             The reference GBSAOBCForce to be alchemically modify.
         alchemical_region : AlchemicalRegion
             The alchemical region containing the indices of the atoms to
@@ -2249,7 +2255,7 @@ class AbsoluteAlchemicalFactory(object):
 
         Returns
         -------
-        custom_force : simtk.openmm.CustomGBForce
+        custom_force : openmm.CustomGBForce
             The alchemical version of the reference force.
 
         """
@@ -2499,7 +2505,7 @@ class AbsoluteAlchemicalFactory(object):
                 # Sort forces by number of bonds.
                 bond_forces = sorted(bond_forces, key=lambda x: x[1].getNumBonds())
                 (force_index1, force1), (force_index2, force2) = bond_forces
-                
+
                 # Check if both define their parameters (with decoupling the lambda
                 # parameter doesn't exist in the alchemical-alchemical force)
                 parameter_name = 'lambda_' + force_type

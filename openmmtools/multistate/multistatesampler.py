@@ -37,7 +37,12 @@ import logging
 import datetime
 
 import numpy as np
-from simtk import unit, openmm
+
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import unit, openmm
 
 from openmmtools import multistate, utils, states, mcmc, cache
 import mpiplus
@@ -49,9 +54,11 @@ from openmmtools.integrators import FIREMinimizationIntegrator
 
 logger = logging.getLogger(__name__)
 
+
 # ==============================================================================
 # MULTISTATE SAMPLER
 # ==============================================================================
+
 
 class MultiStateSampler(object):
     """
@@ -119,17 +126,66 @@ class MultiStateSampler(object):
     sampler_states
     metadata
     is_completed
+    energy_context_cache : openmmtools.cache.ContextCache, default=openmmtools.cache.global_context_cache
+        Context cache to be used for energy computations. Defaults to using global context cache.
+    sampler_context_cache : openmmtools.cache.ContextCache, default=openmmtools.cache.global_context_cache
+        Context cache to be used for propagation. Defaults to using global context cache.
 
-    :param number_of_iterations: Maximum number of integer iterations that will be run
+    Examples
+    --------
+    Sampling multiple states of an alanine dipeptide in implicit solvent system.
 
-    :param online_analysis_interval: How frequently to carry out online analysis in number of iterations
+    >>> import math
+    >>> import tempfile
+    >>> from openmm import unit
+    >>> from openmmtools import testsystems, states, mcmc
+    >>> from openmmtools.multistate import MultiStateSampler, MultiStateReporter
+    >>> testsystem = testsystems.AlanineDipeptideImplicit()
 
-    :param online_analysis_target_error: Target free energy difference error float at which simulation will be stopped during online analysis, in dimensionless energy
+    Create thermodynamic states
 
-    :param online_analysis_minimum_iterations: Minimum number of iterations needed before online analysis is run as int
+    >>> n_replicas = 3
+    >>> T_min = 298.0 * unit.kelvin  # Minimum temperature.
+    >>> T_max = 600.0 * unit.kelvin  # Maximum temperature.
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+    ...                 for i in range(n_replicas)]
+    >>> temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+    ...                 for i in range(n_replicas)]
+    >>> thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
+    ...                         for T in temperatures]
 
+    Initialize simulation object with options. Run with a GHMC integrator.
+
+    >>> move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
+    >>> simulation = MultiStateSampler(mcmc_moves=move, number_of_iterations=2)
+
+    Create simulation and store output in temporary file
+
+    >>> storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
+    >>> reporter = MultiStateReporter(storage_path, checkpoint_interval=1)
+    >>> simulation.create(thermodynamic_states=thermodynamic_states,
+    ...                   sampler_states=states.SamplerState(testsystem.positions), storage=reporter)
+
+    Optionally, specify unlimited context cache attributes using the fastest mixed precision platform
+
+    >>> from openmmtools.cache import ContextCache
+    >>> from openmmtools.utils import get_fastest_platform
+    >>> platform = get_fastest_platform(minimum_precision='mixed')
+    >>> simulation.energy_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.sampler_context_cache = ContextCache(capacity=None, time_to_live=None, platform=platform)
+
+    Run the simulation
+    >>> simulation.run()
+
+    Note that to avoid the repex cycling problem upon resuming a simulation, make sure to specify do the optional
+    energy and sampler context caches.
+
+    >>> reporter = MultiStateReporter(reporter_file, checkpoint_interval=10)
+    >>> simulation = HybridRepexSampler.from_storage(reporter)
+    >>> simulation.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    >>> simulation.extend(n_iterations=1)
     """
-
 
     # -------------------------------------------------------------------------
     # Constructors.
@@ -142,6 +198,9 @@ class MultiStateSampler(object):
 
         # Warn that API is experimental
         logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+
+        # Display cuda device in debug log
+        self._display_cuda_devices()
 
         # These will be set on initialization. See function
         # create() for explanation of single variables.
@@ -157,14 +216,15 @@ class MultiStateSampler(object):
         self._n_proposed_matrix = None
         self._reporter = None
         self._metadata = None
+        self._timing_data = dict()
 
         # Handling default propagator.
         if mcmc_moves is None:
             # This will be converted to a list in create().
             self._mcmc_moves = mcmc.LangevinDynamicsMove(timestep=2.0 * unit.femtosecond,
-                                                                 collision_rate=5.0 / unit.picosecond,
-                                                                 n_steps=500, reassign_velocities=True,
-                                                                 n_restart_attempts=6)
+                                                         collision_rate=5.0 / unit.picosecond,
+                                                         n_steps=500, reassign_velocities=True,
+                                                         n_restart_attempts=6)
         else:
             self._mcmc_moves = copy.deepcopy(mcmc_moves)
 
@@ -187,6 +247,9 @@ class MultiStateSampler(object):
         self._last_err_free_energy = None
 
         self._have_displayed_citations_before = False
+
+        # Initializing context cache attributes
+        self._initialize_context_caches()
 
         # Check convergence.
         if self.number_of_iterations == np.inf:
@@ -230,7 +293,7 @@ class MultiStateSampler(object):
         # We open the reporter only in node 0 in append mode ready for use
         sampler._reporter = reporter
         mpiplus.run_single_node(0, sampler._reporter.open, mode='a',
-                            broadcast_result=False, sync_nodes=False)
+                                broadcast_result=False, sync_nodes=False)
         # Don't write the new last iteration, we have not technically
         # written anything yet, so there is no "junk".
         return sampler
@@ -551,7 +614,7 @@ class MultiStateSampler(object):
 
         Parameters
         ----------
-        tolerance : simtk.unit.Quantity, optional
+        tolerance : openmm.unit.Quantity, optional
             Minimization tolerance (units of energy/mole/length, default is
             ``1.0 * unit.kilojoules_per_mole / unit.nanometers``).
         max_iterations : int, optional
@@ -569,8 +632,8 @@ class MultiStateSampler(object):
         # The other nodes, only need the positions that they use for propagation and
         # computation of the energy matrix entries.
         minimized_positions, sampler_state_ids = mpiplus.distribute(self._minimize_replica, range(self.n_replicas),
-                                                                tolerance, max_iterations,
-                                                                send_results_to=0)
+                                                                    tolerance, max_iterations,
+                                                                    send_results_to=0)
 
         # Update all sampler states. For non-0 nodes, this will update only the
         # sampler states associated to the replicas propagated by this node.
@@ -610,12 +673,46 @@ class MultiStateSampler(object):
             raise RuntimeError('The number of MCMCMoves ({}) and ThermodynamicStates ({}) for equilibration'
                                ' must be the same.'.format(len(self._mcmc_moves), self.n_states))
 
+        timer = utils.Timer()
+        timer.start('Run Equilibration')
+
         # Temporarily set the equilibration MCMCMoves.
         production_mcmc_moves = self._mcmc_moves
         self._mcmc_moves = mcmc_moves
-        for iteration in range(n_iterations):
+        for iteration in range(1, 1 + n_iterations):
             logger.debug("Equilibration iteration {}/{}".format(iteration, n_iterations))
+            timer.start('Equilibration Iteration')
+
+            # NOTE: Unlike run(), do NOT increment iteration counter.
+            # self._iteration += 1
+
+            # Propagate replicas.
             self._propagate_replicas()
+
+            # Compute energies of all replicas at all states
+            self._compute_energies()
+
+            # Update thermodynamic states
+            self._replica_thermodynamic_states = self._mix_replicas()
+
+            # Computing timing information
+            iteration_time = timer.stop('Equilibration Iteration')
+            partial_total_time = timer.partial('Run Equilibration')
+            time_per_iteration = partial_total_time / iteration
+            estimated_time_remaining = time_per_iteration * (n_iterations - iteration)
+            estimated_total_time = time_per_iteration * n_iterations
+            estimated_finish_time = time.time() + estimated_time_remaining
+            # TODO: Transmit timing information
+
+            # Show timing statistics if debug level is activated.
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
+                if estimated_time_remaining != float('inf'):
+                    logger.debug("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
+                        str(datetime.timedelta(seconds=estimated_time_remaining)),
+                        time.ctime(estimated_finish_time),
+                        str(datetime.timedelta(seconds=estimated_total_time))))
+        timer.report_timing()
 
         # Restore production MCMCMoves.
         self._mcmc_moves = production_mcmc_moves
@@ -675,7 +772,7 @@ class MultiStateSampler(object):
             timer.start('Iteration')
 
             # Update thermodynamic states
-            self._mix_replicas()
+            self._replica_thermodynamic_states = self._mix_replicas()
 
             # Propagate replicas.
             self._propagate_replicas()
@@ -689,23 +786,19 @@ class MultiStateSampler(object):
             # Update analysis
             self._update_analysis()
 
-            # Computing timing information
+            # Computing and transmitting timing information
             iteration_time = timer.stop('Iteration')
             partial_total_time = timer.partial('Run ReplicaExchange')
-            time_per_iteration = partial_total_time / (self._iteration - run_initial_iteration)
-            estimated_time_remaining = time_per_iteration * (iteration_limit - self._iteration)
-            estimated_total_time = time_per_iteration * iteration_limit
-            estimated_finish_time = time.time() + estimated_time_remaining
-            # TODO: Transmit timing information
+            self._update_timing(iteration_time, partial_total_time, run_initial_iteration, iteration_limit)
 
             # Show timing statistics if debug level is activated.
             if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
-                if estimated_time_remaining != float('inf'):
+                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
+                if self._timing_data["estimated_time_remaining"] != float('inf'):
                     logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
-                        str(datetime.timedelta(seconds=estimated_time_remaining)),
-                        time.ctime(estimated_finish_time),
-                        str(datetime.timedelta(seconds=estimated_total_time))))
+                        self._timing_data["estimated_time_remaining"],
+                        self._timing_data["estimated_localtime_finish_date"],
+                        self._timing_data["estimated_total_time"]))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
@@ -746,7 +839,7 @@ class MultiStateSampler(object):
                           storage,
                           initial_thermodynamic_states=None,
                           unsampled_thermodynamic_states=None,
-                          metadata=None):
+                          metadata=None,):
         """
         Internal function which allocates and sets up ALL variables prior to actually using them.
         This is helpful to ensure subclasses have all variables created prior to writing them out with
@@ -945,6 +1038,12 @@ class MultiStateSampler(object):
 
         self._last_mbar_f_k = last_mbar_f_k
         self._last_err_free_energy = last_err_free_energy
+
+        # initialize timing dictionary
+        self._timing_data = dict()
+
+        # Initialize context caches
+        self._initialize_context_caches()
 
     def _check_nan_energy(self):
         """Checks that energies are finite and abort otherwise.
@@ -1187,7 +1286,7 @@ class MultiStateSampler(object):
     @utils.with_timer('Propagating all replicas')
     def _propagate_replicas(self):
         """Propagate all replicas."""
-        # TODO  Report on efficiency of dyanmics (fraction of time wasted to overhead).
+        # TODO  Report on efficiency of dynamics (fraction of time wasted to overhead).
         logger.debug("Propagating all replicas...")
 
         # Distribute propagation across nodes. Only node 0 will get all positions
@@ -1220,7 +1319,7 @@ class MultiStateSampler(object):
 
         # Apply MCMC move.
         try:
-            mcmc_move.apply(thermodynamic_state, sampler_state)
+            mcmc_move.apply(thermodynamic_state, sampler_state, context_cache=self.sampler_context_cache)
         except mcmc.IntegratorMoveError as e:
             # Save NaNnig context and MCMove before aborting.
             output_dir = os.path.join(os.path.dirname(self._reporter.filepath), 'nan-error-logs')
@@ -1260,8 +1359,8 @@ class MultiStateSampler(object):
         # Use the FIRE minimizer
         integrator = FIREMinimizationIntegrator(tolerance=tolerance)
 
-        # Create context
-        context = thermodynamic_state.create_context(integrator)
+        # Get context and bound integrator from energy_context_cache
+        context, integrator = self.energy_context_cache.get_context(thermodynamic_state, integrator)
 
         # Set initial positions and box vectors.
         sampler_state.apply_to_context(context)
@@ -1295,7 +1394,7 @@ class MultiStateSampler(object):
         final_energy = thermodynamic_state.reduced_potential(sampler_state)
         logger.debug('Replica {}/{}: final energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, final_energy))
-	# TODO if energy > 0, use slower openmm minimizer
+        # TODO if energy > 0, use slower openmm minimizer
 
         # Clean up the integrator
         del context
@@ -1316,7 +1415,7 @@ class MultiStateSampler(object):
         # Distribute energy computation across nodes. Only node 0 receives
         # all the energies since it needs to store them and mix states.
         new_energies, replica_ids = mpiplus.distribute(self._compute_replica_energies, range(self.n_replicas),
-                                                   send_results_to=0)
+                                                       send_results_to=0)
 
         # Update energy matrices. Non-0 nodes update only the energies computed by this replica.
         for replica_id, energies in zip(replica_ids, new_energies):
@@ -1341,14 +1440,14 @@ class MultiStateSampler(object):
 
         # Compute energy for all thermodynamic states.
         for energies, the_states in [(energy_neighborhood_states, neighborhood_thermodynamic_states),
-                                 (energy_unsampled_states, self._unsampled_states)]:
+                                     (energy_unsampled_states, self._unsampled_states)]:
             # Group thermodynamic states by compatibility.
             compatible_groups, original_indices = states.group_by_compatibility(the_states)
 
             # Compute the reduced potentials of all the compatible states.
             for compatible_group, state_indices in zip(compatible_groups, original_indices):
                 # Get the context, any Integrator works.
-                context, integrator = cache.global_context_cache.get_context(compatible_group[0])
+                context, integrator = self.energy_context_cache.get_context(compatible_group[0])
 
                 # Update positions and box vectors. We don't need
                 # to set Context velocities for the potential.
@@ -1384,6 +1483,7 @@ class MultiStateSampler(object):
             swap_fraction_accepted = n_swaps_accepted / n_swaps_proposed  # Python 3 uses true division for /
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
+        return self._replica_thermodynamic_states
 
     # -------------------------------------------------------------------------
     # Internal-usage: Offline and online analysis
@@ -1414,9 +1514,14 @@ class MultiStateSampler(object):
         bump_error_counter = False
         # Set up analyzer
         # Unbias restraints is False because this will quickly accumulate large time to re-read the trajectories
-        # and unbias the restraints every online-analysis. Current model is to use the last_mbar_f_k as a
-        # hot-start to the analysis. Once we store unbias info as part of a CustomCVForce, we can revisit this choice.
-        analysis = MultiStateSamplerAnalyzer(self._reporter, analysis_kwargs={'initial_f_k': self._last_mbar_f_k},
+        # and unbias the restraints every online-analysis. Current model is to initialize the last_mbar_f_k_offline
+        # attribute to zeros the first time, and then using its last result to produce the subsequent ones.
+        # Once we store unbias info as part of a CustomCVForce, we can revisit this choice.
+        # Initialize with zeros on first run including unsampled states
+        if not hasattr(self, "_last_mbar_f_k_offline"):
+            self._last_mbar_f_k_offline = np.zeros(len(self._thermodynamic_states) + len(self._unsampled_states))
+        analysis = MultiStateSamplerAnalyzer(self._reporter,
+                                             analysis_kwargs={'initial_f_k': self._last_mbar_f_k_offline},
                                              unbias_restraint=False)
 
         # Indices for online analysis, "i'th index, j'th index"
@@ -1427,9 +1532,12 @@ class MultiStateSampler(object):
         try:  # Trap errors for MBAR being under sampled and the W_nk matrix not being normalized correctly
             mbar = analysis.mbar
             free_energy, err_free_energy = analysis.get_free_energy()
+            n_equilibration_iterations = analysis.n_equilibration_iterations
+            statistical_inefficiency = analysis.statistical_inefficiency
         except ParameterError as e:
             # We don't update self._last_err_free_energy here since if it
             # wasn't below the target threshold before, it won't stop MultiStateSampler now.
+            logger.debug(f"ParameterError computing MBAR. {e}.")
             bump_error_counter = True
             self._online_error_bank.append(e)
             if len(self._online_error_bank) > 6:
@@ -1437,7 +1545,7 @@ class MultiStateSampler(object):
                 self._online_error_bank.pop(0)
             free_energy = None
         else:
-            self._last_mbar_f_k = mbar.f_k
+            self._last_mbar_f_k_offline = mbar.f_k
             free_energy = free_energy[idx, jdx]
             self._last_err_free_energy = err_free_energy[idx, jdx]
             logger.debug("Current Free Energy Estimate is {} +- {} kT".format(free_energy,
@@ -1462,8 +1570,21 @@ class MultiStateSampler(object):
 
         # Write out the numbers
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
-                                                            f_k=self._last_mbar_f_k,
+                                                            f_k_offline=self._last_mbar_f_k_offline,
                                                             free_energy=(free_energy, self._last_err_free_energy))
+        # Write real time offline analysis YAML file
+        # TODO: Specify units
+        data_dict = {"iteration": self._iteration,
+                     "percent_complete": self._iteration*100/self.number_of_iterations,
+                     "mbar_analysis": {"free_energy_in_kT": float(free_energy),
+                                       "standard_error_in_kT": float(self._last_err_free_energy),
+                                       "number_of_uncorrelated_samples": float(analysis._equilibration_data[-1]),
+                                       "n_equilibrium_iterations": int(n_equilibration_iterations),
+                                       "statistical_inefficiency": float(statistical_inefficiency)
+                                       },
+                     "timing_data": self._timing_data
+                     }
+        self._reporter.write_current_statistics(data_dict)
 
         return self._last_err_free_energy
 
@@ -1526,30 +1647,17 @@ class MultiStateSampler(object):
         """Update online analysis of free energies"""
 
         # TODO: Currently, this just calls the offline analysis at certain intervals, if requested.
-        # TODO: Refactor this to always compute fast online analysis, updating with offline analysis infrequently.
-
-        # TODO: Simplify this
         if self.online_analysis_interval is None:
             logger.debug('No online analysis requested')
-            analysis_to_perform = None
-        elif self._iteration < self.online_analysis_minimum_iterations:
-            logger.debug('Not enough iterations for online analysis (self.online_analysis_minimum_iterations = %d)' % self.online_analysis_minimum_iterations)
-            analysis_to_perform = 'online'
-        elif self._iteration % self.online_analysis_interval != 0:
-            logger.debug('Not an online analysis iteration')
-            analysis_to_perform = 'online'
-        elif self.locality is not None:
-            logger.debug('Not a global locality')
-            analysis_to_perform = 'online'
-        else:
-            logger.debug('Will perform offline analysis')
-            # All conditions are met for offline analysis
-            analysis_to_perform = 'offline'
+            # Perform no analysis and exit function
+            return
 
-        # Execute selected analysis (only runs on node 0)
-        if analysis_to_perform == 'online':
-            self._last_err_free_energy = self._online_analysis()
-        elif analysis_to_perform == 'offline':
+        # Always perform fast online analysis
+        self._last_err_free_energy = self._online_analysis()
+
+        # Perform offline infrequently
+        # TODO: dictated by the online_analysis_interval, maybe we want a specific offline interval.
+        if self._iteration % self.online_analysis_interval == 0:
             self._last_err_free_energy = self._offline_analysis()
 
         return
@@ -1602,13 +1710,85 @@ class MultiStateSampler(object):
     @staticmethod
     def _throw_restoration_error(message):
         """Masking function to hide the RestorationError class without exposing it or making it a 'hidden' (_X) error"""
+
         class RestorationError(Exception):
             """Represent errors occurring during attempts to restore simulations."""
+
             def __init__(self, error_message):
                 super().__init__(error_message)
                 # Critical messages which have halted a simulation, badly
                 logger.critical(error_message)
+
         raise RestorationError(message)
+
+    def _initialize_context_caches(self):
+        """Handle energy and propagation context cache default behavior.
+
+        Centralized API point where to initialize the context cache instance attributes.
+
+        .. note:: As of 03-Feb-22 default behavior is to use the global cache.
+        """
+        # Default is using global context cache
+        self.energy_context_cache = cache.global_context_cache
+        self.sampler_context_cache = cache.global_context_cache
+
+    def _update_timing(self, iteration_time, partial_total_time, run_initial_iteration, iteration_limit):
+        """
+        Function that computes and transmits timing information to reporter.
+
+        Parameters
+        ----------
+        iteration_time : float
+            Time took in the iteration.
+        partial_total_time : float
+            Partial total time elapsed.
+        run_initial_iteration : int
+            Iteration where to start/resume the simulation.
+        iteration_limit : int
+            Hard limit on number of iterations to be run by the sampler.
+        """
+        self._timing_data["iteration_seconds"] = iteration_time
+        self._timing_data["average_seconds_per_iteration"] = \
+            partial_total_time / (self._iteration - run_initial_iteration)
+        estimated_timedelta_remaining = datetime.timedelta(
+            seconds=self._timing_data["average_seconds_per_iteration"] * (iteration_limit - self._iteration)
+        )
+        estimated_finish_date = datetime.datetime.now() + estimated_timedelta_remaining
+        self._timing_data["estimated_time_remaining"] = str(estimated_timedelta_remaining)  # Putting it in dict as str
+        self._timing_data["estimated_localtime_finish_date"] = estimated_finish_date.strftime("%Y-%b-%d-%H:%M:%S")
+        total_time_in_seconds = datetime.timedelta(
+            seconds=self._timing_data["average_seconds_per_iteration"] * iteration_limit
+        )
+        self._timing_data["estimated_total_time"] = str(total_time_in_seconds)
+
+        # Estimate performance
+        moves_iterator = self._flatten_moves_iterator()
+        # Only consider "dynamic" moves (timestep and n_steps attributes)
+        moves_times = [move.timestep.value_in_unit(unit.nanosecond) * move.n_steps for move in moves_iterator if
+                       hasattr(move, "timestep") and hasattr(move, "n_steps")]
+        iteration_simulated_nanoseconds = sum(moves_times)
+        seconds_in_a_day = (1 * unit.day).value_in_unit(unit.seconds)
+        self._timing_data["ns_per_day"] = iteration_simulated_nanoseconds / (
+                    self._timing_data["average_seconds_per_iteration"] / seconds_in_a_day)
+
+    @staticmethod
+    def _display_cuda_devices():
+        """Query system nvidia-smi to get available GPUs indices and names in debug log."""
+        # Read nvidia-smi query, should return empty strip if no GPU is found.
+        cuda_query_output = os.popen("nvidia-smi --query-gpu=index,gpu_name --format=csv,noheader").read().strip()
+        # Split by line jump and comma
+        cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
+        logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+
+    def _flatten_moves_iterator(self):
+        """Recursively flatten MCMC moves. Handles the cases where each move can be a set of moves, for example with
+        SequenceMove or WeightedMove objects."""
+        def flatten(iterator):
+            try:
+                yield from [inner_move for move in iterator for inner_move in flatten(move)]
+            except TypeError:  # Inner object is not iterable, finish flattening.
+                yield iterator
+        return flatten(self.mcmc_moves)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Test globals
@@ -1622,4 +1802,5 @@ class MultiStateSampler(object):
 
 if __name__ == "__main__":
     import doctest
+
     doctest.testmod()

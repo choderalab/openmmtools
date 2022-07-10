@@ -29,8 +29,12 @@ from typing import Optional, NamedTuple, Union
 
 import mdtraj
 import numpy as np
-from simtk import openmm
-import simtk.unit as units
+try:
+    import openmm
+    import openmm.unit as units
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm
+    import simtk.unit as units
 from scipy.special import logsumexp
 from pymbar import MBAR, timeseries
 
@@ -1031,9 +1035,9 @@ class PhaseAnalyzer(ABC):
         Parameters
         ----------
         energy_matrix : array of numpy.float64, optional, default=None
-           Reduced potential energies of the replicas; if None, will be extracted from the ncfile
+           Reduced potential energies of the replicas.
         samples_per_state : array of ints, optional, default=None
-           Number of samples drawn from each kth state; if None, will be extracted from the ncfile
+           Number of samples drawn from each kth state.
 
         """
         # Initialize MBAR (computing free energy estimates, which may take a while)
@@ -1143,7 +1147,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         be set to the 99.9-percentile of the distribution of the restraint energies
         in the bound state.
 
-    restraint_distance_cutoff : simtk.unit.Quantity or 'auto', optional
+    restraint_distance_cutoff : openmm.unit.Quantity or 'auto', optional
         When the restraint is unbiased, the analyzer discards all the samples
         for which the distance between the restrained atoms is above this cutoff.
         Effectively, this is equivalent to placing a hard wall potential at a
@@ -1152,6 +1156,16 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         If ``'auto'`` and ``restraint_energy_cutoff`` is not specified, this will
         be set to the 99.9-percentile of the distribution of the restraint distances
         in the bound state.
+
+    n_equilibration_iterations : int, optional
+        Number of iterations to discard due to equilibration.
+        If specified, overrides the n_equilibration_iterations computed using _get_equilibration_data().
+        Default is None, in which case n_equilibration_iterations will be computed using _get_equilibration_data().
+
+    statistical_inefficiency : float, optional
+        Sub-sample rate, e.g. if the statistical_inefficiency is 10, we draw a sample every 10 iterations to get the decorrelated samples.
+        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data().
+        Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
 
     Attributes
     ----------
@@ -1169,7 +1183,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
     """
 
     def __init__(self, *args, unbias_restraint=True, restraint_energy_cutoff='auto',
-                 restraint_distance_cutoff='auto', **kwargs):
+                 restraint_distance_cutoff='auto', n_equilibration_iterations=None, statistical_inefficiency=None, **kwargs):
 
         # Warn that API is experimental
         logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
@@ -1181,6 +1195,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         self.unbias_restraint = unbias_restraint
         self.restraint_energy_cutoff = restraint_energy_cutoff
         self.restraint_distance_cutoff = restraint_distance_cutoff
+        self._n_equilibration_iterations = n_equilibration_iterations
+        self._statistical_inefficiency = statistical_inefficiency
 
     # TODO use class syntax and add docstring after dropping python 3.5 support.
     _MixingStatistics = NamedTuple('MixingStatistics', [
@@ -1258,7 +1274,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         # Compute state index statistical inefficiency of stationary data.
         # states[n][k] is the state index of replica k at iteration n, but
         # the functions wants a list of timeseries states[k][n].
-        states_kn = np.transpose(states[number_equilibrated:])
+        states_kn = np.transpose(states[number_equilibrated:self.max_n_iterations,])
         g = timeseries.statisticalInefficiencyMultiple(states_kn)
 
         return self._MixingStatistics(transition_matrix=t_ij, eigenvalues=mu,
@@ -1321,9 +1337,9 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         -------
         restraint_force : forces.RadiallySymmetricRestraintForce
             The restraint force used in the bound state.
-        weights_group1 : list of simtk.unit.Quantity
+        weights_group1 : list of openmm.unit.Quantity
             The masses of the restrained atoms in the first centroid group.
-        weights_group2 : list of simtk.unit.Quantity
+        weights_group2 : list of openmm.unit.Quantity
             The masses of the restrained atoms in the second centroid group.
 
         Raises
@@ -1641,10 +1657,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
         Returns
         -------
-        restraint_energies_ln : simtk.unit.Quantity
+        restraint_energies_ln : openmm.unit.Quantity
             A (n_sampled_states * n_decorrelated_iterations)-long array with
             the restrain energies (units of energy/mole).
-        restraint_distances_ln : simtk.unit.Quantity or None
+        restraint_distances_ln : openmm.unit.Quantity or None
             If we are not applying a distance cutoff, this is None. Otherwise,
             a (n_sampled_states * n_decorrelated_iterations)-long array with
             the restrain distances (units of length) for each frame.
@@ -1982,6 +1998,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
     def _get_equilibration_data(self, energies=None, neighborhoods=None, replica_state_indices=None):
         """Generate the equilibration data from best practices.
 
+        Note that many of the variable names (e.g. t0, g_t) in this function are named after the equations in
+        https://pubs.acs.org/doi/10.1021/acs.jctc.5b00784
+        These equations are summarized here: http://getyank.org/latest/algorithms.html#autocorrelate-algorithm
+
         Parameters
         ----------
         energies : ndarray of shape (K,L,N), optional, Default: None
@@ -2005,28 +2025,35 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         n_uncorrelated_iterations : float
             Effective number of uncorrelated iterations
         """
-        u_n = self.get_effective_energy_timeseries(energies=energies, neighborhoods=neighborhoods, replica_state_indices=replica_state_indices)
 
-        # For SAMS, if there is a second-stage start time, use only the asymptotically optimal data
-        t0 = 1 # discard minimization frame
-        try:
-            iteration = len(u_n)
-            data = self._reporter.read_online_analysis_data(None, 't0')
-            t0 = max(t0, int(data['t0'][0]))
-            logger.debug('t0 found; using initial t0 = {} instead of 1'.format(t0))
-        except Exception as e:
-            # No t0 found
-            logger.debug('Could not find t0: {}'.format(e))
-            pass
+        if self._n_equilibration_iterations is not None and self._statistical_inefficiency is not None:
+            n_equilibration = self._n_equilibration_iterations
+            g_t = self._statistical_inefficiency
+            n_effective_max = (self.max_n_iterations - n_equilibration + 1) / g_t
 
-        # Discard equilibration samples.
-        # TODO: if we include u_n[0] (the energy right after minimization) in the equilibration detection,
-        # TODO:         then number_equilibrated is 0. Find a better way than just discarding first frame.
-        i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:])
-        n_effective_max = n_effective_i.max()
-        i_max = n_effective_i.argmax()
-        n_equilibration = i_t[i_max] + t0 # account for initially discarded frames
-        g_t = g_i[i_max]
+        else:
+            u_n = self.get_effective_energy_timeseries(energies=energies, neighborhoods=neighborhoods, replica_state_indices=replica_state_indices)
+
+            # For SAMS, if there is a second-stage start time, use only the asymptotically optimal data
+            t0 = self._n_equilibration_iterations if self._n_equilibration_iterations is not None else 1 # if self._n_equilibration_iterations was not specified, discard minimization frame
+            try:
+                iteration = len(u_n)
+                data = self._reporter.read_online_analysis_data(None, 't0')
+                t0 = max(t0, int(data['t0'][0]))
+                logger.debug('t0 found; using initial t0 = {} instead of 1'.format(t0))
+            except Exception as e:
+                # No t0 found
+                logger.debug('Could not find t0: {}'.format(e))
+                pass
+
+            # Discard equilibration samples.
+            # TODO: if we include u_n[0] (the energy right after minimization) in the equilibration detection,
+            # TODO:         then number_equilibrated is 0. Find a better way than just discarding first frame.
+            i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:])
+            n_effective_max = n_effective_i.max()
+            i_max = n_effective_i.argmax()
+            n_equilibration = self._n_equilibration_iterations if self._n_equilibration_iterations is not None else i_t[i_max] + t0 # if self._n_equilibration_iterations was not specified, account for initially discarded frames
+            g_t = self._statistical_inefficiency if self._statistical_inefficiency is not None else g_i[i_max]
 
         # Store equilibration data
         self._equilibration_data = tuple([n_equilibration, g_t, n_effective_max])
@@ -2127,6 +2154,10 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     @mbar.default
     def mbar(self, instance):
+        # u_ln[l,n] is the reduced potential for concatenated decorrelated snapshot n evaluated at thermodynamic state l
+        # Shape is (n_states + n_unsampled_states, n_samples)
+        # N_l[l] is the number of decorrelated samples sampled from thermodynamic state l, some can be 0.
+        # Shape is (n_states + n_unsampled_states, )
         return instance._create_mbar(instance._unbiased_decorrelated_u_ln,
                                      instance._unbiased_decorrelated_N_l)
 
@@ -2136,7 +2167,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     @property
     def n_equilibration_iterations(self):
-        """int: The number of equilibration interations."""
+        """int: The number of equilibration iterations."""
         return self._equilibration_data[0]
 
     @property

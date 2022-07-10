@@ -27,10 +27,15 @@ import scipy.integrate
 import yaml
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 import mpiplus
 
 import openmmtools as mmtools
+from openmmtools import cache
 from openmmtools import testsystems
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
@@ -752,6 +757,9 @@ class TestMultiStateSampler(object):
             else:
                 assert not sampler._reporter.is_open()
 
+            # Ensure reporter is closed. Windows based system testing seems to get upset about this.
+            reporter.close()
+
             # Open reporter to read stored data.
             reporter = self.REPORTER(storage_path, open_mode='r', checkpoint_interval=1)
 
@@ -843,9 +851,12 @@ class TestMultiStateSampler(object):
 
         Checks that the static constructor MultiStateSampler.from_storage()
         restores the simulation object in the exact same state as the last
-        iteration.
+        iteration. Except from the reporter and timing data attributes, that
+        is _reporter and _timing_data, respectively.
 
         """
+        # We don't want to restore reporter and timing data attributes
+        __NON_RESTORABLE_ATTRIBUTES__ = ("_reporter", "_timing_data")
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.hostguest_test)
         n_replicas = len(sampler_states)
 
@@ -866,14 +877,16 @@ class TestMultiStateSampler(object):
             for iteration in range(2):
                 # Store the state of the initial repex object (its __dict__). We leave the
                 # reporter out because when the NetCDF file is copied, it runs into issues.
-                original_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items() if not k == '_reporter'})
+                original_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items()
+                                               if k not in __NON_RESTORABLE_ATTRIBUTES__})
 
                 # Delete repex to close reporter before creating a new one
                 # to avoid weird issues with multiple NetCDF files open.
                 del sampler
                 reporter.close()
                 sampler = self.SAMPLER.from_storage(reporter)
-                restored_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items() if not k == '_reporter'})
+                restored_dict = copy.deepcopy({k: v for k, v in sampler.__dict__.items()
+                                               if k not in __NON_RESTORABLE_ATTRIBUTES__})
 
                 # Check thermodynamic states.
                 original_ts = original_dict.pop('_thermodynamic_states')
@@ -1170,8 +1183,8 @@ class TestMultiStateSampler(object):
             if len(node_replica_ids) == n_replicas:
                 reporter = self.REPORTER(storage_path, open_mode='r', checkpoint_interval=1)
                 stored_sampler_states = reporter.read_sampler_states(iteration=0)
-                for new_state, stored_state in zip(sampler._sampler_states, stored_sampler_states):
-                    assert np.allclose(new_state.positions, stored_state.positions)
+                for stored_state in stored_sampler_states:
+                    assert any([np.allclose(new_state.positions, stored_state.positions) for new_state in sampler._sampler_states])
 
             # We are still at iteration 0.
             assert sampler._iteration == 0
@@ -1435,6 +1448,74 @@ class TestMultiStateSampler(object):
             assert sampler._iteration < n_iterations
             assert sampler.is_completed
 
+    def test_context_cache_default(self):
+        """Test default behavior of context cache attributes."""
+        sampler = self.SAMPLER()
+        global_context_cache = cache.global_context_cache
+        # Default is to use global context cache for both context cache attributes
+        assert sampler.sampler_context_cache is global_context_cache
+        assert sampler.energy_context_cache is global_context_cache
+
+    def test_context_cache_energy_propagation(self):
+        """Test specifying different context caches for energy and propagation in a short simulation."""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+        n_replicas = len(sampler_states)
+        if n_replicas == 1:
+            # This test is intended for use with more than one replica
+            return
+
+        with self.temporary_storage_path() as storage_path:
+            # Create a replica exchange that propagates only 1 femtosecond
+            # per iteration so that positions won't change much.
+            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+            sampler = self.SAMPLER(mcmc_moves=move)
+            reporter = self.REPORTER(storage_path)
+            self.call_sampler_create(sampler, reporter,
+                                     thermodynamic_states, sampler_states,
+                                     unsampled_states)
+            # Set context cache attributes
+            sampler.energy_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+            sampler.sampler_context_cache = cache.ContextCache(capacity=None, time_to_live=None)
+            # Compute energies
+            sampler._compute_energies()
+            # Check only energy context cache has been accessed
+            assert sampler.energy_context_cache._lru._n_access > 0, \
+                f"Expected more than 0 accesses, received {sampler.energy_context_cache._lru._n_access }."
+            assert sampler.sampler_context_cache._lru._n_access == 0, \
+                f"{sampler.sampler_context_cache._lru._n_access} accesses, expected 0."
+
+            # Propagate replicas
+            sampler._propagate_replicas()
+            # Check propagation context cache has been accessed after propagation
+            assert sampler.sampler_context_cache._lru._n_access > 0, \
+                f"Expected more than 0 accesses, received {sampler.energy_context_cache._lru._n_access }."
+
+    def test_real_time_analysis_yaml(self):
+        """Test expected number of entries in real time analysis output yaml file."""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+        with self.temporary_storage_path() as storage_path:
+            n_iterations = 13
+            online_interval = 3
+            expected_yaml_entries = int(n_iterations/online_interval)
+            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
+                                   online_analysis_interval=online_interval)
+            self.call_sampler_create(sampler, storage_path,
+                                     thermodynamic_states, sampler_states,
+                                     unsampled_states)
+            # Run
+            sampler.run()
+            # load file and check number of iterations
+            storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
+            # remove extension from filename
+            yaml_prefix = os.path.splitext(reporter_filename)[0]
+            output_filepath = f"{storage_dir}/{yaml_prefix}_real_time_analysis.yaml"
+            with open(f"{storage_dir}/{yaml_prefix}_real_time_analysis.yaml") as yaml_file:
+                yaml_contents = yaml.safe_load(yaml_file)
+            # Make sure we get the correct number of entries
+            assert len(yaml_contents) == expected_yaml_entries, \
+                "Expected yaml entries do not match the actual number entries in the file."
+
 
 #############
 
@@ -1682,8 +1763,10 @@ class TestParallelTempering(TestMultiStateSampler):
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
-
-    from simtk import unit
+    try:
+        from openmm import unit
+    except ImportError:  # OpenMM < 7.6
+        from simtk import unit
     N_SAMPLERS = 3
     N_STATES = 3
     SAMPLER = ParallelTemperingSampler
@@ -1723,8 +1806,10 @@ class TestParallelTempering(TestMultiStateSampler):
             self.call_sampler_create(sampler, reporter,
                 thermodynamic_states, sampler_states,
                 unsampled_states)
-
-            from simtk import unit
+            try:
+                from openmm import unit
+            except ImportError:  # OpenMM < 7.6
+                from simtk import unit
             temperatures = [state.temperature/unit.kelvin for state in sampler._thermodynamic_states] # in kelvin
             assert len(temperatures) == self.N_STATES, f"There are {len(temperatures)} thermodynamic states; expected {self.N_STATES}"
             assert np.isclose(min(temperatures), (self.MIN_TEMP/unit.kelvin)), f"Min temperature is {min(temperatures)} K; expected {(self.MIN_TEMP/unit.kelvin)} K"

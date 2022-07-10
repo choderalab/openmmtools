@@ -26,8 +26,11 @@ from openmmtools.utils import *
 
 def test_platform_supports_precision():
     """Test that platform_supports_precision works correctly."""
-    from simtk import openmm
-    
+    try:
+        import openmm
+    except ImportError:  # OpenMM < 7.6
+        from simtk import openmm
+
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
         platform_name = platform.getName()
@@ -41,6 +44,11 @@ def test_platform_supports_precision():
         if platform_name == 'CPU':
             if supported_precisions != set(['mixed']):
                 raise Exception(f"'CPU' platform should support 'mixed' precision, but platform_supports_precision reports {supported_precisions}")
+
+
+def test_string_platform_supports_precision():
+    """Test that if we use a string for the platform name, it works"""
+    assert platform_supports_precision("CPU", "mixed")
 
 # =============================================================================
 # TEST STRING MATHEMATICAL EXPRESSION PARSING UTILITIES

@@ -53,9 +53,14 @@ import scipy
 import scipy.special
 import scipy.integrate
 
-from simtk import openmm
-from simtk import unit
-from simtk.openmm import app
+try:
+    import openmm
+    from openmm import unit
+    from openmm import app
+except ImportError:  # Openmm < 7.6
+    from simtk import openmm
+    from simtk import unit
+    from simtk.openmm import app
 
 from .constants import kB
 
@@ -135,11 +140,11 @@ def handle_kwargs(func, defaults, input_kwargs):
     return kwargs
 
 def in_openmm_units(quantity):
-    """Strip the units from a simtk.unit.Quantity object after converting to natural OpenMM units
+    """Strip the units from a openmm.unit.Quantity object after converting to natural OpenMM units
 
     Parameters
     ----------
-    quantity : simtk.unit.Quantity
+    quantity : openmm.unit.Quantity
        The quantity to convert
 
     Returns
@@ -230,14 +235,14 @@ def subrandom_particle_positions(nparticles, box_vectors, method='sobol'):
     ----------
     nparticles : int
         The number of particles.
-    box_vectors : simtk.unit.Quantity of (3,3) with units compatible with nanometer
+    box_vectors : openmm.unit.Quantity of (3,3) with units compatible with nanometer
         Periodic box vectors in which particles should lie.
     method : str, optional, default='sobol'
         Method for creating subrandom sequence (one of 'halton' or 'sobol')
 
     Returns
     -------
-    positions : simtk.unit.Quantity of (natoms,3) with units compatible with nanometer
+    positions : openmm.unit.Quantity of (natoms,3) with units compatible with nanometer
         The particle positions.
 
     Examples
@@ -414,11 +419,11 @@ class ThermodynamicState(object):
         Parameters
         ----------
 
-        system : simtk.openmm.System, optional, default=None
+        system : openmm.System, optional, default=None
             System object describing the potential energy function for the system
-        temperature : simtk.unit.Quantity compatible with 'kelvin', optional, default=None
+        temperature : openmm.unit.Quantity compatible with 'kelvin', optional, default=None
             Temperature for a system with constant temperature
-        pressure : simtk.unit.Quantity compatible with 'atmospheres', optional, default=None
+        pressure : openmm.unit.Quantity compatible with 'atmospheres', optional, default=None
             If not None, specifies the pressure for constant-pressure systems.
 
 
@@ -444,7 +449,7 @@ class TestSystem(object):
 
     Attributes
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
         System object for the test system
     positions : list
         positions of test system
@@ -504,7 +509,7 @@ class TestSystem(object):
 
     @property
     def system(self):
-        """The simtk.openmm.System object corresponding to the test system."""
+        """The openmm.System object corresponding to the test system."""
         return self._system
 
     @system.setter
@@ -517,7 +522,7 @@ class TestSystem(object):
 
     @property
     def positions(self):
-        """The simtk.unit.Quantity object containing the particle positions, with units compatible with simtk.unit.nanometers."""
+        """The openmm.unit.Quantity object containing the particle positions, with units compatible with openmm.unit.nanometers."""
         return self._positions
 
     @positions.setter
@@ -530,7 +535,7 @@ class TestSystem(object):
 
     @property
     def topology(self):
-        """The simtk.openmm.app.Topology object corresponding to the test system."""
+        """The openmm.app.Topology object corresponding to the test system."""
         return self._topology
 
     @topology.setter
@@ -585,8 +590,10 @@ class TestSystem(object):
             Serialized XML form of State object containing particle positions.
 
         """
-
-        from simtk.openmm import XmlSerializer
+        try:
+            from openmm import XmlSerializer
+        except ImportError:  # OpenMM < 7.6
+            from simtk.openmm import XmlSerializer
 
         # Serialize System.
         system_xml = XmlSerializer.serialize(self._system)
@@ -622,7 +629,7 @@ class CustomExternalForcesTestSystem(TestSystem):
         Each string in the tuple will add a CustomExternalForce to the
         OpenMM system.  Each force will be assigned a different force
         group, starting with 0.  By default this will be a 3D harmonic oscillator.
-    mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
+    mass : openmm.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass.  Default corresponds to argon.
     n_particles : int, optional, default=500
         Number of (identical) particles to add.
@@ -676,11 +683,11 @@ class HarmonicOscillator(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=100.0 * unit.kilocalories_per_mole/unit.angstrom**2
+    K : openmm.unit.Quantity, optional, default=100.0 * unit.kilocalories_per_mole/unit.angstrom**2
         harmonic restraining potential
-    mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
+    mass : openmm.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
-    U0 : simtk.unit.Quantity, optional, default=0.0 * unit.kilocalories_per_mole
+    U0 : openmm.unit.Quantity, optional, default=0.0 * unit.kilocalories_per_mole
         Potential offset for harmonic oscillator
 
     The functional form is given by
@@ -689,7 +696,7 @@ class HarmonicOscillator(TestSystem):
 
     Attributes
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
         Openmm system with the harmonic oscillator
     positions : list
         positions of harmonic oscillator
@@ -735,7 +742,7 @@ class HarmonicOscillator(TestSystem):
 
     Compute the potential expectation and standard deviation
 
-    >>> import simtk.unit as u
+    >>> import openmm.unit as u
     >>> thermodynamic_state = ThermodynamicState(temperature=298.0*u.kelvin, system=system)
     >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
     >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
@@ -801,7 +808,7 @@ class HarmonicOscillator(TestSystem):
         Returns
         -------
 
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -820,7 +827,7 @@ class HarmonicOscillator(TestSystem):
         Returns
         -------
 
-        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_stddev : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
 
         """
@@ -834,16 +841,16 @@ class PowerOscillator(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=100.0
+    K : openmm.unit.Quantity, optional, default=100.0
         harmonic restraining potential.  The units depend on the power,
         so we accept unitless inputs and add units of the form
         unit.kilocalories_per_mole / unit.angstrom ** b
-    mass : simtk.unit.Quantity, optional, default=39.948 * unit.amu
+    mass : openmm.unit.Quantity, optional, default=39.948 * unit.amu
         particle mass
 
     Attributes
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
         Openmm system with the harmonic oscillator
     positions : list
         positions of harmonic oscillator
@@ -908,7 +915,7 @@ class PowerOscillator(TestSystem):
         Returns
         -------
 
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -939,15 +946,15 @@ class Diatom(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=290.1 * unit.kilocalories_per_mole / unit.angstrom**2
+    K : openmm.unit.Quantity, optional, default=290.1 * unit.kilocalories_per_mole / unit.angstrom**2
         harmonic bond potential.  default is GAFF c-c bond
-    r0 : simtk.unit.Quantity, optional, default=1.550 * unit.amu
+    r0 : openmm.unit.Quantity, optional, default=1.550 * unit.amu
         bond length.  Default is Amber GAFF c-c bond.
     constraint : bool, default=False
         if True, the bond length will be constrained
-    m1 : simtk.unit.Quantity, optional, default=12.01 * unit.amu
+    m1 : openmm.unit.Quantity, optional, default=12.01 * unit.amu
         particle1 mass
-    m2 : simtk.unit.Quantity, optional, default=12.01 * unit.amu
+    m2 : openmm.unit.Quantity, optional, default=12.01 * unit.amu
         particle2 mass
     use_central_potential : bool, optional, default=False
         if True, a soft central potential will also be added to keep the system from drifting away
@@ -1040,7 +1047,7 @@ class Diatom(TestSystem):
         Returns
         -------
 
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -1064,27 +1071,27 @@ class DiatomicFluid(TestSystem):
     ----------
     nmolecules : int, optional, default=250
         Number of molecules.
-    K : simtk.unit.Quantity, optional, default=290.1 * unit.kilocalories_per_mole / unit.angstrom**2
+    K : openmm.unit.Quantity, optional, default=290.1 * unit.kilocalories_per_mole / unit.angstrom**2
         harmonic bond potential.  default is GAFF c-c bond
-    r0 : simtk.unit.Quantity, optional, default=1.550 * unit.amu
+    r0 : openmm.unit.Quantity, optional, default=1.550 * unit.amu
         bond length.  Default is Amber GAFF c-c bond.
     constraint : bool, default=False
         if True, the bond length will be constrained
-    m1 : simtk.unit.Quantity, optional, default=12.01 * unit.amu
+    m1 : openmm.unit.Quantity, optional, default=12.01 * unit.amu
         particle1 mass
-    m2 : simtk.unit.Quantity, optional, default=12.01 * unit.amu
+    m2 : openmm.unit.Quantity, optional, default=12.01 * unit.amu
         particle2 mass
-    epsilon : simtk.unit.Quantity, optional, default=0.1700 * unit.kilocalories_per_mole
+    epsilon : openmm.unit.Quantity, optional, default=0.1700 * unit.kilocalories_per_mole
         particle Lennard-Jones well depth
-    sigma : simtk.unit.Quantity, optional, default=1.8240 * unit.angstroms
+    sigma : openmm.unit.Quantity, optional, default=1.8240 * unit.angstroms
         particle Lennard-Jones sigma
-    charge : simtk.unit.Quantity, optional, default=0.0 * unit.elementary_charge
+    charge : openmm.unit.Quantity, optional, default=0.0 * unit.elementary_charge
         charge to place on atomic centers to create a dipole
     reduced_density : float, optional, default=0.05
         Reduced density (density * sigma**3); default is appropriate for gas
-    cutoff : simtk.unit.Quantity, optional, default=None
+    cutoff : openmm.unit.Quantity, optional, default=None
         if specified, the specified cutoff will be used; otherwise, 3.0 * sigma will be used
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
@@ -1237,7 +1244,7 @@ class DiatomicFluid(TestSystem):
 
         Returns
         -------
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -1340,16 +1347,16 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole / unit.nanometer**2
+    K : openmm.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole / unit.nanometer**2
         harmonic restraining potential
-    d : simtk.unit.Quantity, optional, default=1.0 * unit.nanometer
+    d : openmm.unit.Quantity, optional, default=1.0 * unit.nanometer
         distance between harmonic oscillators.  Default is Amber GAFF c-c bond.
-    mass : simtk.unit.Quantity, default=39.948 * unit.amu
+    mass : openmm.unit.Quantity, default=39.948 * unit.amu
         particle mass
 
     Attributes
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
     positions : list
 
     Notes
@@ -1431,18 +1438,18 @@ class HarmonicOscillatorArray(TestSystem):
 
     Parameters
     ----------
-    K : simtk.unit.Quantity, optional, default=90.0 * unit.kilocalories_per_mole/unit.angstroms**2
+    K : openmm.unit.Quantity, optional, default=90.0 * unit.kilocalories_per_mole/unit.angstroms**2
         harmonic restraining potential
-    d : simtk.unit.Quantity, optional, default=1.0 * unit.nanometer
+    d : openmm.unit.Quantity, optional, default=1.0 * unit.nanometer
         distance between harmonic oscillators.  Default is Amber GAFF c-c bond.
-    mass : simtk.unit.Quantity, default=39.948 * unit.amu
+    mass : openmm.unit.Quantity, default=39.948 * unit.amu
         particle mass
     N : int, optional, default=5
         Number of harmonic oscillators
 
     Attributes
     ----------
-    system : simtk.openmm.System
+    system : openmm.System
     positions : list
 
     Notes
@@ -1517,7 +1524,7 @@ class HarmonicOscillatorArray(TestSystem):
 
         Returns
         -------
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -1534,7 +1541,7 @@ class HarmonicOscillatorArray(TestSystem):
 
         Returns
         -------
-        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_stddev : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
 
         """
@@ -1552,7 +1559,7 @@ class SodiumChlorideCrystal(TestSystem):
 
     Each atom is represented by a charged Lennard-Jones sphere in an Ewald lattice.
 
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
@@ -1673,12 +1680,12 @@ class LennardJonesCluster(TestSystem):
         number of particles in the y direction
     nz : int, optional, default=3
         number of particles in the z direction
-    K : simtk.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
+    K : openmm.unit.Quantity, optional, default=1.0 * unit.kilojoules_per_mole/unit.nanometer**2
         harmonic restraining potential
-    cutoff : simtk.unit.Quantity, optional, default=None
+    cutoff : openmm.unit.Quantity, optional, default=None
         If None, will use NoCutoff for the NonbondedForce.  Otherwise,
         use CutoffNonPeriodic with the specified cutoff.
-    switch_width : simtk.unit.Quantity, optional, default=None
+    switch_width : openmm.unit.Quantity, optional, default=None
         If None, the cutoff is a hard cutoff.  If switch_width is specified,
         use a switching function with this width.
 
@@ -1781,7 +1788,7 @@ class WaterCluster(TestSystem):
         ----------
         n_waters : int
             Number of water molecules in the cluster
-        K : simtk.unit.Quantity (energy / distance^2)
+        K : openmm.unit.Quantity (energy / distance^2)
             spring constant for restraining potential
         model : string
             Must be one of ['tip3p', 'tip4pew', 'tip5p', 'spce']
@@ -1872,15 +1879,15 @@ class LennardJonesFluid(TestSystem):
         Number of Lennard-Jones particles.
     reduced_density : float, optional, default=0.05
         Reduced density (density * sigma**3); default is appropriate for gas
-    mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
+    mass : openmm.unit.Quantity, optional, default=39.9 * unit.amu
         mass of each particle; default is appropriate for argon
-    sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
+    sigma : openmm.unit.Quantity, optional, default=3.4 * unit.angstrom
         Lennard-Jones sigma parameter; default is appropriate for argon
-    epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
+    epsilon : openmm.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
         Lennard-Jones well depth; default is appropriate for argon
-    cutoff : simtk.unit.Quantity, optional, default=None
+    cutoff : openmm.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 3.0 * sigma
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=3.4 * unit.angstrom
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=3.4 * unit.angstrom
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
         Ignored if `shift=True`.
@@ -1891,7 +1898,7 @@ class LennardJonesFluid(TestSystem):
     lattice : bool, optional, default=False
         If True, use fcc sphere packing to generate initial positions.  The box
         size will be determined by `nparticles` and `reduced_density`.
-    charge : simtk.unit, optional, default=None
+    charge : openmm.unit, optional, default=None
         If not None, use alternating plus and minus `charge` for the particle charges.
         Also, if not None, use PME for electrostatics.  Obviously this is no
         longer a traditional LJ system, but this option could be useful for
@@ -2079,15 +2086,15 @@ class LennardJonesGrid(LennardJonesFluid):
         Number of particles in x, y, and z dimensions.
     reduced_density : float, optional, default=0.86
         Reduced density (density * sigma**3); default is appropriate for liquid argon.
-    mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
+    mass : openmm.unit.Quantity, optional, default=39.9 * unit.amu
         mass of each particle; default is appropriate for argon
-    sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
+    sigma : openmm.unit.Quantity, optional, default=3.4 * unit.angstrom
         Lennard-Jones sigma parameter; default is appropriate for argon
-    epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
+    epsilon : openmm.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
         Lennard-Jones well depth; default is appropriate for argon
-    cutoff : simtk.unit.Quantity, optional, default=None
+    cutoff : openmm.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 2.5 * sigma
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=0.2*unit.angstroms
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
@@ -2165,15 +2172,15 @@ class CustomLennardJonesFluidMixture(TestSystem):
         Number of Lennard-Jones particles.
     reduced_density : float, optional, default=0.05
         Reduced density (density * sigma**3); default is appropriate for gas
-    mass : simtk.unit.Quantity, optional, default=39.9 * unit.amu
+    mass : openmm.unit.Quantity, optional, default=39.9 * unit.amu
         mass of each particle.
-    sigma : simtk.unit.Quantity, optional, default=3.4 * unit.angstrom
+    sigma : openmm.unit.Quantity, optional, default=3.4 * unit.angstrom
         Lennard-Jones sigma parameter
-    epsilon : simtk.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
+    epsilon : openmm.unit.Quantity, optional, default=0.238 * unit.kilocalories_per_mole
         Lennard-Jones well depth
-    cutoff : simtk.unit.Quantity, optional, default=None
+    cutoff : openmm.unit.Quantity, optional, default=None
         Cutoff for nonbonded interactions.  If None, defaults to 3 * sigma
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=None
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=None
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     dispersion_correction : bool, optional, default=True
@@ -2309,11 +2316,11 @@ class WCAFluid(TestSystem):
             Number of particles.
         density : float, optional, default = 0.96
             Reduced density, N sigma^3 / V.
-        mass : simtk.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
+        mass : openmm.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
             Particle mass.
-        epsilon : simtk.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
+        epsilon : openmm.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
             WCA well depth.
-        sigma : simtk.unit.Quantity
+        sigma : openmm.unit.Quantity
             WCA sigma.
 
         """
@@ -2404,17 +2411,17 @@ class DoubleWellDimer_WCAFluid(WCAFluid):
             Number of particles.
         density : float, optional, default = 0.96
             Reduced density, N sigma^3 / V.
-        mass : simtk.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
+        mass : openmm.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
             Particle mass.
-        epsilon : simtk.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
+        epsilon : openmm.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
             WCA well depth.
-        sigma : simtk.unit.Quantity, optional, default = 3.4 angstrom
+        sigma : openmm.unit.Quantity, optional, default = 3.4 angstrom
             WCA sigma.
-        h : simtk.unit.Quantity, optional, default = 593.28K * kB
+        h : openmm.unit.Quantity, optional, default = 593.28K * kB
             Double well barrier height.
-        r0 : simtk.unit.Quantity, optional, default = 2^(1/6) * 3.4 angstrom
+        r0 : openmm.unit.Quantity, optional, default = 2^(1/6) * 3.4 angstrom
             Double well "short" state distance for minimum energy.
-        w: simtk.unit.Quanity, optional, default = 1.02 angstrom
+        w : openmm.unit.Quanity, optional, default = 1.02 angstrom
             Double well width; "extended" state minimum energy distance is
             r0 + 2w.
 
@@ -2546,17 +2553,17 @@ class DoubleWellChain_WCAFluid(DoubleWellDimer_WCAFluid):
             Number of particles.
         density : float, optional, default = 0.96
             Reduced density, N sigma^3 / V.
-        mass : simtk.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
+        mass : openmm.unit.Quantity with units compatible with angstrom, optional, default=39.9 amu
             Particle mass.
-        epsilon : simtk.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
+        epsilon : openmm.unit.Quantity with units compatible with kilocalories_per_mole, optional, default=120K*kB
             WCA well depth.
-        sigma : simtk.unit.Quantity, optional, default = 3.4 angstrom
+        sigma : openmm.unit.Quantity, optional, default = 3.4 angstrom
             WCA sigma.
-        h : simtk.unit.Quantity, optional, default = 593.28K * kB
+        h : openmm.unit.Quantity, optional, default = 593.28K * kB
             Double well barrier height.
-        r0 : simtk.unit.Quantity, optional, default = 2^(1/6) * 3.4 angstrom
+        r0 : openmm.unit.Quantity, optional, default = 2^(1/6) * 3.4 angstrom
             Double well "short" state distance for minimum energy.
-        w: simtk.unit.Quanity, optional, default = 1.02 angstrom
+        w : openmm.unit.Quanity, optional, default = 1.02 angstrom
             Double well width; "extended" state minimum energy distance is
             r0 + 2w.
 
@@ -2698,7 +2705,7 @@ class IdealGas(TestSystem):
 
         Returns
         -------
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -2715,7 +2722,7 @@ class IdealGas(TestSystem):
 
         Returns
         -------
-        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_stddev : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
 
         """
@@ -2732,7 +2739,7 @@ class IdealGas(TestSystem):
 
         Returns
         -------
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_mean : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             The expectation of the potential energy.
 
         """
@@ -2749,7 +2756,7 @@ class IdealGas(TestSystem):
 
         Returns
         -------
-        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+        potential_stddev : openmm.unit.Quantity compatible with openmm.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
 
         """
@@ -2766,7 +2773,7 @@ class IdealGas(TestSystem):
 
         Returns
         -------
-        volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+        volume_mean : openmm.unit.Quantity compatible with openmm.unit.nanometers**3
             The expectation of the volume at equilibrium.
 
         Notes
@@ -2793,7 +2800,7 @@ class IdealGas(TestSystem):
 
         Returns
         -------
-        volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+        volume_stddev : openmm.unit.Quantity compatible with openmm.unit.nanometers**3
             The standard deviation of the volume at equilibrium.
 
         Notes
@@ -2849,19 +2856,19 @@ class WaterBox(TestSystem):
         Parameters
         ----------
 
-        box_edge : simtk.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
+        box_edge : openmm.unit.Quantity with units compatible with nanometers, optional, default = 2.5 nm
            Edge length for cubic box [should be greater than 2*cutoff]
-        cutoff : simtk.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_CUTOFF_DISTANCE
+        cutoff : openmm.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_CUTOFF_DISTANCE
            Nonbonded cutoff
         model : str, optional, default = 'tip3p'
            The name of the water model to use ['tip3p', 'tip4p', 'tip4pew', 'tip5p', 'spce']
-        switch_width : simtk.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_SWITCH_WIDTH
+        switch_width : openmm.unit.Quantity with units compatible with nanometers, optional, default = DEFAULT_SWITCH_WIDTH
            Sets the width of the switch function for Lennard-Jones.
         constrained : bool, optional, default=True
            Sets whether water geometry should be constrained (rigid water implemented via SETTLE) or flexible.
         dispersion_correction : bool, optional, default=True
            Sets whether the long-range dispersion correction should be used.
-        nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+        nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
            Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
         ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
            The Ewald or PME tolerance.  Used only if nonbondedMethod is Ewald or PME.
@@ -2869,7 +2876,7 @@ class WaterBox(TestSystem):
             The positive ion to add (default is Na+).
         negative_ion : str, optional
             The negative ion to add (default is Cl-).
-        ionic_strength : simtk.unit.Quantity, optional
+        ionic_strength : openmm.unit.Quantity, optional
             The total concentration of ions (both positive and negative)
             to add (default is 0.0*molar).
 
@@ -3343,7 +3350,7 @@ class AlanineDipeptideVacuum(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -3413,7 +3420,7 @@ class AlanineDipeptideImplicit(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -3456,19 +3463,19 @@ class AlanineDipeptideExplicit(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     rigid_water : bool, optional, default=True
     nonbondedCutoff : Quantity, optional, default=9.0 * unit.angstroms
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    cutoff : simtk.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_CUTOFF_DISTANCE
+    cutoff : openmm.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_CUTOFF_DISTANCE
         Cutoff distance
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_SWITCH_WIDTH
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default = DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
@@ -3524,7 +3531,7 @@ class TolueneVacuum(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -3566,7 +3573,7 @@ class TolueneImplicit(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -3582,7 +3589,7 @@ class TolueneImplicit(TestSystem):
     Use the OBC2 GB model (may have non-optimal parameters)
     >>> testsystem = TolueneImplicit(implicitSolvent=app.OBC2)
     Create a dict containing a version with each available GB model:
-    >>> testsystems = { name : TolueneImplicit(implicitSolvent=getattr(simtk.openmm.app, name)) for name in ['HCT', 'OBC1', 'OBC2', 'GBn', 'GBn2'] }
+    >>> testsystems = { name : TolueneImplicit(implicitSolvent=getattr(openmm.app, name)) for name in ['HCT', 'OBC1', 'OBC2', 'GBn', 'GBn2'] }
 
     """
 
@@ -3660,7 +3667,7 @@ class HostGuestVacuum(TestSystem, _HostGuestBase):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -3708,7 +3715,7 @@ class HostGuestImplicit(TestSystem, _HostGuestBase):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
@@ -3780,17 +3787,17 @@ class HostGuestExplicit(TestSystem, _HostGuestBase):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     rigid_water : bool, optional, default=True
     nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
@@ -3854,17 +3861,17 @@ class DHFRExplicit(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     rigid_water : bool, optional, default=True
     nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
@@ -3881,17 +3888,11 @@ class DHFRExplicit(TestSystem):
 
         TestSystem.__init__(self, **kwargs)
 
-        try:
-            from parmed.amber import AmberParm
-        except ImportError as e:
-            print("DHFR test system requires Parmed (`import parmed`).")
-            raise(e)
-
-        prmtop_filename = get_data_filename("data/dhfr/prmtop")
-        crd_filename = get_data_filename("data/dhfr/inpcrd")
+        prmtop_filename = get_data_filename("data/dhfr/JAC.prmtop")
+        crd_filename = get_data_filename("data/dhfr/JAC.inpcrd")
 
         # Initialize system.
-        self.prmtop = AmberParm(prmtop_filename, crd_filename)
+        self.prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = self.prmtop.createSystem(constraints=constraints, nonbondedMethod=nonbondedMethod, rigidWater=rigid_water, nonbondedCutoff=nonbondedCutoff, hydrogenMass=hydrogenMass)
 
         # Extract topology
@@ -3906,10 +3907,12 @@ class DHFRExplicit(TestSystem):
             forces['NonbondedForce'].setUseSwitchingFunction(True)
             forces['NonbondedForce'].setSwitchingDistance(nonbondedCutoff - switch_width)
 
-        positions = self.prmtop.positions
+        # Read positions.
+        inpcrd = app.AmberInpcrdFile(crd_filename)
+        positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
-        box_vectors = self.prmtop.box_vectors
+        box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
 
         self.system, self.positions = system, positions
@@ -3927,17 +3930,17 @@ class DNADodecamerExplicit(TestSystem):
 
     Parameters
     ----------
-    constraints : optional, default=simtk.openmm.app.HBonds
+    constraints : optional, default=openmm.app.HBonds
     rigid_water : bool, optional, default=True
     nonbondedCutoff : Quantity, optional, default=DEFAULT_CUTOFF_DISTANCE
     use_dispersion_correction : bool, optional, default=True
         If True, the long-range disperson correction will be used.
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
     hydrogenMass : unit, optional, default=None
         If set, will pass along a modified hydrogen mass for OpenMM to
         use mass repartitioning.
-    switch_width : simtk.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
+    switch_width : openmm.unit.Quantity with units compatible with angstroms, optional, default=DEFAULT_SWITCH_WIDTH
         switching function is turned on at cutoff - switch_width
         If None, no switch will be applied (e.g. hard cutoff).
     ewaldErrorTolerance : float, optional, default=DEFAULT_EWALD_ERROR_TOLERANCE
@@ -3993,7 +3996,7 @@ class LysozymeImplicit(TestSystem):
 
     Parameters
     ----------
-    constraints : simtk.openmm.app constraints (None, HBonds, HAngles, AllBonds)
+    constraints : openmm.app constraints (None, HBonds, HAngles, AllBonds)
        constraints to be imposed
 
     Examples
@@ -4072,7 +4075,7 @@ class SrcExplicit(TestSystem):
 
     Parameters
     ----------
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (CutoffPeriodic, app.Ewald, app.PME).
 
     Examples
@@ -4143,7 +4146,7 @@ class MethanolBox(TestSystem):
     ----------
     shake : string, optional, default="h-bonds"
     nonbondedCutoff : Quantity, optional, default=7.0 * unit.angstroms
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
 
     Examples
@@ -4188,7 +4191,7 @@ class MolecularIdealGas(TestSystem):
     ----------
     shake : string, optional, default=None
     nonbondedCutoff : Quantity, optional, default=7.0 * unit.angstroms
-    nonbondedMethod : simtk.openmm.app nonbonded method, optional, default=app.PME
+    nonbondedMethod : openmm.app nonbonded method, optional, default=app.PME
        Sets the nonbonded method to use for the water box (one of app.CutoffPeriodic, app.Ewald, app.PME).
 
     Examples
@@ -4451,11 +4454,11 @@ class LennardJonesPair(TestSystem):
 
     Parameters
     ----------
-    mass : simtk.unit.Quantity with units compatible with amu, optional, default=39.9*amu
+    mass : openmm.unit.Quantity with units compatible with amu, optional, default=39.9*amu
        The mass of each particle.
-    epsilon : simtk.unit.Quantity with units compatible with kilojoules_per_mole, optional, default=1.0*kilocalories_per_mole
+    epsilon : openmm.unit.Quantity with units compatible with kilojoules_per_mole, optional, default=1.0*kilocalories_per_mole
        The effective Lennard-Jones sigma parameter.
-    sigma : simtk.unit.Quantity with units compatible with nanometers, optional, default=3.350*angstroms
+    sigma : openmm.unit.Quantity with units compatible with nanometers, optional, default=3.350*angstroms
        The effective Lennard-Jones sigma parameter.
 
     Examples

@@ -56,7 +56,7 @@ def compute_forces(system, positions, platform=None, force_group=-1):
 
     Parameters
     ----------
-    platform : simtk.openmm.Platform or None, optional
+    platform : openmm.Platform or None, optional
         If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
     force_group : int flag or set of int, optional
         Passed to the groups argument of Context.getState().
@@ -77,15 +77,15 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
 
     Parameters
     ----------
-    reference_system : simtk.openmm.System
+    reference_system : openmm.System
         Reference System
-    alchemical_system : simtk.openmm.System
+    alchemical_system : openmm.System
         System to compare to reference
-    positions : simtk.unit.Quantity of shape [nparticles,3] with units of distance
+    positions : openmm.unit.Quantity of shape [nparticles,3] with units of distance
         The particle positions to use
     name : str, optional, default=""
         System name to use for debugging.
-    platform : simtk.openmm.Platform, optional, default=None
+    platform : openmm.Platform, optional, default=None
         If specified, use this platform
 
     """
@@ -110,14 +110,14 @@ def generate_new_positions(system, positions, platform=None, nsteps=50):
 
     Parameters
     ----------
-    platform : simtk.openmm.Platform or None, optional
+    platform : openmm.Platform or None, optional
         If None, the global GLOBAL_ALCHEMY_PLATFORM will be used.
     nsteps : int, optional, default=50
         Number of steps of dynamics to take.
 
     Returns
     -------
-    new_positions : simtk.unit.Quantity of shape [nparticles,3] with units compatible with distance
+    new_positions : openmm.unit.Quantity of shape [nparticles,3] with units compatible with distance
         New positions
 
     """

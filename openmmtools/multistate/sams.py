@@ -81,7 +81,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     Create the system:
 
     >>> import math
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems, states, mcmc
     >>> testsystem = testsystems.AlanineDipeptideVacuum()
     >>> import os
@@ -363,8 +363,8 @@ class SAMSSampler(multistate.MultiStateSampler):
         # Update log weights
         self._update_log_weights()
 
-    def _restore_sampler_from_reporter(self, reporter):
-        super()._restore_sampler_from_reporter(reporter)
+    def _restore_sampler_from_reporter(self, reporter, **kwargs):
+        super()._restore_sampler_from_reporter(reporter, **kwargs)
         self._cached_state_histogram = self._compute_state_histogram(reporter=reporter)
         logger.debug('Restored state histogram: {}'.format(self._cached_state_histogram))
         data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0')
@@ -421,16 +421,20 @@ class SAMSSampler(multistate.MultiStateSampler):
         n_swaps_accepted = self._n_accepted_matrix.sum()
         swap_fraction_accepted = 0.0
         if n_swaps_proposed > 0:
-            # TODO drop casting to float when dropping Python 2 support.
-            swap_fraction_accepted = float(n_swaps_accepted) / n_swaps_proposed
+            swap_fraction_accepted = n_swaps_accepted / n_swaps_proposed
         logger.debug("Accepted {}/{} attempted swaps ({:.1f}%)".format(n_swaps_accepted, n_swaps_proposed,
                                                                        swap_fraction_accepted * 100.0))
 
-        # Update logZ estimates
-        self._update_logZ_estimates(replicas_log_P_k)
+        # Do not update and/or write to disk during equilibration
+        if self._iteration > 0:
+            # Update logZ estimates. Must be up to date in node 0!
+            self._update_logZ_estimates(replicas_log_P_k)
 
-        # Update log weights based on target probabilities
-        self._update_log_weights()
+            # Update log weights based on target probabilities. Must be up to date in node 0!
+            self._update_log_weights()
+
+        # Return replica thermodynamic states
+        return self._replica_thermodynamic_states
 
     def _local_jump(self, replicas_log_P_k):
         n_replica, n_states, locality = self.n_replicas, self.n_states, self.locality

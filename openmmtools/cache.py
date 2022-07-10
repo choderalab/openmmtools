@@ -18,7 +18,11 @@ import re
 import copy
 import collections
 
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import integrators
 
@@ -226,7 +230,7 @@ class ContextCache(object):
 
     Parameters
     ----------
-    platform : simtk.openmm.Platform, optional
+    platform : openmm.Platform, optional
         The OpenMM platform to use to create Contexts. If None, OpenMM
         tries to select the fastest one available (default is None).
     platform_properties : dict, optional
@@ -252,7 +256,7 @@ class ContextCache(object):
 
     Examples
     --------
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState
     >>> alanine = testsystems.AlanineDipeptideExplicit()
@@ -394,14 +398,14 @@ class ContextCache(object):
         ----------
         thermodynamic_state : states.ThermodynamicState
             The thermodynamic state of the system.
-        integrator : simtk.openmm.Integrator, optional
+        integrator : openmm.Integrator, optional
             The integrator for the context (default is None).
 
         Returns
         -------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The context in the given thermodynamic system.
-        context_integrator : simtk.openmm.Integrator
+        context_integrator : openmm.Integrator
             The integrator to be used to propagate the Context. Can be
             a difference instance from the one passed as an argument.
 
@@ -476,6 +480,17 @@ class ContextCache(object):
         else:
             self._platform_properties = serialization["platform_properties"]
         self._lru = LRUCache(serialization['capacity'], serialization['time_to_live'])
+
+    def __eq__(self, other):
+        """Two ContextCache objects are equal if they have the same values in their public attributes."""
+        # Check types are compatible
+        if isinstance(other, ContextCache):
+            # Check all inner public attributes have the same values (excluding methods)
+            my_inner_attrs = [attr_ for attr_ in dir(self) if not attr_.startswith('_')
+                              and not callable(getattr(self, attr_))]
+            return all([getattr(self, attr) == getattr(other, attr) for attr in my_inner_attrs])
+        else:
+            return False
 
     # -------------------------------------------------------------------------
     # Internal usage
@@ -690,13 +705,13 @@ class DummyContextCache(object):
 
     Parameters
     ----------
-    platform : simtk.openmm.Platform, optional
+    platform : openmm.Platform, optional
         The OpenMM platform to use. If None, OpenMM tries to select
         the fastest one available (default is None).
 
     Attributes
     ----------
-    platform : simtk.openmm.Platform
+    platform : openmm.Platform
         The OpenMM platform to use. If None, OpenMM tries to select
         the fastest one available.
 
@@ -704,7 +719,8 @@ class DummyContextCache(object):
     --------
     Create a new ``Context`` object for alanine dipeptide in vacuum in NPT.
 
-    >>> from simtk import openmm, unit
+    >>> import openmm
+    >>> from openmm import unit
     >>> from openmmtools import states, testsystems
     >>> system = testsystems.AlanineDipeptideVacuum().system
     >>> thermo_state = states.ThermodynamicState(system, temperature=300*unit.kelvin)
@@ -729,7 +745,7 @@ class DummyContextCache(object):
         ----------
         thermodynamic_state : states.ThermodynamicState
             The thermodynamic state of the system.
-        integrator : simtk.openmm.Integrator, optional
+        integrator : openmm.Integrator, optional
             The integrator to bind to the new context. If ``None``, an arbitrary
             integrator is used. Currently, this is a ``LangevinIntegrator`` with
             "V R O R V" splitting, but this might change in the future. Default
@@ -737,9 +753,9 @@ class DummyContextCache(object):
 
         Returns
         -------
-        context : simtk.openmm.Context
+        context : openmm.Context
             The new context in the given thermodynamic system.
-        context_integrator : simtk.openmm.Integrator
+        context_integrator : openmm.Integrator
             The integrator bound to the context that can be used for
             propagation. This is identical to the ``integrator`` argument
             if it was passed.

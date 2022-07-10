@@ -46,7 +46,7 @@ Jun S. Liu. Monte Carlo Strategies in Scientific Computing. Springer, 2008.
 
 Examples
 --------
->>> from simtk import unit
+>>> from openmm import unit
 >>> from openmmtools import testsystems, cache
 >>> from openmmtools.states import ThermodynamicState, SamplerState
 
@@ -115,7 +115,11 @@ import copy
 import logging
 
 import numpy as np
-from simtk import openmm, unit
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools import integrators, cache, utils
 from openmmtools.utils import SubhookedABCMeta, Timer
@@ -142,9 +146,13 @@ class MCMCMove(SubhookedABCMeta):
     statistics such as number of attempted moves and acceptance rates.
 
     """
+    def __init__(self, context_cache=None):
+        if context_cache is not None:
+            logger.warning("Ignoring context_cache argument. The MCMCMove.context_cache field has been deprecated."
+                           " The API now requires context_cache be passed to apply(). Please update your code.'")
 
     @abc.abstractmethod
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the MCMC move.
 
         Depending on the implementation, this can alter the thermodynamic
@@ -158,9 +166,45 @@ class MCMCMove(SubhookedABCMeta):
         sampler_state : openmmtools.states.SamplerState
            The initial sampler state before applying the move. This may
            be modified depending on the implementation.
-
+        context_cache : opemmtools.cache.ContextCache
+            Context cache to be used in the propagation of the mcmc move. If None,
+            it will use the global context cache.
         """
         pass
+
+    @property
+    def context_cache(self):
+        logger.warning('The MCMCMove.context_cache field has been deprecated. The API now requires context_cache '
+                       'be passed to apply(). Please update your code.')
+        from openmmtools import cache
+        return cache.global_context_cache
+
+    @staticmethod
+    def _get_context_cache(context_cache_input):
+        """
+        Method to return context to be used for move propagation.
+
+        .. note:: centralized API point to deal with context cache behavior.
+
+        Parameters
+        ----------
+        context_cache_input : openmmtools.cache.ContextCache or None
+            Context cache to be used in the propagation of the mcmc move. If None,
+            it will create a new unlimited ContextCache object.
+
+        Returns
+        -------
+        context_cache : openmmtools.cache.ContextCache
+            Context cache object to be used for propagation.
+        """
+        if context_cache_input is None:
+            # Default behavior, gobal Context Cache
+            context_cache = cache.global_context_cache
+        elif isinstance(context_cache_input, cache.ContextCache):
+            context_cache = context_cache_input
+        else:
+            raise ValueError("Context cache input is not a valid ContextCache or None type.")
+        return context_cache
 
 
 # =============================================================================
@@ -196,7 +240,7 @@ class MCMCSampler(object):
     --------
 
     >>> import numpy as np
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
 
@@ -236,7 +280,7 @@ class MCMCSampler(object):
         self.sampler_state = copy.deepcopy(sampler_state)
         self.move = move
 
-    def run(self, n_iterations=1):
+    def run(self, n_iterations=1, context_cache=None):
         """
         Run the sampler for a specified number of iterations.
 
@@ -244,11 +288,17 @@ class MCMCSampler(object):
         ----------
         n_iterations : int
             Number of iterations of the sampler to run.
+        context_cache : openmmtools.cache.ContextCache or None, optional, default None
+            Context cache to be used for move/integrator propagation. If None, global context cache will be used.
+
 
         """
+        # Handle context cache, fall back to global if None.
+        if context_cache is None:
+            context_cache = cache.global_context_cache
         # Apply move for n_iterations.
         for iteration in range(n_iterations):
-            self.move.apply(self.thermodynamic_state, self.sampler_state)
+            self.move.apply(self.thermodynamic_state, self.sampler_state, context_cache=context_cache)
 
     def minimize(self, tolerance=1.0*unit.kilocalories_per_mole/unit.angstroms,
                  max_iterations=100, context_cache=None):
@@ -256,7 +306,7 @@ class MCMCSampler(object):
 
         Parameters
         ----------
-        tolerance : simtk.unit.Quantity, optional
+        tolerance : openmm.unit.Quantity, optional
             Tolerance to use for minimization termination criterion (units of
             energy/(mole*distance), default is 1*kilocalories_per_mole/angstroms).
         max_iterations : int, optional
@@ -302,9 +352,6 @@ class SequenceMove(MCMCMove):
     ----------
     move_list : list-like of MCMCMove
         The sequence of MCMC moves to apply.
-    context_cache : openmmtools.cache.ContextCache, optional
-        If not None, the context_cache of all the moves in the sequence
-        will be set to this (default is None).
 
     Attributes
     ----------
@@ -317,7 +364,7 @@ class SequenceMove(MCMCMove):
     NPT ensemble simulation of a Lennard Jones fluid with a sequence of moves.
 
     >>> import numpy as np
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.LennardJonesFluid(nparticles=200)
@@ -333,11 +380,9 @@ class SequenceMove(MCMCMove):
     False
 
     """
-    def __init__(self, move_list, context_cache=None):
+    def __init__(self, move_list, **kwargs):
+        super(SequenceMove, self).__init__(**kwargs)
         self.move_list = list(move_list)
-        if context_cache is not None:
-            for move in self.move_list:
-                move.context_cache = context_cache
 
     @property
     def statistics(self):
@@ -356,7 +401,7 @@ class SequenceMove(MCMCMove):
             if hasattr(move, 'statistics'):
                 move.statistics = value[i]
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the sequence of MCMC move in order.
 
         Parameters
@@ -365,10 +410,14 @@ class SequenceMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to.
+        context_cache : opemmtools.cache.ContextCache, optional
 
         """
+        # Get context cache to be used
+        local_context_cache = self._get_context_cache(context_cache)
         for move in self.move_list:
-            move.apply(thermodynamic_state, sampler_state)
+            # Apply each move with the specified local context
+            move.apply(thermodynamic_state, sampler_state, context_cache=local_context_cache)
 
     def __str__(self):
         return str(self.move_list)
@@ -393,9 +442,6 @@ class WeightedMove(MCMCMove):
     move_set : list of tuples (MCMCMove, float_
         Each tuple associate an MCMCMoves to its probability of being
         selected on apply().
-    context_cache : openmmtools.cache.ContextCache, optional
-        If not None, the context_cache of all the moves in the set will be
-        set to this (default is None).
 
     Attributes
     ----------
@@ -406,7 +452,7 @@ class WeightedMove(MCMCMove):
     Create and run an alanine dipeptide simulation with a weighted move.
 
     >>> import numpy as np
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -423,11 +469,9 @@ class WeightedMove(MCMCMove):
     False
 
     """
-    def __init__(self, move_set, context_cache=None):
+    def __init__(self, move_set, **kwargs):
+        super(WeightedMove, self).__init__(**kwargs)
         self.move_set = move_set
-        if context_cache is not None:
-            for move, weight in self.move_set:
-                move.context_cache = context_cache
 
     @property
     def statistics(self):
@@ -446,7 +490,7 @@ class WeightedMove(MCMCMove):
             if hasattr(move, 'statistics'):
                 move.statistics = value[i]
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply one of the MCMC moves in the set to the state.
 
         The probability that a move is picked is given by its weight.
@@ -457,11 +501,15 @@ class WeightedMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to.
+        context_cache : openmmtools.cache.ContextCache
+            The ContextCache to use for Context creation.
 
         """
         moves, weights = zip(*self.move_set)
         move = np.random.choice(moves, p=weights)
-        move.apply(thermodynamic_state, sampler_state)
+        # Get context cache to be used
+        local_context_cache = self._get_context_cache(context_cache)
+        move.apply(thermodynamic_state, sampler_state, context_cache=local_context_cache)
 
     def __getstate__(self):
         serialized_moves = [utils.serialize(move) for move, _ in self.move_set]
@@ -494,7 +542,7 @@ class IntegratorMoveError(Exception):
         A description of the error.
     move : MCMCMove
         The MCMCMove that raised the error.
-    context : simtk.openmm.Context, optional
+    context : openmm.Context, optional
         The context after the integration.
 
     """
@@ -564,9 +612,6 @@ class BaseIntegratorMove(MCMCMove):
     ----------
     n_steps : int
         The number of integration steps to take each time the move is applied.
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
@@ -581,7 +626,6 @@ class BaseIntegratorMove(MCMCMove):
     Attributes
     ----------
     n_steps : int
-    context_cache : openmmtools.cache.ContextCache
     reassign_velocities : bool
     n_restart_attempts : int or None
 
@@ -590,7 +634,7 @@ class BaseIntegratorMove(MCMCMove):
     Create a VerletIntegratorMove class.
 
     >>> from openmmtools import testsystems, states
-    >>> from simtk.openmm import VerletIntegrator
+    >>> from openmm import VerletIntegrator
     >>> class VerletMove(BaseIntegratorMove):
     ...     def __init__(self, timestep, n_steps, **kwargs):
     ...         super(VerletMove, self).__init__(n_steps, **kwargs)
@@ -607,20 +651,19 @@ class BaseIntegratorMove(MCMCMove):
     >>> sampler_state = states.SamplerState(alanine.positions)
     >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
     >>> move = VerletMove(timestep=1.0*unit.femtosecond, n_steps=2)
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     Setting velocities
     Reading statistics
 
     """
 
-    def __init__(self, n_steps, context_cache=None,
-                 reassign_velocities=False, n_restart_attempts=4):
+    def __init__(self, n_steps, reassign_velocities=False, n_restart_attempts=4, **kwargs):
+        super(BaseIntegratorMove, self).__init__(**kwargs)
         self.n_steps = n_steps
-        self.context_cache = context_cache
         self.reassign_velocities = reassign_velocities
         self.n_restart_attempts = n_restart_attempts
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Propagate the state through the integrator.
 
         This updates the SamplerState after the integration. It also logs
@@ -632,6 +675,8 @@ class BaseIntegratorMove(MCMCMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            Context cache to be used during propagation with the integrator.
 
         See Also
         --------
@@ -641,18 +686,16 @@ class BaseIntegratorMove(MCMCMove):
         move_name = self.__class__.__name__  # shortcut
         timer = Timer()
 
-        # Check if we have to use the global cache.
-        if self.context_cache is None:
-            context_cache = cache.global_context_cache
-        else:
-            context_cache = self.context_cache
-
         # Create integrator.
         integrator = self._get_integrator(thermodynamic_state)
 
+        # Get context cache
+        local_context_cache = self._get_context_cache(context_cache)
+
         # Create context.
         timer.start("{}: Context request".format(move_name))
-        context, integrator = context_cache.get_context(thermodynamic_state, integrator)
+        # TODO: Is this still needed now that we are specifying the context?
+        context, integrator = local_context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
         #logger.debug("{}: Context obtained, platform is {}".format(
         #    move_name, context.getPlatform().getName()))
@@ -745,11 +788,7 @@ class BaseIntegratorMove(MCMCMove):
         pass
 
     def __getstate__(self):
-        if self.context_cache is None:
-            context_cache_serialized = None
-        else:
-            context_cache_serialized = utils.serialize(self.context_cache)
-        return dict(n_steps=self.n_steps, context_cache=context_cache_serialized,
+        return dict(n_steps=self.n_steps,
                     reassign_velocities=self.reassign_velocities,
                     n_restart_attempts=self.n_restart_attempts)
 
@@ -757,10 +796,6 @@ class BaseIntegratorMove(MCMCMove):
         self.n_steps = serialization['n_steps']
         self.reassign_velocities = serialization['reassign_velocities']
         self.n_restart_attempts = serialization['n_restart_attempts']
-        if serialization['context_cache'] is None:
-            self.context_cache = None
-        else:
-            self.context_cache = utils.deserialize(serialization['context_cache'])
 
 
 # =============================================================================
@@ -780,9 +815,6 @@ class MetropolizedMove(MCMCMove):
     atom_subset : slice or list of int, optional
         If specified, the move is applied only to those atoms specified by these
         indices. If None, the move is applied to all atoms (default is None).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
@@ -791,11 +823,10 @@ class MetropolizedMove(MCMCMove):
     n_proposed : int
         The total number of attempted moves.
     atom_subset
-    context_cache
 
     Examples
     --------
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems, states
     >>> class AddOneVector(MetropolizedMove):
     ...     def __init__(self, **kwargs):
@@ -809,7 +840,7 @@ class MetropolizedMove(MCMCMove):
     >>> sampler_state = states.SamplerState(alanine.positions)
     >>> thermodynamic_state = states.ThermodynamicState(alanine.system, 300*unit.kelvin)
     >>> move = AddOneVector(atom_subset=list(range(sampler_state.n_particles)))
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     Propose new positions
     >>> move.n_accepted
     1
@@ -817,11 +848,11 @@ class MetropolizedMove(MCMCMove):
     1
 
     """
-    def __init__(self, atom_subset=None, context_cache=None):
+    def __init__(self, atom_subset=None, **kwargs):
+        super(MetropolizedMove, self).__init__(**kwargs)
         self.n_accepted = 0
         self.n_proposed = 0
         self.atom_subset = atom_subset
-        self.context_cache = context_cache
 
     @property
     def statistics(self):
@@ -833,7 +864,7 @@ class MetropolizedMove(MCMCMove):
         self.n_accepted = value['n_accepted']
         self.n_proposed = value['n_proposed']
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply a metropolized move to the sampler state.
 
         Total number of acceptances and proposed move are updated.
@@ -844,20 +875,20 @@ class MetropolizedMove(MCMCMove):
            The thermodynamic state to use to apply the move.
         sampler_state : openmmtools.states.SamplerState
            The initial sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            The ContextCache to use for Context creation.
 
         """
         timer = Timer()
         benchmark_id = 'Applying {}'.format(self.__class__.__name__ )
         timer.start(benchmark_id)
 
-        # Check if we have to use the global cache.
-        if self.context_cache is None:
-            context_cache = cache.global_context_cache
-        else:
-            context_cache = self.context_cache
+        # Get context cache
+        local_context_cache = self._get_context_cache(context_cache)
 
+        # TODO: Is this still needed now that we are specifying the context?
         # Create context, any integrator works.
-        context, unused_integrator = context_cache.get_context(thermodynamic_state)
+        context, unused_integrator = local_context_cache.get_context(thermodynamic_state)
 
         # Compute initial energy. We don't need to set velocities to compute the potential.
         # TODO assume sampler_state.potential_energy is the correct potential if not None?
@@ -905,20 +936,12 @@ class MetropolizedMove(MCMCMove):
         #timer.report_timing()
 
     def __getstate__(self):
-        if self.context_cache is None:
-            context_cache_serialized = None
-        else:
-            context_cache_serialized = utils.serialize(self.context_cache)
-        serialization = dict(atom_subset=self.atom_subset, context_cache=context_cache_serialized)
+        serialization = dict(atom_subset=self.atom_subset)
         serialization.update(self.statistics)
         return serialization
 
     def __setstate__(self, serialization):
         self.atom_subset = serialization['atom_subset']
-        if serialization['context_cache'] is None:
-            self.context_cache = None
-        else:
-            self.context_cache = utils.deserialize(serialization['context_cache'])
         self.statistics = serialization
 
     @abc.abstractmethod
@@ -954,19 +977,15 @@ class IntegratorMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    integrator : simtk.openmm.Integrator
+    integrator : openmm.Integrator
         An instance of an OpenMM Integrator object to use for propagation.
     n_steps : int
         The number of integration steps to take each time the move is applied.
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
     integrator
     n_steps
-    context_cache
 
     """
     def __init__(self, integrator, n_steps, **kwargs):
@@ -1025,27 +1044,24 @@ class LangevinDynamicsMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         The timestep to use for Langevin integration
-        (time units, default is 1*simtk.unit.femtosecond).
-    collision_rate : simtk.unit.Quantity, optional
+        (time units, default is 1*openmm.unit.femtosecond).
+    collision_rate : openmm.unit.Quantity, optional
         The collision rate with fictitious bath particles
-        (1/time units, default is 10/simtk.unit.picoseconds).
+        (1/time units, default is 10/openmm.unit.picoseconds).
     n_steps : int, optional
         The number of integration timesteps to take each time the
         move is applied (default is 1000).
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
         The timestep to use for Langevin integration (time units).
-    collision_rate : simtk.unit.Quantity
+    collision_rate : openmm.unit.Quantity
         The collision rate with fictitious bath particles (1/time units).
     n_steps : int
         The number of integration timesteps to take each time the move
@@ -1053,9 +1069,6 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     reassign_velocities : bool
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move.
-    context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global
-        cache openmmtools.cache.global_context_cache is used.
 
     Examples
     --------
@@ -1063,7 +1076,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import SamplerState, ThermodynamicState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1082,7 +1095,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1092,7 +1105,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1106,7 +1119,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         self.timestep = timestep
         self.collision_rate = collision_rate
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the Langevin dynamics MCMC move.
 
         This modifies the given sampler_state. The temperature of the
@@ -1118,10 +1131,13 @@ class LangevinDynamicsMove(BaseIntegratorMove):
            The thermodynamic state to use to propagate dynamics.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            Context cache to be used during propagation with the integrator.
 
         """
         # Explicitly implemented just to have more specific docstring.
-        super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state)
+        super(LangevinDynamicsMove, self).apply(thermodynamic_state, sampler_state,
+                                                context_cache=context_cache)
 
     def __getstate__(self):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
@@ -1150,21 +1166,18 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         The timestep to use for Langevin integration
-        (time units, default is 1*simtk.unit.femtosecond).
-    collision_rate : simtk.unit.Quantity, optional
+        (time units, default is 1*openmm.unit.femtosecond).
+    collision_rate : openmm.unit.Quantity, optional
         The collision rate with fictitious bath particles
-        (1/time units, default is 10/simtk.unit.picoseconds).
+        (1/time units, default is 10/openmm.unit.picoseconds).
     n_steps : int, optional
         The number of integration timesteps to take each time the
         move is applied (default is 1000).
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     splitting : string, default: "V R O R V"
         Sequence of "R", "V", "O" (and optionally "{", "}", "V0", "V1", ...) substeps to be executed each timestep.
@@ -1184,9 +1197,9 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
         The timestep to use for Langevin integration (time units).
-    collision_rate : simtk.unit.Quantity
+    collision_rate : openmm.unit.Quantity
         The collision rate with fictitious bath particles (1/time units).
     n_steps : int
         The number of integration timesteps to take each time the move
@@ -1194,9 +1207,6 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     reassign_velocities : bool
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move.
-    context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global
-        cache openmmtools.cache.global_context_cache is used.
     splitting : str
         Splitting applied to this integrator represented as a string.
     constraint_tolerance : float, default: 1.0e-8
@@ -1212,7 +1222,7 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import SamplerState, ThermodynamicState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1235,7 +1245,7 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1245,7 +1255,7 @@ class LangevinSplittingDynamicsMove(LangevinDynamicsMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1302,31 +1312,25 @@ class GHMCMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
         The timestep to use for Langevin integration (time units, default
-        is 1*simtk.unit.femtoseconds).
-    collision_rate : simtk.unit.Quantity, optional
+        is 1*openmm.unit.femtoseconds).
+    collision_rate : openmm.unit.Quantity, optional
         The collision rate with fictitious bath particles (1/time units,
-        default is 20/simtk.unit.picoseconds).
+        default is 20/openmm.unit.picoseconds).
     n_steps : int, optional
         The number of integration timesteps to take each time the move
         is applied (default is 1000).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
         The timestep to use for Langevin integration (time units).
-    collision_rate : simtk.unit.Quantity
+    collision_rate : openmm.unit.Quantity
         The collision rate with fictitious bath particles (1/time units).
     n_steps : int
         The number of integration timesteps to take each time the move
         is applied.
-    context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global
-        cache openmmtools.cache.global_context_cache is used.
     n_accepted : int
         The number of accepted steps.
     n_proposed : int
@@ -1344,7 +1348,7 @@ class GHMCMove(BaseIntegratorMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1363,7 +1367,7 @@ class GHMCMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1373,7 +1377,7 @@ class GHMCMove(BaseIntegratorMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1414,7 +1418,7 @@ class GHMCMove(BaseIntegratorMove):
         self.n_accepted = 0
         self.n_proposed = 0
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the GHMC MCMC move.
 
         This modifies the given sampler_state. The temperature of the
@@ -1423,13 +1427,15 @@ class GHMCMove(BaseIntegratorMove):
         Parameters
         ----------
         thermodynamic_state : openmmtools.states.ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move.
+            The thermodynamic state to use when applying the MCMC move.
         sampler_state : openmmtools.states.SamplerState
-           The sampler state to apply the move to. This is modified.
+            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            Context cache to be used during propagation with the integrator.
 
         """
         # Explicitly implemented just to have more specific docstring.
-        super(GHMCMove, self).apply(thermodynamic_state, sampler_state)
+        super(GHMCMove, self).apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     def __getstate__(self):
         serialization = super(GHMCMove, self).__getstate__()
@@ -1476,26 +1482,20 @@ class HMCMove(BaseIntegratorMove):
 
     Parameters
     ----------
-    timestep : simtk.unit.Quantity, optional
+    timestep : openmm.unit.Quantity, optional
        The timestep to use for HMC dynamics, which uses velocity Verlet following
-       velocity randomization (time units, default is 1*simtk.unit.femtosecond)
+       velocity randomization (time units, default is 1*openmm.unit.femtosecond)
     n_steps : int, optional
        The number of dynamics steps to take before Metropolis acceptance/rejection
        (default is 1000).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
-    timestep : simtk.unit.Quantity
+    timestep : openmm.unit.Quantity
        The timestep to use for HMC dynamics, which uses velocity Verlet following
        velocity randomization (time units).
     n_steps : int
        The number of dynamics steps to take before Metropolis acceptance/rejection.
-    context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used.
 
     Examples
     --------
@@ -1503,7 +1503,7 @@ class HMCMove(BaseIntegratorMove):
     state to propagate. Here we create an alanine dipeptide system
     in vacuum.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideVacuum()
@@ -1521,7 +1521,7 @@ class HMCMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1531,7 +1531,7 @@ class HMCMove(BaseIntegratorMove):
     >>> sampler_state = SamplerState(positions=test.positions)
     >>> thermodynamic_state = ThermodynamicState(system=test.system,
     ...                                          temperature=298*unit.kelvin)
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1541,7 +1541,7 @@ class HMCMove(BaseIntegratorMove):
         super(HMCMove, self).__init__(n_steps=n_steps, **kwargs)
         self.timestep = timestep
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the MCMC move.
 
         This modifies the given sampler_state.
@@ -1552,10 +1552,12 @@ class HMCMove(BaseIntegratorMove):
            The thermodynamic state to use when applying the MCMC move.
         sampler_state : openmmtools.states.SamplerState
            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            Context cache to be used during propagation with the integrator.
 
         """
         # Explicitly implemented just to have more specific docstring.
-        super(HMCMove, self).apply(thermodynamic_state, sampler_state)
+        super(HMCMove, self).apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     def __getstate__(self):
         serialization = super(HMCMove, self).__getstate__()
@@ -1587,17 +1589,10 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     n_attempts : int, optional
         The number of Monte Carlo attempts to make to adjust the box
         volume (default is 5).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global
-        cache openmmtools.cache.global_context_cache is used (default is
-        None).
 
     Attributes
     ----------
     n_attempts
-    context_cache : openmmtools.cache.ContextCache
-        The ContextCache to use for Context creation. If None, the global
-        cache openmmtools.cache.global_context_cache is used.
 
     Examples
     --------
@@ -1605,7 +1600,7 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     force. The class ThermodynamicState takes care of adding one when
     we specify the pressure in its constructor.
 
-    >>> from simtk import unit
+    >>> from openmm import unit
     >>> from openmmtools import testsystems
     >>> from openmmtools.states import ThermodynamicState, SamplerState
     >>> test = testsystems.AlanineDipeptideExplicit()
@@ -1624,7 +1619,7 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     Perform one update of the sampler state. The sampler state is updated
     with the new state.
 
-    >>> move.apply(thermodynamic_state, sampler_state)
+    >>> move.apply(thermodynamic_state,sampler_state,context_cache=context_cache)
     >>> np.allclose(sampler_state.positions, test.positions)
     False
 
@@ -1642,7 +1637,7 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
     def n_attempts(self, value):
         self.n_steps = value
 
-    def apply(self, thermodynamic_state, sampler_state):
+    def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the MCMC move.
 
         The thermodynamic state must be barostated by a MonteCarloBarostat
@@ -1651,9 +1646,11 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
         Parameters
         ----------
         thermodynamic_state : openmmtools.states.ThermodynamicState
-           The thermodynamic state to use when applying the MCMC move.
+            The thermodynamic state to use when applying the MCMC move.
         sampler_state : openmmtools.states.SamplerState
-           The sampler state to apply the move to. This is modified.
+            The sampler state to apply the move to. This is modified.
+        context_cache : openmmtools.cache.ContextCache
+            Context cache to be used during propagation with the integrator
 
         """
         # Make sure system contains a MonteCarlo barostat.
@@ -1671,7 +1668,8 @@ class MonteCarloBarostatMove(BaseIntegratorMove):
             barostat.setFrequency(1)
         thermodynamic_state.barostat = barostat
 
-        super(MonteCarloBarostatMove, self).apply(thermodynamic_state, sampler_state)
+        super(MonteCarloBarostatMove, self).apply(thermodynamic_state, sampler_state,
+                                                  context_cache=context_cache)
 
         # Restore frequency of barostat.
         if old_barostat_frequency != 1:
@@ -1692,15 +1690,12 @@ class MCDisplacementMove(MetropolizedMove):
 
     Parameters
     ----------
-    displacement_sigma : simtk.unit.Quantity
+    displacement_sigma : openmm.unit.Quantity
         The standard deviation of the normal distribution used to propose the
         random displacement (units of length, default is 1.0*nanometer).
     atom_subset : slice or list of int, optional
         If specified, the move is applied only to those atoms specified by these
         indices. If None, the move is applied to all atoms (default is None).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
@@ -1710,7 +1705,6 @@ class MCDisplacementMove(MetropolizedMove):
         The total number of attempted moves.
     displacement_sigma
     atom_subset
-    context_cache
 
     See Also
     --------
@@ -1728,15 +1722,15 @@ class MCDisplacementMove(MetropolizedMove):
 
         Parameters
         ----------
-        positions : nx3 numpy.ndarray simtk.unit.Quantity
+        positions : nx3 numpy.ndarray openmm.unit.Quantity
             The positions to displace.
-        displacement_sigma : simtk.unit.Quantity
+        displacement_sigma : openmm.unit.Quantity
             The standard deviation of the normal distribution used to propose
             the random displacement (units of length, default is 1.0*nanometer).
 
         Returns
         -------
-        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+        rotated_positions : nx3 numpy.ndarray openmm.unit.Quantity
             The displaced positions.
 
         """
@@ -1772,9 +1766,6 @@ class MCRotationMove(MetropolizedMove):
     atom_subset : slice or list of int, optional
         If specified, the move is applied only to those atoms specified by these
         indices. If None, the move is applied to all atoms (default is None).
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
@@ -1783,7 +1774,6 @@ class MCRotationMove(MetropolizedMove):
     n_proposed : int
         The total number of attempted moves.
     atom_subset
-    context_cache
 
     See Also
     --------
@@ -1800,12 +1790,12 @@ class MCRotationMove(MetropolizedMove):
 
         Parameters
         ----------
-        positions : nx3 numpy.ndarray simtk.unit.Quantity
+        positions : nx3 numpy.ndarray openmm.unit.Quantity
             The positions to rotate.
 
         Returns
         -------
-        rotated_positions : nx3 numpy.ndarray simtk.unit.Quantity
+        rotated_positions : nx3 numpy.ndarray openmm.unit.Quantity
             The rotated positions.
 
         """
