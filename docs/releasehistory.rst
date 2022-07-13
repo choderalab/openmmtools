@@ -1,6 +1,13 @@
 Release History
 ***************
 
+0.21.5 - Bugfix release
+=======================
+
+Bugfixes
+--------
+- Bug in returning velocities when propagating replicas. Fixed by using ``ignore_velocities=False`` in ``_propagate_replica``. Issue `#531 <https://github.com/choderalab/openmmtools/issues/531>`_ (PR `#602 <https://github.com/choderalab/openmmtools/pull/602>`_).
+
 0.21.4 - Bugfix release
 =======================
 
