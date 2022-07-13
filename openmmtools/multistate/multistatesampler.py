@@ -1333,7 +1333,7 @@ class MultiStateSampler(object):
             raise SimulationNaNError(message)
 
         # Send the new state to the root node. We can ignore velocities as we're not saving them.
-        return sampler_state.__getstate__(ignore_velocities=True)
+        return sampler_state.__getstate__(ignore_velocities=False)
 
     def _get_replica_move_statistics(self, replica_id):
         """Return the statistics of the MCMCMove currently associated to this replica."""
