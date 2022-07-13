@@ -1273,7 +1273,7 @@ class TestMultiStateSampler(object):
                 else:
                     assert states is None
 
-    def test_resume_from_storage(self):
+    def test_resume_positions_velocities_from_storage(self):
         """Test that positions and velocities are the same when resuming a simulation from reporter storage file."""
         # TODO: Find a way to extend this test to use MPI since resuming velocities has a problem there.
         test_cases = [self.alanine_test, self.hostguest_test]
