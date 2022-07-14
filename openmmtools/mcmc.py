@@ -1026,11 +1026,21 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     negligible. Use HybridMonteCarloMove instead to ensure the exact
     distribution is generated.
 
+    The OpenMM LangevinMiddleIntegrator, based on BAOAB [1],  is used.
+
+    .. warning::
+        The LangevinMiddleIntegrator generates velocities that are half a timestep lagged behind the positions.
+
     .. warning::
         No Metropolization is used to ensure the correct phase space
         distribution is sampled. This means that timestep-dependent errors
         will remain uncorrected, and are amplified with larger timesteps.
         Use this move at your own risk!
+
+    References
+    ----------
+    [1] Leimkuhler B and Matthews C. Robust and efficient configurational molecular sampling via Langevin dynamics. https://doi.org/10.1063/1.4802990
+    [2] Leimkuhler B and Matthews C. Efficient molecular dynamics using geodesic integration and solvent–solute splitting. https://doi.org/10.1098/rspa.2016.0138
 
     Parameters
     ----------
@@ -1142,8 +1152,8 @@ class LangevinDynamicsMove(BaseIntegratorMove):
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
-        return openmm.LangevinIntegrator(thermodynamic_state.temperature,
-                                         self.collision_rate, self.timestep)
+        return openmm.LangevinMiddleIntegrator(thermodynamic_state.temperature,
+                                               self.collision_rate, self.timestep)
 
 
 class LangevinSplittingDynamicsMove(LangevinDynamicsMove):

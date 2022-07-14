@@ -360,6 +360,8 @@ class TestReporter(object):
             restored_sampler_states = reporter.read_sampler_states(iteration=0)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
                 assert np.allclose(state.positions, restored_state.positions)
+                # By default stored velocities are zeros if not present in origin sampler_state
+                assert np.allclose(np.zeros(state.positions.shape), restored_state.velocities)
                 assert np.allclose(state.box_vectors / unit.nanometer, restored_state.box_vectors / unit.nanometer)
             # Check that the analysis particles are written off checkpoint whereas full trajectory is not
             restored_analysis_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
@@ -367,16 +369,19 @@ class TestReporter(object):
             assert type(restored_analysis_states) is list
             for state in restored_analysis_states:
                 assert state.positions.shape == (len(analysis_particles), 3)
+                assert state.velocities.shape == (len(analysis_particles), 3)
             assert restored_checkpoint_states is None
             # Check that the analysis particles are written separate from the checkpoint particles
             restored_analysis_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
             restored_checkpoint_states = reporter.read_sampler_states(iteration=2)
             assert len(restored_analysis_states) == len(restored_checkpoint_states)
             for analysis_state, checkpoint_state in zip(restored_analysis_states, restored_checkpoint_states):
-                # This assert is dual purpose: Positions are identical; Analysis shape is correct
+                # This assert is multiple purpose: Positions are identical; Velocities are indetical and zeros
+                # (since unspecified); Analysis shape is correct
                 # Will raise a ValueError for np.allclose(x,y) if x.shape != y.shape
                 # Will raise AssertionError if the values are not allclose
                 assert np.allclose(analysis_state.positions, checkpoint_state.positions[analysis_particles, :])
+                assert np.allclose(analysis_state.velocities, checkpoint_state.velocities[analysis_particles, :])
                 assert np.allclose(analysis_state.box_vectors / unit.nanometer,
                                    checkpoint_state.box_vectors / unit.nanometer)
 
@@ -1267,6 +1272,41 @@ class TestMultiStateSampler(object):
                     assert type(states[0].positions) is mmtools.utils.TrackedQuantity
                 else:
                     assert states is None
+
+    def test_resume_positions_velocities_from_storage(self):
+        """Test that positions and velocities are the same when resuming a simulation from reporter storage file."""
+        # TODO: Find a way to extend this test to use MPI since resuming velocities has a problem there.
+        test_cases = [self.alanine_test, self.hostguest_test]
+
+        for test_case in test_cases:
+            thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(test_case)
+
+            with self.temporary_storage_path() as storage_path:
+                moves = mmtools.mcmc.SequenceMove([
+                    mmtools.mcmc.LangevinDynamicsMove(n_steps=1),
+                    mmtools.mcmc.MCRotationMove(),
+                    mmtools.mcmc.GHMCMove(n_steps=1)
+                ])
+
+                sampler = self.SAMPLER(mcmc_moves=moves, number_of_iterations=3)
+                reporter = self.REPORTER(storage_path, checkpoint_interval=1)
+                self.call_sampler_create(sampler, reporter,
+                                         thermodynamic_states, sampler_states,
+                                         unsampled_states)
+                # Run 3 iterations
+                sampler.run(n_iterations=3)
+                # store a copy of the original states
+                original_states = sampler.sampler_states
+                # Unallocate current objects and close reporter
+                del sampler
+                reporter.close()
+                # recreate sampler from storage
+                sampler = self.SAMPLER.from_storage(reporter)
+                restored_states = sampler.sampler_states
+                for original_state, restored_state in zip(original_states, restored_states):
+                    assert np.allclose(original_state.positions, restored_state.positions)
+                    assert np.allclose(original_state.velocities, restored_state.velocities)
+
 
     def test_last_iteration_functions(self):
         """Test that the last_iteration functions work right"""

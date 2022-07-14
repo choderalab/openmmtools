@@ -1664,6 +1664,8 @@ class MultiStateReporter(object):
                     x = sampler_state.velocities / (unit.nanometer/unit.picoseconds) # _unitless_velocities
                     velocities[replica_index, :, :] = x[:, :]
              # Store velocites
+            # TODO: This stores velocities as zeros if no velocities are present in the sampler state. Making restored
+            #  sampler_state different from origin.
             storage.variables['velocities'][write_iteration, :, :, :] = velocities
 
             if is_periodic:

@@ -1,6 +1,19 @@
 Release History
 ***************
 
+0.21.5 - Bugfix release
+======================
+
+Changed behaviors
+-----------------
+-   ``LangevinDynamicsMove`` now uses ``openmm.LangevinMiddleIntegrator`` (a BAOAB integrator) instead of `openmm.LangevinIntegrator`` (an OBABO integrator).
+    (`Issue #599 <https://github.com/choderalab/openmmtools/issues/579>`_) (`PR #600 <https://github.com/choderalab/openmmtools/pull/5600>`_)
+
+Bugfixes
+--------
+- Bug in returning velocities when propagating replicas. Fixed by using ``ignore_velocities=False`` in ``_propagate_replica``. Issue `#531 <https://github.com/choderalab/openmmtools/issues/531>`_ (PR `#602 <https://github.com/choderalab/openmmtools/pull/602>`_).
+
+
 0.21.4 - Bugfix release
 =======================
 
