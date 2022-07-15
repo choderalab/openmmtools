@@ -96,9 +96,11 @@ class RepexConstructor():
     def __init__(self, 
                  mixed_system : openmm.System,
                  initial_positions: unit.Quantity,
-                 repex_storage_file : str,
                  n_states : int,
                  temperature : unit.Quantity,
+                 storage_kwargs: Dict={'storage': 'repex.nc', 
+                                       'checkpoint_interval': 10,
+                                       'analysis_particle_indices': None}
                  mcmc_moves : Optional[mcmc.MCMCMove] = mcmc.LangevinSplittingDynamicsMove,
                  mcmc_moves_kwargs : Optional[Dict] = {'timestep': 1.0*unit.femtoseconds, 
                                                        'collision_rate': 1.0/unit.picoseconds,
@@ -106,11 +108,12 @@ class RepexConstructor():
                                                        'reassign_velocities': False,
                                                        'constraint_tolerance': 1e-6},
                  replica_exchange_sampler_kwargs : Optional[Dict] = {'number_of_iterations': 5000,
-                                                                     'online_analysis_interval': 200,
+                                                                     'online_analysis_interval': 10,
+                                                                     'online_analysis_minimum_iterations': 10
                                                                     },
                  **unused_kwargs):
         self._mixed_system = mixed_system
-        self._storage_file = repex_storage_file
+        self._storage_kwargs = storage_kwargs
         self._temperature = temperature
         self._mcmc_moves = mcmc_moves
         self._mcmc_moves_kwargs = mcmc_moves_kwargs
@@ -128,6 +131,6 @@ class RepexConstructor():
                       mixed_system = self._mixed_system, 
                       init_positions = self._initial_positions, 
                       temperature = self._temperature, 
-                      storage_file = self._storage_file)  
+                      storage_kwargs = self._storage_kwargs)  
 
         return _sampler

@@ -294,12 +294,13 @@ class NNPCompatibilityMixin(object):
         super().__init__(*args, **kwargs)
     
     def setup(self, n_states, mixed_system, 
-              init_positions, temperature, storage_file, 
+              init_positions, temperature, storage_kwargs, 
               n_replicas=None, lambda_schedule=None, 
               lambda_protocol=None, **unused_kwargs):
         from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
         from openmmtools.alchemy import NNPAlchemicalState
         from copy import deepcopy
+        from openmmtools.multistate import MultiStateReporter
 
         lambda_zero_alchemical_state = NNPAlchemicalState.from_system(mixed_system)
         thermostate = ThermodynamicState(mixed_system, temperature=temperature)
@@ -332,5 +333,6 @@ class NNPCompatibilityMixin(object):
             compound_thermostate_copy.set_alchemical_parameters(lambda_val, lambda_protocol)
             thermostate_list.append(compound_thermostate_copy)
             sampler_state_list.append(deepcopy(init_sampler_state))
-
-        self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=storage_file)
+        
+        reporter = MultiStateReporter(**storage_kwargs)
+        self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=reporter)
