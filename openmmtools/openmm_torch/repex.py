@@ -83,15 +83,6 @@ class MixedSystemConstructor():
 class RepexConstructor():
     """ 
     simple handler to build replica exchange sampler.
-    Example:
-      >>> pdb = app.PDBFile('out-complex.pdb')
-      >>> omm_system = deserialize_xml('complex-old-system.gz') # any standard serialized `openmm.System` `.xml` will do
-      >>> 
-      >>> # create mixed system where the ml-treated particles are given where `topology.residue.name == 'MOL'` by default (see docs for alternatives)
-      >>> mixed_system = MixedSystemConstructor(system = omm_system, topology = pdb.getTopology()).mixed_system
-      >>> sampler = RepexConstructor(mixed_system, pdb.getPositions(), repex_storage_file="./out_complex.nc", temperature=300.*unit.kelvin, n_states=5).sampler
-      >>> sampler.minimize()
-      >>> sampler.run()
     """
     def __init__(self, 
                  mixed_system : openmm.System,
@@ -105,7 +96,7 @@ class RepexConstructor():
                  mcmc_moves_kwargs : Optional[Dict] = {'timestep': 1.0*unit.femtoseconds, 
                                                        'collision_rate': 1.0/unit.picoseconds,
                                                        'n_steps': 1000,
-                                                       'reassign_velocities': False,
+                                                       'reassign_velocities': True,
                                                        'constraint_tolerance': 1e-6},
                  replica_exchange_sampler_kwargs : Optional[Dict] = {'number_of_iterations': 5000,
                                                                      'online_analysis_interval': 10,
