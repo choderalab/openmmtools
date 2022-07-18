@@ -58,7 +58,7 @@ class MixedSystemConstructor():
                  nnpify_resname: Optional[str]='MOL',
                  nnp_potential : Optional[str]='ani2x',
                  implementation: Optional[str]='nnpops', 
-                 **unused_kwargs):
+                 **createMixedSystem_kwargs):
         """
         initialize the constructor
         """
@@ -71,6 +71,7 @@ class MixedSystemConstructor():
         assert_no_residue_constraints(system, self._atom_indices)
         self._nnp_potential_str = nnp_potential
         self._nnp_potential = MLPotential(self._nnp_potential_str)
+        self._createMixedSystem_kwargs = createMixedSystem_kwargs
     
     @property
     def mixed_system(self):
@@ -78,7 +79,9 @@ class MixedSystemConstructor():
                                                      system = self._system, 
                                                      atoms = self._atom_indices, 
                                                      implementation='nnpops', 
-                                                     interpolate=True)
+                                                     interpolate=True,
+                                                     **self._createMixedSystem_kwargs
+                                                     )
 
 class RepexConstructor():
     """ 
@@ -91,7 +94,7 @@ class RepexConstructor():
                  temperature : unit.Quantity,
                  storage_kwargs: Dict={'storage': 'repex.nc', 
                                        'checkpoint_interval': 10,
-                                       'analysis_particle_indices': None}
+                                       'analysis_particle_indices': None},
                  mcmc_moves : Optional[mcmc.MCMCMove] = mcmc.LangevinSplittingDynamicsMove,
                  mcmc_moves_kwargs : Optional[Dict] = {'timestep': 1.0*unit.femtoseconds, 
                                                        'collision_rate': 1.0/unit.picoseconds,
