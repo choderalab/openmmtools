@@ -14,7 +14,7 @@ dependencies:
   - numpy
   - openmm >=7.5.0
   - pip
-  - pymbar
+  - pymbar <4
   - python
   - python
   - pyyaml
