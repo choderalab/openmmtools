@@ -22,7 +22,7 @@ def deserialize_xml(filename):
 class NNPRepexSampler(NNPCompatibilityMixin, replicaexchange.ReplicaExchangeSampler):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-
+        
 def get_atoms_from_resname(topology, resname) -> List:
     """get the atoms (in order) of the appropriate topology resname"""
     all_resnames = [res.name for res in topology.residues() if res.name == resname]
@@ -103,7 +103,8 @@ class RepexConstructor():
                                                        'constraint_tolerance': 1e-6},
                  replica_exchange_sampler_kwargs : Optional[Dict] = {'number_of_iterations': 5000,
                                                                      'online_analysis_interval': 10,
-                                                                     'online_analysis_minimum_iterations': 10
+                                                                     'online_analysis_minimum_iterations': 10,
+                                                                     'independent_replicas': False
                                                                     },
                  **unused_kwargs):
         self._mixed_system = mixed_system

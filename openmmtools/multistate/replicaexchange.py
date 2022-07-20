@@ -80,6 +80,8 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         be sure to set also ``online_analysis_interval``.
     replica_mixing_scheme : 'swap-all', 'swap-neighbors' or None, Default: 'swap-all'
         The scheme used to swap thermodynamic states between replicas.
+    independent_replicas : bool; Default 'False':
+        Whether to allow or prevent mixing of states. If True, only 'swap-all' as a `replica_mixing_scheme` is currently implemented
     online_analysis_interval : None or Int >= 1, optional, default None
         Choose the interval at which to perform online analysis of the free energy.
 
@@ -109,6 +111,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     sampler_states
     metadata
     is_completed
+    _independent_replicas
 
     Examples
     --------
@@ -211,11 +214,16 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     # Constructors.
     # -------------------------------------------------------------------------
 
-    def __init__(self, replica_mixing_scheme='swap-all', **kwargs):
+    def __init__(self, replica_mixing_scheme='swap-all', independent_replicas=False, **kwargs):
 
         # Initialize multi-state sampler simulation.
         super(ReplicaExchangeSampler, self).__init__(**kwargs)
         self.replica_mixing_scheme = replica_mixing_scheme
+        
+        if independent_replicas:
+            if replica_mixing_scheme != 'swap-all':
+                raise NotImplementedError("using independent replicas is currently only supported with 'swap-all' as a mixing scheme")
+            self._independent_replicas = independent_replicas
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):
 
@@ -273,7 +281,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                     self._mix_all_replicas_numba(
                         nswap_attempts, self.n_replicas,
                         self._replica_thermodynamic_states, self._energy_thermodynamic_states,
-                        self._n_accepted_matrix, self._n_proposed_matrix
+                        self._n_accepted_matrix, self._n_proposed_matrix, self._independent_replicas
                         )
                 except (ValueError, ImportError) as e:
                     logger.warning(str(e))
@@ -296,7 +304,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     def _mix_all_replicas_numba(
         nswap_attempts,
         n_replicas, _replica_thermodynamic_states, _energy_thermodynamic_states,
-        _n_accepted_matrix, _n_proposed_matrix):
+        _n_accepted_matrix, _n_proposed_matrix, _independent_replicas):
         """
         numba-accelerated version of _mix_all_replicas()
 
@@ -317,6 +325,8 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             _n_accepted_matrix[from_state,to_state] is the number of accepted swaps
         _n_proposed_matrix : array-like of float of shape [n_replicas, n_replicas]
             _n_accepted_matrix[from_state,to_state] is the number of proposed swaps
+        _independent_replicas : bool
+            whether to omit mixing
         """
         for swap_attempt in range(nswap_attempts):
 
@@ -340,7 +350,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             _n_proposed_matrix[thermodynamic_state_j, thermodynamic_state_i] += 1
 
             # Accept or reject.
-            if log_p_accept >= 0.0 or np.random.rand() < np.exp(log_p_accept):
+            if (log_p_accept >= 0.0 or np.random.rand() < np.exp(log_p_accept)) and not _independent_replicas:
                 # Swap states in replica slots i and j.
                 _replica_thermodynamic_states[replica_i] = thermodynamic_state_j
                 _replica_thermodynamic_states[replica_j] = thermodynamic_state_i
@@ -397,7 +407,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         self._n_proposed_matrix[thermodynamic_state_j, thermodynamic_state_i] += 1
 
         # Accept or reject.
-        if log_p_accept >= 0.0 or np.random.rand() < math.exp(log_p_accept):
+        if (log_p_accept >= 0.0 or np.random.rand() < math.exp(log_p_accept)) and not self._independent_replicas:
             # Swap states in replica slots i and j.
             self._replica_thermodynamic_states[replica_i] = thermodynamic_state_j
             self._replica_thermodynamic_states[replica_j] = thermodynamic_state_i
