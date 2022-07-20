@@ -45,3 +45,4 @@ Major contributors include:
 * [Iván Pulido](https://github.com/ijpulidos)
 * [Ivy Zhang](https://github.com/zhang-ivy)
 * [Dominic Rufa](https://github.com/dominicrufa)
+* [Mike Henry](https://github.com/mikemhenry)
