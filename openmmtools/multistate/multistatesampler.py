@@ -1361,6 +1361,8 @@ class MultiStateSampler(object):
 
         # Get context and bound integrator from energy_context_cache
         context, integrator = self.energy_context_cache.get_context(thermodynamic_state, integrator)
+        # inform of platform used in current context
+        logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
         # Set initial positions and box vectors.
         sampler_state.apply_to_context(context)
