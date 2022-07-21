@@ -104,7 +104,6 @@ class RepexConstructor():
                  replica_exchange_sampler_kwargs : Optional[Dict] = {'number_of_iterations': 5000,
                                                                      'online_analysis_interval': 10,
                                                                      'online_analysis_minimum_iterations': 10,
-                                                                     'independent_replicas': False
                                                                     },
                  **unused_kwargs):
         self._mixed_system = mixed_system
@@ -120,12 +119,19 @@ class RepexConstructor():
         
     @property
     def sampler(self):
+        # set context cache
+        from openmmtools.utils import get_fastest_platform
+        from openmmtools import cache
+        platform = get_fastest_platform(minimum_precision='mixed')
+        context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+
         mcmc_moves = self._mcmc_moves(**self._mcmc_moves_kwargs)
         _sampler = NNPRepexSampler(mcmc_moves=mcmc_moves, **self._replica_exchange_sampler_kwargs)
+        _sampler.energy_context_cache = context_cache
+        _sampler.sampler_context_cache = context_cache
         _sampler.setup(n_states=self._n_states, 
                       mixed_system = self._mixed_system, 
                       init_positions = self._initial_positions, 
                       temperature = self._temperature, 
                       storage_kwargs = self._storage_kwargs)  
-
         return _sampler
