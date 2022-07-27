@@ -12,7 +12,8 @@ Changed behaviors
 Bugfixes
 --------
 - Bug in returning velocities when propagating replicas. Fixed by using ``ignore_velocities=False`` in ``_propagate_replica``. Issue `#531 <https://github.com/choderalab/openmmtools/issues/531>`_ (PR `#602 <https://github.com/choderalab/openmmtools/pull/602>`_).
-
+- Bug in equilibration detection when user specifies either ``statistical_inefficiency`` or ``n_equilibration_iterations`` (but not both). Fixed by preventing user from specifying only the former, and updating the behavior for the latter to include ``t0`` in the returned ``n_equilibration_iterations``. Issue `#609 <https://github.com/choderalab/openmmtools/issues/609>`_ (PR `#610 <https://github.com/choderalab/openmmtools/pull/610>`_). 
+- Bug in equilibration detection where ``get_equilibration_data_per_sample`` returns 0 for ``n_equilibration_iterations``. Fixed by always discarding the first time origin returned by ``get_equilibration_data_per_sample``. Issue `#609 <https://github.com/choderalab/openmmtools/issues/609>`_ (PR `#610 <https://github.com/choderalab/openmmtools/pull/610>`_).
 
 0.21.4 - Bugfix release
 =======================

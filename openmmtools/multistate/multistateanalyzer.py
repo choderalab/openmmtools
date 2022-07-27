@@ -1198,7 +1198,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         super().__init__(*args, **kwargs)
 
         if statistical_inefficiency and n_equilibration_iterations is None:
-            raise Exception("Cannot specify statistical_inefficiency without n_equilibration_iterations, because" \
+            raise Exception("Cannot specify statistical_inefficiency without n_equilibration_iterations, because " \
             "otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency.")
 
         # Cached values with dependencies.
