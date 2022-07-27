@@ -1166,7 +1166,9 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         Sub-sample rate, e.g. if the statistical_inefficiency is 10, we draw a sample every 10 iterations to get the decorrelated samples.
         If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` must be specified as well.
         Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
-
+    max_subset : int >= 1 or None, optional, default: 100
+        Argument in ``multistate.utils.get_equilibration_dat_per_sample()`` that specifies the maximum number of points in the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_dat_per_sample()``) on which to analyze the equilibration on.
+    
     Attributes
     ----------
     unbias_restraint
@@ -1183,7 +1185,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
     """
 
     def __init__(self, *args, unbias_restraint=True, restraint_energy_cutoff='auto',
-                 restraint_distance_cutoff='auto', n_equilibration_iterations=None, statistical_inefficiency=None, **kwargs):
+                 restraint_distance_cutoff='auto', n_equilibration_iterations=None, statistical_inefficiency=None, max_subset=100, **kwargs):
 
         # Warn that API is experimental
         logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
@@ -1200,6 +1202,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         self.restraint_distance_cutoff = restraint_distance_cutoff
         self._n_equilibration_iterations = n_equilibration_iterations
         self._statistical_inefficiency = statistical_inefficiency
+        self._max_subset = max_subset
 
     # TODO use class syntax and add docstring after dropping python 3.5 support.
     _MixingStatistics = NamedTuple('MixingStatistics', [
@@ -2052,7 +2055,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             # Discard equilibration samples.
             # TODO: if we include u_n[0] (the energy right after minimization) in the equilibration detection,
             # TODO:         then number_equilibrated is 0. Find a better way than just discarding first frame.
-            i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:])
+            i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:], max_subset=self._max_subset)
             n_effective_max = n_effective_i.max()
             i_max = n_effective_i.argmax()
             n_equilibration = i_t[i_max] + self._n_equilibration_iterations if self._n_equilibration_iterations is not None else i_t[i_max] + t0 # if self._n_equilibration_iterations was not specified, account for initially discarded frames
