@@ -1164,7 +1164,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     statistical_inefficiency : float, optional
         Sub-sample rate, e.g. if the statistical_inefficiency is 10, we draw a sample every 10 iterations to get the decorrelated samples.
-        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data().
+        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` must be specified as well.
         Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
 
     Attributes
@@ -1190,6 +1190,9 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
         # super() calls clear() that initialize the cached variables.
         super().__init__(*args, **kwargs)
+
+        if statistical_inefficiency and n_equilibration_iterations is None:
+            raise Exception("Cannot specify statistical_inefficiency without n_equilibration_iterations, because otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency.")
 
         # Cached values with dependencies.
         self.unbias_restraint = unbias_restraint
