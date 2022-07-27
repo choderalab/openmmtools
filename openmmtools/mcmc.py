@@ -1058,7 +1058,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         distribution at the beginning of the move (default is False).
     constraint_tolerance : float, optional
         Fraction of the constrained distance within which constraints are maintained for the
-        integrator (default is 1e-05).
+        integrator (default is 1e-8).
 
     Attributes
     ----------
@@ -1118,7 +1118,7 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
-                 n_steps=1000, reassign_velocities=False, constraint_tolerance=1e-05, **kwargs):
+                 n_steps=1000, reassign_velocities=False, constraint_tolerance=1e-8, **kwargs):
         super(LangevinDynamicsMove, self).__init__(n_steps=n_steps,
                                                    reassign_velocities=reassign_velocities,
                                                    **kwargs)
@@ -1150,12 +1150,14 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
+        serialization['constraint_tolerance'] = self.constraint_tolerance
         return serialization
 
     def __setstate__(self, serialization):
         super(LangevinDynamicsMove, self).__setstate__(serialization)
         self.timestep = serialization['timestep']
         self.collision_rate = serialization['collision_rate']
+        self.constraint_tolerance = serialization['constraint_tolerance']
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
