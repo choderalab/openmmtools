@@ -113,6 +113,8 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
     This is different than saying "I want analysis done every X for total points Y = len(timeseries)/X",
     this is "I want Y total analysis points"
 
+    Note that the returned arrays will be of size max_subset - 1, because we always discard data from the first time origin due to equilibration.
+
     See the ``pymbar.timeseries.detectEquilibration`` function for full algorithm documentation
 
     Parameters
@@ -177,7 +179,7 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
         except:
             g_i[i] = (time_size - t + 1)
         n_effective_i[i] = (time_size - t + 1) / g_i[i]
-    return i_t, g_i, n_effective_i
+    return i_t[1:], g_i[1:], n_effective_i[1:] # We should never choose data from the first time origin as the equilibrated data
 
 
 def get_equilibration_data(timeseries_to_analyze, fast=True, max_subset=1000):
