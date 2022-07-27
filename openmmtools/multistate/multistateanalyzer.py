@@ -1164,7 +1164,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     statistical_inefficiency : float, optional
         Sub-sample rate, e.g. if the statistical_inefficiency is 10, we draw a sample every 10 iterations to get the decorrelated samples.
-        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` must be specified as well.
+        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` 
+        must be specified as well.
         Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
     max_subset : int >= 1 or None, optional, default: 100
         Argument in ``multistate.utils.get_equilibration_dat_per_sample()`` that specifies the maximum number of points in 
@@ -1196,7 +1197,8 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         super().__init__(*args, **kwargs)
 
         if statistical_inefficiency and n_equilibration_iterations is None:
-            raise Exception("Cannot specify statistical_inefficiency without n_equilibration_iterations, because otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency.")
+            raise Exception("Cannot specify statistical_inefficiency without n_equilibration_iterations, because" \
+            "otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency.")
 
         # Cached values with dependencies.
         self.unbias_restraint = unbias_restraint
@@ -2060,7 +2062,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:], max_subset=self._max_subset)
             n_effective_max = n_effective_i.max()
             i_max = n_effective_i.argmax()
-            n_equilibration = i_t[i_max] + self._n_equilibration_iterations if self._n_equilibration_iterations is not None else i_t[i_max] + t0 # if self._n_equilibration_iterations was not specified, account for initially discarded frames
+            n_equilibration = i_t[i_max] + t0 
             g_t = self._statistical_inefficiency if self._statistical_inefficiency is not None else g_i[i_max]
 
         # Store equilibration data
