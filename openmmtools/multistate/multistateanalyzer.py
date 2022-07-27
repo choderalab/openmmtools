@@ -1167,7 +1167,9 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` must be specified as well.
         Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
     max_subset : int >= 1 or None, optional, default: 100
-        Argument in ``multistate.utils.get_equilibration_dat_per_sample()`` that specifies the maximum number of points in the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_dat_per_sample()``) on which to analyze the equilibration on.
+        Argument in ``multistate.utils.get_equilibration_dat_per_sample()`` that specifies the maximum number of points in 
+        the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_dat_per_sample()``) on which 
+        to analyze the equilibration on.
     
     Attributes
     ----------
