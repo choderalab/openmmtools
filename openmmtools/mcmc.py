@@ -697,8 +697,8 @@ class BaseIntegratorMove(MCMCMove):
         # TODO: Is this still needed now that we are specifying the context?
         context, integrator = local_context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
-        #logger.debug("{}: Context obtained, platform is {}".format(
-        #    move_name, context.getPlatform().getName()))
+        # inform of platform used in current context
+        logger.debug(f"{move_name}: Integrator using {context.getPlatform().getName()} platform.")
 
         # Perform the integration.
         for attempt_counter in range(self.n_restart_attempts + 1):
