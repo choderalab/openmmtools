@@ -2055,7 +2055,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:])
             n_effective_max = n_effective_i.max()
             i_max = n_effective_i.argmax()
-            n_equilibration = self._n_equilibration_iterations if self._n_equilibration_iterations is not None else i_t[i_max] + t0 # if self._n_equilibration_iterations was not specified, account for initially discarded frames
+            n_equilibration = i_t[i_max] + self._n_equilibration_iterations if self._n_equilibration_iterations is not None else i_t[i_max] + t0 # if self._n_equilibration_iterations was not specified, account for initially discarded frames
             g_t = self._statistical_inefficiency if self._statistical_inefficiency is not None else g_i[i_max]
 
         # Store equilibration data
