@@ -1723,9 +1723,12 @@ class MultiStateReporter(object):
                 x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
                 positions = unit.Quantity(x, unit.nanometers)
 
-                # Restore velocities.
-                x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
-                velocities = unit.Quantity(x, unit.nanometer/unit.picoseconds)
+                # Restore velocities for recent versions of openmmtools (>0.21.2)
+                try:
+                    x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
+                    velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
+                except KeyError:  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
+                    pass
 
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.
