@@ -1666,6 +1666,10 @@ class MultiStateReporter(object):
              # Store velocites
             # TODO: This stores velocities as zeros if no velocities are present in the sampler state. Making restored
             #  sampler_state different from origin.
+            if 'velocities' not in storage.variables:
+                # create variable with expected dimensions and shape
+                storage.createVariable('velocities', storage.variables['positions'].dtype,
+                                       dimensions=storage.variables['positions'].dimensions)
             storage.variables['velocities'][write_iteration, :, :, :] = velocities
 
             if is_periodic:
@@ -1728,7 +1732,8 @@ class MultiStateReporter(object):
                     x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
                     velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
                 except KeyError:  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
-                    pass
+                    # pass zeros as velocities when key is not found (<0.21.3 behavior)
+                    velocities = np.zeros_like(positions)
 
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.
