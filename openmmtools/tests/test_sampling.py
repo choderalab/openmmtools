@@ -16,14 +16,13 @@ TODO
 import contextlib
 import copy
 import inspect
-import math
 import os
 import pickle
+import shutil
 import sys
 from io import StringIO
 
 import numpy as np
-import scipy.integrate
 import yaml
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
@@ -1307,6 +1306,54 @@ class TestMultiStateSampler(object):
                     assert np.allclose(original_state.positions, restored_state.positions)
                     assert np.allclose(original_state.velocities, restored_state.velocities)
 
+    def test_resume_velocities_from_legacy_storage(self):
+        """
+        This tests simulations can be resumed even if velocities are not present in the serialized/reporter file.
+
+        This emulates the behavior of reading older versions (previous to 0.21.3 release) of serialized simulations.
+        """
+        import netCDF4
+        origin_reporter_path = testsystems.get_data_filename(
+            os.path.join("data", "reporter-examples", "alanine_dipeptide_legacy.nc")
+        )
+        origin_checkpoint_path = testsystems.get_data_filename(
+            os.path.join("data", "reporter-examples", "alanine_dipeptide_legacy_checkpoint.nc")
+        )
+        # Assert no velocities in legacy dataset variables
+        netcdf_data = netCDF4.Dataset(origin_checkpoint_path)  # open checkpoint for reading
+        assert 'velocities' not in netcdf_data.variables, "velocities variable should not exist in legacy reporter " \
+                                                          "netcdf file."
+
+        with self.temporary_storage_path() as storage_path:
+            # copy files to temporary directory
+            temporary_checkpoint_path = f"{os.path.splitext(storage_path)[0]}_checkpoint.nc"
+            reporter_path = shutil.copy(origin_reporter_path, storage_path)  # copy reporter file
+            checkpoint_path = shutil.copy(origin_checkpoint_path, temporary_checkpoint_path)  # copy checkpoint file
+            # Load repex simulation
+            reporter = self.REPORTER(reporter_path, checkpoint_interval=1)
+            sampler = self.SAMPLER.from_storage(reporter)
+            # Assert velocities are initialized as zeros
+            for state in sampler.sampler_states:
+                assert np.all(state.velocities.value_in_unit_system(unit.md_unit_system) == 0), \
+                    "Velocities in sampler state from legacy checkpoint are expected to be all zeros."
+
+            # Resume simulation
+            sampler.extend(n_iterations=1)
+
+            # delete reporters and load again
+            del sampler
+            reporter.close()
+            # assert velocities variable exist
+            netcdf_data = netCDF4.Dataset(checkpoint_path)  # open checkpoint for reading
+            assert 'velocities' in netcdf_data.variables, "velocities variable should exist in new reporter " \
+                                                          "netcdf file."
+            netcdf_data.close()  # close or it errors in next line
+            # Load repex simulation from new reporter file
+            new_sampler = self.SAMPLER.from_storage(reporter)
+            # assert velocities in sampler states are non-zero
+            for state in new_sampler.sampler_states:
+                assert np.any(state.velocities.value_in_unit_system(unit.md_unit_system) != 0), \
+                    "At least some velocity in sampler state from new checkpoint is expected to different from zero."
 
     def test_last_iteration_functions(self):
         """Test that the last_iteration functions work right"""
