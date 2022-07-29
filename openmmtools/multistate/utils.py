@@ -181,7 +181,12 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
         except:
             g_i[i] = (time_size - t + 1)
         n_effective_i[i] = (time_size - t + 1) / g_i[i]
-    return i_t[1:], g_i[1:], n_effective_i[1:] # We should never choose data from the first time origin as the equilibrated data
+
+    # We should never choose data from the first time origin as the equilibrated data because 
+    # it contains snapshots warming up from minimization, which causes problems with correlation time detection
+    # By default (max_subset=100), the first 1% of the data is discarded. If 1% is not ideal, user can specify
+    # max_subset to change the percentage (e.g. if 0.5% is desired, specify max_subset=200).
+    return i_t[1:], g_i[1:], n_effective_i[1:]
 
 
 def get_equilibration_data(timeseries_to_analyze, fast=True, max_subset=1000):
