@@ -174,6 +174,15 @@ class TestHarmonicOscillatorsMultiStateSampler(TestCase):
             assert n_equilibration_iterations > 10
             del analyzer
 
+            # Create Analyzer specifying both n_equilibration_iterations and statistical_inefficiency
+            # check that it returns the user specified values without running the equilibration detection
+            analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10, statistical_inefficiency=3)
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations == 10
+            assert statistical_inefficiency == 3
+            del analyzer
+
             # Create Analyzer with defaults.
             analyzer = self.ANALYZER(reporter)
 
