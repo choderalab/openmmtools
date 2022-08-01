@@ -1727,7 +1727,8 @@ class MultiStateReporter(object):
                 x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
                 positions = unit.Quantity(x, unit.nanometers)
 
-                # Restore velocities for recent versions of openmmtools (>0.21.2)
+                # Restore velocities
+                # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
                 try:
                     x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
                     velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
