@@ -79,7 +79,7 @@ def check_thermodynamic_states_equality(original_states, restored_states):
 # ==============================================================================
 
 class TestHarmonicOscillatorsMultiStateSampler(TestCase):
-    """Test multistate sampler can compute free energies of harmonic oscillator"""
+    """Test multistate sampler can detect equilibration and compute free energies of harmonic oscillator"""
 
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
@@ -228,9 +228,11 @@ class TestHarmonicOscillatorsMultiStateSampler(TestCase):
         del simulation
 
     def test_with_unsampled_states(self):
+        """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
 
     def test_without_unsampled_states(self):
+        """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
 
 class TestHarmonicOscillatorsReplicaExchangeSampler(TestHarmonicOscillatorsMultiStateSampler):
