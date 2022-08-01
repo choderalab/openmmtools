@@ -164,6 +164,12 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             # Create Analyzer.
             analyzer = self.ANALYZER(reporter)
 
+            # Check that n_equilibration_iterations is > 1
+            energy_data = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = energy_data
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations > 1
+
             # Check if free energies have the right shape and deviations exceed tolerance
             delta_f_ij, delta_f_ij_stderr = analyzer.get_free_energy()
             nstates, _ = delta_f_ij.shape
