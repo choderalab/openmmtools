@@ -21,6 +21,7 @@ import os
 import pickle
 import sys
 from io import StringIO
+from unittest import TestCase
 
 import numpy as np
 import scipy.integrate
@@ -77,7 +78,7 @@ def check_thermodynamic_states_equality(original_states, restored_states):
 # Harmonic oscillator free energy test
 # ==============================================================================
 
-class TestHarmonicOscillatorsMultiStateSampler(object):
+class TestHarmonicOscillatorsMultiStateSampler(TestCase):
     """Test multistate sampler can compute free energies of harmonic oscillator"""
 
     # ------------------------------------
@@ -161,12 +162,23 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             logger.setLevel(logging.CRITICAL)
             simulation.run()
 
-            # Create Analyzer.
+            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and 
+            # check that it throws an exception
+            self.assertRaises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
+
+            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and 
+            # check that equilibration detection returns n_equilibration_iterations > 10
+            analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10)
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations > 10
+            del analyzer
+
+            # Create Analyzer with defaults.
             analyzer = self.ANALYZER(reporter)
 
-            # Check that n_equilibration_iterations is > 1
-            energy_data = list(analyzer._read_energies(truncate_max_n_iterations=True))
-            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = energy_data
+            # Check that default analyzer yields n_equilibration_iterations > 1
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
             n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
             assert n_equilibration_iterations > 1
 
