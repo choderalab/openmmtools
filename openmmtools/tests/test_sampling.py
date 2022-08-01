@@ -21,7 +21,6 @@ import os
 import pickle
 import sys
 from io import StringIO
-from unittest import TestCase
 
 import numpy as np
 import scipy.integrate
@@ -78,7 +77,7 @@ def check_thermodynamic_states_equality(original_states, restored_states):
 # Harmonic oscillator free energy test
 # ==============================================================================
 
-class TestHarmonicOscillatorsMultiStateSampler(TestCase):
+class TestHarmonicOscillatorsMultiStateSampler(object):
     """Test multistate sampler can detect equilibration and compute free energies of harmonic oscillator"""
 
     # ------------------------------------
@@ -164,7 +163,7 @@ class TestHarmonicOscillatorsMultiStateSampler(TestCase):
 
             # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and 
             # check that it throws an exception
-            self.assertRaises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
+            assert_raises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
 
             # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and 
             # check that equilibration detection returns n_equilibration_iterations > 10
