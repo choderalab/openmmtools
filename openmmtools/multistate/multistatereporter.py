@@ -1330,7 +1330,7 @@ class MultiStateReporter(object):
         reporter_dir, reporter_filename = os.path.split(self._storage_analysis_file_path)
         # remove extension from filename
         yaml_prefix = os.path.splitext(reporter_filename)[0]
-        output_filepath = f"{reporter_dir}/{yaml_prefix}_real_time_analysis.yaml"
+        output_filepath = os.path.join(reporter_dir, f"{yaml_prefix}_real_time_analysis.yaml")
         # Remove if it is a fresh reporter session
         if self._overwrite_statistics:
             try:
