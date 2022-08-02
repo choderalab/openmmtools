@@ -1579,8 +1579,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
             # remove extension from filename
             yaml_prefix = os.path.splitext(reporter_filename)[0]
-            output_filepath = f"{storage_dir}/{yaml_prefix}_real_time_analysis.yaml"
-            with open(f"{storage_dir}/{yaml_prefix}_real_time_analysis.yaml") as yaml_file:
+            output_filepath = os.path.join(storage_dir, f"{yaml_prefix}_real_time_analysis.yaml")
+            with open(output_filepath) as yaml_file:
                 yaml_contents = yaml.safe_load(yaml_file)
             # Make sure we get the correct number of entries
             assert len(yaml_contents) == expected_yaml_entries, \
