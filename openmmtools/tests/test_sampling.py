@@ -77,7 +77,7 @@ def check_thermodynamic_states_equality(original_states, restored_states):
 # ==============================================================================
 
 class TestHarmonicOscillatorsMultiStateSampler(object):
-    """Test multistate sampler can compute free energies of harmonic oscillator"""
+    """Test multistate sampler can detect equilibration and compute free energies of harmonic oscillator"""
 
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
@@ -160,8 +160,34 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             logger.setLevel(logging.CRITICAL)
             simulation.run()
 
-            # Create Analyzer.
+            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and 
+            # check that it throws an exception
+            assert_raises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
+
+            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and 
+            # check that equilibration detection returns n_equilibration_iterations > 10
+            analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10)
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations > 10
+            del analyzer
+
+            # Create Analyzer specifying both n_equilibration_iterations and statistical_inefficiency
+            # check that it returns the user specified values without running the equilibration detection
+            analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10, statistical_inefficiency=3)
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations == 10
+            assert statistical_inefficiency == 3
+            del analyzer
+
+            # Create Analyzer with defaults.
             analyzer = self.ANALYZER(reporter)
+
+            # Check that default analyzer yields n_equilibration_iterations > 1
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations > 1
 
             # Check if free energies have the right shape and deviations exceed tolerance
             delta_f_ij, delta_f_ij_stderr = analyzer.get_free_energy()
@@ -200,9 +226,11 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
         del simulation
 
     def test_with_unsampled_states(self):
+        """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
 
     def test_without_unsampled_states(self):
+        """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
 
 class TestHarmonicOscillatorsReplicaExchangeSampler(TestHarmonicOscillatorsMultiStateSampler):
