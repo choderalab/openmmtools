@@ -6,8 +6,7 @@ Release History
 
 Changed behaviors
 -----------------
-- ``LangevinDynamicsMove`` now uses ``openmm.LangevinMiddleIntegrator`` (a BAOAB integrator) instead of ``openmm.LangevinIntegrator`` (an OBABO integrator).
-    (`Issue #599 <https://github.com/choderalab/openmmtools/issues/579>`_) (`PR #600 <https://github.com/choderalab/openmmtools/pull/5600>`_)
+- ``LangevinDynamicsMove`` now uses ``openmm.LangevinMiddleIntegrator`` (a BAOAB integrator) instead of ``openmm.LangevinIntegrator`` (an OBABO integrator). Issue `#599 <https://github.com/choderalab/openmmtools/issues/579>`_ (PR `#600 <https://github.com/choderalab/openmmtools/pull/5600>`_).
 
 Bugfixes
 --------
