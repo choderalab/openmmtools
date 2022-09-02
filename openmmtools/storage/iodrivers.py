@@ -22,6 +22,7 @@ import yaml
 import warnings
 import importlib
 import collections
+from collections.abc import Iterable
 import numpy as np
 import netCDF4 as nc
 from sys import getsizeof
@@ -1332,7 +1333,7 @@ class NCIterable(NCVariableCodec):
     """
     @property
     def dtype(self):
-        return collections.Iterable
+        return Iterable
 
     @staticmethod
     def dtype_string():
