@@ -7,6 +7,8 @@ requirements_file: null
 
 build:
   image: latest
+  tools:
+    python: mambaforge-4.10
 
 python:
   version: 3.6
