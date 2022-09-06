@@ -28,3 +28,8 @@ dependencies:
   - nose-timer
   - pytest
   - pytest-cov
+  
+  # docs
+  - numpydoc
+  - sphinxcontrib-bibtex
+  
