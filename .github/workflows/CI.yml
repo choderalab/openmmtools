@@ -60,7 +60,7 @@ jobs:
         run: |
           conda install --yes -c omnia-dev openmm
 
-      - name: Install OpenMM nightly
+      - name: Install OpenMM beta
         shell: bash -l {0}
         if: matrix.cfg.openmm == 'beta'
         run: |
