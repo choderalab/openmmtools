@@ -6,13 +6,21 @@ Release History
 
 Changed behaviors
 -----------------
--   ``LangevinDynamicsMove`` now uses ``openmm.LangevinMiddleIntegrator`` (a BAOAB integrator) instead of `openmm.LangevinIntegrator`` (an OBABO integrator).
-    (`Issue #599 <https://github.com/choderalab/openmmtools/issues/579>`_) (`PR #600 <https://github.com/choderalab/openmmtools/pull/5600>`_)
+- ``LangevinDynamicsMove`` now uses ``openmm.LangevinMiddleIntegrator`` (a BAOAB integrator) instead of ``openmm.LangevinIntegrator`` (an OBABO integrator). Issue `#599 <https://github.com/choderalab/openmmtools/issues/579>`_ (PR `#600 <https://github.com/choderalab/openmmtools/pull/5600>`_).
 
 Bugfixes
 --------
-- Bug in returning velocities when propagating replicas. Fixed by using ``ignore_velocities=False`` in ``_propagate_replica``. Issue `#531 <https://github.com/choderalab/openmmtools/issues/531>`_ (PR `#602 <https://github.com/choderalab/openmmtools/pull/602>`_).
+- Velocities were being incorrectly updated as zeros when resuming simulations or broadcasting from different mpi processes. Fixed by specifying ``ignore_velocities=False`` in ``_propagate_replica``. Issue `#531 <https://github.com/choderalab/openmmtools/issues/531>`_ (PR `#602 <https://github.com/choderalab/openmmtools/pull/602>`_).
+- Bug in equilibration detection #1: The user was allowed to specify ``statistical_inefficiency`` without specifying ``n_equilibration_iterations``, which doesn't make sense, as ``n_equilibration_iterations`` and ``n_effective_max`` cannot be computed from ``statistical_inefficiency`` alone. Fixed by preventing user from specifying ``statistical_inefficiency`` without ``n_equilibration_iterations``. Issue `#609 <https://github.com/choderalab/openmmtools/issues/609>`_ (PR `#610 <https://github.com/choderalab/openmmtools/pull/610>`_). 
+- Bug in equilibration detection #2: If the user specified ``n_equilibration_iterations`` but not ``statistical_inefficiency``, the returned ``n_equilibration_iterations`` did not include number of equilibration iterations as computed from ``_get_equilibration_data_per_sample()``. Fixed by always including the ``_get_equilibration_data_per_sample()`` result in  in the returned ``n_equilibration_iterations``. Issue `#609 <https://github.com/choderalab/openmmtools/issues/609>`_ (PR `#610 <https://github.com/choderalab/openmmtools/pull/610>`_).
+- Bug in equilibration detection #3: ``get_equilibration_data_per_sample`` returns 0 for ``n_equilibration_iterations``. Fixed by always discarding the first time origin returned by ``get_equilibration_data_per_sample``. To control the amount of data discarded by the first time origin, the user can now specify ``max_subset`` when initializing ``MultiStateSamplerAnalyzer``. Issue `#609 <https://github.com/choderalab/openmmtools/issues/609>`_ (PR `#610 <https://github.com/choderalab/openmmtools/pull/610>`_).
+- Deserializing simulations from ``openmmtools<0.21.3`` versions resulted in error. Fixed by catching the missing key, ``KeyError`` exception, when deserializing. Issue `#612 <https://github.com/choderalab/openmmtools/issues/612>`_, PR `#613 <https://github.com/choderalab/openmmtools/pull/613>`_.
+- Not specifying a subdirectory for the reporter file resulted in ``PermissionError`` when writing the real time analysis file. Fixed by using ``os.path.join`` for creating the output paths. Issue `#615 <https://github.com/choderalab/openmmtools/issues/615>`_, PR `#616 <https://github.com/choderalab/openmmtools/pull/616>`_.
 
+Enhancements
+------------
+- ``LangevinDynamicsMove`` now allows ``constraint_tolerance`` parameter and public attribute, for specifying the fraction of the constrained distance within which constraints are maintained for the integrator (Refer to `Openmm's documentation <http://docs.openmm.org/latest/api-python/generated/openmm.openmm.LangevinMiddleIntegrator.html#openmm.openmm.LangevinMiddleIntegrator.setConstraintTolerance>`_ for more information). Issue `#608 <https://github.com/choderalab/openmmtools/issues/608>`_, PR `#611 <https://github.com/choderalab/openmmtools/pull/611>`_.
+- Platform is now reported in the logs in DEBUG mode. Issue `#583 <https://github.com/choderalab/openmmtools/issues/583>`_, PR `#605 <https://github.com/choderalab/openmmtools/pull/605>`_.
 
 0.21.4 - Bugfix release
 =======================

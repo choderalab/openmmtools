@@ -113,6 +113,9 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
     This is different than saying "I want analysis done every X for total points Y = len(timeseries)/X",
     this is "I want Y total analysis points"
 
+    Note that the returned arrays will be of size max_subset - 1, because we always discard data from the first time 
+    origin due to equilibration.
+
     See the ``pymbar.timeseries.detectEquilibration`` function for full algorithm documentation
 
     Parameters
@@ -121,8 +124,9 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
         1-D timeseries to analyze for equilibration
     max_subset : int >= 1 or None, optional, default: 100
         Maximum number of points in the ``timeseries_to_analyze`` on which to analyze the equilibration on.
-        These are distributed uniformly over the timeseries so the final output will be size max_subset where indices
-        are placed  approximately every ``(len(timeseries_to_analyze) - 1) / max_subset``.
+        These are distributed uniformly over the timeseries so the final output (after discarding the first point 
+        due to equilibration) will be size max_subset - 1 where indices are placed  approximately every 
+        ``(len(timeseries_to_analyze) - 1) / max_subset``.
         The full timeseries is used if the timeseries is smaller than ``max_subset`` or if ``max_subset`` is None
     fast : bool, optional. Default: True
         If True, will use faster (but less accurate) method to estimate correlation time
@@ -177,7 +181,12 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
         except:
             g_i[i] = (time_size - t + 1)
         n_effective_i[i] = (time_size - t + 1) / g_i[i]
-    return i_t, g_i, n_effective_i
+
+    # We should never choose data from the first time origin as the equilibrated data because 
+    # it contains snapshots warming up from minimization, which causes problems with correlation time detection
+    # By default (max_subset=100), the first 1% of the data is discarded. If 1% is not ideal, user can specify
+    # max_subset to change the percentage (e.g. if 0.5% is desired, specify max_subset=200).
+    return i_t[1:], g_i[1:], n_effective_i[1:]
 
 
 def get_equilibration_data(timeseries_to_analyze, fast=True, max_subset=1000):

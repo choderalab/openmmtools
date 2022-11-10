@@ -1056,6 +1056,9 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
+    constraint_tolerance : float, optional
+        Fraction of the constrained distance within which constraints are maintained for the
+        integrator (default is 1e-8).
 
     Attributes
     ----------
@@ -1069,6 +1072,9 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     reassign_velocities : bool
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move.
+    constraint_tolerance : float
+        Fraction of the constrained distance within which constraints are maintained for the
+        integrator.
 
     Examples
     --------
@@ -1112,12 +1118,13 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
-                 n_steps=1000, reassign_velocities=False, **kwargs):
+                 n_steps=1000, reassign_velocities=False, constraint_tolerance=1e-8, **kwargs):
         super(LangevinDynamicsMove, self).__init__(n_steps=n_steps,
                                                    reassign_velocities=reassign_velocities,
                                                    **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
+        self.constraint_tolerance = constraint_tolerance
 
     def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the Langevin dynamics MCMC move.
@@ -1143,17 +1150,21 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
+        serialization['constraint_tolerance'] = self.constraint_tolerance
         return serialization
 
     def __setstate__(self, serialization):
         super(LangevinDynamicsMove, self).__setstate__(serialization)
         self.timestep = serialization['timestep']
         self.collision_rate = serialization['collision_rate']
+        self.constraint_tolerance = serialization['constraint_tolerance']
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
-        return openmm.LangevinMiddleIntegrator(thermodynamic_state.temperature,
-                                               self.collision_rate, self.timestep)
+        integrator = openmm.LangevinMiddleIntegrator(thermodynamic_state.temperature,
+                                                     self.collision_rate, self.timestep)
+        integrator.setConstraintTolerance(self.constraint_tolerance)
+        return integrator
 
 
 class LangevinSplittingDynamicsMove(LangevinDynamicsMove):

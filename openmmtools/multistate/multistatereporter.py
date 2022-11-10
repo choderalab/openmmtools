@@ -1330,7 +1330,7 @@ class MultiStateReporter(object):
         reporter_dir, reporter_filename = os.path.split(self._storage_analysis_file_path)
         # remove extension from filename
         yaml_prefix = os.path.splitext(reporter_filename)[0]
-        output_filepath = f"{reporter_dir}/{yaml_prefix}_real_time_analysis.yaml"
+        output_filepath = os.path.join(reporter_dir, f"{yaml_prefix}_real_time_analysis.yaml")
         # Remove if it is a fresh reporter session
         if self._overwrite_statistics:
             try:
@@ -1666,6 +1666,10 @@ class MultiStateReporter(object):
              # Store velocites
             # TODO: This stores velocities as zeros if no velocities are present in the sampler state. Making restored
             #  sampler_state different from origin.
+            if 'velocities' not in storage.variables:
+                # create variable with expected dimensions and shape
+                storage.createVariable('velocities', storage.variables['positions'].dtype,
+                                       dimensions=storage.variables['positions'].dimensions)
             storage.variables['velocities'][write_iteration, :, :, :] = velocities
 
             if is_periodic:
@@ -1723,9 +1727,14 @@ class MultiStateReporter(object):
                 x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
                 positions = unit.Quantity(x, unit.nanometers)
 
-                # Restore velocities.
-                x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
-                velocities = unit.Quantity(x, unit.nanometer/unit.picoseconds)
+                # Restore velocities
+                # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
+                try:
+                    x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
+                    velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
+                except KeyError:  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
+                    # pass zeros as velocities when key is not found (<0.21.3 behavior)
+                    velocities = np.zeros_like(positions)
 
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.

@@ -16,14 +16,13 @@ TODO
 import contextlib
 import copy
 import inspect
-import math
 import os
 import pickle
+import shutil
 import sys
 from io import StringIO
 
 import numpy as np
-import scipy.integrate
 import yaml
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
@@ -78,7 +77,7 @@ def check_thermodynamic_states_equality(original_states, restored_states):
 # ==============================================================================
 
 class TestHarmonicOscillatorsMultiStateSampler(object):
-    """Test multistate sampler can compute free energies of harmonic oscillator"""
+    """Test multistate sampler can detect equilibration and compute free energies of harmonic oscillator"""
 
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
@@ -161,8 +160,34 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             logger.setLevel(logging.CRITICAL)
             simulation.run()
 
-            # Create Analyzer.
+            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and 
+            # check that it throws an exception
+            assert_raises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
+
+            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and 
+            # check that equilibration detection returns n_equilibration_iterations > 10
+            analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10)
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations > 10
+            del analyzer
+
+            # Create Analyzer specifying both n_equilibration_iterations and statistical_inefficiency
+            # check that it returns the user specified values without running the equilibration detection
+            analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10, statistical_inefficiency=3)
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations == 10
+            assert statistical_inefficiency == 3
+            del analyzer
+
+            # Create Analyzer with defaults.
             analyzer = self.ANALYZER(reporter)
+
+            # Check that default analyzer yields n_equilibration_iterations > 1
+            sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
+            n_equilibration_iterations, statistical_inefficiency, n_effective_max = analyzer._get_equilibration_data(sampled_energy_matrix, neighborhoods, replicas_state_indices)
+            assert n_equilibration_iterations > 1
 
             # Check if free energies have the right shape and deviations exceed tolerance
             delta_f_ij, delta_f_ij_stderr = analyzer.get_free_energy()
@@ -201,9 +226,11 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
         del simulation
 
     def test_with_unsampled_states(self):
+        """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
 
     def test_without_unsampled_states(self):
+        """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
 
 class TestHarmonicOscillatorsReplicaExchangeSampler(TestHarmonicOscillatorsMultiStateSampler):
@@ -552,9 +579,8 @@ class TestReporter(object):
 # TEST MULTISTATE SAMPLERS
 # ==============================================================================
 
-class TestMultiStateSampler(object):
-    """Base test suite for the multi-state classes"""
-
+class TestBaseMultistateSampler(object):
+    """Minimal Base class to test sampler objects"""
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
     # ------------------------------------
@@ -564,6 +590,54 @@ class TestMultiStateSampler(object):
     SAMPLER = MultiStateSampler
     REPORTER = MultiStateReporter
 
+    @staticmethod
+    @contextlib.contextmanager
+    def temporary_storage_path():
+        """Generate a storage path in a temporary folder and share it.
+
+        It makes it possible to run tests on multiple nodes with MPI.
+
+        """
+        mpicomm = mpiplus.get_mpicomm()
+        with temporary_directory() as tmp_dir_path:
+            storage_file_path = os.path.join(tmp_dir_path, 'test_storage.nc')
+            if mpicomm is not None:
+                storage_file_path = mpicomm.bcast(storage_file_path, root=0)
+            yield storage_file_path
+
+    @staticmethod
+    @contextlib.contextmanager
+    def captured_output():
+        new_out, new_err = StringIO(), StringIO()
+        old_out, old_err = sys.stdout, sys.stderr
+        try:
+            sys.stdout, sys.stderr = new_out, new_err
+            yield sys.stdout, sys.stderr
+        finally:
+            sys.stdout, sys.stderr = old_out, old_err
+
+    @staticmethod
+    def property_creator(name, on_disk_name, value, on_disk_value):
+        """
+        Helper to create additional properties to create for checking
+
+        Makes a nested dict where the top key is the 'name', with one
+        value as a dict where the sub-dict is of the form:
+        {'value': value,
+         'on_disk_name': on_disk_name,
+         'on_disk_value': on_disk_value
+        }
+        """
+        return {name: {
+
+            'value': value,
+            'on_disk_value': on_disk_value,
+            'on_disk_name': on_disk_name
+        }}
+
+
+class TestMultiStateSampler(TestBaseMultistateSampler):
+    """Base test suite for the multi-state classes"""
     # --------------------------------------
     # Optional helper function to overwrite.
     # --------------------------------------
@@ -680,21 +754,6 @@ class TestMultiStateSampler(object):
         print("#" * len_output)
 
     @staticmethod
-    @contextlib.contextmanager
-    def temporary_storage_path():
-        """Generate a storage path in a temporary folder and share it.
-
-        It makes it possible to run tests on multiple nodes with MPI.
-
-        """
-        mpicomm = mpiplus.get_mpicomm()
-        with temporary_directory() as tmp_dir_path:
-            storage_file_path = os.path.join(tmp_dir_path, 'test_storage.nc')
-            if mpicomm is not None:
-                storage_file_path = mpicomm.bcast(storage_file_path, root=0)
-            yield storage_file_path
-
-    @staticmethod
     def get_node_replica_ids(tot_n_replicas):
         """Return the indices of the replicas that this node is responsible for."""
         mpicomm = mpiplus.get_mpicomm()
@@ -703,35 +762,6 @@ class TestMultiStateSampler(object):
         else:
             return set(range(mpicomm.rank, tot_n_replicas, mpicomm.size))
 
-    @staticmethod
-    @contextlib.contextmanager
-    def captured_output():
-        new_out, new_err = StringIO(), StringIO()
-        old_out, old_err = sys.stdout, sys.stderr
-        try:
-            sys.stdout, sys.stderr = new_out, new_err
-            yield sys.stdout, sys.stderr
-        finally:
-            sys.stdout, sys.stderr = old_out, old_err
-
-    @staticmethod
-    def property_creator(name, on_disk_name, value, on_disk_value):
-        """
-        Helper to create additional properties to create for checking
-
-        Makes a nested dict where the top key is the 'name', with one
-        value as a dict where the sub-dict is of the form:
-        {'value': value,
-         'on_disk_name': on_disk_name,
-         'on_disk_value': on_disk_value
-        }
-        """
-        return {name: {
-
-            'value': value,
-            'on_disk_value': on_disk_value,
-            'on_disk_name': on_disk_name
-        }}
 
     def test_create(self):
         """Test creation of a new MultiState simulation.
@@ -1549,8 +1579,8 @@ class TestMultiStateSampler(object):
             storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
             # remove extension from filename
             yaml_prefix = os.path.splitext(reporter_filename)[0]
-            output_filepath = f"{storage_dir}/{yaml_prefix}_real_time_analysis.yaml"
-            with open(f"{storage_dir}/{yaml_prefix}_real_time_analysis.yaml") as yaml_file:
+            output_filepath = os.path.join(storage_dir, f"{yaml_prefix}_real_time_analysis.yaml")
+            with open(output_filepath) as yaml_file:
                 yaml_contents = yaml.safe_load(yaml_file)
             # Make sure we get the correct number of entries
             assert len(yaml_contents) == expected_yaml_entries, \
@@ -1888,6 +1918,62 @@ class TestParallelTempering(TestMultiStateSampler):
                     energies[i][j] = state.reduced_potential(context)
         return energy_thermodynamic_states, energy_unsampled_states
 
+
+class TestSerializedMultiStateSampler(TestBaseMultistateSampler):
+    """
+    Test suite for serialized MultiStateSampler objects.
+
+    Requires a different class because serialized objects are not fully compatible between different classes.
+    """
+
+    def test_resume_velocities_from_legacy_storage(self):
+        """
+        This tests simulations can be resumed even if velocities are not present in the serialized/reporter file.
+
+        This emulates the behavior of reading older versions (previous to 0.21.3 release) of serialized simulations.
+        """
+        import netCDF4
+        origin_reporter_path = testsystems.get_data_filename(
+            os.path.join("data", "reporter-examples", "alanine_dipeptide_legacy.nc")
+        )
+        origin_checkpoint_path = testsystems.get_data_filename(
+            os.path.join("data", "reporter-examples", "alanine_dipeptide_legacy_checkpoint.nc")
+        )
+        # Assert no velocities in legacy dataset variables
+        netcdf_data = netCDF4.Dataset(origin_checkpoint_path)  # open checkpoint for reading
+        assert 'velocities' not in netcdf_data.variables, "velocities variable should not exist in legacy reporter " \
+                                                          "netcdf file."
+
+        with self.temporary_storage_path() as storage_path:
+            # copy files to temporary directory
+            temporary_checkpoint_path = f"{os.path.splitext(storage_path)[0]}_checkpoint.nc"
+            reporter_path = shutil.copy(origin_reporter_path, storage_path)  # copy reporter file
+            checkpoint_path = shutil.copy(origin_checkpoint_path, temporary_checkpoint_path)  # copy checkpoint file
+            # Load repex simulation
+            reporter = self.REPORTER(reporter_path, checkpoint_interval=1)
+            sampler = self.SAMPLER.from_storage(reporter)
+            # Assert velocities are initialized as zeros
+            for state in sampler.sampler_states:
+                assert np.all(state.velocities.value_in_unit_system(unit.md_unit_system) == 0), \
+                    "Velocities in sampler state from legacy checkpoint are expected to be all zeros."
+
+            # Resume simulation
+            sampler.extend(n_iterations=1)
+
+            # delete reporters and load again
+            del sampler
+            reporter.close()
+            # assert velocities variable exist
+            netcdf_data = netCDF4.Dataset(checkpoint_path)  # open checkpoint for reading
+            assert 'velocities' in netcdf_data.variables, "velocities variable should exist in new reporter " \
+                                                          "netcdf file."
+            netcdf_data.close()  # close or it errors in next line
+            # Load repex simulation from new reporter file
+            new_sampler = self.SAMPLER.from_storage(reporter)
+            # assert velocities in sampler states are non-zero
+            for state in new_sampler.sampler_states:
+                assert np.any(state.velocities.value_in_unit_system(unit.md_unit_system) != 0), \
+                    "At least some velocity in sampler state from new checkpoint is expected to different from zero."
 
 # ==============================================================================
 # MAIN AND TESTS
