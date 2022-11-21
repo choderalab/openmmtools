@@ -1,4 +1,4 @@
-name: test
+name: openmmtools-test
 channels:
   - conda-forge
   - defaults

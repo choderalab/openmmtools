@@ -36,9 +36,14 @@ except ImportError:  # OpenMM < 7.6
     from simtk import openmm
     import simtk.unit as units
 from scipy.special import logsumexp
-from pymbar import MBAR, timeseries
+from pymbar import MBAR
 
 from openmmtools import multistate, utils, forces
+from openmmtools.multistate.pymbar import (
+    _pymbar_bar,
+    statistical_inefficiency_multiple,
+    subsample_correlated_data,
+)
 
 
 ABC = abc.ABC
@@ -1286,7 +1291,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         # states[n][k] is the state index of replica k at iteration n, but
         # the functions wants a list of timeseries states[k][n].
         states_kn = np.transpose(states[number_equilibrated:self.max_n_iterations,])
-        g = timeseries.statisticalInefficiencyMultiple(states_kn)
+        g = statistical_inefficiency_multiple(states_kn)
 
         return self._MixingStatistics(transition_matrix=t_ij, eigenvalues=mu,
                                       statistical_inefficiency=g)
@@ -1915,11 +1920,13 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         logger.debug("Computing covariance matrix...")
 
         try:
-            # pymbar 2
-            (Deltaf_ij, dDeltaf_ij) = self.mbar.getFreeEnergyDifferences()
-        except ValueError:
             # pymbar 3
             (Deltaf_ij, dDeltaf_ij, _) = self.mbar.getFreeEnergyDifferences()
+        except AttributeError:
+            # pymbar 4
+            results = self.mbar.compute_free_energy_differences()
+            Deltaf_ij = results['Delta_f']
+            dDeltaf_ij = results['dDelta_f']
 
         # Matrix of free energy differences
         logger.debug("Deltaf_ij:")
@@ -2192,7 +2199,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         if self.use_full_trajectory:
             return np.arange(self.max_n_iterations + 1, dtype=int)
         equilibrium_iterations = np.array(range(self.n_equilibration_iterations, self.max_n_iterations + 1))
-        decorrelated_iterations_indices = timeseries.subsampleCorrelatedData(equilibrium_iterations,
+        decorrelated_iterations_indices = subsample_correlated_data(equilibrium_iterations,
                                                                              self.statistical_inefficiency)
         return equilibrium_iterations[decorrelated_iterations_indices]
 

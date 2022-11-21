@@ -21,18 +21,16 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { os: macOS-latest,   python-version: '3.8', openmm: latest  }
-          - { os: windows-latest, python-version: '3.8.10', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
-          - { os: ubuntu-latest,  python-version: '3.10', openmm: latest  }
-
-    env:
-      OPENMM: ${{ matrix.cfg.openmm }}
+          - { os: macOS-latest,   python-version: '3.8', openmm: latest, pymbar: '3' }
+          - { os: windows-latest, python-version: '3.8.10', openmm: latest , pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest , pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest , pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly, pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.10', openmm: latest, pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest, pymbar: '4' }
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v2
 
       - name: Additional info about the build
         shell: bash
@@ -58,6 +56,11 @@ jobs:
         run: |
           conda install --yes -c omnia-dev openmm
 
+      - name: Install pymbar 4
+        shell: bash -l {0}
+        if: matrix.cfg.pymbar == '4'
+          conda install "pymbar=4" --yes -c omnia-dev openmm -c conda-forge
+
       - name: Install package
         shell: bash -l {0}
         run: |
@@ -71,7 +74,7 @@ jobs:
           nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
           flags: unittests

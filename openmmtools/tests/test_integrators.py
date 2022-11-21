@@ -15,7 +15,7 @@ Test custom integrators.
 
 import copy
 import inspect
-import pymbar
+from openmmtools.multistate.pymbar import _pymbar_bar
 
 from unittest import TestCase
 
@@ -789,9 +789,15 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
         del context
         del compound_integrator
 
-    dF, ddF = pymbar.BAR(work['forward'], work['reverse'])
-    nsigma = np.abs(dF - dF_analytical) / ddF
-    print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
+    results = _pymbar_bar(work['forward'], work['reverse'])
+    nsigma = np.abs(results['Delta_f'] - dF_analytical) / results['dDelta_f']
+
+    print(
+        "analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(
+            dF_analytical, results['Delta_f'], results['dDelta_f'], nsigma,
+        )
+    )
+
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
@@ -939,10 +945,15 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     print(np.array(forward_works).std())
     print(np.array(reverse_works).std())
 
-    dF, ddF = pymbar.BAR(np.array(forward_works), np.array(reverse_works))
-    nsigma = np.abs(dF - dF_analytical) / ddF
+    results = _pymbar_bar(np.array(forward_works), np.array(reverse_works))
+    nsigma = np.abs(results['Delta_f'] - dF_analytical) / results['dDelta_f']
     assert np.isclose(integrator.getGlobalVariableByName("lambda"), 0.0)
-    print("analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(dF_analytical, dF, ddF, nsigma))
+    print(
+        "analytical DeltaF: {:12.4f}, DeltaF: {:12.4f}, dDeltaF: {:12.4f}, nsigma: {:12.1f}".format(
+            dF_analytical, results['Delta_f'], results['dDelta_f'], nsigma,
+        )
+    )
+
     if nsigma > NSIGMA_MAX:
         raise Exception(f"The free energy difference for the nonequilibrium switching for splitting {splitting} is not zero within statistical error.")
 

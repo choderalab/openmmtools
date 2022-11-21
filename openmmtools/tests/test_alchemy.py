@@ -30,6 +30,7 @@ from nose.plugins.attrib import attr
 from openmmtools import testsystems, forces
 from openmmtools.constants import kB
 from openmmtools.alchemy import *
+from openmmtools.multistate.pymbar import subsample_correlated_data, detect_equilibration, exp
 
 logger = logging.getLogger(__name__)
 
@@ -1153,13 +1154,12 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
 
     # Discard data to equilibration and subsample.
     du_n = np.array(data['du_n'])
-    from pymbar import timeseries, EXP
-    t0, g, Neff = timeseries.detectEquilibration(du_n)
-    indices = timeseries.subsampleCorrelatedData(du_n, g=g)
+    t0, g, Neff = detect_equilibration(du_n)
+    indices = subsample_correlated_data(du_n, g=g)
     du_n = du_n[indices]
 
     # Compute statistics.
-    DeltaF, dDeltaF = EXP(du_n)
+    DeltaF, dDeltaF = exp(du_n)
 
     # Raise an exception if the error is larger than 3kT.
     MAX_DEVIATION = 3.0  # kT
