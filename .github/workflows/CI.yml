@@ -15,19 +15,19 @@ on:
 
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
+    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}, pymbar ${{ matrix.cfg.pymbar }}
     runs-on: ${{ matrix.cfg.os }}
     strategy:
       fail-fast: false
       matrix:
         cfg:
-          - { os: macOS-latest,   python-version: '3.8', openmm: latest, pymbar: '3' }
-          - { os: windows-latest, python-version: '3.8.10', openmm: latest , pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest , pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest , pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly, pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.10', openmm: latest, pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest, pymbar: '4' }
+          - { os: macOS-latest,   python-version: '3.8',    openmm: latest,  pymbar: '3' }
+          - { os: windows-latest, python-version: '3.8.10', openmm: latest,  pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.8',    openmm: latest,  pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.9',    openmm: latest,  pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.8',    openmm: nightly, pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.10',   openmm: latest,  pymbar: '3' }
+          - { os: ubuntu-latest,  python-version: '3.8',    openmm: latest,  pymbar: '4' }
 
     steps:
       - uses: actions/checkout@v2
