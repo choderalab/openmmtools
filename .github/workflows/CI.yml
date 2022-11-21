@@ -59,6 +59,7 @@ jobs:
       - name: Install pymbar 4
         shell: bash -l {0}
         if: matrix.cfg.pymbar == '4'
+        run: |
           conda install "pymbar=4" --yes -c omnia-dev openmm -c conda-forge
 
       - name: Install package
