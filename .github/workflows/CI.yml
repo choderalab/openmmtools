@@ -27,6 +27,7 @@ jobs:
           - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
           - { os: ubuntu-latest,  python-version: '3.10', openmm: latest  }
+          - { os: ubuntu-latest,  python-version: '3.10', openmm: beta  }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
@@ -51,6 +52,12 @@ jobs:
           auto-update-conda: true
           auto-activate-base: false
           show-channel-urls: true
+
+      - name: Install OpenMM beta
+        if: matrix.cfg.openmm == 'beta'
+        shell: bash -l {0}
+        run: |
+          conda install -c conda-forge/label/openmm_dev -c conda-forge openmm
 
       - name: Install OpenMM nightly
         shell: bash -l {0}
