@@ -305,15 +305,28 @@ class NNPCompatibilityMixin(object):
     def setup(self, n_states, mixed_system, 
               init_positions, temperature, storage_kwargs, 
               n_replicas=None, lambda_schedule=None, 
-              lambda_protocol=None, **unused_kwargs):
+              lambda_protocol=None, setup_equilibration_intervals=None,
+              steps_per_setup_equilibration_interval=None,
+              **unused_kwargs):
+        """try to gently equilibrate the setup of the different thermodynamic states;
+        make the number of `setup_equilibration_intervals` some multiple of `n_states`.
+        The number of initial equilibration steps will be equal to
+        `setup_equilibration_intervals * steps_per_setup_equilibration_interval`
+        """
         from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
         from openmmtools.alchemy import NNPAlchemicalState
         from copy import deepcopy
         from openmmtools.multistate import MultiStateReporter
+        from openmmtools.utils import get_fastest_platform
+        from openmmtools import cache
+        platform = get_fastest_platform(minimum_precision='mixed')
+        context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 
         lambda_zero_alchemical_state = NNPAlchemicalState.from_system(mixed_system)
-        thermostate = ThermodynamicState(mixed_system, temperature=temperature)
-        compound_thermostate = CompoundThermodynamicState(thermostate, composable_states=[lambda_zero_alchemical_state])
+        thermostate = ThermodynamicState(mixed_system,
+            temperature=temperature)
+        compound_thermostate = CompoundThermodynamicState(thermostate,
+            composable_states=[lambda_zero_alchemical_state])
         thermostate_list, sampler_state_list = [], []
         if n_replicas is None:
             n_replicas = n_states
@@ -327,6 +340,14 @@ class NNPCompatibilityMixin(object):
             assert len(lambda_schedule) == n_states
             assert np.isclose(lambda_schedule[0], 0.)
             assert np.isclose(lambda_schedule[-1], 1.)
+
+        if setup_equilibration_intervals is not None:
+            # attempt to gently equilibrate
+            assert setup_equilibration_intervals % n_states == 0, f"""
+              the number of `n_states` must be divisible into `setup_equilibration_intervals`"""
+            interval_stepper = setup_equilibration_intervals // n_states
+        else:
+            raise Exception(f"At present, we require setup equilibration interval work.")
         
         if lambda_protocol is None:
             from openmmtools.alchemy import NNPProtocol
@@ -336,12 +357,30 @@ class NNPCompatibilityMixin(object):
                                       is allowed until the `lambda_protocol` class is appropriately generalized""")
         
         init_sampler_state = SamplerState(init_positions, box_vectors = mixed_system.getDefaultPeriodicBoxVectors())
+
+        # first, a context, integrator to equilibrate and minimize state 0
+        eq_context, eq_integrator = context_cache.get_context(deepcopy(compound_thermostate),
+                                                              openmm.LangevinMiddleIntegrator(temperature, 1., 0.001))
+        openmm.LocalEnergyMinimizer.minimize(eq_context)
+        init_sampler_state.update_from_context(eq_context)
+        eq_context.setVelocitiesToTemperature(temperature)
+
         logger.info(f"making lambda states...")
-        for lambda_val in lambda_schedule:
-            compound_thermostate_copy = deepcopy(compound_thermostate)
-            compound_thermostate_copy.set_alchemical_parameters(lambda_val, lambda_protocol)
-            thermostate_list.append(compound_thermostate_copy)
-            sampler_state_list.append(deepcopy(init_sampler_state))
-        
+        lambda_subinterval_schedule = np.linspace(0., 1., setup_equilibration_intervals)
+        for lambda_subinterval in lambda_subinterval_schedule:
+            compound_thermostate_copy = deepcopy(compound_thermostate) # copy thermostate
+            compound_thermostate_copy.set_alchemical_parameters(lambda_subinterval, lambda_protocol) # update thermostate
+            compound_thermostate_copy.apply_to_context(eq_context) # apply new alch val to context
+            eq_integrator.step(steps_per_setup_equilibration_interval) # step the integrator
+            init_sampler_state.update_from_context(eq_context) # update sampler_state
+
+            matchers = [np.isclose(lambda_subinterval, i) for i in lambda_schedule]
+            if any(matchers): # if the lambda subinterval is in the lambda protocol, add thermostate and sampler state
+                thermostate_list.append(compound_thermostate_copy)
+                sampler_state_list.append(deepcopy(init_sampler_state))
+
+        # put context, integrator into garbage collector
+        del eq_context
+        del eq_integrator
         reporter = MultiStateReporter(**storage_kwargs)
         self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=reporter)
