@@ -313,6 +313,8 @@ class NNPCompatibilityMixin(object):
         The number of initial equilibration steps will be equal to
         `setup_equilibration_intervals * steps_per_setup_equilibration_interval`
         """
+        import openmm
+        from openmm import unit
         from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
         from openmmtools.alchemy import NNPAlchemicalState
         from copy import deepcopy
@@ -361,13 +363,16 @@ class NNPCompatibilityMixin(object):
         # first, a context, integrator to equilibrate and minimize state 0
         eq_context, eq_integrator = context_cache.get_context(deepcopy(compound_thermostate),
                                                               openmm.LangevinMiddleIntegrator(temperature, 1., 0.001))
-        openmm.LocalEnergyMinimizer.minimize(eq_context)
-        init_sampler_state.update_from_context(eq_context)
-        eq_context.setVelocitiesToTemperature(temperature)
+        init_sampler_state.apply_to_context(eq_context) # don't forget to set particle positions, bvs
+        openmm.LocalEnergyMinimizer.minimize(eq_context) # don't forget to minimize
+        init_sampler_state.update_from_context(eq_context) # update from context for good measure
+        eq_context.setVelocitiesToTemperature(temperature) # set velocities at appropriate temperature
 
         logger.info(f"making lambda states...")
         lambda_subinterval_schedule = np.linspace(0., 1., setup_equilibration_intervals)
+        print(f"running thermolist population...")
         for lambda_subinterval in lambda_subinterval_schedule:
+            print(f"running lambda subinterval {lambda_subinterval}.")
             compound_thermostate_copy = deepcopy(compound_thermostate) # copy thermostate
             compound_thermostate_copy.set_alchemical_parameters(lambda_subinterval, lambda_protocol) # update thermostate
             compound_thermostate_copy.apply_to_context(eq_context) # apply new alch val to context
@@ -376,6 +381,7 @@ class NNPCompatibilityMixin(object):
 
             matchers = [np.isclose(lambda_subinterval, i) for i in lambda_schedule]
             if any(matchers): # if the lambda subinterval is in the lambda protocol, add thermostate and sampler state
+                print(f"this subinterval matched; adding to state...")
                 thermostate_list.append(compound_thermostate_copy)
                 sampler_state_list.append(deepcopy(init_sampler_state))
 

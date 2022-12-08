@@ -104,7 +104,7 @@ class RepexConstructor():
                                                                      'online_analysis_interval': 10,
                                                                      'online_analysis_minimum_iterations': 10,
                                                                     },
-                 **unused_kwargs):
+                 **kwargs):
         self._mixed_system = mixed_system
         self._storage_kwargs = storage_kwargs
         self._temperature = temperature
@@ -112,6 +112,7 @@ class RepexConstructor():
         self._mcmc_moves_kwargs = mcmc_moves_kwargs
         self._replica_exchange_sampler_kwargs = replica_exchange_sampler_kwargs
         self._n_states = n_states
+        self._extra_kwargs = kwargs
         
         # initial positions
         self._initial_positions = initial_positions
@@ -132,5 +133,6 @@ class RepexConstructor():
                       mixed_system = self._mixed_system, 
                       init_positions = self._initial_positions, 
                       temperature = self._temperature, 
-                      storage_kwargs = self._storage_kwargs)  
+                      storage_kwargs = self._storage_kwargs,
+                      **self._extra_kwargs)  
         return _sampler
