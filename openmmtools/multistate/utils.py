@@ -329,7 +329,7 @@ class NNPCompatibilityMixin(object):
             temperature=temperature)
         compound_thermostate = CompoundThermodynamicState(thermostate,
             composable_states=[lambda_zero_alchemical_state])
-        thermostate_list, sampler_state_list = [], []
+        thermostate_list, sampler_state_list, unsampled_thermostate_list = [], [], []
         if n_replicas is None:
             n_replicas = n_states
         else:
@@ -380,7 +380,10 @@ class NNPCompatibilityMixin(object):
             init_sampler_state.update_from_context(eq_context) # update sampler_state
 
             matchers = [np.isclose(lambda_subinterval, i) for i in lambda_schedule]
-            if any(matchers): # if the lambda subinterval is in the lambda protocol, add thermostate and sampler state
+            ml_endstate_matcher = np.isclose(lambda_subinterval, 1.) # this is the last state, and we want to make it unsampled
+            if ml_endstate_matcher:
+                unsampled_thermostate_list.append(compound_thermostate_copy)
+            elif any(matchers): # if the lambda subinterval is in the lambda protocol, add thermostate and sampler state
                 print(f"this subinterval matched; adding to state...")
                 thermostate_list.append(compound_thermostate_copy)
                 sampler_state_list.append(deepcopy(init_sampler_state))
@@ -389,4 +392,5 @@ class NNPCompatibilityMixin(object):
         del eq_context
         del eq_integrator
         reporter = MultiStateReporter(**storage_kwargs)
-        self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=reporter)
+        self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=reporter, 
+            unsampled_thermodynamic_states = unsampled_thermostate_list)
