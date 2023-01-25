@@ -63,7 +63,7 @@ jobs:
         shell: bash -l {0}
         if: matrix.cfg.openmm == 'rc'
         run: |
-          conda install -y-yes -c conda-forge/label/openmm_rc openmm
+          conda install --yes -c conda-forge/label/openmm_rc openmm
 
       - name: Install package
         shell: bash -l {0}
