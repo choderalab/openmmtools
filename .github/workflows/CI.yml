@@ -27,6 +27,7 @@ jobs:
           - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
           - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
           - { os: ubuntu-latest,  python-version: '3.10', openmm: latest  }
+          - { os: ubuntu-latest,  python-version: '3.10', openmm: rc }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
@@ -57,6 +58,12 @@ jobs:
         if: matrix.cfg.openmm == 'nightly'
         run: |
           conda install --yes -c omnia-dev openmm
+
+      - name: Install OpenMM RC
+        shell: bash -l {0}
+        if: matrix.cfg.openmm == 'rc'
+        run: |
+          conda install --yes -c conda-forge/label/openmm_rc openmm
 
       - name: Install package
         shell: bash -l {0}
