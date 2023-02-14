@@ -1921,7 +1921,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
         try:
             # pymbar 3
-            (Deltaf_ij, dDeltaf_ij, _) = self.mbar.getFreeEnergyDifferences()
+            Deltaf_ij, dDeltaf_ij = self.mbar.getFreeEnergyDifferences()
         except AttributeError:
             # pymbar 4
             results = self.mbar.compute_free_energy_differences()
