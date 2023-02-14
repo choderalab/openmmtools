@@ -21,21 +21,20 @@ jobs:
       fail-fast: false
       matrix:
         cfg:
-          - { os: macOS-latest,   python-version: '3.8',    openmm: latest,  pymbar: '3' }
-          - { os: windows-latest, python-version: '3.8.10', openmm: latest,  pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.8',    openmm: latest,  pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.9',    openmm: latest,  pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.8',    openmm: nightly, pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.10',   openmm: latest,  pymbar: '3' }
-          - { os: ubuntu-latest,  python-version: '3.8',    openmm: latest,  pymbar: '4' }
-          - { os: ubuntu-latest,  python-version: '3.10',   openmm: rc,      pymbar: '4'  }
+          - { os: macOS-latest,   python-version: '3.8',    openmm: latest,  pymbar: 3 }
+          - { os: windows-latest, python-version: '3.8.10', openmm: latest,  pymbar: 3 }
+          - { os: ubuntu-latest,  python-version: '3.8',    openmm: latest,  pymbar: 3 }
+          - { os: ubuntu-latest,  python-version: '3.9',    openmm: latest,  pymbar: 3 }
+          - { os: ubuntu-latest,  python-version: '3.8',    openmm: nightly, pymbar: 3 }
+          - { os: ubuntu-latest,  python-version: '3.10',   openmm: latest,  pymbar: 3 }
+          - { os: ubuntu-latest,  python-version: '3.8',    openmm: latest,  pymbar: 4 }
+          - { os: ubuntu-latest,  python-version: '3.10',   openmm: rc,      pymbar: 4 }
 
     env:
       OPENMM: ${{ matrix.cfg.openmm }}
 
-
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
 
       - name: Additional info about the build
         shell: bash
@@ -61,19 +60,16 @@ jobs:
         run: |
           conda install --yes -c omnia-dev openmm
 
-
-      - name: Install pymbar 4
+      - name: Update/check pymbar version
         shell: bash -l {0}
-        if: matrix.cfg.pymbar == '4'
         run: |
-          conda install "pymbar=4" --yes -c conda-forge
+          conda install "pymbar =${{ matrix.cfg.pymbar }}" -c conda-forge -yq
 
       - name: Install OpenMM RC
         shell: bash -l {0}
         if: matrix.cfg.openmm == 'rc'
         run: |
           conda install --yes -c conda-forge/label/openmm_rc openmm
-
 
       - name: Install package
         shell: bash -l {0}
