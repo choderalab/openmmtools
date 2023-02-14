@@ -33,7 +33,7 @@ jobs:
       OPENMM: ${{ matrix.cfg.openmm }}
 
     steps:
-      - uses: actions/checkout@v1
+      - uses: actions/checkout@v3
 
       - name: Additional info about the build
         shell: bash
@@ -42,28 +42,25 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/conda-incubator/setup-miniconda
-      - uses: conda-incubator/setup-miniconda@v2
+      - uses: mamba-org/provision-with-micromamba@main
         with:
-          python-version: ${{ matrix.cfg.python-version }}
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults
-          activate-environment: test
-          auto-update-conda: true
-          auto-activate-base: false
-          show-channel-urls: true
+          # Not sure which packages pull from omnia/defaults these days
+          channel-priority: "flexible"
+          extra-specs: |
+            python=${{ matrix.cfg.python-version }}
 
       - name: Install OpenMM nightly
         shell: bash -l {0}
         if: matrix.cfg.openmm == 'nightly'
         run: |
-          conda install --yes -c omnia-dev openmm
+          micromamba install --no-channel-priority --yes -c omnia-dev openmm
 
       - name: Install OpenMM RC
         shell: bash -l {0}
         if: matrix.cfg.openmm == 'rc'
         run: |
-          conda install --yes -c conda-forge/label/openmm_rc openmm
+          micromamba install --no-channel-priority --yes -c conda-forge/label/openmm_rc openmm
 
       - name: Install package
         shell: bash -l {0}
@@ -78,7 +75,7 @@ jobs:
           nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
           flags: unittests

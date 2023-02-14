@@ -1,7 +1,6 @@
 name: test
 channels:
   - conda-forge
-  - defaults
   - omnia
 dependencies:
     # Base depends
@@ -17,13 +16,11 @@ dependencies:
   - pip
   - pymbar <4
   - python
-  - python
   - pyyaml
   - scipy
   - setuptools
   - sphinxcontrib-bibtex
     # Testing
-  - codecov
   - nose
   - nose-timer
   - pytest
