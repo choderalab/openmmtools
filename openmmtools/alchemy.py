@@ -413,9 +413,30 @@ class NNPProtocol():
     """
     protocol for perturbing the `lambda_interpolate` parameter of an openmm-ml mixed system
     """
+    def interREST_fn(x, temp_scale):
+        if x <= 0.5:
+            out = -2.*x*(1. - temp_scale)
+        else:
+            out = 2*x*(1-temp_scale) + 2*temp_scale - 2
+        return out
     default_functions = {'lambda_interpolate' : lambda x:x}
-    def __init__(self, **unused_kwargs):
-        self.functions = copy.deepcopy(self.default_functions)
+    def __init__(self, temp_scale, **unused_kwargs):
+        """allow to encode a temp scaling"""
+        if temp_scale is not None: # if the temp scale is not none, it must be a float
+            assert type(temp_scale) == float, f"temp scale is not a float"
+            def interREST_fn(x):
+                if x <= 0.5:
+                    out = -2.*x*(1. - temp_scale)
+                else:
+                    out = 2*x*(1-temp_scale) + 2*temp_scale - 2
+                return out
+            self.functions = copy.deepcopy(self.default_functions)
+            # set the modified function as partialed with the `temp_scale`; need to check that this is right.
+            self.functions['lambda_interRest'] = interRest_fn
+        else: # remove the temp scale
+            my_default_fns = copy.deepcopy(self.default_functions)
+            out_default_functions = {'lambda_interpolate': my_default_functions['lambda_interpolate']}
+            self.functions = out_default_functions
 
 class NNPAlchemicalState(AlchemicalState):
     """
@@ -425,6 +446,8 @@ class NNPAlchemicalState(AlchemicalState):
         pass
     
     lambda_interpolate = _LambdaParameter('lambda_interpolate')
+    lambda_interREST = _LambdaParameter('lambda_interREST') # this is specific to the inter-REST region
+
 
     def set_alchemical_parameters(self, global_lambda, lambda_protocol = NNPProtocol(), **unused_kwargs):
         self.global_lambda = global_lambda
