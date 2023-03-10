@@ -1810,7 +1810,7 @@ class MultiStateReporter(object):
                 dimension_name = 'scalar'
             # Create variable.
             nc_variable = storage_nc.createVariable(path, variable_type,
-                                                    dimension_name, zlib=True)
+                                                    dimension_name, zlib=False)
 
         # Assign the value to the variable.
         if fixed_dimension:
