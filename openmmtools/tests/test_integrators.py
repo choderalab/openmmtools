@@ -508,17 +508,17 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         context.setPositions(wbox.positions)
         context.setVelocitiesToTemperature(temperature)
 
-        def switchoff(force, context, frac=0.9):
-            force.setParticleParameters(0, charge=-0.834 * frac, sigma=0.3150752406575124*frac, epsilon=0.635968 * frac)
-            force.setParticleParameters(1, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
-            force.setParticleParameters(2, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
-            force.updateParametersInContext(context)
+        def switchoff(omm_force, omm_context, frac=0.9):
+            omm_force.setParticleParameters(0, charge=-0.834 * frac, sigma=0.3150752406575124 * frac, epsilon=0.635968 * frac)
+            omm_force.setParticleParameters(1, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
+            omm_force.setParticleParameters(2, charge=0.417 * frac, sigma=0, epsilon=1 * frac)
+            omm_force.updateParametersInContext(omm_context)
 
-        def switchon(force, context):
-            force.setParticleParameters(0, charge=-0.834, sigma=0.3150752406575124, epsilon=0.635968)
-            force.setParticleParameters(1, charge=0.417, sigma=0, epsilon=1)
-            force.setParticleParameters(2, charge=0.417, sigma=0, epsilon=1)
-            force.updateParametersInContext(context)
+        def switchon(omm_force, omm_context):
+            omm_force.setParticleParameters(0, charge=-0.834, sigma=0.3150752406575124, epsilon=0.635968)
+            omm_force.setParticleParameters(1, charge=0.417, sigma=0, epsilon=1)
+            omm_force.setParticleParameters(2, charge=0.417, sigma=0, epsilon=1)
+            omm_force.updateParametersInContext(omm_context)
 
         force = wbox.system.getForce(2)  # Non-bonded force.
 
