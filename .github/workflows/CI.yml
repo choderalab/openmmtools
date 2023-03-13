@@ -13,10 +13,14 @@ on:
     #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
     - cron: "0 0 * * *"
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -79,4 +83,4 @@ jobs:
         with:
           file: ./coverage.xml
           flags: unittests
-          name: codecov-${{ matrix.cfg.os }}-py${{ matrix.cfg.python-version }}
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}-openmm-${{ matrix.openmm }}
