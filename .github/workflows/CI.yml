@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}, OpenMM ${{ matrix.openmm }}
+    name: ${{ matrix.os }}, py-${{ matrix.python-version }}, OpenMM-${{ matrix.openmm }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
