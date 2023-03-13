@@ -28,7 +28,7 @@ jobs:
         openmm: ["7.7", "8.0"]
         os: [macOS-latest, windows-latest, ubuntu-latest]
         include:
-          - openmm: "8.0.0dev3"
+          - openmm: "dev"
             python-version: "3.10"
             os: ubuntu-latest
         exclude:
