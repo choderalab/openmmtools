@@ -419,8 +419,13 @@ class TestRestorableOpenMMObject(object):
         system.addForce(copy.deepcopy(dummy_force))
         system.addForce(copy.deepcopy(dummier_force))
 
-        with nose.tools.assert_raises(openmm.OpenMMException):
-            openmm.Context(system, copy.deepcopy(self.dummy_integrator))
+        # TODO: Change this once we migrate to pytest -- using skipif as needed
+        # Skip assertion for openmm < 8
+        if int(openmm.__version__[0]) < 8:
+            pass
+        else:
+            with nose.tools.assert_raises(openmm.OpenMMException):
+                openmm.Context(system, copy.deepcopy(self.dummy_integrator))
 
     def test_restorable_openmm_object_failure(self):
         """An exception is raised if the class has a restorable hash but the class can't be found."""
