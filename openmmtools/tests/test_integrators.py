@@ -520,7 +520,13 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             omm_force.setParticleParameters(2, charge=0.417, sigma=0, epsilon=1)
             omm_force.updateParametersInContext(omm_context)
 
-        force = wbox.system.getForce(2)  # Non-bonded force.
+        # Get Nonbonded force from system -- Note: order may vary by platform. Don't expect a specific index.
+        for force in wbox.system.getForces():
+            if isinstance(force, openmm.NonbondedForce):
+                nonbonded_force = force
+                break
+        else:
+            raise ValueError("No nonbonded force found in the system.")
 
         # Number of NCMC steps
         nsteps = 20
@@ -533,14 +539,14 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             for step in range(nsteps):
                 fraction = float(step + 1) / float(nsteps)
                 initial_energy = context.getState(getEnergy=True).getPotentialEnergy()
-                switchoff(force, context, frac=fraction)
+                switchoff(nonbonded_force, context, frac=fraction)
                 final_energy = context.getState(getEnergy=True).getPotentialEnergy()
                 external_protocol_work += (final_energy - initial_energy) / kT
                 integrator.step(1)
             integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
             assert abs(external_protocol_work - integrator_protocol_work) < 1.E-5
             # Return to unperturbed state
-            switchon(force, context)
+            switchon(nonbonded_force, context)
 
 
     def test_protocol_work_accumulation_harmonic_oscillator(self):
