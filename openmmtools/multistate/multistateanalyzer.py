@@ -40,7 +40,6 @@ from pymbar import MBAR
 
 from openmmtools import multistate, utils, forces
 from openmmtools.multistate.pymbar import (
-    _pymbar_bar,
     statistical_inefficiency_multiple,
     subsample_correlated_data,
 )
@@ -1169,15 +1168,15 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     statistical_inefficiency : float, optional
         Sub-sample rate, e.g. if the statistical_inefficiency is 10, we draw a sample every 10 iterations to get the decorrelated samples.
-        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` 
+        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations`
         must be specified as well.
         Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
 
     max_subset : int >= 1 or None, optional, default: 100
-        Argument in ``multistate.utils.get_equilibration_data_per_sample()`` that specifies the maximum number of points from 
-        the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_data_per_sample()``) on which 
+        Argument in ``multistate.utils.get_equilibration_data_per_sample()`` that specifies the maximum number of points from
+        the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_data_per_sample()``) on which
         to compute equilibration data.
-    
+
     Attributes
     ----------
     unbias_restraint
@@ -2070,7 +2069,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:], max_subset=self._max_subset)
             n_effective_max = n_effective_i.max()
             i_max = n_effective_i.argmax()
-            n_equilibration = i_t[i_max] + t0 
+            n_equilibration = i_t[i_max] + t0
             g_t = self._statistical_inefficiency if self._statistical_inefficiency is not None else g_i[i_max]
 
         # Store equilibration data
