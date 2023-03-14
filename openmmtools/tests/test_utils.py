@@ -8,7 +8,7 @@
 Test utility functions in utils.py.
 
 """
-
+import copy
 
 # =============================================================================
 # GLOBAL IMPORTS
@@ -326,16 +326,12 @@ class TestRestorableOpenMMObject(object):
             def __init__(self, *args, **kwargs):
                 super(DummyRestorableCustomForce, self).__init__(*args, **kwargs)
 
-        class DummierRestorableCustomForce(RestorableOpenMMObject, openmm.CustomAngleForce):
-            def __init__(self, *args, **kwargs):
-                super(DummierRestorableCustomForce, self).__init__(*args, **kwargs)
-
         class DummyRestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
             def __init__(self, *args, **kwargs):
                 super(DummyRestorableCustomIntegrator, self).__init__(*args, **kwargs)
 
         cls.dummy_force = DummyRestorableCustomForce('0.0;')
-        cls.dummier_force = DummierRestorableCustomForce('0.0;')
+        cls.dummier_force = DummyRestorableCustomForce('0.0;')
         cls.dummy_integrator= DummyRestorableCustomIntegrator(2.0*unit.femtoseconds)
 
     def test_restorable_openmm_object(self):
@@ -367,7 +363,16 @@ class TestRestorableOpenMMObject(object):
                 assert hasattr(copied_object, '_monkey_patching')
 
     def test_multiple_object_context_creation(self):
-        """Test that it is possible to create contexts with multiple restorable objects."""
+        """Test that it is possible to create contexts with multiple restorable objects.
+
+        The aim of this test is to make sure we can restore the force objects using to create the context;
+        after serialization.
+
+        Notes
+        -----
+        As of Openmm 8 having the same type of openmm objects with different default values for global parameters is
+        not allowed.
+        """
         system = openmm.System()
         for i in range(4):
             system.addParticle(1.0*unit.atom_mass_units)
@@ -385,11 +390,42 @@ class TestRestorableOpenMMObject(object):
         force1, force2 = system.getForce(0), system.getForce(1)
         assert RestorableOpenMMObject.restore_interface(force1)
         assert RestorableOpenMMObject.restore_interface(force2)
-        hash1 = force1._get_force_parameter_by_name(force1, force_hash_parameter_name)
-        hash2 = force2._get_force_parameter_by_name(force2, force_hash_parameter_name)
-        assert not np.isclose(hash1, hash2)
         assert isinstance(force1, self.dummy_force.__class__)
         assert isinstance(force2, self.dummier_force.__class__)
+
+    def test_context_from_restorable_with_different_globals(self):
+        """
+        Test that you cannot create a context from restorable objects with different default values for
+        global parameters.
+
+        Creates a system with two forces that have different default values for the hash global parameter and
+        expects an OpenmmException when trying to create a Context using these forces.
+
+        Notes
+        -----
+        As of Openmm 8 having the same type of openmm objects with different default values for global parameters is
+        not allowed.
+        """
+        dummy_force = copy.deepcopy(self.dummy_force)
+        dummier_force = copy.deepcopy(self.dummier_force)
+
+        # Change the global parameter default value for one of the forces
+        force_hash_parameter_name = dummy_force._hash_parameter_name
+        dummier_force.addGlobalParameter(force_hash_parameter_name, 3.141592)
+
+        system = openmm.System()
+        for i in range(4):
+            system.addParticle(1.0 * unit.atom_mass_units)
+        system.addForce(copy.deepcopy(dummy_force))
+        system.addForce(copy.deepcopy(dummier_force))
+
+        # TODO: Change this once we migrate to pytest -- using skipif as needed
+        # Skip assertion for openmm < 8
+        if int(openmm.__version__[0]) < 8:
+            pass
+        else:
+            with nose.tools.assert_raises(openmm.OpenMMException):
+                openmm.Context(system, copy.deepcopy(self.dummy_integrator))
 
     def test_restorable_openmm_object_failure(self):
         """An exception is raised if the class has a restorable hash but the class can't be found."""
