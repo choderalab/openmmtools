@@ -68,7 +68,7 @@ jobs:
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==8.0.0dev3
-            pymbar==${{ matrix.pymbar-version }}
+            pymbar==${{ matrix.pymbar-version }}.*
 
       - name: Setup micromamba
         uses: mamba-org/provision-with-micromamba@main
@@ -81,7 +81,7 @@ jobs:
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
-            pymbar==${{ matrix.pymbar-version }}
+            pymbar==${{ matrix.pymbar-version }}.*
             
       - name: Install package
         shell: bash -l {0}
