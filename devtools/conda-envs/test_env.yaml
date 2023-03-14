@@ -1,8 +1,6 @@
 name: openmmtools-test
 channels:
   - conda-forge
-  - defaults
-  - omnia
 dependencies:
     # Base depends
   - cython
@@ -12,7 +10,7 @@ dependencies:
   - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
   - numba
   - numpy
-  - openmm >=7.5.0
+  - openmm
   #- parmed  # Test to see if this fixes the docs
   - pip
   - pymbar <4
@@ -32,4 +30,3 @@ dependencies:
   # docs
   - numpydoc
   - sphinxcontrib-bibtex
-  
