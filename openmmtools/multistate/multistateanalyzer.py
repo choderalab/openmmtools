@@ -36,12 +36,12 @@ except ImportError:  # OpenMM < 7.6
     from simtk import openmm
     import simtk.unit as units
 from scipy.special import logsumexp
-from pymbar import MBAR
 
 from openmmtools import multistate, utils, forces
 from openmmtools.multistate.pymbar import (
     statistical_inefficiency_multiple,
     subsample_correlated_data,
+    MBAR,
 )
 
 

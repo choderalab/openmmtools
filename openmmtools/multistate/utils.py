@@ -180,7 +180,7 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
         try:
             g_i[i] = statistical_inefficiency(series[t:], fast=fast)
         except Exception as e:
-            raise e
+            raise e("If you see this, open an issue https://github.com/choderalab/openmmtools/issues")
             g_i[i] = (time_size - t + 1)
         n_effective_i[i] = (time_size - t + 1) / g_i[i]
 
