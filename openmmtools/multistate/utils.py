@@ -178,7 +178,7 @@ def get_equilibration_data_per_sample(timeseries_to_analyze, fast=True, max_subs
     i_t = np.floor(counter * time_size / max_subset).astype(int)
     for i, t in enumerate(i_t):
         try:
-            g_i[i] = statisticalInefficiency(series[t:], fast=fast)
+            g_i[i] = statistical_inefficiency(series[t:], fast=fast)
         except Exception as e:
             raise e
             g_i[i] = (time_size - t + 1)
