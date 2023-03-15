@@ -9,6 +9,7 @@ try:
         detect_equilibration,
         statistical_inefficiency_multiple,
         subsample_correlated_data,
+        statistical_inefficiency
     )
 except ImportError:
     # pymbar < 4
@@ -17,6 +18,7 @@ except ImportError:
         detectEquilibration as detect_equilibration,
         statisticalInefficiencyMultiple as statistical_inefficiency_multiple,
         subsampleCorrelatedData as subsample_correlated_data,
+        statisticalInefficiency as statistical_inefficiency
     )
 
 
