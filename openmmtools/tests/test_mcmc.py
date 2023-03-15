@@ -19,7 +19,6 @@ import tempfile
 from functools import partial
 
 import nose
-from pymbar import timeseries
 from openmmtools.multistate.pymbar import detect_equilibration
 
 from openmmtools import testsystems

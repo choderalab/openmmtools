@@ -47,8 +47,7 @@ except ImportError:  # OpenMM < 7.6
 from openmmtools import multistate, utils, states, mcmc, cache
 import mpiplus
 from openmmtools.multistate.utils import SimulationNaNError
-
-from pymbar.utils import ParameterError
+from openmmtools.multistate.pymbar import ParameterError
 
 from openmmtools.integrators import FIREMinimizationIntegrator
 
