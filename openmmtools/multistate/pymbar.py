@@ -46,10 +46,10 @@ def _pymbar_exp(
     try:
         # pymbar < 4
         from pymbar import EXP
-        fe_estimate = EXP(w_f)
+        fe_estimate = EXP(w_F)
         return fe_estimate[0], fe_estimate[1]
     except ImportError:
         # pymbar >= 4
         from pymbar.other_estimators import exp
-        fe_estimate = exp(w_f)
+        fe_estimate = exp(w_F)
         return fe_estimate["Delta_f"], fe_estimate["dDelta_f"]
