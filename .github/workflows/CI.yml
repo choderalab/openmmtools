@@ -26,33 +26,30 @@ jobs:
       matrix:
         python-version: ["3.8", "3.9", "3.10"]
         openmm: ["7.7", "8.0"]
-        os: [macOS-latest, ubuntu-latest, windows-latest]
-        pymbar-version: ["3", "4"]
+        os: [macOS-latest, ubuntu-latest]
+        pymbar-version: ["4"]
         include:
           # Test openmm dev build on newest python + linux
           - openmm: "dev"
             python-version: "3.10"
             os: ubuntu-latest
-            pymbar-version: "4"
-          # For python 3.8, windows only works with the 3.8.10 build
-          - openmm: "7.7"
-            python-version: "3.8.10"
-            os: windows-latest
-            pymbar-version: "4"
+          # Test newest python, openmm, and pymbar we support on windows
           - openmm: "8.0"
-            python-version: "3.8.10"
+            python-version: "3.10"
             os: windows-latest
             pymbar-version: "4"
+          # Have one job test pymbar 3 support
+          - openmm: "8.0"
+            python-version: "3.10"
+            os: ubuntu-latest
+            pymbar-version: "3"
         exclude:
           # There are no py 3.10 builds of openmm 7.7
           - openmm: "7.7"
             python-version: "3.10"
-          # For python 3.8, windows only works with the 3.8.10 build
-          - os: windows-latest
-            python-version: "3.8"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Additional info about the build
         shell: bash
         run: |
