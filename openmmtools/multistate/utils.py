@@ -99,7 +99,7 @@ def get_decorrelation_time(timeseries_to_analyze):
     """
     Compute the decorrelation times given a timeseries.
 
-    See the ``pymbar.timeseries.statisticalInefficiency`` for full documentation
+    See the ``pymbar.timeseries.statistical_inefficiency`` for full documentation
     """
     return statistical_inefficiency(timeseries_to_analyze)
 
