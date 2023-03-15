@@ -1,10 +1,9 @@
-from typing import Dict
+from typing import Dict, Tuple
 
 import numpy as np
 
 try:
     # pymbar >= 4
-    from pymbar.other_estimators import exp
     from pymbar.timeseries import (
         detect_equilibration,
         statistical_inefficiency_multiple,
@@ -15,7 +14,6 @@ try:
     from pymbar.utils import ParameterError
 except ImportError:
     # pymbar < 4
-    from pymbar import EXP as exp
     from pymbar.timeseries import (
         detectEquilibration as detect_equilibration,
         statisticalInefficiencyMultiple as statistical_inefficiency_multiple,
@@ -41,3 +39,17 @@ def _pymbar_bar(
     except AttributeError:
         # pymbar < 4
         return pymbar.BAR(work_forward, work_backward, return_dict=True)
+
+def _pymbar_exp(
+        w_F: np.ndarray,
+) -> Tuple[float, float]:
+    try:
+        # pymbar < 4
+        from pymbar import EXP
+        fe_estimate = EXP(w_f)
+        return fe_estimate[0], fe_estimate[1]
+    except ImportError:
+        # pymbar >= 4
+        from pymbar.other_estimators import exp
+        fe_estimate = exp(w_f)
+        return fe_estimate["Delta_f"], fe_estimate["dDelta_f"]
