@@ -4,6 +4,7 @@ channels:
 dependencies:
     # Base depends
   - cython
+  - hdf5=1.12.2  # Macos has problem with newer releases (1.14.x) to date
   - libnetcdf >=4.6.2 # workaround for libssl issues
   - mdtraj
   - mpiplus
