@@ -47,8 +47,7 @@ except ImportError:  # OpenMM < 7.6
 from openmmtools import multistate, utils, states, mcmc, cache
 import mpiplus
 from openmmtools.multistate.utils import SimulationNaNError
-
-from pymbar.utils import ParameterError
+from openmmtools.multistate.pymbar import ParameterError
 
 from openmmtools.integrators import FIREMinimizationIntegrator
 
@@ -1014,7 +1013,8 @@ class MultiStateSampler(object):
                                                     "Either your data is fully corrupted or something has gone very "
                                                     "wrong to see this message. "
                                                     "Please open an issue on the GitHub issue tracker if you see this!")
-            except:
+            except Exception as err:
+                raise err
                 # Trap all other errors caught by the load process
                 continue
 

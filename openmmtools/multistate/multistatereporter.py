@@ -368,7 +368,8 @@ class MultiStateReporter(object):
         for attempt in range(n_attempts-1):
             try:
                 return netcdf.Dataset(*args, **kwargs)
-            except:
+            except Exception as err: # This should be safe since we will raise the error below on return
+                logger.debug(f"exception thrown {err}")
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
                              'in {} seconds'.format(attempt+1, n_attempts, args[0], sleep_time))
                 time.sleep(sleep_time)

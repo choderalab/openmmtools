@@ -19,36 +19,37 @@ concurrency:
 
 jobs:
   test:
-    name: ${{ matrix.os }}, py-${{ matrix.python-version }}, OpenMM-${{ matrix.openmm }}
+    name: ${{ matrix.os }}, py-${{ matrix.python-version }}, OpenMM-${{ matrix.openmm }}, pymbar-${{ matrix.pymbar-version }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         python-version: ["3.8", "3.9", "3.10"]
         openmm: ["7.7", "8.0"]
-        os: [macOS-latest, ubuntu-latest, windows-latest]
+        os: [macOS-latest, ubuntu-latest]
+        pymbar-version: ["4"]
         include:
           # Test openmm dev build on newest python + linux
           - openmm: "dev"
             python-version: "3.10"
             os: ubuntu-latest
-          # For python 3.8, windows only works with the 3.8.10 build
-          - openmm: "7.7"
-            python-version: "3.8.10"
-            os: windows-latest
+          # Test newest python, openmm, and pymbar we support on windows
           - openmm: "8.0"
-            python-version: "3.8.10"
+            python-version: "3.10"
             os: windows-latest
+            pymbar-version: "4"
+          # Have one job test pymbar 3 support
+          - openmm: "8.0"
+            python-version: "3.10"
+            os: ubuntu-latest
+            pymbar-version: "3"
         exclude:
           # There are no py 3.10 builds of openmm 7.7
           - openmm: "7.7"
             python-version: "3.10"
-          # For python 3.8, windows only works with the 3.8.10 build
-          - os: windows-latest
-            python-version: "3.8"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v3
       - name: Additional info about the build
         shell: bash
         run: |
@@ -63,10 +64,11 @@ jobs:
           channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge
           environment-file: devtools/conda-envs/test_env.yaml
           channel-priority: flexible
-          environment-name: test
+          environment-name: openmmtools-test
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==8.0.0dev3
+            pymbar==${{ matrix.pymbar-version }}.*
 
       - name: Setup micromamba
         uses: mamba-org/provision-with-micromamba@main
@@ -75,11 +77,12 @@ jobs:
           channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge
           environment-file: devtools/conda-envs/test_env.yaml
           channel-priority: strict
-          environment-name: test
+          environment-name: openmmtools-test
           extra-specs: |
             python==${{ matrix.python-version }}
             openmm==${{ matrix.openmm }}
-
+            pymbar==${{ matrix.pymbar-version }}.*
+            
       - name: Install package
         shell: bash -l {0}
         run: |
@@ -94,7 +97,7 @@ jobs:
           nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
           flags: unittests

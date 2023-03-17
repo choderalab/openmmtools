@@ -1,9 +1,10 @@
-name: test
+name: openmmtools-test
 channels:
   - conda-forge
 dependencies:
     # Base depends
   - cython
+  - hdf5=1.12.2  # Macos has problem with newer releases (1.14.x) to date
   - libnetcdf >=4.6.2 # workaround for libssl issues
   - mdtraj
   - mpiplus
@@ -13,7 +14,7 @@ dependencies:
   - openmm
   #- parmed  # Test to see if this fixes the docs
   - pip
-  - pymbar <4
+  - pymbar
   - python
   - python
   - pyyaml
