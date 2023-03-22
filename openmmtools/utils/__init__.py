@@ -8,8 +8,16 @@ This module provides a common API point for different utility functions that ser
 or help users in different miscellaneous tasks.
 """
 from .utils import (
+    _RESERVED_WORDS_PATTERNS,
     deserialize,
+    find_all_subclasses,
+    is_quantity_close,
+    platform_supports_precision,
     quantity_from_string,
+    sanitize_expression,
+    math_eval,
+    RestorableOpenMMObject,
+    RestorableOpenMMObjectError,
     serialize,
     SubhookedABCMeta,
     temporary_directory,
@@ -20,4 +28,4 @@ from .utils import (
     with_timer,
 )
 
-# from .equilibration import gentle_equilibration
+from .equilibration import gentle_equilibration

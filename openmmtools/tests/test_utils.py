@@ -8,6 +8,7 @@
 Test utility functions in utils.py.
 
 """
+import abc
 import copy
 
 # =============================================================================
@@ -15,6 +16,13 @@ import copy
 # =============================================================================
 
 import nose
+import numpy as np
+
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools.utils import _RESERVED_WORDS_PATTERNS
 from openmmtools.utils import *
@@ -26,10 +34,6 @@ from openmmtools.utils import *
 
 def test_platform_supports_precision():
     """Test that platform_supports_precision works correctly."""
-    try:
-        import openmm
-    except ImportError:  # OpenMM < 7.6
-        from simtk import openmm
 
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
@@ -253,7 +257,8 @@ def test_subhooked_abcmeta():
         @abc.abstractmethod
         def my_method(self): pass
 
-        @abc.abstractproperty
+        @abc.abstractmethod
+        @property
         def my_property(self): pass
 
         @staticmethod
@@ -450,3 +455,77 @@ class TestRestorableOpenMMObject(object):
             hash_float = RestorableOpenMMObject._compute_class_hash(restorable_cls)
             all_hashes.add(hash_float)
         assert len(all_hashes) == len(restorable_classes)
+
+
+class TestEquilibrationUtils(object):
+    """
+    Class for testing equilibration utility functions in openmmtools.utils.equilibration
+    """
+    def test_gentle_equilibration(self):
+        """
+        Test gentle equilibration implementation
+        Returns
+        -------
+
+        """
+        from openmmtools.utils import gentle_equilibration
+        # Load htf
+        with open(args.infile, "rb") as f:
+            htf = pickle.load(f)
+
+        # Retrieve old positions and system
+        # (in PointMutationExecutor, we will want to feed the gently equilibrated positions in before geometry engine)
+        positions = htf.old_positions(htf.hybrid_positions)
+        system = htf._topology_proposal.old_system
+        topology = htf._topology_proposal.old_topology
+
+        stages = [
+            {'EOM': 'minimize', 'n_steps': 10000, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD_interpolate', 'n_steps': 100000, 'temperature': 100 * unit.kelvin,
+             'temperature_end': 300 * unit.kelvin,
+             'ensemble': 'NVT', 'restraint_selection': 'protein and not type H',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 250000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'minimize', 'n_steps': 10000, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.01 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.001 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 2500000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': None,
+             'force_constant': 0 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 2 * unit.femtoseconds},
+        ]
+
+        gentle_equilibration(topology, positions, system, stages, args.outfile)
