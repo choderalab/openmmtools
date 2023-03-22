@@ -39,7 +39,7 @@ from openmmtools import testsystems
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
 from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyzer
-from openmmtools.multistate import ParallelTemperingSampler, ParallelTemperingAnalyzer
+from openmmtools.multistate import ParallelTemperingSampler
 from openmmtools.multistate import SAMSSampler, SAMSAnalyzer
 from openmmtools.multistate.multistatereporter import _DictYamlLoader
 from openmmtools.utils import temporary_directory
