@@ -11,6 +11,8 @@ from .utils import (
     _RESERVED_WORDS_PATTERNS,
     deserialize,
     find_all_subclasses,
+    get_available_platforms,
+    get_fastest_platform,
     is_quantity_close,
     platform_supports_precision,
     quantity_from_string,

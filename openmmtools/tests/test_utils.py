@@ -257,8 +257,7 @@ def test_subhooked_abcmeta():
         @abc.abstractmethod
         def my_method(self): pass
 
-        @abc.abstractmethod
-        @property
+        @abc.abstractproperty
         def my_property(self): pass
 
         @staticmethod
