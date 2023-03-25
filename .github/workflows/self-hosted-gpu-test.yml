@@ -11,7 +11,7 @@ on:
 jobs:
   start-runner:
     name: Start self-hosted EC2 runner
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     outputs:
       label: ${{ steps.start-ec2-runner.outputs.label }}
       ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
@@ -28,10 +28,10 @@ jobs:
         with:
           mode: start
           github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-          ec2-image-id: ami-096d499d418f88d88
-          ec2-instance-type: p2.xlarge
-          subnet-id: subnet-0e82552b8c708a999
-          security-group-id: sg-0589e74ec03965add
+          ec2-image-id: ami-04d16a12bbc76ff0b
+          ec2-instance-type: g4dn.xlarge
+          subnet-id: subnet-0dee8543e12afe0cd # us-east-1a
+          security-group-id: sg-0f9809618550edb98
           # iam-role-name: self-hosted-runner # optional, requires additional permissions
           aws-resource-tags: > # optional, requires additional permissions
             [
@@ -46,6 +46,7 @@ jobs:
       TEST_MODE: GPU
       OPENMM: ${{ matrix.cfg.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
+      HOME: /home/ec2-user
 
     defaults:
       run:
@@ -55,7 +56,7 @@ jobs:
       - uses: conda-incubator/setup-miniconda@v2
         with:
           installer-url: https://github.com/conda-forge/miniforge/releases/latest/download/Mambaforge-Linux-x86_64.sh
-          python-version: 3.8
+          python-version: "3.10"
           activate-environment: test
           channels: conda-forge,defaults
           environment-file: devtools/conda-envs/test_env.yaml
@@ -66,7 +67,7 @@ jobs:
       - name: Refine test env
         shell: bash -l {0}
         run: |
-          mamba install -y cudatoolkit==11.0.3 openmm==7.7
+          mamba install -y cudatoolkit==11.7 openmm>=8.0
       
       - name: Additional info about the build
         shell: bash -l {0}
