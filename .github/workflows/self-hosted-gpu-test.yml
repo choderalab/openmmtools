@@ -94,7 +94,7 @@ jobs:
       - name: Test the package
         shell: bash -l {0}
         run: |
-          nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest
+          pytest -v --cov-report xml --durations=0 --cov=openmmtools openmmtools/tests 
 
       - name: Codecov
         if: ${{ github.repository == 'choderalab/openmmtools'
