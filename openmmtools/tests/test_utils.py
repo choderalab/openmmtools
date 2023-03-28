@@ -16,6 +16,7 @@ import copy
 # =============================================================================
 
 import nose
+from nose.tools import nottest
 import numpy as np
 
 try:
@@ -460,64 +461,140 @@ class TestEquilibrationUtils(object):
     """
     Class for testing equilibration utility functions in openmmtools.utils.equilibration
     """
-    def test_gentle_equilibration(self):
+    def test_gentle_equilibration_setup(self):
         """
-        Test gentle equilibration implementation
-        Returns
-        -------
+        Test gentle equilibration implementation using the Alanine dipeptide in explicit solvent
+        system found in `openmmtools.testsystems.AlanineDipeptideExplicit`
 
+        This only tests the gentle equilibration can be run with this system, only one iteration
+        of each stage is run.
         """
+        from openmmtools.testsystems import AlanineDipeptideExplicit
         from openmmtools.utils import gentle_equilibration
-        # Load htf
-        with open(args.infile, "rb") as f:
-            htf = pickle.load(f)
 
-        # Retrieve old positions and system
-        # (in PointMutationExecutor, we will want to feed the gently equilibrated positions in before geometry engine)
-        positions = htf.old_positions(htf.hybrid_positions)
-        system = htf._topology_proposal.old_system
-        topology = htf._topology_proposal.old_topology
+        test_system = AlanineDipeptideExplicit()
+
+        # Retrieve positions, system and topology from the test_system object
+        positions = np.array(test_system.positions.value_in_unit(unit.nanometer))
+        system = test_system.system
+        topology = test_system.topology
+
+        stages = [
+            {'EOM': 'minimize', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD_interpolate', 'n_steps': 1, 'temperature': 100 * unit.kelvin,
+             'temperature_end': 300 * unit.kelvin,
+             'ensemble': 'NVT', 'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'minimize', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': None,
+             'force_constant': 0 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 2 * unit.femtoseconds},
+        ]
+
+        with temporary_directory() as tmp_path:
+            outfile_path = f"{tmp_path}/outfile.cif"
+            gentle_equilibration(topology, positions, system, stages, outfile_path, platform_name="CPU",
+                                 save_box_vectors=False)
+
+    # TODO: Marking as not a test until we solve our GPU CI
+    @nottest
+    def test_gentle_equilibration_cuda(self):
+        """
+        Test gentle equilibration implementation using the Alanine dipeptide in explicit solvent
+        system found in `openmmtools.testsystems.AlanineDipeptideExplicit`
+
+        To date it is meant to just test that the protocol can run with a test system and
+        do a quick comparison of the energies.
+
+        Meant to be run using CUDA platform, similar to a production-ready environment.
+        """
+        from openmmtools.testsystems import AlanineDipeptideExplicit
+        from openmmtools.utils import gentle_equilibration
+
+        test_system = AlanineDipeptideExplicit()
+
+        # Retrieve positions, system and topology from the test_system object
+        positions = np.array(test_system.positions.value_in_unit(unit.nanometer))
+        system = test_system.system
+        topology = test_system.topology
 
         stages = [
             {'EOM': 'minimize', 'n_steps': 10000, 'temperature': 300 * unit.kelvin, 'ensemble': None,
              'restraint_selection': 'protein and not type H',
-             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
              'collision_rate': 2 / unit.picoseconds,
              'timestep': 1 * unit.femtoseconds},
             {'EOM': 'MD_interpolate', 'n_steps': 100000, 'temperature': 100 * unit.kelvin,
              'temperature_end': 300 * unit.kelvin,
              'ensemble': 'NVT', 'restraint_selection': 'protein and not type H',
-             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
              'collision_rate': 10 / unit.picoseconds,
              'timestep': 1 * unit.femtoseconds},
             {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300, 'ensemble': 'NPT',
              'restraint_selection': 'protein and not type H',
-             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
              'collision_rate': 10 / unit.picoseconds,
              'timestep': 1 * unit.femtoseconds},
             {'EOM': 'MD', 'n_steps': 250000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
              'restraint_selection': 'protein and not type H',
-             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
              'collision_rate': 2 / unit.picoseconds,
              'timestep': 1 * unit.femtoseconds},
             {'EOM': 'minimize', 'n_steps': 10000, 'temperature': 300 * unit.kelvin, 'ensemble': None,
              'restraint_selection': 'protein and backbone',
-             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
              'collision_rate': 2 / unit.picoseconds,
              'timestep': 1 * unit.femtoseconds},
             {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
              'restraint_selection': 'protein and backbone',
              'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
-             'collision_rate': 2 / unit.picoseconds,
-             'timestep': 1 * unit.femtoseconds},
-            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
-             'restraint_selection': 'protein and backbone',
-             'force_constant': 0.01 * unit.kilocalories_per_mole / unit.angstrom ** 2,
-             'collision_rate': 2 / unit.picoseconds,
-             'timestep': 1 * unit.femtoseconds},
-            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
-             'restraint_selection': 'protein and backbone',
-             'force_constant': 0.001 * unit.kilocalories_per_mole / unit.angstrom ** 2,
              'collision_rate': 2 / unit.picoseconds,
              'timestep': 1 * unit.femtoseconds},
             {'EOM': 'MD', 'n_steps': 2500000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
@@ -527,4 +604,5 @@ class TestEquilibrationUtils(object):
              'timestep': 2 * unit.femtoseconds},
         ]
 
-        gentle_equilibration(topology, positions, system, stages, args.outfile)
+        gentle_equilibration(topology, positions, system, stages, "outfile.cif", platform_name="CUDA",
+                             save_box_vectors=False)

@@ -2,14 +2,14 @@
 Utility functions useful for equilibration.
 """
 
-from openmm import unit
 import logging
+from openmm import unit, OpenMMException
 
 # Set up logger
 _logger = logging.getLogger(__name__)
 
 
-def gentle_equilibration(topology, positions, system, stages, filename, platform_name='CUDA'):
+def gentle_equilibration(topology, positions, system, stages, filename, platform_name='CUDA', save_box_vectors=True):
     """
     Run gentle equilibration.
 
@@ -47,6 +47,9 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
         path to save the equilibrated structure
     platform_name : str, default 'CUDA'
         name of platform to be used by OpenMM. If not specified, OpenMM will select the fastest available platform
+    save_box_vectors : bool
+        Whether to save the box vectors in a box_vectors.npy file in the working directory, after execution.
+        Defaults to True.
 
     """
     import copy
@@ -54,12 +57,11 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
     import time
     import numpy as np
     import mdtraj as md
-    from rich.progress import track
 
-    for i, parameters in enumerate(stages):
+    for stage_index, parameters in enumerate(stages):
 
         initial_time = time.time()
-        print(f"Executing stage {i + 1}")
+        print(f"Executing stage {stage_index + 1}")
 
         # Make a copy of the system
         system_copy = copy.deepcopy(system)
@@ -78,23 +80,25 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
         # Set barostat update interval to 0 (for NVT)
         if parameters['ensemble'] == 'NVT':
             force_dict = {force.__class__.__name__: index for index, force in enumerate(system_copy.getForces())}
-            system_copy.getForce(force_dict['MonteCarloBarostat']).setFrequency(0)  # This requires openmm 8
-            # system_copy.removeForce(force_dict[
-            #                             'MonteCarloBarostat'])  # TODO : change this to `system_copy.getForce(force_dict['MonteCarloBarostat']).setFrequency(0) once the next release comes out (this recently merged PR allows frequency to be 0: https://github.com/openmm/openmm/pull/3411)
+            try:
+                system_copy.getForce(force_dict['MonteCarloBarostat']).setFrequency(0)  # This requires openmm 8
+            except KeyError:
+                # No MonteCarloBarostat found
+                _logger.debug("No MonteCarloBarostat found in forces. Continuing.")
+            except OpenMMException:
+                # Must be Openmm<8
+                system_copy.removeForce(force_dict['MonteCarloBarostat'])
 
         elif parameters['ensemble'] == 'NPT' or parameters['ensemble'] is None:
             pass
 
         else:
-            raise Exception("Invalid parameter supplied for 'ensemble'")
+            raise ValueError("Invalid parameter supplied for 'ensemble'")
 
         # Set up integrator
         temperature = parameters['temperature']
         collision_rate = parameters['collision_rate']
         timestep = parameters['timestep']
-
-        if parameters['EOM'] == 'MD_interpolate':
-            temperature_end = parameters['temperature_end']
 
         integrator = openmm.LangevinMiddleIntegrator(temperature, collision_rate, timestep)
 
@@ -118,22 +122,24 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
             openmm.LocalEnergyMinimizer.minimize(context, maxIterations=n_steps)
 
         elif parameters['EOM'] == 'MD':
-            for _ in track(range(int(n_steps / n_steps_per_iteration))):
+            for _ in range(int(n_steps / n_steps_per_iteration)):
                 integrator.step(n_steps_per_iteration)
 
         elif parameters['EOM'] == 'MD_interpolate':
+            temperature_end = parameters['temperature_end']
             temperature_unit = unit.kelvin
             temperatures = np.linspace(temperature / temperature_unit, temperature_end / temperature_unit,
                                        int(n_steps / n_steps_per_iteration)) * temperature_unit
-            for temperature in track(temperatures):
+            for temperature in temperatures:
                 integrator.setTemperature(temperature)
                 integrator.step(n_steps_per_iteration)
 
         else:
-            raise Exception("Invalid parameter supplied for 'EOM'")
+            raise ValueError("Invalid parameter supplied for 'EOM'")
 
         # Retrieve positions after this stage of equil
-        positions = context.getState(getPositions=True).getPositions(asNumpy=True)
+        state = context.getState(getPositions=True, getEnergy=True)
+        positions = state.getPositions(asNumpy=True)
 
         # Update default box vectors for next iteration
         box_vectors = context.getState().getPeriodicBoxVectors()
@@ -143,7 +149,7 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
         del context, integrator, system_copy
 
         elapsed_time = time.time() - initial_time
-        print(f"\tStage {i + 1} took {elapsed_time} seconds")
+        print(f"\tStage {stage_index + 1} took {elapsed_time} seconds")
 
     # Save the final equilibrated positions
     if filename.endswith('pdb'):
@@ -152,6 +158,7 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
         openmm.app.PDBxFile.writeFile(topology, positions, open(filename, "w"), keepIds=True)
 
     # Save the box vectors
-    with open(filename[:-4] + '_box_vectors.npy', 'wb') as f:
-        np.save(f, box_vectors)
+    if save_box_vectors:
+        with open(filename[:-4] + '_box_vectors.npy', 'wb') as f:
+            np.save(f, box_vectors)
 
