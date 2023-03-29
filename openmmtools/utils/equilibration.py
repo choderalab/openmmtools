@@ -9,7 +9,7 @@ from openmm import unit, OpenMMException
 _logger = logging.getLogger(__name__)
 
 
-def gentle_equilibration(topology, positions, system, stages, filename, platform_name='CUDA', save_box_vectors=True):
+def run_gentle_equilibration(topology, positions, system, stages, filename, platform_name='CUDA', save_box_vectors=True):
     """
     Run gentle equilibration. Serialize results in an external PDB or CIF file.
 

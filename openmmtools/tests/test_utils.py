@@ -541,10 +541,11 @@ class TestEquilibrationUtils(object):
         system found in `openmmtools.testsystems.AlanineDipeptideExplicit`
 
         To date it is meant to just test that the protocol can run with a test system and
-        do a quick comparison of the energies.
+        do a quick comparison of the energies (this latter part not implemented yet).
 
         Meant to be run using CUDA platform, similar to a production-ready environment.
         """
+        # TODO: Perform the energy comparison part
         from openmmtools.testsystems import AlanineDipeptideExplicit
         from openmmtools.utils import gentle_equilibration
 
