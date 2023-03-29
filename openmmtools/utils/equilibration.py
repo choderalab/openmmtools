@@ -138,7 +138,7 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
             raise ValueError("Invalid parameter supplied for 'EOM'")
 
         # Retrieve positions after this stage of equil
-        state = context.getState(getPositions=True, getEnergy=True)
+        state = context.getState(getPositions=True)
         positions = state.getPositions(asNumpy=True)
 
         # Update default box vectors for next iteration
