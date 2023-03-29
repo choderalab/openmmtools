@@ -30,4 +30,4 @@ from .utils import (
     with_timer,
 )
 
-from .equilibration import gentle_equilibration
+from .equilibration import run_gentle_equilibration

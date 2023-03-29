@@ -470,7 +470,7 @@ class TestEquilibrationUtils(object):
         of each stage is run.
         """
         from openmmtools.testsystems import AlanineDipeptideExplicit
-        from openmmtools.utils import gentle_equilibration
+        from openmmtools.utils import run_gentle_equilibration
 
         test_system = AlanineDipeptideExplicit()
 
@@ -530,7 +530,7 @@ class TestEquilibrationUtils(object):
 
         with temporary_directory() as tmp_path:
             outfile_path = f"{tmp_path}/outfile.cif"
-            gentle_equilibration(topology, positions, system, stages, outfile_path, platform_name="CPU",
+            run_gentle_equilibration(topology, positions, system, stages, outfile_path, platform_name="CPU",
                                  save_box_vectors=False)
 
     # TODO: Marking as not a test until we solve our GPU CI
@@ -547,7 +547,7 @@ class TestEquilibrationUtils(object):
         """
         # TODO: Perform the energy comparison part
         from openmmtools.testsystems import AlanineDipeptideExplicit
-        from openmmtools.utils import gentle_equilibration
+        from openmmtools.utils import run_gentle_equilibration
 
         test_system = AlanineDipeptideExplicit()
 
@@ -605,5 +605,5 @@ class TestEquilibrationUtils(object):
              'timestep': 2 * unit.femtoseconds},
         ]
 
-        gentle_equilibration(topology, positions, system, stages, "outfile.cif", platform_name="CUDA",
+        run_gentle_equilibration(topology, positions, system, stages, "outfile.cif", platform_name="CUDA",
                              save_box_vectors=False)
