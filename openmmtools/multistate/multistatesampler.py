@@ -49,8 +49,6 @@ import mpiplus
 from openmmtools.multistate.utils import SimulationNaNError
 from openmmtools.multistate.pymbar import ParameterError
 
-from openmmtools.integrators import FIREMinimizationIntegrator
-
 logger = logging.getLogger(__name__)
 
 
