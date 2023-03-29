@@ -142,7 +142,7 @@ def gentle_equilibration(topology, positions, system, stages, filename, platform
         positions = state.getPositions(asNumpy=True)
 
         # Update default box vectors for next iteration
-        box_vectors = context.getState().getPeriodicBoxVectors()
+        box_vectors = state.getPeriodicBoxVectors()
         system.setDefaultPeriodicBoxVectors(*box_vectors)
 
         # Delete context and integrator
