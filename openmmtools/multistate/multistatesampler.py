@@ -1366,7 +1366,11 @@ class MultiStateSampler(object):
         thermodynamic_state.pressure = None
 
         # Use Gradient Descent first for numerical stability
-        integrator_grad = GradientDescentMinimizationIntegrator()
+        # This initial step size is 10 times smaller than the default, but
+        # 1. the goal here is stability, not convergence rate and
+        # 2. the step size is adaptive, so it should quickly increase anyway.
+        initial_step_size = 0.001 * unit.angstroms
+        integrator_grad = GradientDescentMinimizationIntegrator(initial_step_size)
         # platform = self.energy_context_cache.platform # This is None, causes:
         # "ValueError: To set platform_properties, you need to also specify the platform."
         platform = get_fastest_platform(minimum_precision='mixed')
