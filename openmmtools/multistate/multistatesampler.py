@@ -790,14 +790,13 @@ class MultiStateSampler(object):
             partial_total_time = timer.partial('Run ReplicaExchange')
             self._update_timing(iteration_time, partial_total_time, run_initial_iteration, iteration_limit)
 
-            # Show timing statistics if debug level is activated.
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
-                if self._timing_data["estimated_time_remaining"] != float('inf'):
-                    logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
-                        self._timing_data["estimated_time_remaining"],
-                        self._timing_data["estimated_localtime_finish_date"],
-                        self._timing_data["estimated_total_time"]))
+            # Log timing data as info level -- useful for users by default
+            logger.info("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
+            if self._timing_data["estimated_time_remaining"] != float('inf'):
+                logger.info("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
+                    self._timing_data["estimated_time_remaining"],
+                    self._timing_data["estimated_localtime_finish_date"],
+                    self._timing_data["estimated_total_time"]))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
