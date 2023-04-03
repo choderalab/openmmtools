@@ -72,7 +72,7 @@ def compute_forces(system, positions, platform=None, force_group=-1):
     return forces
 
 
-def compare_system_forces(reference_system, alchemical_system, positions, name="", platform=None):
+def compare_system_forces(reference_system, alchemical_system, positions, name="", platform=None, max_force_relative_error=MAX_FORCE_RELATIVE_ERROR):
     """Check that the forces of reference and modified systems are close.
 
     Parameters
@@ -98,10 +98,10 @@ def compare_system_forces(reference_system, alchemical_system, positions, name="
         return np.sqrt(np.mean(np.sum(vec**2, axis=1)))
 
     relative_error = magnitude(alchemical_force - reference_force) / magnitude(reference_force)
-    if np.any(np.abs(relative_error) > MAX_FORCE_RELATIVE_ERROR):
+    if np.any(np.abs(relative_error) > max_force_relative_error):
         err_msg = ("Maximum allowable relative force error exceeded (was {:.8f}; allowed {:.8f}).\n"
                    "alchemical_force = {:.8f}, reference_force = {:.8f}, difference = {:.8f}")
-        raise Exception(err_msg.format(relative_error, MAX_FORCE_RELATIVE_ERROR, magnitude(alchemical_force),
+        raise Exception(err_msg.format(relative_error, max_force_relative_error, magnitude(alchemical_force),
                                        magnitude(reference_force), magnitude(alchemical_force-reference_force)))
 
 
@@ -132,7 +132,6 @@ def generate_new_positions(system, positions, platform=None, nsteps=50):
     del context, integrator
     return new_positions
 
-
 # =============================================================================
 # TEST FORCE FACTORIES FUNCTIONS
 # =============================================================================
@@ -147,7 +146,7 @@ def test_restrain_atoms():
 
     # Restrain all the host carbon atoms.
     restrained_atoms = [atom.index for atom in topology.atoms
-                        if atom.element.symbol is 'C' and atom.index <= 125]
+                        if atom.element.symbol == 'C' and atom.index <= 125]
     restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms)
 
     # Compute host center_of_geometry.
@@ -164,7 +163,8 @@ def test_replace_reaction_field():
     """
     test_cases = [
         testsystems.AlanineDipeptideExplicit(nonbondedMethod=openmm.app.CutoffPeriodic),
-        testsystems.HostGuestExplicit(nonbondedMethod=openmm.app.CutoffPeriodic)
+        testsystems.HostGuestExplicit(nonbondedMethod=openmm.app.CutoffPeriodic),
+        testsystems.WaterBox(nonbondedMethod=openmm.app.CutoffPeriodic)
     ]
     platform = openmm.Platform.getPlatformByName('Reference')
     for test_system in test_cases:
@@ -195,4 +195,105 @@ def test_replace_reaction_field():
         f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
                     name=test_name, platform=platform)
         f.description = "Testing replace_reaction_field on system {} with shifted=True".format(test_name)
+        yield f
+
+def test_replace_reaction_field_atomic_mts():
+    """Check that replacing reaction-field electrostatics with atomic MTS reaction field
+    yields minimal force differences with original system.
+
+    Note that we cannot test for energy consistency or energy overlap because
+    which atoms are within the cutoff will cause energy difference to vary wildly.
+
+    """
+    test_cases = [
+        testsystems.AlanineDipeptideExplicit(nonbondedMethod=openmm.app.CutoffPeriodic, switch_width=None, cutoff=10.0*unit.angstroms),
+        testsystems.HostGuestExplicit(nonbondedMethod=openmm.app.CutoffPeriodic, switch_width=None, cutoff=10.0*unit.angstroms),
+        testsystems.WaterBox(nonbondedMethod=openmm.app.CutoffPeriodic, switch_width=None, cutoff=10.0*unit.angstroms)
+    ]
+    platform = openmm.Platform.getPlatformByName('Reference')
+
+    # Test defaults without splitting solvent into separate force group
+    for test_system in test_cases:
+        test_name = test_system.__class__.__name__
+
+        # Replace reaction field using same solvent dielectric
+        for force in test_system.system.getForces():
+            if hasattr(force, 'getReactionFieldDielectric'):
+                solvent_dielectric = force.getReactionFieldDielectric()
+        modified_rf_system = replace_reaction_field_atomic_mts(test_system.system, solvent_dielectric=solvent_dielectric)
+
+        # Make sure positions are not at minimum.
+        positions = generate_new_positions(test_system.system, test_system.positions)
+
+        # Test forces.
+        max_force_relative_error = 0.3
+        f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
+                    name=test_name, platform=platform, max_force_relative_error=max_force_relative_error)
+        f.description = "Testing replace_reaction_field_atomic_mts on system {}".format(test_name)
+        yield f
+
+    # Test defaults with splitting solvent into separate force group
+    for test_system in test_cases:
+        test_name = test_system.__class__.__name__
+
+        # Replace reaction field, splitting solvent into separate force group
+        import mdtraj
+        solvent_indices = mdtraj.Topology.from_openmm(test_system.topology).select('water') # TODO: Select ions too
+        for force in test_system.system.getForces():
+            if hasattr(force, 'getReactionFieldDielectric'):
+                solvent_dielectric = force.getReactionFieldDielectric()
+        modified_rf_system = replace_reaction_field_atomic_mts(test_system.system, solvent_dielectric=solvent_dielectric, solvent_indices=solvent_indices)
+
+        # Make sure positions are not at minimum.
+        positions = generate_new_positions(test_system.system, test_system.positions)
+
+        # Test forces.
+        max_force_relative_error = 0.3
+        f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
+                    name=test_name, platform=platform, max_force_relative_error=max_force_relative_error)
+        f.description = f"Testing replace_reaction_field_atomic_mts on system {test_name}"
+        yield f
+
+    # Test different methods
+    test_system = test_cases[0]
+    test_name = test_system.__class__.__name__
+
+    for method in ['riniker-AT-SHIFT-4-6', 'openmm-shifted', 'openmm-unshifted']:
+        # Replace reaction field.
+        import mdtraj
+        solvent_indices = mdtraj.Topology.from_openmm(test_system.topology).select('water') # TODO: Select ions too
+        for force in test_system.system.getForces():
+            if hasattr(force, 'getReactionFieldDielectric'):
+                solvent_dielectric = force.getReactionFieldDielectric()
+        modified_rf_system = replace_reaction_field_atomic_mts(test_system.system, solvent_indices=solvent_indices, method=method, solvent_dielectric=solvent_dielectric)
+
+        # Make sure positions are not at minimum.
+        positions = generate_new_positions(test_system.system, test_system.positions)
+
+        # Test forces.
+        max_force_relative_error = 0.3
+        f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
+                    name=test_name, platform=platform, max_force_relative_error=max_force_relative_error)
+        f.description = f"Testing replace_reaction_field_atomic_mts with method {method} on system {test_name}"
+        yield f
+
+    # Test specified cutoff option
+    for test_system in test_cases:
+        test_name = test_system.__class__.__name__
+
+        # Replace reaction field using specified solvent indices and specified cutoff
+        cutoff = 12.0 * unit.angstroms
+        modified_rf_system = replace_reaction_field_atomic_mts(test_system.system, cutoff=cutoff, solvent_dielectric=100.0)
+
+        # Check cutoff was set correctly
+        for force in modified_rf_system.getForces():
+            if force.__class__.__name__ in ['CustomNonbondedForce', 'NonbondedForce']:
+                assert abs(force.getCutoffDistance() - cutoff) < 0.1*unit.angstroms, f"Expected cutoff distance {cutoff} but got {force.getCutoffDistance()}"
+
+        # Make sure positions are not at minimum.
+        positions = generate_new_positions(modified_rf_system, test_system.positions)
+
+        # Test forces.
+        f = partial(compute_forces, modified_rf_system, positions, platform=platform)
+        f.description = f"Testing replace_reaction_field_atomic_mts with cutoff specified for system {test_name}"
         yield f
