@@ -1376,9 +1376,6 @@ class MultiStateSampler(object):
         # Compute the final energy of the system for logging.
         final_energy = thermodynamic_state.reduced_potential(sampler_state)
         logger.debug(f'Replica {replica_id + 1}/{self.n_replicas}: final energy {final_energy:8.3f}kT')
-        # TODO if energy > 0, use slower openmm minimizer
-        # Clean up the integrator
-        del context
 
         # Return minimized positions.
         return sampler_state.positions
