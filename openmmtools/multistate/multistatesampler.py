@@ -765,9 +765,9 @@ class MultiStateSampler(object):
             # Increment iteration counter.
             self._iteration += 1
 
-            logger.debug('*' * 80)
-            logger.debug('Iteration {}/{}'.format(self._iteration, iteration_limit))
-            logger.debug('*' * 80)
+            logger.info('*' * 80)
+            logger.info('Iteration {}/{}'.format(self._iteration, iteration_limit))
+            logger.info('*' * 80)
             timer.start('Iteration')
 
             # Update thermodynamic states
