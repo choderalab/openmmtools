@@ -679,7 +679,7 @@ class MultiStateSampler(object):
         production_mcmc_moves = self._mcmc_moves
         self._mcmc_moves = mcmc_moves
         for iteration in range(1, 1 + n_iterations):
-            logger.debug("Equilibration iteration {}/{}".format(iteration, n_iterations))
+            logger.info("Equilibration iteration {}/{}".format(iteration, n_iterations))
             timer.start('Equilibration Iteration')
 
             # NOTE: Unlike run(), do NOT increment iteration counter.
@@ -703,14 +703,12 @@ class MultiStateSampler(object):
             estimated_finish_time = time.time() + estimated_time_remaining
             # TODO: Transmit timing information
 
-            # Show timing statistics if debug level is activated.
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
-                if estimated_time_remaining != float('inf'):
-                    logger.debug("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
-                        str(datetime.timedelta(seconds=estimated_time_remaining)),
-                        time.ctime(estimated_finish_time),
-                        str(datetime.timedelta(seconds=estimated_total_time))))
+            logger.info("Iteration took {:.3f}s.".format(iteration_time))
+            if estimated_time_remaining != float('inf'):
+                logger.info("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
+                    str(datetime.timedelta(seconds=estimated_time_remaining)),
+                    time.ctime(estimated_finish_time),
+                    str(datetime.timedelta(seconds=estimated_total_time))))
         timer.report_timing()
 
         # Restore production MCMCMoves.
@@ -765,9 +763,9 @@ class MultiStateSampler(object):
             # Increment iteration counter.
             self._iteration += 1
 
-            logger.debug('*' * 80)
-            logger.debug('Iteration {}/{}'.format(self._iteration, iteration_limit))
-            logger.debug('*' * 80)
+            logger.info('*' * 80)
+            logger.info('Iteration {}/{}'.format(self._iteration, iteration_limit))
+            logger.info('*' * 80)
             timer.start('Iteration')
 
             # Update thermodynamic states
