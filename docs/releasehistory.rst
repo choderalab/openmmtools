@@ -1,6 +1,22 @@
 Release History
 ***************
 
+0.22.0 - pymbar 4 support and gentle equilibration
+==================================================
+
+Enhancements
+------------
+- Openmmtools now supports both Pymbar 3 and 4 versions. (PR `#659 <https://github.com/choderalab/openmmtools/pull/659>`_)
+- Gentle equilibration protocol utility function available in ``openmmtools.utils.gentle_equilibration`` (PR `#669 <https://github.com/choderalab/openmmtools/pull/669>`_).
+- Timing information for multiple state sampler is now reported by default (PRs `#679 <https://github.com/choderalab/openmmtools/pull/679>`_ and `#671 <https://github.com/choderalab/openmmtools/issues/671>`_).
+
+Bugfixes
+--------
+- Users were not able to distinguish the exceptions caught during dynamics. Warnings are now raised when an exception is being caught (Issue `#643 <https://github.com/choderalab/openmmtools/issues/643>`_ PR `#658 <https://github.com/choderalab/openmmtools/pull/658>`_).
+- Deserializing MCMC moves objects from versions <=0.21.4 resulted in error finding the key. Fixed by catching the exception and raising a warning when key is not found (Issue `#618 <https://github.com/choderalab/openmmtools/issues/618>`_ PR `#675 <https://github.com/choderalab/openmmtools/pull/675>`_).
+- Different improvements in documentation strings and readthedocs documentation generation (Issues `#620 <https://github.com/choderalab/openmmtools/issues/620>`_ `#641 <https://github.com/choderalab/openmmtools/issues/641>`_ `#548 <https://github.com/choderalab/openmmtools/issues/548>`_. PR `#676 <https://github.com/choderalab/openmmtools/pull/676>`_)
+- Support for newer NetCDF versions (1.6 branch) by not using zlib compression for varying length variables. (PR `#654 <https://github.com/choderalab/openmmtools/pull/654>`_).
+
 0.21.5 - Bugfix release
 ======================
 
