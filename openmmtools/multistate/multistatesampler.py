@@ -1379,7 +1379,7 @@ class MultiStateSampler(object):
                 logger.debug('Using FIRE: tolerance {} max_iterations {}'.format(tolerance, max_iterations))
                 integrator.step(max_iterations)
         except Exception as e:
-            if str(e) == 'Particle coordinate is nan':
+            if 'particle coordinate is nan' in str(e).lower():
                 logger.debug('NaN encountered in FIRE minimizer; falling back to L-BFGS after resetting positions')
                 sampler_state.apply_to_context(context)
                 openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
