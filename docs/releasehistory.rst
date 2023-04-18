@@ -1,6 +1,14 @@
 Release History
 ***************
 
+0.22.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fixed issue where the error message thrown from openMM changed, so we need a case insensitive check. This was already fixed in most of the code base but one spot was missed. (PR `#684 <https://github.com/choderalab/openmmtools/pull/684>`_)
+
 0.22.0 - pymbar 4 support and gentle equilibration
 ==================================================
 
@@ -18,7 +26,7 @@ Bugfixes
 - Support for newer NetCDF versions (1.6 branch) by not using zlib compression for varying length variables. (PR `#654 <https://github.com/choderalab/openmmtools/pull/654>`_).
 
 0.21.5 - Bugfix release
-======================
+=======================
 
 Changed behaviors
 -----------------
@@ -131,7 +139,7 @@ Cleanup
 - Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
 
 0.20.1 - Bugfix release
-========================================
+=======================
 
 Enhancements
 ------------
