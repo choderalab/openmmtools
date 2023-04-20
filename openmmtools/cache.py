@@ -143,7 +143,8 @@ class LRUCache(object):
 
     def empty(self):
         """Purge the cache."""
-        self._data = collections.OrderedDict()
+        for context in self._data:
+            del self._data[context]
 
     def __getitem__(self, key):
         # When we access data, push element at the
