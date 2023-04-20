@@ -143,7 +143,7 @@ class LRUCache(object):
 
     def empty(self):
         """Purge the cache."""
-        for context in self._data:
+        for context in list(self._data.keys()):
             del self._data[context]
 
     def __getitem__(self, key):
