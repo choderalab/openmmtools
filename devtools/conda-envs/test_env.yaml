@@ -27,6 +27,7 @@ dependencies:
   - nose-timer
   - pytest
   - pytest-cov
+  - coverage
   
   # docs
   - numpydoc
