@@ -137,8 +137,9 @@ class MultiStateReporter(object):
         self._analysis_particle_indices = tuple(analysis_particle_indices)
         if open_mode is not None:
             self.open(open_mode)
-        # Flag to check whether to overwrite real time statistics file
-        self._overwrite_statistics = True
+        # TODO: Maybe we want to expose this flag to control ovrwriting/appending
+        # Flag to check whether to overwrite real time statistics file -- Defaults to append
+        self._overwrite_statistics = False
 
     @property
     def filepath(self):
@@ -266,6 +267,7 @@ class MultiStateReporter(object):
         self.close()
 
         # Create directory if we want to write.
+        # TODO: We probably want to check here specifically for w when we want to write
         if mode != 'r':
             for storage_path in self._storage_paths:
                 # normpath() transform '' to '.' for makedirs().
