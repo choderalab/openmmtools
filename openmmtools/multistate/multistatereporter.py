@@ -97,8 +97,8 @@ class MultiStateReporter(object):
         The reporter internally tracks what data goes into which file, so its transparent to all other classes
         In the future, this will be able to take Storage classes as well
     analysis_particle_indices : tuple of ints, Optional. Default: () (empty tuple)
-        Indices of particles which should be treated as special when manipulating read and write functions.
-        If this is an empty tuple, then no particles are treated as special
+        If specified, it will serialize positions and velocities for the specified particles, at every iteration, in the
+        reporter storage (.nc) file. If empty, no positions or velocities will be stored in this file for any atoms.
 
     Attributes
     ----------
