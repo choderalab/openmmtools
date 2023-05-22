@@ -15,7 +15,7 @@ Test Force classes in forces.py.
 
 import pickle
 
-import nose.tools
+import pytest
 
 from openmmtools import testsystems, states
 from openmmtools.forces import *
@@ -39,12 +39,6 @@ def assert_quantity_almost_equal(object1, object2):
     assert utils.is_quantity_close(object1, object2), '{} != {}'.format(object1, object2)
 
 
-def assert_equal(*args, **kwargs):
-    """Python 2 work-around to be able to yield nose.tools.assert_equal"""
-    # TODO: Just yield nose.tools.assert_equal after we have dropped Python2 support.
-    nose.tools.assert_equal(*args, **kwargs)
-
-
 # =============================================================================
 # UTILITY FUNCTIONS TESTS
 # =============================================================================
@@ -63,44 +57,46 @@ def test_find_forces():
         # Forces should be ordered by their index.
         assert list(found_forces.keys()) == sorted(found_forces.keys())
         found_forces = {(i, force.__class__) for i, force in found_forces.items()}
-        nose.tools.assert_equal(found_forces, set(expected_force_classes))
+        assert found_forces == set(expected_force_classes)
 
     # Test find force without including subclasses.
     found_forces = find_forces(system, openmm.CustomBondForce)
-    yield assert_forces_equal, found_forces, [(6, openmm.CustomBondForce)]
+    assert_forces_equal(found_forces, [(6, openmm.CustomBondForce)])
 
     # Test find force and include subclasses.
     found_forces = find_forces(system, openmm.CustomBondForce, include_subclasses=True)
-    yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
-                                              (6, openmm.CustomBondForce)]
+    assert_forces_equal(found_forces, [(5, HarmonicRestraintBondForce),
+                                       (6, openmm.CustomBondForce)])
     found_forces = find_forces(system, RadiallySymmetricRestraintForce, include_subclasses=True)
-    yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce)]
+    assert_forces_equal(found_forces, [(5, HarmonicRestraintBondForce)])
 
     # Test exact name matching.
     found_forces = find_forces(system, 'HarmonicBondForce')
-    yield assert_forces_equal, found_forces, [(0, openmm.HarmonicBondForce)]
+    assert_forces_equal(found_forces, [(0, openmm.HarmonicBondForce)])
 
     # Find all forces containing the word "Harmonic".
     found_forces = find_forces(system, '.*Harmonic.*')
-    yield assert_forces_equal, found_forces, [(0, openmm.HarmonicBondForce),
-                                              (1, openmm.HarmonicAngleForce),
-                                              (5, HarmonicRestraintBondForce)]
+    assert_forces_equal(found_forces, [(0, openmm.HarmonicBondForce),
+                                       (1, openmm.HarmonicAngleForce),
+                                       (5, HarmonicRestraintBondForce)])
 
     # Find all forces from the name including the subclasses.
     # Test find force and include subclasses.
     found_forces = find_forces(system, 'CustomBond.*', include_subclasses=True)
-    yield assert_forces_equal, found_forces, [(5, HarmonicRestraintBondForce),
-                                              (6, openmm.CustomBondForce)]
+    assert_forces_equal(found_forces, [(5, HarmonicRestraintBondForce),
+                                       (6, openmm.CustomBondForce)])
 
     # With check_multiple=True only one force is returned.
     force_idx, force = find_forces(system, openmm.NonbondedForce, only_one=True)
-    yield assert_forces_equal, {force_idx: force}, [(3, openmm.NonbondedForce)]
+    assert_forces_equal({force_idx: force}, [(3, openmm.NonbondedForce)])
 
     # An exception is raised with "only_one" if multiple forces are found.
-    yield nose.tools.assert_raises, MultipleForcesError, find_forces, system, 'CustomBondForce', True, True
+    with pytest.raises(MultipleForcesError):
+        find_forces(system, 'CustomBondForce', True, True)
 
     # An exception is raised with "only_one" if the force wasn't found.
-    yield nose.tools.assert_raises, NoForceFoundError, find_forces, system, 'NonExistentForce', True
+    with pytest.raises(NoForceFoundError):
+        find_forces(system, 'NonExistentForce', True)
 
 
 # =============================================================================
@@ -153,17 +149,17 @@ class TestRadiallySymmetricRestraints(object):
     def test_restraint_properties(self):
         """Test that properties work as expected."""
         for restraint in self.restraints:
-            yield assert_quantity_almost_equal, restraint.spring_constant, self.spring_constant
+            assert restraint.spring_constant == pytest.approx(self.spring_constant, abs=1e-7)
             if isinstance(restraint, FlatBottomRestraintForceMixIn):
-                yield assert_quantity_almost_equal, restraint.well_radius, self.well_radius
+                assert_quantity_almost_equal(restraint.well_radius, self.well_radius)
 
             if isinstance(restraint, RadiallySymmetricCentroidRestraintForce):
-                yield assert_equal, restraint.restrained_atom_indices1, self.restrained_atom_indices1
-                yield assert_equal, restraint.restrained_atom_indices2, self.restrained_atom_indices2
+                assert restraint.restrained_atom_indices1 == self.restrained_atom_indices1
+                assert restraint.restrained_atom_indices2 == self.restrained_atom_indices2
             else:
                 assert isinstance(restraint, RadiallySymmetricBondRestraintForce)
-                yield assert_equal, restraint.restrained_atom_indices1, [self.restrained_atom_index1]
-                yield assert_equal, restraint.restrained_atom_indices2, [self.restrained_atom_index2]
+                assert restraint.restrained_atom_indices1 == [self.restrained_atom_index1]
+                assert restraint.restrained_atom_indices2 == [self.restrained_atom_index2]
 
     def test_controlling_parameter_name(self):
         """Test that the controlling parameter name enters the energy function correctly."""
@@ -251,7 +247,7 @@ class TestRadiallySymmetricRestraints(object):
             ssc = restraint.compute_standard_state_correction(thermodynamic_state, square_well,
                                                               radius_cutoff, energy_cutoff, max_volume)
             err_msg = '{} computed SSC != expected SSC'.format(restraint.__class__.__name__)
-            nose.tools.assert_equal(ssc, expected_ssc, msg=err_msg)
+            assert ssc == expected_ssc, err_msg
 
         for restraint in self.restraints:
             # In NPT ensemble, an exception is thrown if max_volume is not provided.
