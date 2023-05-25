@@ -35,6 +35,7 @@ import typing
 import inspect
 import logging
 import datetime
+import subprocess
 
 import numpy as np
 
@@ -1774,10 +1775,16 @@ class MultiStateSampler(object):
     def _display_cuda_devices():
         """Query system nvidia-smi to get available GPUs indices and names in debug log."""
         # Read nvidia-smi query, should return empty strip if no GPU is found.
-        cuda_query_output = os.popen("nvidia-smi --query-gpu=index,gpu_name --format=csv,noheader").read().strip()
-        # Split by line jump and comma
-        cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
-        logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+        cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
+        print(cuda_query_output)
+        if cuda_query_output.stdout:
+            # Split by line jump and comma
+            cuda_devices_list = [entry for entry in cuda_query_output.stdout.splitlines()]
+            logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+            if "Default" in cuda_query_output.stdout:
+                logger.warn(f"GPU in 'Exclusive_Process' mode, one context is allowed per device. This may prevent some openmmtools features from working.")
+        else:
+            logger.debug(f"nvidia-smi command failed: {cuda_query_output.stderr}, this is expected if there is no GPU available")
 
     def _flatten_moves_iterator(self):
         """Recursively flatten MCMC moves. Handles the cases where each move can be a set of moves, for example with
