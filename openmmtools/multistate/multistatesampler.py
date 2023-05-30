@@ -1783,6 +1783,8 @@ class MultiStateSampler(object):
             if "Default" not in cuda_query_output.stdout:
                 logger.warn(f"GPU in 'Exclusive_Process' mode (or Prohibited), one context is allowed per device. This may prevent some openmmtools features from working. GPU must be in 'Default' compute mode")
         except subprocess.CalledProcessError:
+            # I guess we call it again, but this time don't check for the fail
+            cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
             logger.debug(f"nvidia-smi command failed: {cuda_query_output.stderr}, this is expected if there is no GPU available")
 
     def _flatten_moves_iterator(self):
