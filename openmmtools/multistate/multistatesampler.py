@@ -1775,7 +1775,7 @@ class MultiStateSampler(object):
     def _display_cuda_devices():
         """Query system nvidia-smi to get available GPUs indices and names in debug log."""
         try:
-            cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
+            cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True, check=True)
             # Split by line jump and comma
             cuda_devices_list = [entry for entry in cuda_query_output.stdout.splitlines()]
             logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
