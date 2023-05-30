@@ -1781,7 +1781,7 @@ class MultiStateSampler(object):
             # Split by line jump and comma
             cuda_devices_list = [entry for entry in cuda_query_output.stdout.splitlines()]
             logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
-            if "Default" in cuda_query_output.stdout:
+            if "Exclusive_Process" in cuda_query_output.stdout:
                 logger.warn(f"GPU in 'Exclusive_Process' mode, one context is allowed per device. This may prevent some openmmtools features from working.")
         else:
             logger.debug(f"nvidia-smi command failed: {cuda_query_output.stderr}, this is expected if there is no GPU available")
