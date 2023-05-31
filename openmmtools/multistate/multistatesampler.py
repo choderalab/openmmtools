@@ -1774,17 +1774,18 @@ class MultiStateSampler(object):
     @staticmethod
     def _display_cuda_devices():
         """Query system nvidia-smi to get available GPUs indices and names in debug log."""
-        try:
-            cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True, check=True)
+
+        cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
+        # Check if command worked
+        if cuda_query_output.returncode == 0:
             # Split by line jump and comma
             cuda_devices_list = [entry for entry in cuda_query_output.stdout.splitlines()]
             logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
             # We only support "Default" and not "Exclusive_Process" for the compute mode
             if "Default" not in cuda_query_output.stdout:
                 logger.warn(f"GPU in 'Exclusive_Process' mode (or Prohibited), one context is allowed per device. This may prevent some openmmtools features from working. GPU must be in 'Default' compute mode")
-        except subprocess.CalledProcessError:
-            # I guess we call it again, but this time don't check for the fail
-            cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
+        # Handel the case where the command had some error
+        else:
             logger.debug(f"nvidia-smi command failed: {cuda_query_output.stderr}, this is expected if there is no GPU available")
 
     def _flatten_moves_iterator(self):
