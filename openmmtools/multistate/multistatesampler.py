@@ -1026,12 +1026,12 @@ class MultiStateSampler(object):
         self._thermodynamic_states = thermodynamic_states
         self._unsampled_states = unsampled_states
         self._sampler_states = sampler_states
-        self._replica_thermodynamic_states = state_indices
+        self._replica_thermodynamic_states = np.array(state_indices)
         self._energy_thermodynamic_states = energy_thermodynamic_states
         self._neighborhoods = neighborhoods
         self._energy_unsampled_states = energy_unsampled_states
-        self._n_accepted_matrix = n_accepted_matrix
-        self._n_proposed_matrix = n_proposed_matrix
+        self._n_accepted_matrix = np.array(n_accepted_matrix)
+        self._n_proposed_matrix = np.array(n_proposed_matrix)
         self._metadata = metadata
 
         self._last_mbar_f_k = last_mbar_f_k
