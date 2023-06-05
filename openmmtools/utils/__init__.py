@@ -8,7 +8,7 @@ This module provides a common API point for different utility functions that ser
 or help users in different miscellaneous tasks.
 """
 from .utils import (
-    RestorableOpenMMObject
+    RestorableOpenMMObject,
     RestorableOpenMMObjectError,
     SubhookedABCMeta,
     Timer,
