@@ -406,8 +406,7 @@ class MultiStateReporter(object):
             ncfile.createDimension('spatial', 3)  # Number of spatial dimensions.
 
             # Set global attributes.
-            ncfile.application = 'YANK'
-            ncfile.program = 'yank.py'
+            ncfile.program = f"openmmtools {openmmtools.__version__}"
             ncfile.programVersion = __version__
             ncfile.Conventions = convention
             ncfile.ConventionVersion = '0.2'
