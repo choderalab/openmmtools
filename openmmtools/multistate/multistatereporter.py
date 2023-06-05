@@ -48,6 +48,7 @@ try:
 except ImportError:  # OpenMM < 7.6
     from simtk import unit
 
+import openmmtools
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
 from openmmtools import states
 
@@ -408,8 +409,7 @@ class MultiStateReporter(object):
             ncfile.createDimension('spatial', 3)  # Number of spatial dimensions.
 
             # Set global attributes.
-            ncfile.application = 'YANK'
-            ncfile.program = 'yank.py'
+            ncfile.program = f"openmmtools {openmmtools.__version__}"
             ncfile.programVersion = __version__
             ncfile.Conventions = convention
             ncfile.ConventionVersion = '0.2'
