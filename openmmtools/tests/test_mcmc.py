@@ -364,7 +364,7 @@ def test_mcmc_move_context_cache_shallow_copy():
     )
     # Create temporary reporter storage file
     with tempfile.NamedTemporaryFile() as storage:
-        reporter = multistate.MultiStateReporter(storage.name, checkpoint_interval=999999)
+        reporter = multistate.MultiStateReporter(storage.name, checkpoint_interval=200)
     simulation.create(
         thermodynamic_states=thermodynamic_states,
         sampler_states=SamplerState(

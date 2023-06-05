@@ -141,7 +141,8 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
     def run(self, include_unsampled_states=False):
         # Create and configure simulation object
         move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0*unit.angstroms)
-        simulation = self.SAMPLER(mcmc_moves=move, number_of_iterations=self.N_ITERATIONS)
+        simulation = self.SAMPLER(mcmc_moves=move, number_of_iterations=self.N_ITERATIONS,
+                                  online_analysis_interval=self.N_ITERATIONS)
 
         # Define file for temporary storage.
         with temporary_directory() as tmp_dir:
@@ -587,6 +588,7 @@ class TestBaseMultistateSampler(object):
 
     N_SAMPLERS = 3
     N_STATES = 5
+    # TODO: Once we migrate to pytest SAMPLER and REPORTER should be fixtures!
     SAMPLER = MultiStateSampler
     REPORTER = MultiStateReporter
 
@@ -999,7 +1001,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
 
         with self.temporary_storage_path() as storage_path:
-            sampler = self.SAMPLER(number_of_iterations=5)
+            sampler = self.SAMPLER(number_of_iterations=5, online_analysis_interval=1)
             reporter = self.REPORTER(storage_path, checkpoint_interval=1)
             self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
@@ -1451,7 +1453,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval,
                                    online_analysis_minimum_iterations=3)
-            self.call_sampler_create(sampler, storage_path,
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
                                      unsampled_states)
             # Run
@@ -1510,7 +1513,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                                    online_analysis_interval=online_interval,
                                    online_analysis_minimum_iterations=0,
                                    online_analysis_target_error=np.inf)  # use infinite error to stop right away
-            self.call_sampler_create(sampler, storage_path,
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
                                      unsampled_states)
             # Run
@@ -1570,7 +1574,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval)
-            self.call_sampler_create(sampler, storage_path,
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
                                      unsampled_states)
             # Run
