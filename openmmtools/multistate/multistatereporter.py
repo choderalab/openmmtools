@@ -48,6 +48,7 @@ try:
 except ImportError:  # OpenMM < 7.6
     from simtk import unit
 
+import openmmtools
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
 from openmmtools import states
 
