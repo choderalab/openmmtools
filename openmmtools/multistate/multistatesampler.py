@@ -35,6 +35,7 @@ import typing
 import inspect
 import logging
 import datetime
+import subprocess
 
 import numpy as np
 
@@ -588,6 +589,12 @@ class MultiStateSampler(object):
         if mpiplus.run_single_node(0, self._reporter.storage_exists, broadcast_result=True):
             raise RuntimeError('Storage file {} already exists; cowardly '
                                'refusing to overwrite.'.format(self._reporter.filepath))
+
+        # Make sure online analysis interval is a multiples of the reporter's checkpoint interval
+        # this avoids having redundant iteration information in the real time yaml files
+        if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
+            raise ValueError(f"Online analysis interval: {self.online_analysis_interval}, must be a "
+                             f"multiple of the checkpoint interval: {self._reporter.checkpoint_interval}")
 
         # Make sure sampler_states is an iterable of SamplerStates.
         if isinstance(sampler_states, states.SamplerState):
@@ -1773,11 +1780,19 @@ class MultiStateSampler(object):
     @staticmethod
     def _display_cuda_devices():
         """Query system nvidia-smi to get available GPUs indices and names in debug log."""
-        # Read nvidia-smi query, should return empty strip if no GPU is found.
-        cuda_query_output = os.popen("nvidia-smi --query-gpu=index,gpu_name --format=csv,noheader").read().strip()
-        # Split by line jump and comma
-        cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
-        logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+
+        cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
+        # Check if command worked
+        if cuda_query_output.returncode == 0:
+            # Split by line jump and comma
+            cuda_devices_list = [entry for entry in cuda_query_output.stdout.splitlines()]
+            logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+            # We only support "Default" and not "Exclusive_Process" for the compute mode
+            if "Default" not in cuda_query_output.stdout:
+                logger.warning(f"GPU in 'Exclusive_Process' mode (or Prohibited), one context is allowed per device. This may prevent some openmmtools features from working. GPU must be in 'Default' compute mode")
+        # Handel the case where the command had some error
+        else:
+            logger.debug(f"nvidia-smi command failed: {cuda_query_output.stderr}, this is expected if there is no GPU available")
 
     def _flatten_moves_iterator(self):
         """Recursively flatten MCMC moves. Handles the cases where each move can be a set of moves, for example with
