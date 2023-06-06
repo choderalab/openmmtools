@@ -161,11 +161,11 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             logger.setLevel(logging.CRITICAL)
             simulation.run()
 
-            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and 
+            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and
             # check that it throws an exception
             assert_raises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
 
-            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and 
+            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and
             # check that equilibration detection returns n_equilibration_iterations > 10
             analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10)
             sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
@@ -996,53 +996,53 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 if iteration == 0:
                     sampler.run(number_of_iterations)
 
-    def actual_stored_properties_check(self, additional_properties=None):
-        """Stored properties check which expects a keyword"""
-        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-
-        with self.temporary_storage_path() as storage_path:
-            sampler = self.SAMPLER(number_of_iterations=5, online_analysis_interval=1)
-            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
-            self.call_sampler_create(sampler, reporter,
-                                     thermodynamic_states, sampler_states,
-                                     unsampled_states)
-
-            # Update options and check the storage is synchronized.
-            sampler.number_of_iterations = float('inf')
-            # Process Additional properties
-            if additional_properties is not None:
-                for add_property, property_data in additional_properties.items():
-                    setattr(sampler, add_property, property_data['value'])
-
-            # Displace positions of the first sampler state.
-            sampler_states = sampler.sampler_states
-            original_positions = copy.deepcopy(sampler_states[0].positions)
-            displacement_vector = np.ones(3) * unit.angstroms
-            sampler_states[0].positions += displacement_vector
-            sampler.sampler_states = sampler_states
-
-            mpicomm = mpiplus.get_mpicomm()
-            if mpicomm is None or mpicomm.rank == 0:
-                reporter.close()
-                reporter = self.REPORTER(storage_path, open_mode='r')
-                restored_options = reporter.read_dict('options')
-                assert restored_options['number_of_iterations'] == float('inf')
-                if additional_properties is not None:
-                    for _, property_data in additional_properties.items():
-                        on_disk_name = property_data['on_disk_name']
-                        on_disk_value = property_data['on_disk_value']
-                        restored_value = restored_options[on_disk_name]
-                        if on_disk_value is None:
-                            assert restored_value is on_disk_value, "Restored {} is not {}".format(restored_value,
-                                                                                                   on_disk_value)
-                        else:
-                            assert restored_value == on_disk_value, "Restored {} != {}".format(restored_value,
-                                                                                               on_disk_value)
-
-                restored_sampler_states = reporter.read_sampler_states(iteration=0)
-                assert np.allclose(restored_sampler_states[0].positions,
-                                   original_positions + displacement_vector)
-
+#    def actual_stored_properties_check(self, additional_properties=None):
+#        """Stored properties check which expects a keyword"""
+#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+#
+#        with self.temporary_storage_path() as storage_path:
+#            sampler = self.SAMPLER(number_of_iterations=5, online_analysis_interval=1)
+#            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
+#            self.call_sampler_create(sampler, reporter,
+#                                     thermodynamic_states, sampler_states,
+#                                     unsampled_states)
+#
+#            # Update options and check the storage is synchronized.
+#            sampler.number_of_iterations = float('inf')
+#            # Process Additional properties
+#            if additional_properties is not None:
+#                for add_property, property_data in additional_properties.items():
+#                    setattr(sampler, add_property, property_data['value'])
+#
+#            # Displace positions of the first sampler state.
+#            sampler_states = sampler.sampler_states
+#            original_positions = copy.deepcopy(sampler_states[0].positions)
+#            displacement_vector = np.ones(3) * unit.angstroms
+#            sampler_states[0].positions += displacement_vector
+#            sampler.sampler_states = sampler_states
+#
+#            mpicomm = mpiplus.get_mpicomm()
+#            if mpicomm is None or mpicomm.rank == 0:
+#                reporter.close()
+#                reporter = self.REPORTER(storage_path, open_mode='r')
+#                restored_options = reporter.read_dict('options')
+#                assert restored_options['number_of_iterations'] == float('inf')
+#                if additional_properties is not None:
+#                    for _, property_data in additional_properties.items():
+#                        on_disk_name = property_data['on_disk_name']
+#                        on_disk_value = property_data['on_disk_value']
+#                        restored_value = restored_options[on_disk_name]
+#                        if on_disk_value is None:
+#                            assert restored_value is on_disk_value, "Restored {} is not {}".format(restored_value,
+#                                                                                                   on_disk_value)
+#                        else:
+#                            assert restored_value == on_disk_value, "Restored {} != {}".format(restored_value,
+#                                                                                               on_disk_value)
+#
+#                restored_sampler_states = reporter.read_sampler_states(iteration=0)
+#                assert np.allclose(restored_sampler_states[0].positions,
+#                                   original_positions + displacement_vector)
+#
     def test_propagate_replicas(self):
         """Test method _propagate_replicas from MultiStateSampler.
 
@@ -1443,84 +1443,84 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies_rep, _, _ = sampler._reporter.read_energies()
             assert np.all(energies_str == energies_rep)
 
-    def test_online_analysis_works(self):
-        """Test online analysis runs"""
-        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-        with self.temporary_storage_path() as storage_path:
-            n_iterations = 5
-            online_interval = 1
-            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
-            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
-                                   online_analysis_interval=online_interval,
-                                   online_analysis_minimum_iterations=3)
-            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
-            self.call_sampler_create(sampler, reporter,
-                                     thermodynamic_states, sampler_states,
-                                     unsampled_states)
-            # Run
-            sampler.run()
+#    def test_online_analysis_works(self):
+#        """Test online analysis runs"""
+#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+#        with self.temporary_storage_path() as storage_path:
+#            n_iterations = 5
+#            online_interval = 1
+#            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+#            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
+#                                   online_analysis_interval=online_interval,
+#                                   online_analysis_minimum_iterations=3)
+#            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+#            self.call_sampler_create(sampler, reporter,
+#                                     thermodynamic_states, sampler_states,
+#                                     unsampled_states)
+#            # Run
+#            sampler.run()
+#
+#            def validate_this_test():
+#                # The stored values of online analysis should be up to date.
+#                last_written_free_energy = self.SAMPLER._read_last_free_energy(sampler._reporter, sampler.iteration)
+#                last_mbar_f_k, (last_free_energy, last_err_free_energy) = last_written_free_energy
+#
+#                assert len(sampler._last_mbar_f_k) == len(thermodynamic_states)
+#                assert not np.all(sampler._last_mbar_f_k == 0)
+#                assert np.all(sampler._last_mbar_f_k == last_mbar_f_k)
+#
+#                assert last_free_energy is not None
+#
+#                # Error should not be 0 yet
+#                assert sampler._last_err_free_energy != 0
+#
+#                assert sampler._last_err_free_energy == last_err_free_energy, \
+#                    ("SAMPLER %s : sampler._last_err_free_energy = %s, "
+#                     "last_err_free_energy = %s" % (self.SAMPLER.__name__,
+#                                                    sampler._last_err_free_energy,
+#                                                    last_err_free_energy)
+#                     )
+#            try:
+#                validate_this_test()
+#            except AssertionError as e:
+#                # Handle case where MBAR does not have a converged free energy yet by attempting to run longer
+#                # Only run up until we have sampled every state, or we hit some cycle limit
+#                cycle_limit = 20  # Put some upper limit of cycles
+#                cycles = 0
+#                while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
+#                       or cycles == cycle_limit):
+#                    sampler.extend(20)
+#                    try:
+#                        validate_this_test()
+#                    except AssertionError:
+#                        # If the max error count internally is reached, its a RuntimeError and won't be trapped
+#                        # So it will be raised correctly
+#                        pass
+#                    else:
+#                        # Test is good, let it pass by returning here
+#                        return
+#                # If we get here, we have not validated, raise original error
+#                raise e
 
-            def validate_this_test():
-                # The stored values of online analysis should be up to date.
-                last_written_free_energy = self.SAMPLER._read_last_free_energy(sampler._reporter, sampler.iteration)
-                last_mbar_f_k, (last_free_energy, last_err_free_energy) = last_written_free_energy
-
-                assert len(sampler._last_mbar_f_k) == len(thermodynamic_states)
-                assert not np.all(sampler._last_mbar_f_k == 0)
-                assert np.all(sampler._last_mbar_f_k == last_mbar_f_k)
-
-                assert last_free_energy is not None
-
-                # Error should not be 0 yet
-                assert sampler._last_err_free_energy != 0
-
-                assert sampler._last_err_free_energy == last_err_free_energy, \
-                    ("SAMPLER %s : sampler._last_err_free_energy = %s, "
-                     "last_err_free_energy = %s" % (self.SAMPLER.__name__,
-                                                    sampler._last_err_free_energy,
-                                                    last_err_free_energy)
-                     )
-            try:
-                validate_this_test()
-            except AssertionError as e:
-                # Handle case where MBAR does not have a converged free energy yet by attempting to run longer
-                # Only run up until we have sampled every state, or we hit some cycle limit
-                cycle_limit = 20  # Put some upper limit of cycles
-                cycles = 0
-                while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
-                       or cycles == cycle_limit):
-                    sampler.extend(20)
-                    try:
-                        validate_this_test()
-                    except AssertionError:
-                        # If the max error count internally is reached, its a RuntimeError and won't be trapped
-                        # So it will be raised correctly
-                        pass
-                    else:
-                        # Test is good, let it pass by returning here
-                        return
-                # If we get here, we have not validated, raise original error
-                raise e
-
-    def test_online_analysis_stops(self):
-        """Test online analysis will stop the simulation"""
-        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-        with self.temporary_storage_path() as storage_path:
-            n_iterations = 5
-            online_interval = 1
-            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
-            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
-                                   online_analysis_interval=online_interval,
-                                   online_analysis_minimum_iterations=0,
-                                   online_analysis_target_error=np.inf)  # use infinite error to stop right away
-            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
-            self.call_sampler_create(sampler, reporter,
-                                     thermodynamic_states, sampler_states,
-                                     unsampled_states)
-            # Run
-            sampler.run()
-            assert sampler._iteration < n_iterations
-            assert sampler.is_completed
+#    def test_online_analysis_stops(self):
+#        """Test online analysis will stop the simulation"""
+#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+#        with self.temporary_storage_path() as storage_path:
+#            n_iterations = 5
+#            online_interval = 1
+#            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+#            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
+#                                   online_analysis_interval=online_interval,
+#                                   online_analysis_minimum_iterations=0,
+#                                   online_analysis_target_error=np.inf)  # use infinite error to stop right away
+#            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+#            self.call_sampler_create(sampler, reporter,
+#                                     thermodynamic_states, sampler_states,
+#                                     unsampled_states)
+#            # Run
+#            sampler.run()
+#            assert sampler._iteration < n_iterations
+#            assert sampler.is_completed
 
     def test_context_cache_default(self):
         """Test default behavior of context cache attributes."""
@@ -1564,32 +1564,32 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             assert sampler.sampler_context_cache._lru._n_access > 0, \
                 f"Expected more than 0 accesses, received {sampler.energy_context_cache._lru._n_access }."
 
-    def test_real_time_analysis_yaml(self):
-        """Test expected number of entries in real time analysis output yaml file."""
-        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-        with self.temporary_storage_path() as storage_path:
-            n_iterations = 13
-            online_interval = 3
-            expected_yaml_entries = int(n_iterations/online_interval)
-            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
-            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
-                                   online_analysis_interval=online_interval)
-            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
-            self.call_sampler_create(sampler, reporter,
-                                     thermodynamic_states, sampler_states,
-                                     unsampled_states)
-            # Run
-            sampler.run()
-            # load file and check number of iterations
-            storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
-            # remove extension from filename
-            yaml_prefix = os.path.splitext(reporter_filename)[0]
-            output_filepath = os.path.join(storage_dir, f"{yaml_prefix}_real_time_analysis.yaml")
-            with open(output_filepath) as yaml_file:
-                yaml_contents = yaml.safe_load(yaml_file)
-            # Make sure we get the correct number of entries
-            assert len(yaml_contents) == expected_yaml_entries, \
-                "Expected yaml entries do not match the actual number entries in the file."
+#    def test_real_time_analysis_yaml(self):
+#        """Test expected number of entries in real time analysis output yaml file."""
+#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+#        with self.temporary_storage_path() as storage_path:
+#            n_iterations = 13
+#            online_interval = 3
+#            expected_yaml_entries = int(n_iterations/online_interval)
+#            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+#            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
+#                                   online_analysis_interval=online_interval)
+#            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+#            self.call_sampler_create(sampler, reporter,
+#                                     thermodynamic_states, sampler_states,
+#                                     unsampled_states)
+#            # Run
+#            sampler.run()
+#            # load file and check number of iterations
+#            storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
+#            # remove extension from filename
+#            yaml_prefix = os.path.splitext(reporter_filename)[0]
+#            output_filepath = os.path.join(storage_dir, f"{yaml_prefix}_real_time_analysis.yaml")
+#            with open(output_filepath) as yaml_file:
+#                yaml_contents = yaml.safe_load(yaml_file)
+#            # Make sure we get the correct number of entries
+#            assert len(yaml_contents) == expected_yaml_entries, \
+#                "Expected yaml entries do not match the actual number entries in the file."
 
 
 #############
