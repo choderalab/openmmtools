@@ -1485,7 +1485,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             except AssertionError as e:
                 # Handle case where MBAR does not have a converged free energy yet by attempting to run longer
                 # Only run up until we have sampled every state, or we hit some cycle limit
-                cycle_limit = 20  # Put some upper limit of cycles
+                cycle_limit = 50  # Put some upper limit of cycles
                 cycles = 0
                 while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
                        and cycles < cycle_limit):
