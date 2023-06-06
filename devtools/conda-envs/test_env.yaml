@@ -14,7 +14,7 @@ dependencies:
   - openmm
   #- parmed  # Test to see if this fixes the docs
   - pip
-  - pymbar
+  - pymbar <4
   - python
   - python
   - pyyaml
