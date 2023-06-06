@@ -996,53 +996,53 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 if iteration == 0:
                     sampler.run(number_of_iterations)
 
-#    def actual_stored_properties_check(self, additional_properties=None):
-#        """Stored properties check which expects a keyword"""
-#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-#
-#        with self.temporary_storage_path() as storage_path:
-#            sampler = self.SAMPLER(number_of_iterations=5, online_analysis_interval=1)
-#            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
-#            self.call_sampler_create(sampler, reporter,
-#                                     thermodynamic_states, sampler_states,
-#                                     unsampled_states)
-#
-#            # Update options and check the storage is synchronized.
-#            sampler.number_of_iterations = float('inf')
-#            # Process Additional properties
-#            if additional_properties is not None:
-#                for add_property, property_data in additional_properties.items():
-#                    setattr(sampler, add_property, property_data['value'])
-#
-#            # Displace positions of the first sampler state.
-#            sampler_states = sampler.sampler_states
-#            original_positions = copy.deepcopy(sampler_states[0].positions)
-#            displacement_vector = np.ones(3) * unit.angstroms
-#            sampler_states[0].positions += displacement_vector
-#            sampler.sampler_states = sampler_states
-#
-#            mpicomm = mpiplus.get_mpicomm()
-#            if mpicomm is None or mpicomm.rank == 0:
-#                reporter.close()
-#                reporter = self.REPORTER(storage_path, open_mode='r')
-#                restored_options = reporter.read_dict('options')
-#                assert restored_options['number_of_iterations'] == float('inf')
-#                if additional_properties is not None:
-#                    for _, property_data in additional_properties.items():
-#                        on_disk_name = property_data['on_disk_name']
-#                        on_disk_value = property_data['on_disk_value']
-#                        restored_value = restored_options[on_disk_name]
-#                        if on_disk_value is None:
-#                            assert restored_value is on_disk_value, "Restored {} is not {}".format(restored_value,
-#                                                                                                   on_disk_value)
-#                        else:
-#                            assert restored_value == on_disk_value, "Restored {} != {}".format(restored_value,
-#                                                                                               on_disk_value)
-#
-#                restored_sampler_states = reporter.read_sampler_states(iteration=0)
-#                assert np.allclose(restored_sampler_states[0].positions,
-#                                   original_positions + displacement_vector)
-#
+    def actual_stored_properties_check(self, additional_properties=None):
+        """Stored properties check which expects a keyword"""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+
+        with self.temporary_storage_path() as storage_path:
+            sampler = self.SAMPLER(number_of_iterations=5, online_analysis_interval=1)
+            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
+            self.call_sampler_create(sampler, reporter,
+                                     thermodynamic_states, sampler_states,
+                                     unsampled_states)
+
+            # Update options and check the storage is synchronized.
+            sampler.number_of_iterations = float('inf')
+            # Process Additional properties
+            if additional_properties is not None:
+                for add_property, property_data in additional_properties.items():
+                    setattr(sampler, add_property, property_data['value'])
+
+            # Displace positions of the first sampler state.
+            sampler_states = sampler.sampler_states
+            original_positions = copy.deepcopy(sampler_states[0].positions)
+            displacement_vector = np.ones(3) * unit.angstroms
+            sampler_states[0].positions += displacement_vector
+            sampler.sampler_states = sampler_states
+
+            mpicomm = mpiplus.get_mpicomm()
+            if mpicomm is None or mpicomm.rank == 0:
+                reporter.close()
+                reporter = self.REPORTER(storage_path, open_mode='r')
+                restored_options = reporter.read_dict('options')
+                assert restored_options['number_of_iterations'] == float('inf')
+                if additional_properties is not None:
+                    for _, property_data in additional_properties.items():
+                        on_disk_name = property_data['on_disk_name']
+                        on_disk_value = property_data['on_disk_value']
+                        restored_value = restored_options[on_disk_name]
+                        if on_disk_value is None:
+                            assert restored_value is on_disk_value, "Restored {} is not {}".format(restored_value,
+                                                                                                   on_disk_value)
+                        else:
+                            assert restored_value == on_disk_value, "Restored {} != {}".format(restored_value,
+                                                                                               on_disk_value)
+
+                restored_sampler_states = reporter.read_sampler_states(iteration=0)
+                assert np.allclose(restored_sampler_states[0].positions,
+                                   original_positions + displacement_vector)
+
     def test_propagate_replicas(self):
         """Test method _propagate_replicas from MultiStateSampler.
 
