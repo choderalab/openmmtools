@@ -1443,64 +1443,65 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies_rep, _, _ = sampler._reporter.read_energies()
             assert np.all(energies_str == energies_rep)
 
-#    def test_online_analysis_works(self):
-#        """Test online analysis runs"""
-#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-#        with self.temporary_storage_path() as storage_path:
-#            n_iterations = 5
-#            online_interval = 1
-#            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
-#            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
-#                                   online_analysis_interval=online_interval,
-#                                   online_analysis_minimum_iterations=3)
-#            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
-#            self.call_sampler_create(sampler, reporter,
-#                                     thermodynamic_states, sampler_states,
-#                                     unsampled_states)
-#            # Run
-#            sampler.run()
-#
-#            def validate_this_test():
-#                # The stored values of online analysis should be up to date.
-#                last_written_free_energy = self.SAMPLER._read_last_free_energy(sampler._reporter, sampler.iteration)
-#                last_mbar_f_k, (last_free_energy, last_err_free_energy) = last_written_free_energy
-#
-#                assert len(sampler._last_mbar_f_k) == len(thermodynamic_states)
-#                assert not np.all(sampler._last_mbar_f_k == 0)
-#                assert np.all(sampler._last_mbar_f_k == last_mbar_f_k)
-#
-#                assert last_free_energy is not None
-#
-#                # Error should not be 0 yet
-#                assert sampler._last_err_free_energy != 0
-#
-#                assert sampler._last_err_free_energy == last_err_free_energy, \
-#                    ("SAMPLER %s : sampler._last_err_free_energy = %s, "
-#                     "last_err_free_energy = %s" % (self.SAMPLER.__name__,
-#                                                    sampler._last_err_free_energy,
-#                                                    last_err_free_energy)
-#                     )
-#            try:
-#                validate_this_test()
-#            except AssertionError as e:
-#                # Handle case where MBAR does not have a converged free energy yet by attempting to run longer
-#                # Only run up until we have sampled every state, or we hit some cycle limit
-#                cycle_limit = 20  # Put some upper limit of cycles
-#                cycles = 0
-#                while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
-#                       or cycles == cycle_limit):
-#                    sampler.extend(20)
-#                    try:
-#                        validate_this_test()
-#                    except AssertionError:
-#                        # If the max error count internally is reached, its a RuntimeError and won't be trapped
-#                        # So it will be raised correctly
-#                        pass
-#                    else:
-#                        # Test is good, let it pass by returning here
-#                        return
-#                # If we get here, we have not validated, raise original error
-#                raise e
+    def test_online_analysis_works(self):
+        """Test online analysis runs"""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+        with self.temporary_storage_path() as storage_path:
+            n_iterations = 5
+            online_interval = 1
+            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
+                                   online_analysis_interval=online_interval,
+                                   online_analysis_minimum_iterations=3)
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
+                                     thermodynamic_states, sampler_states,
+                                     unsampled_states)
+            # Run
+            sampler.run()
+
+            def validate_this_test():
+                # The stored values of online analysis should be up to date.
+                last_written_free_energy = self.SAMPLER._read_last_free_energy(sampler._reporter, sampler.iteration)
+                last_mbar_f_k, (last_free_energy, last_err_free_energy) = last_written_free_energy
+
+                assert len(sampler._last_mbar_f_k) == len(thermodynamic_states)
+                assert not np.all(sampler._last_mbar_f_k == 0)
+                assert np.all(sampler._last_mbar_f_k == last_mbar_f_k)
+
+                assert last_free_energy is not None
+
+                # Error should not be 0 yet
+                assert sampler._last_err_free_energy != 0
+
+                assert sampler._last_err_free_energy == last_err_free_energy, \
+                    ("SAMPLER %s : sampler._last_err_free_energy = %s, "
+                     "last_err_free_energy = %s" % (self.SAMPLER.__name__,
+                                                    sampler._last_err_free_energy,
+                                                    last_err_free_energy)
+                     )
+            try:
+                validate_this_test()
+            except AssertionError as e:
+                # Handle case where MBAR does not have a converged free energy yet by attempting to run longer
+                # Only run up until we have sampled every state, or we hit some cycle limit
+                cycle_limit = 20  # Put some upper limit of cycles
+                cycles = 0
+                while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
+                       or cycles == cycle_limit):
+                    sampler.extend(20)
+                    cycles += 1
+                    try:
+                        validate_this_test()
+                    except AssertionError:
+                        # If the max error count internally is reached, its a RuntimeError and won't be trapped
+                        # So it will be raised correctly
+                        pass
+                    else:
+                        # Test is good, let it pass by returning here
+                        return
+                # If we get here, we have not validated, raise original error
+                raise e
 
     def test_online_analysis_stops(self):
         """Test online analysis will stop the simulation"""
