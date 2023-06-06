@@ -1488,7 +1488,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 cycle_limit = 20  # Put some upper limit of cycles
                 cycles = 0
                 while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
-                       or cycles == cycle_limit):
+                       and cycles < cycle_limit):
                     sampler.extend(20)
                     cycles += 1
                     try:
