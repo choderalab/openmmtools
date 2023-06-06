@@ -1564,32 +1564,32 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             assert sampler.sampler_context_cache._lru._n_access > 0, \
                 f"Expected more than 0 accesses, received {sampler.energy_context_cache._lru._n_access }."
 
-#    def test_real_time_analysis_yaml(self):
-#        """Test expected number of entries in real time analysis output yaml file."""
-#        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
-#        with self.temporary_storage_path() as storage_path:
-#            n_iterations = 13
-#            online_interval = 3
-#            expected_yaml_entries = int(n_iterations/online_interval)
-#            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
-#            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
-#                                   online_analysis_interval=online_interval)
-#            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
-#            self.call_sampler_create(sampler, reporter,
-#                                     thermodynamic_states, sampler_states,
-#                                     unsampled_states)
-#            # Run
-#            sampler.run()
-#            # load file and check number of iterations
-#            storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
-#            # remove extension from filename
-#            yaml_prefix = os.path.splitext(reporter_filename)[0]
-#            output_filepath = os.path.join(storage_dir, f"{yaml_prefix}_real_time_analysis.yaml")
-#            with open(output_filepath) as yaml_file:
-#                yaml_contents = yaml.safe_load(yaml_file)
-#            # Make sure we get the correct number of entries
-#            assert len(yaml_contents) == expected_yaml_entries, \
-#                "Expected yaml entries do not match the actual number entries in the file."
+    def test_real_time_analysis_yaml(self):
+        """Test expected number of entries in real time analysis output yaml file."""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
+        with self.temporary_storage_path() as storage_path:
+            n_iterations = 13
+            online_interval = 3
+            expected_yaml_entries = int(n_iterations/online_interval)
+            move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
+            sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
+                                   online_analysis_interval=online_interval)
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
+                                     thermodynamic_states, sampler_states,
+                                     unsampled_states)
+            # Run
+            sampler.run()
+            # load file and check number of iterations
+            storage_dir, reporter_filename = os.path.split(sampler._reporter._storage_analysis_file_path)
+            # remove extension from filename
+            yaml_prefix = os.path.splitext(reporter_filename)[0]
+            output_filepath = os.path.join(storage_dir, f"{yaml_prefix}_real_time_analysis.yaml")
+            with open(output_filepath) as yaml_file:
+                yaml_contents = yaml.safe_load(yaml_file)
+            # Make sure we get the correct number of entries
+            assert len(yaml_contents) == expected_yaml_entries, \
+                "Expected yaml entries do not match the actual number entries in the file."
 
 
 #############
