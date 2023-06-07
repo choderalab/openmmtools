@@ -1452,7 +1452,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval,
-                                   online_analysis_minimum_iterations=3)
+                                   online_analysis_minimum_iterations=1)
             reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
             self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
