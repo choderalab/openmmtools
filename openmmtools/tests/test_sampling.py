@@ -1444,14 +1444,14 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies_rep, _, _ = sampler._reporter.read_energies()
             assert np.all(energies_str == energies_rep)
 
-    @unittest.skip("This test needs to fixed, see https://github.com/choderalab/openmmtools/pull/705")
-    @unittest.skipIf(os.getenv("RUNNER_OS") == "macOS", "Test doesn't work on OSX on GHA")
+    #@unittest.skip("This test needs to fixed, see https://github.com/choderalab/openmmtools/pull/705")
+    #@unittest.skipIf(os.getenv("RUNNER_OS") == "macOS", "Test doesn't work on OSX on GHA")
     def test_online_analysis_works(self):
         """Test online analysis runs"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
         with self.temporary_storage_path() as storage_path:
             n_iterations = 5
-            online_interval = 1
+            online_interval = 2
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval,
