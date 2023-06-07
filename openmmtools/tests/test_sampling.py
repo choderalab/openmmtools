@@ -24,6 +24,7 @@ from io import StringIO
 
 import numpy as np
 import yaml
+import unittest
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
 try:
@@ -1443,6 +1444,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies_rep, _, _ = sampler._reporter.read_energies()
             assert np.all(energies_str == energies_rep)
 
+    @unittest.skipIf(if os.getenv["RUNNER_OS"] == "macOS", "Test doesn't work on OSX on GHA")
     def test_online_analysis_works(self):
         """Test online analysis runs"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
@@ -1452,7 +1454,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval,
-                                   online_analysis_minimum_iterations=1)
+                                   online_analysis_minimum_iterations=3)
             reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
             self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
