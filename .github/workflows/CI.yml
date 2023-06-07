@@ -27,7 +27,7 @@ jobs:
         python-version: ["3.8", "3.9", "3.10"]
         openmm: ["7.7", "8.0"]
         os: [macOS-latest, ubuntu-latest]
-        pymbar-version: ["3"]
+        pymbar-version: ["4"]
         include:
           # Test openmm dev build on newest python + linux
           - openmm: "dev"
