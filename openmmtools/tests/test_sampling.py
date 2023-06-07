@@ -1450,7 +1450,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         """Test online analysis runs"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
         with self.temporary_storage_path() as storage_path:
-            n_iterations = 5
+            n_iterations = 10
             online_interval = 2
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
