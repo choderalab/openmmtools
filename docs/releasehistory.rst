@@ -1,6 +1,20 @@
 Release History
 ***************
 
+0.22.2 - Bugfix release
+=======================
+
+Enhancements
+------------
+- Running with NVIDIA GPUs in Exclusive Process mode now raises a warning (issue `#697 <https://github.com/choderalab/openmmtools/issues/697>`_, PR `#699 <https://github.com/choderalab/openmmtools/pull/699>`_)
+
+Bugfixes
+--------
+- Fix metadata for netcdf files, specifying openmmtools for the ``program`` metadata (issue `#694 <https://github.com/choderalab/openmmtools/issues/694>`_, PR `#704 <https://github.com/choderalab/openmmtools/pull/704>`_).
+- Real time statistics YAML file gets appended instead of overwritten when extending or resumimng simulations (issue `#691 <https://github.com/choderalab/openmmtools/issues/691>`_, PR `#692 <https://github.com/choderalab/openmmtools/pull/692>`_).
+- Error when resuming simulations with numba 0.57 fixed by avoiding using ``numpy.MaskedArray`` when deserializing ``.nc`` files (issue `#700 <https://github.com/choderalab/openmmtools/issues/700>`_, PR `#701 <https://github.com/choderalab/openmmtools/pull/701>`_)
+
+
 0.22.1 - Bugfix release
 =======================
 
