@@ -1,8 +1,10 @@
 Release History
 ***************
 
-0.22.2 - Bugfix release
-=======================
+0.23.0 - latest numba support and real time stats enhancements
+==============================================================
+
+Please note that there is an API breaking change. To ensure consistency of the data when appending real time stats make sure that you make the ``online_analysis_interval`` of your ``MultiStateSampler`` object match the ``checkpoint_interval`` of your ``MultiStateReporter``. It will error if this is not the case.
 
 Enhancements
 ------------
