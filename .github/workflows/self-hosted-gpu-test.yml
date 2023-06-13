@@ -47,6 +47,7 @@ jobs:
       OPENMM: ${{ matrix.cfg.openmm }}
       OE_LICENSE: ${{ github.workspace }}/oe_license.txt
       HOME: /home/ec2-user
+      CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     defaults:
       run:
@@ -104,7 +105,7 @@ jobs:
           file: ./coverage.xml
           name: codecov-${{ matrix.cfg.os }}-py${{ matrix.cfg.python-version }}
           flags: unittests
-          fail_ci_if_error: true
+          fail_ci_if_error: false
 
   stop-runner:
     name: Stop self-hosted EC2 runner
