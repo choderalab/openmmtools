@@ -33,6 +33,7 @@ jobs:
           - openmm: "dev"
             python-version: "3.10"
             os: ubuntu-latest
+            pymbar-version: "4"
           # Test newest python, openmm, and pymbar we support on windows
           - openmm: "8.0"
             python-version: "3.10"
@@ -94,7 +95,7 @@ jobs:
         shell: bash -l {0}
         run: |
           # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
-          nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
+          nosetests openmmtools/tests --nocapture --cover-tests --with-coverage --cover-package=openmmtools --cover-xml --cover-xml-file=coverage.xml --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
         uses: codecov/codecov-action@v3
