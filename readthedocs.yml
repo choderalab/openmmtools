@@ -1,13 +1,13 @@
-conda:
-  file: docs/environment.yml
+version: 2
 
-# The default for requirements_file is null, but for some reason we get an error with this message if it's not set:
-# "Problem parsing YAML configuration. Invalid "requirements_file": path docs/requirements.txt does not exist"
-requirements_file: null
+conda:
+  environment: devtools/conda-envs/test_env.yaml
 
 build:
-  image: latest
+  os: ubuntu-22.04
+  tools:
+    python: mambaforge-4.10
 
-python:
-  version: 3.6
-  setup_py_install: true
+sphinx:
+   configuration: docs/conf.py
+   fail_on_warning: false

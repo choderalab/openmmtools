@@ -109,12 +109,14 @@ the DummyCache.
 # GLOBAL IMPORTS
 # =============================================================================
 
-import os
 import abc
 import copy
 import logging
+import os
+import warnings
 
 import numpy as np
+
 try:
     import openmm
     from openmm import unit
@@ -697,8 +699,8 @@ class BaseIntegratorMove(MCMCMove):
         # TODO: Is this still needed now that we are specifying the context?
         context, integrator = local_context_cache.get_context(thermodynamic_state, integrator)
         timer.stop("{}: Context request".format(move_name))
-        #logger.debug("{}: Context obtained, platform is {}".format(
-        #    move_name, context.getPlatform().getName()))
+        # inform of platform used in current context
+        logger.debug(f"{move_name}: Integrator using {context.getPlatform().getName()} platform.")
 
         # Perform the integration.
         for attempt_counter in range(self.n_restart_attempts + 1):
@@ -715,8 +717,10 @@ class BaseIntegratorMove(MCMCMove):
                 # Run dynamics.
                 timer.start("{}: step({})".format(move_name, self.n_steps))
                 integrator.step(self.n_steps)
-            except Exception:
+            except Exception as e:
                 # Catches particle positions becoming nan during integration.
+                # Return the exception message as a warning
+                warnings.warn(str(e))
                 restart = True
             else:
                 timer.stop("{}: step({})".format(move_name, self.n_steps))
@@ -731,6 +735,7 @@ class BaseIntegratorMove(MCMCMove):
                 potential_energy = context_state.getPotentialEnergy()
                 restart = np.isnan(potential_energy.value_in_unit(potential_energy.unit))
 
+            # TODO: Probably refactor this whole thing to do simple restart
             # Restart the move if we found NaNs.
             if restart:
                 err_msg = ('Potential energy is NaN after {} attempts of integration '
@@ -1026,11 +1031,21 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     negligible. Use HybridMonteCarloMove instead to ensure the exact
     distribution is generated.
 
+    The OpenMM LangevinMiddleIntegrator, based on BAOAB [1],  is used.
+
+    .. warning::
+        The LangevinMiddleIntegrator generates velocities that are half a timestep lagged behind the positions.
+
     .. warning::
         No Metropolization is used to ensure the correct phase space
         distribution is sampled. This means that timestep-dependent errors
         will remain uncorrected, and are amplified with larger timesteps.
         Use this move at your own risk!
+
+    References
+    ----------
+    [1] Leimkuhler B and Matthews C. Robust and efficient configurational molecular sampling via Langevin dynamics. https://doi.org/10.1063/1.4802990
+    [2] Leimkuhler B and Matthews C. Efficient molecular dynamics using geodesic integration and solvent–solute splitting. https://doi.org/10.1098/rspa.2016.0138
 
     Parameters
     ----------
@@ -1046,6 +1061,9 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     reassign_velocities : bool, optional
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move (default is False).
+    constraint_tolerance : float, optional
+        Fraction of the constrained distance within which constraints are maintained for the
+        integrator (default is 1e-8).
 
     Attributes
     ----------
@@ -1059,6 +1077,9 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     reassign_velocities : bool
         If True, the velocities will be reassigned from the Maxwell-Boltzmann
         distribution at the beginning of the move.
+    constraint_tolerance : float
+        Fraction of the constrained distance within which constraints are maintained for the
+        integrator.
 
     Examples
     --------
@@ -1102,12 +1123,13 @@ class LangevinDynamicsMove(BaseIntegratorMove):
     """
 
     def __init__(self, timestep=1.0*unit.femtosecond, collision_rate=10.0/unit.picoseconds,
-                 n_steps=1000, reassign_velocities=False, **kwargs):
+                 n_steps=1000, reassign_velocities=False, constraint_tolerance=1e-8, **kwargs):
         super(LangevinDynamicsMove, self).__init__(n_steps=n_steps,
                                                    reassign_velocities=reassign_velocities,
                                                    **kwargs)
         self.timestep = timestep
         self.collision_rate = collision_rate
+        self.constraint_tolerance = constraint_tolerance
 
     def apply(self, thermodynamic_state, sampler_state, context_cache=None):
         """Apply the Langevin dynamics MCMC move.
@@ -1133,17 +1155,21 @@ class LangevinDynamicsMove(BaseIntegratorMove):
         serialization = super(LangevinDynamicsMove, self).__getstate__()
         serialization['timestep'] = self.timestep
         serialization['collision_rate'] = self.collision_rate
+        serialization['constraint_tolerance'] = self.constraint_tolerance
         return serialization
 
     def __setstate__(self, serialization):
         super(LangevinDynamicsMove, self).__setstate__(serialization)
         self.timestep = serialization['timestep']
         self.collision_rate = serialization['collision_rate']
+        self.constraint_tolerance = serialization['constraint_tolerance']
 
     def _get_integrator(self, thermodynamic_state):
         """Implement BaseIntegratorMove._get_integrator()."""
-        return openmm.LangevinIntegrator(thermodynamic_state.temperature,
-                                         self.collision_rate, self.timestep)
+        integrator = openmm.LangevinMiddleIntegrator(thermodynamic_state.temperature,
+                                                     self.collision_rate, self.timestep)
+        integrator.setConstraintTolerance(self.constraint_tolerance)
+        return integrator
 
 
 class LangevinSplittingDynamicsMove(LangevinDynamicsMove):

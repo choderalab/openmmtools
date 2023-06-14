@@ -19,7 +19,7 @@ import tempfile
 from functools import partial
 
 import nose
-from pymbar import timeseries
+from openmmtools.multistate.pymbar import detect_equilibration
 
 from openmmtools import testsystems
 from openmmtools.states import SamplerState, ThermodynamicState
@@ -143,7 +143,7 @@ def subtest_mcmc_expectation(testsystem, move):
             testsystem.__class__.__name__)
 
         potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
-        [t0, g, Neff_max] = timeseries.detectEquilibration(potential_n)
+        [t0, g, Neff_max] = detect_equilibration(potential_n)
         potential_mean = potential_n[t0:].mean()
         dpotential_mean = potential_n[t0:].std() / np.sqrt(Neff_max)
         potential_error = potential_mean - potential_expectation
@@ -166,7 +166,7 @@ def subtest_mcmc_expectation(testsystem, move):
             testsystem.__class__.__name__)
 
         volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
-        [t0, g, Neff_max] = timeseries.detectEquilibration(volume_n)
+        [t0, g, Neff_max] = detect_equilibration(volume_n)
         volume_mean = volume_n[t0:].mean()
         dvolume_mean = volume_n[t0:].std() / np.sqrt(Neff_max)
         volume_error = volume_mean - volume_expectation
@@ -364,7 +364,7 @@ def test_mcmc_move_context_cache_shallow_copy():
     )
     # Create temporary reporter storage file
     with tempfile.NamedTemporaryFile() as storage:
-        reporter = multistate.MultiStateReporter(storage.name, checkpoint_interval=999999)
+        reporter = multistate.MultiStateReporter(storage.name, checkpoint_interval=200)
     simulation.create(
         thermodynamic_states=thermodynamic_states,
         sampler_states=SamplerState(
@@ -505,6 +505,40 @@ def test_langevin_splitting_move():
         sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
         sampler.run(1)
 
+def test_langevin_dynamics_move_constraint_tolerance():
+    """Test constraint tolerance is properly set in LangevinDynamicsMove integrator."""
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
+    # Check for default tolerance
+    default_move = LangevinDynamicsMove()
+    default_constraint_tolerance = 1e-8
+    move_tolerance = default_move.constraint_tolerance
+    assert move_tolerance == default_constraint_tolerance, f"LangevinDynamicsMove tolerance, {move_tolerance}, is" \
+                                                           f" not the same as the expected default tolerance," \
+                                                           f" {default_constraint_tolerance}."
+    default_integrator = default_move._get_integrator(thermodynamic_state)
+    default_integrator_tolerance = default_integrator.getConstraintTolerance()
+    assert default_integrator_tolerance == default_constraint_tolerance, f"LangevinDynamicsMove integrator tolerance," \
+                                                                         f" {default_integrator_tolerance}, is not " \
+                                                                         f"the same as the expected default " \
+                                                                         f"tolerance, {default_constraint_tolerance}."
+    # Now we change the tolerance in initializer and check
+    new_constraint_tolerance = 1e-5
+    new_move = LangevinDynamicsMove(constraint_tolerance=new_constraint_tolerance)
+    new_integrator = new_move._get_integrator(thermodynamic_state)
+    new_integrator_tolerance = new_integrator.getConstraintTolerance()
+    assert new_integrator_tolerance == new_constraint_tolerance, f"LangevinDynamicsMove integrator tolerance," \
+                                                                 f" {new_integrator_tolerance}, is not the same as" \
+                                                                 f" the specified value of {new_constraint_tolerance}."
+    # Test by changing public attribute
+    constraint_tolerance = 1e-7
+    move = LangevinDynamicsMove()  # create default move
+    move.constraint_tolerance = constraint_tolerance  # change the public attribute
+    integrator = move._get_integrator(thermodynamic_state)
+    integrator_tolerance = integrator.getConstraintTolerance()
+    assert integrator_tolerance == constraint_tolerance, f"LangevinDynamicsMove integrator tolerance," \
+                                                         f" {integrator_tolerance}, is not the same as" \
+                                                         f" the specified value of {constraint_tolerance}."
 
 
 # =============================================================================

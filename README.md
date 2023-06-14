@@ -3,6 +3,7 @@
 [![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
 [![Documentation Status](https://readthedocs.org/projects/openmmtools/badge/?version=latest)](https://openmmtools.readthedocs.io/en/latest/?badge=latest)
 [![Zenodo DOI Badge](https://zenodo.org/badge/25416166.svg)](https://zenodo.org/badge/latestdoi/25416166)
+[![codecov](https://codecov.io/gh/choderalab/openmmtools/branch/main/graph/badge.svg?token=aGwEahm2CY)](https://codecov.io/gh/choderalab/openmmtools)
 
 ## OpenMMTools
 
@@ -32,13 +33,17 @@ A complete list of contributors can be found [here](https://github.com/choderala
 
 Major contributors include:
 
-* Andrea Rizzi `<andrea.rizzi@choderalab.org>` (WCMC)
-* John D. Chodera `<john.chodera@choderalab.org>` (MSKCC)
-* Levi N. Naden `<levi.naden@choderalab.org>` (MSKCC)
-* Patrick Grinaway `<patrick.grinaway@choderalab.org>` (MSKCC)
-* Kyle A. Beauchamp `<kyle.beauchamp@choderalab.org>` (MSKCC)
-* Josh Fass `<josh.fass@choderalab.org>` (MSKCC)
-* Bas Rustenburg `<bas.rustenburg@choderalab.org>` (MSKCC)
-* Gregory Ross `<greg.ross@choderalab.org>` (MSKCC)
-* David W.H. Swenson `<dwhs@hyperblazer.net>`
-* Hannah Bruce Macdonald `<hannah.brucemacdonald>` (MSKCC)
+* [Andrea Rizzi](https://github.com/andrrizzi) 
+* [John D. Chodera](https://github.com/jchodera)
+* [Levi N. Naden](https://github.com/Lnaden)
+* [Patrick Grinaway](https://github.com/pgrinaway)
+* [Kyle A. Beauchamp](https://github.com/kyleabeauchamp)
+* [Josh Fass](https://github.com/maxentile)
+* [Bas Rustenburg](https://github.com/bas-rustenburg)
+* [Gregory Ross](https://github.com/gregoryross)
+* [David W.H. Swenson](https://github.com/dwhswenson)
+* [Hannah Bruce Macdonald](https://github.com/hannahbrucemacdonald)
+* [Iván Pulido](https://github.com/ijpulidos)
+* [Ivy Zhang](https://github.com/zhang-ivy)
+* [Dominic Rufa](https://github.com/dominicrufa)
+* [Mike Henry](https://github.com/mikemhenry)

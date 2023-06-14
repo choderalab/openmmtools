@@ -22,6 +22,7 @@ import yaml
 import warnings
 import importlib
 import collections
+from collections.abc import Iterable
 import numpy as np
 import netCDF4 as nc
 from sys import getsizeof
@@ -36,7 +37,7 @@ try:
 except ImportError:  # OpenMM < 7.6
     from simtk import unit
 
-from ..utils import typename, quantity_from_string
+from openmmtools.utils import typename, quantity_from_string
 
 # TODO: Use the `with_metaclass` from .utils when we merge it in
 ABC = abc.ABCMeta('ABC', (object,), {})  # compatible with Python 2 *and* 3
@@ -1332,7 +1333,7 @@ class NCIterable(NCVariableCodec):
     """
     @property
     def dtype(self):
-        return collections.Iterable
+        return Iterable
 
     @staticmethod
     def dtype_string():
