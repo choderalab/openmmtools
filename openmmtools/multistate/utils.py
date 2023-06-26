@@ -325,15 +325,14 @@ class NNPCompatibilityMixin(object):
         context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
 
         # get parameters, pass the `lambda_REST` parameter to the constructor of the protocol
-        _parameters = {}
-        _nbfs = [force for force in mixed_system.getForces() if force.__class__.__name__ == 'NonbondedForce']
-        assert len(_nbfs) == 1, f"there can only be 1 nbf"
-        num_global_params = _nbfs[0].getNumGlobalParameters()
-        assert num_global_params == 1, f"there can only be 1 global parameter in the nbf"
-        global_param_name = _nbfs[0].getGlobalParameterName(0)
-        assert global_param_name == 'lambda_interREST'
-        temp_scale = _nbfs[0].getGlobalParameterDefaultValue(0)
-        
+        #_parameters = {}
+        #_nbfs = [force for force in mixed_system.getForces() if force.__class__.__name__ == 'NonbondedForce']
+        #assert len(_nbfs) == 1, f"there can only be 1 nbf"
+        #num_global_params = _nbfs[0].getNumGlobalParameters()
+        #assert num_global_params == 1, f"there can only be 1 global parameter in the nbf"
+        #global_param_name = _nbfs[0].getGlobalParameterName(0)
+        #assert global_param_name == 'lambda_interREST', f"the global param name is {global_param_name}"
+        #temp_scale = _nbfs[0].getGlobalParameterDefaultValue(0)
         
 
         lambda_zero_alchemical_state = NNPAlchemicalState.from_system(mixed_system)
@@ -365,7 +364,9 @@ class NNPCompatibilityMixin(object):
         
         if lambda_protocol is None:
             from openmmtools.alchemy import NNPProtocol
-            lambda_protocol = NNPProtocol(temp_scale = temp_scale)
+            #lambda_protocol = NNPProtocol(temp_scale = temp_scale)
+            lambda_protocol = NNPProtocol()
+
         else:
             raise NotImplementedError(f"""`lambda_protocol` is currently placeholding; only default `None` 
                                       is allowed until the `lambda_protocol` class is appropriately generalized""")
