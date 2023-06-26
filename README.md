@@ -3,6 +3,7 @@
 [![Downloads Badge](https://anaconda.org/omnia/openmmtools/badges/downloads.svg)](https://anaconda.org/omnia/openmmtools/files)
 [![Documentation Status](https://readthedocs.org/projects/openmmtools/badge/?version=latest)](https://openmmtools.readthedocs.io/en/latest/?badge=latest)
 [![Zenodo DOI Badge](https://zenodo.org/badge/25416166.svg)](https://zenodo.org/badge/latestdoi/25416166)
+[![codecov](https://codecov.io/gh/choderalab/openmmtools/branch/main/graph/badge.svg?token=aGwEahm2CY)](https://codecov.io/gh/choderalab/openmmtools)
 
 ## OpenMMTools
 

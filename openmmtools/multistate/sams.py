@@ -25,10 +25,10 @@ This code is licensed under the latest available version of the MIT License.
 
 import logging
 import numpy as np
-import openmmtools as mmtools
 from scipy.special import logsumexp
 
-from openmmtools import multistate, utils
+from openmmtools import multistate
+from openmmtools import utils
 from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
 import mpiplus
 
@@ -404,7 +404,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         # Perform swap attempts according to requested scheme.
         # TODO: We may be able to refactor this to simply have different update schemes compute neighborhoods differently.
         # TODO: Can we allow "plugin" addition of new update schemes that can be registered externally?
-        with mmtools.utils.time_it('Mixing of replicas'):
+        with utils.time_it('Mixing of replicas'):
             # Initialize statistics. This matrix is modified by the jump function and used when updating the logZ estimates.
             replicas_log_P_k = np.zeros([self.n_replicas, self.n_states], np.float64)
             if self.state_update_scheme == 'global-jump':

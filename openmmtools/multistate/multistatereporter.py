@@ -48,6 +48,7 @@ try:
 except ImportError:  # OpenMM < 7.6
     from simtk import unit
 
+import openmmtools
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
 from openmmtools import states
 
@@ -97,8 +98,8 @@ class MultiStateReporter(object):
         The reporter internally tracks what data goes into which file, so its transparent to all other classes
         In the future, this will be able to take Storage classes as well
     analysis_particle_indices : tuple of ints, Optional. Default: () (empty tuple)
-        Indices of particles which should be treated as special when manipulating read and write functions.
-        If this is an empty tuple, then no particles are treated as special
+        If specified, it will serialize positions and velocities for the specified particles, at every iteration, in the
+        reporter storage (.nc) file. If empty, no positions or velocities will be stored in this file for any atoms.
 
     Attributes
     ----------
@@ -137,8 +138,9 @@ class MultiStateReporter(object):
         self._analysis_particle_indices = tuple(analysis_particle_indices)
         if open_mode is not None:
             self.open(open_mode)
-        # Flag to check whether to overwrite real time statistics file
-        self._overwrite_statistics = True
+        # TODO: Maybe we want to expose this flag to control ovrwriting/appending
+        # Flag to check whether to overwrite real time statistics file -- Defaults to append
+        self._overwrite_statistics = False
 
     @property
     def filepath(self):
@@ -266,6 +268,7 @@ class MultiStateReporter(object):
         self.close()
 
         # Create directory if we want to write.
+        # TODO: We probably want to check here specifically for w when we want to write
         if mode != 'r':
             for storage_path in self._storage_paths:
                 # normpath() transform '' to '.' for makedirs().
@@ -368,7 +371,8 @@ class MultiStateReporter(object):
         for attempt in range(n_attempts-1):
             try:
                 return netcdf.Dataset(*args, **kwargs)
-            except:
+            except Exception as err: # This should be safe since we will raise the error below on return
+                logger.debug(f"exception thrown {err}")
                 logger.debug('Attempt {}/{} to open {} failed. Retrying '
                              'in {} seconds'.format(attempt+1, n_attempts, args[0], sleep_time))
                 time.sleep(sleep_time)
@@ -405,8 +409,7 @@ class MultiStateReporter(object):
             ncfile.createDimension('spatial', 3)  # Number of spatial dimensions.
 
             # Set global attributes.
-            ncfile.application = 'YANK'
-            ncfile.program = 'yank.py'
+            ncfile.program = f"openmmtools {openmmtools.__version__}"
             ncfile.programVersion = __version__
             ncfile.Conventions = convention
             ncfile.ConventionVersion = '0.2'
@@ -1810,7 +1813,7 @@ class MultiStateReporter(object):
                 dimension_name = 'scalar'
             # Create variable.
             nc_variable = storage_nc.createVariable(path, variable_type,
-                                                    dimension_name, zlib=True)
+                                                    dimension_name, zlib=False)
 
         # Assign the value to the variable.
         if fixed_dimension:

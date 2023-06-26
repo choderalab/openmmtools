@@ -37,7 +37,7 @@ try:
 except ImportError:  # OpenMM < 7.6
     from simtk import unit
 
-from ..utils import typename, quantity_from_string
+from openmmtools.utils import typename, quantity_from_string
 
 # TODO: Use the `with_metaclass` from .utils when we merge it in
 ABC = abc.ABCMeta('ABC', (object,), {})  # compatible with Python 2 *and* 3
