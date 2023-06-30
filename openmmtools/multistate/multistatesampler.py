@@ -592,9 +592,11 @@ class MultiStateSampler(object):
 
         # Make sure online analysis interval is a multiples of the reporter's checkpoint interval
         # this avoids having redundant iteration information in the real time yaml files
-        if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
-            raise ValueError(f"Online analysis interval: {self.online_analysis_interval}, must be a "
-                             f"multiple of the checkpoint interval: {self._reporter.checkpoint_interval}")
+        # only check if self.online_analysis_interval is set
+        if self.online_analysis_interval:
+            if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
+                raise ValueError(f"Online analysis interval: {self.online_analysis_interval}, must be a "
+                                 f"multiple of the checkpoint interval: {self._reporter.checkpoint_interval}")
 
         # Make sure sampler_states is an iterable of SamplerStates.
         if isinstance(sampler_states, states.SamplerState):
