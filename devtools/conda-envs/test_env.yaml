@@ -4,8 +4,8 @@ channels:
 dependencies:
     # Base depends
   - cython
-  - hdf5  # Macos has problem with newer releases (1.14.x) to date
-  - libnetcdf >=4.6.2  # workaround for libssl issues
+  - hdf5 <=1.14.0  # Macos has problem with newer releases (1.14.x) to date
+  - libnetcdf >=4.6.2 # workaround for libssl issues
   - mdtraj
   - mpiplus
   - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
