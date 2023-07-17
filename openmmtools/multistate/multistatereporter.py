@@ -100,12 +100,12 @@ class MultiStateReporter(object):
     analysis_particle_indices : tuple of ints, Optional. Default: () (empty tuple)
         If specified, it will serialize positions and velocities for the specified particles, at every iteration, in the
         reporter storage (.nc) file. If empty, no positions or velocities will be stored in this file for any atoms.
-    position_interval : int or None, default 1
-        the frequency at which to write positions relative to analysis information
-        None would prevent information being written
-    velocity_interval : int or None, default 1
-        the frequency at which to write positions relative to analysis information
-        None would prevent information being written
+    position_interval : int, default 1
+        the frequency at which to write positions relative to analysis
+        information, 0 would prevent information being written
+    velocity_interval : int, default 1
+        the frequency at which to write positions relative to analysis
+        information, 0 would prevent information being written
 
     Attributes
     ----------
@@ -216,10 +216,12 @@ class MultiStateReporter(object):
 
     @property
     def position_interval(self):
+        """Interval relative to energies that positions are written at"""
         return self._position_interval
 
     @property
     def velocity_interval(self):
+        """Interval relative to energies that velocities are written at"""
         return self._velocity_interval
 
     def storage_exists(self, skip_size=False):
@@ -1673,10 +1675,10 @@ class MultiStateReporter(object):
         # write out pos/vel - if checkpointing,
         # or if interval matches desired frequency
         write_pos = (storage_file == 'checkpoint' or
-                     (self._position_interval is not None
+                     (self._position_interval != 0
                       and not (write_iteration % self._position_interval)))
         write_vel = (storage_file == 'checkpoint' or
-                     (self._velocity_interval is not None
+                     (self._velocity_interval != 0
                       and not (write_iteration % self._velocity_interval)))
 
         # Write the sampler state if we are on the checkpoint interval OR if told to ignore the interval
