@@ -302,7 +302,7 @@ class MultiStateSampler(object):
     Status = typing.NamedTuple('Status', [
         ('iteration', int),
         ('target_error', float),
-        ('is_completed', bool)
+        ('is_converged', bool)
     ])
 
     @classmethod
@@ -322,7 +322,7 @@ class MultiStateSampler(object):
         -------
         status : ReplicaExchange.Status
             The status of the replica-exchange calculation. It has three
-            fields: ``iteration``, ``target_error``, and ``is_completed``.
+            fields: ``iteration``, ``target_error``, and ``is_converged``.
 
         """
         # Handle case in which storage is a string.
@@ -348,15 +348,15 @@ class MultiStateSampler(object):
         finally:
             reporter.close()
 
-        # Check if the calculation is done.
-        number_of_iterations = options['number_of_iterations']
+        # Check if the calculation is converged. To check if the calculation is
+        # done, also need to check the number of iterations at each call site.
+        # This allows increasing the number of iterations upon resume.
         online_analysis_target_error = options['online_analysis_target_error']
-        is_completed = cls._is_completed_static(number_of_iterations, iteration,
-                                                last_err_free_energy,
+        is_converged = cls._is_converged_static(last_err_free_energy,
                                                 online_analysis_target_error)
 
         return cls.Status(iteration=iteration, target_error=target_error,
-                          is_completed=is_completed)
+                          is_converged=is_converged)
 
     # -------------------------------------------------------------------------
     # Public properties.
@@ -1700,18 +1700,15 @@ class MultiStateSampler(object):
         """Check if we have reached the required number of iterations or statistical error."""
         if iteration_limit is None:
             iteration_limit = self.number_of_iterations
-        return self._is_completed_static(iteration_limit, self._iteration,
-                                         self._last_err_free_energy,
-                                         self.online_analysis_target_error)
+        return self._is_converged_static(self._last_err_free_energy,
+                                         self.online_analysis_target_error) or (self._iteration >= iteration_limit)
 
     @staticmethod
-    def _is_completed_static(iteration_limit, iteration, last_err_free_energy,
+    def _is_converged_static(last_err_free_energy,
                              online_analysis_target_error):
-        """Check if we have reached the required number of iterations or statistical error."""
-        # Return if we have reached the number of iterations
-        # or the statistical error target required.
-        if (iteration >= iteration_limit or (
-                        last_err_free_energy is not None and last_err_free_energy <= online_analysis_target_error)):
+        """Check if we have reached the statistical error."""
+        # Return if we have reached the statistical error target required.
+        if (last_err_free_energy is not None and last_err_free_energy <= online_analysis_target_error):
             return True
         return False
 
