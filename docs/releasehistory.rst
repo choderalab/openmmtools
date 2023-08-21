@@ -1,6 +1,15 @@
 Release History
 ***************
 
+
+0.23.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fix issue where if ``None`` was used for ``online_analysis_interval`` an error would be thrown (issue `#708 <https://github.com/choderalab/openmmtools/issues/708>`_ PR `#710 <https://github.com/choderalab/openmmtools/pull/710`_)
+
 0.23.0 - latest numba support and real time stats enhancements
 ==============================================================
 
