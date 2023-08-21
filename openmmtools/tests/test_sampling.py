@@ -16,10 +16,12 @@ TODO
 import contextlib
 import copy
 import inspect
+import math
 import os
 import pickle
 import shutil
 import sys
+import tempfile
 from io import StringIO
 
 import numpy as np
@@ -35,8 +37,7 @@ except ImportError:  # OpenMM < 7.6
 import mpiplus
 
 import openmmtools as mmtools
-from openmmtools import cache
-from openmmtools import testsystems
+from openmmtools import cache, testsystems, states, mcmc
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
 from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyzer
@@ -1595,7 +1596,24 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             assert len(yaml_contents) == expected_yaml_entries, \
                 "Expected yaml entries do not match the actual number entries in the file."
 
-
+def test_real_time_analysis_can_be_none():
+    """Test if real time analysis can be done"""
+    testsystem = testsystems.AlanineDipeptideImplicit()
+    n_replicas = 3
+    T_min = 298.0 * unit.kelvin  # Minimum temperature.
+    T_max = 600.0 * unit.kelvin  # Maximum temperature.
+    temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+                    for i in range(n_replicas)]
+    temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+                    for i in range(n_replicas)]
+    thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
+                            for T in temperatures]
+    move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
+    simulation = MultiStateSampler(mcmc_moves=move, number_of_iterations=2, online_analysis_interval=None)
+    storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
+    reporter = MultiStateReporter(storage_path, checkpoint_interval=1)
+    simulation.create(thermodynamic_states=thermodynamic_states,
+                      sampler_states=states.SamplerState(testsystem.positions), storage=reporter)
 #############
 
 class TestExtraSamplersMultiStateSampler(TestMultiStateSampler):
