@@ -16,14 +16,17 @@ TODO
 import contextlib
 import copy
 import inspect
+import math
 import os
 import pickle
 import shutil
 import sys
+import tempfile
 from io import StringIO
 
 import numpy as np
 import yaml
+import unittest
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
 try:
@@ -34,8 +37,7 @@ except ImportError:  # OpenMM < 7.6
 import mpiplus
 
 import openmmtools as mmtools
-from openmmtools import cache
-from openmmtools import testsystems
+from openmmtools import cache, testsystems, states, mcmc
 from openmmtools.multistate import MultiStateReporter
 from openmmtools.multistate import MultiStateSampler, MultiStateSamplerAnalyzer
 from openmmtools.multistate import ReplicaExchangeSampler, ReplicaExchangeAnalyzer
@@ -141,7 +143,8 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
     def run(self, include_unsampled_states=False):
         # Create and configure simulation object
         move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0*unit.angstroms)
-        simulation = self.SAMPLER(mcmc_moves=move, number_of_iterations=self.N_ITERATIONS)
+        simulation = self.SAMPLER(mcmc_moves=move, number_of_iterations=self.N_ITERATIONS,
+                                  online_analysis_interval=self.N_ITERATIONS)
 
         # Define file for temporary storage.
         with temporary_directory() as tmp_dir:
@@ -160,11 +163,11 @@ class TestHarmonicOscillatorsMultiStateSampler(object):
             logger.setLevel(logging.CRITICAL)
             simulation.run()
 
-            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and 
+            # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and
             # check that it throws an exception
             assert_raises(Exception, self.ANALYZER, reporter, statistical_inefficiency=10)
 
-            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and 
+            # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and
             # check that equilibration detection returns n_equilibration_iterations > 10
             analyzer = self.ANALYZER(reporter, n_equilibration_iterations=10)
             sampled_energy_matrix, unsampled_energy_matrix, neighborhoods, replicas_state_indices = list(analyzer._read_energies(truncate_max_n_iterations=True))
@@ -587,6 +590,7 @@ class TestBaseMultistateSampler(object):
 
     N_SAMPLERS = 3
     N_STATES = 5
+    # TODO: Once we migrate to pytest SAMPLER and REPORTER should be fixtures!
     SAMPLER = MultiStateSampler
     REPORTER = MultiStateReporter
 
@@ -999,7 +1003,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
 
         with self.temporary_storage_path() as storage_path:
-            sampler = self.SAMPLER(number_of_iterations=5)
+            sampler = self.SAMPLER(number_of_iterations=5, online_analysis_interval=1)
             reporter = self.REPORTER(storage_path, checkpoint_interval=1)
             self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
@@ -1441,17 +1445,20 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies_rep, _, _ = sampler._reporter.read_energies()
             assert np.all(energies_str == energies_rep)
 
+    #@unittest.skip("This test needs to fixed, see https://github.com/choderalab/openmmtools/pull/705")
+    #@unittest.skipIf(os.getenv("RUNNER_OS") == "macOS", "Test doesn't work on OSX on GHA")
     def test_online_analysis_works(self):
         """Test online analysis runs"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
         with self.temporary_storage_path() as storage_path:
-            n_iterations = 5
-            online_interval = 1
+            n_iterations = 10
+            online_interval = 2
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval,
                                    online_analysis_minimum_iterations=3)
-            self.call_sampler_create(sampler, storage_path,
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
                                      unsampled_states)
             # Run
@@ -1482,11 +1489,12 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             except AssertionError as e:
                 # Handle case where MBAR does not have a converged free energy yet by attempting to run longer
                 # Only run up until we have sampled every state, or we hit some cycle limit
-                cycle_limit = 20  # Put some upper limit of cycles
+                cycle_limit = 100  # Put some upper limit of cycles
                 cycles = 0
                 while (not np.unique(sampler._reporter.read_replica_thermodynamic_states()).size == self.N_STATES
-                       or cycles == cycle_limit):
+                       and cycles < cycle_limit):
                     sampler.extend(20)
+                    cycles += 1
                     try:
                         validate_this_test()
                     except AssertionError:
@@ -1510,7 +1518,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                                    online_analysis_interval=online_interval,
                                    online_analysis_minimum_iterations=0,
                                    online_analysis_target_error=np.inf)  # use infinite error to stop right away
-            self.call_sampler_create(sampler, storage_path,
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
                                      unsampled_states)
             # Run
@@ -1570,7 +1579,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             move = mmtools.mcmc.IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1)
             sampler = self.SAMPLER(mcmc_moves=move, number_of_iterations=n_iterations,
                                    online_analysis_interval=online_interval)
-            self.call_sampler_create(sampler, storage_path,
+            reporter = self.REPORTER(storage_path, checkpoint_interval=online_interval)
+            self.call_sampler_create(sampler, reporter,
                                      thermodynamic_states, sampler_states,
                                      unsampled_states)
             # Run
@@ -1586,7 +1596,24 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             assert len(yaml_contents) == expected_yaml_entries, \
                 "Expected yaml entries do not match the actual number entries in the file."
 
-
+def test_real_time_analysis_can_be_none():
+    """Test if real time analysis can be done"""
+    testsystem = testsystems.AlanineDipeptideImplicit()
+    n_replicas = 3
+    T_min = 298.0 * unit.kelvin  # Minimum temperature.
+    T_max = 600.0 * unit.kelvin  # Maximum temperature.
+    temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+                    for i in range(n_replicas)]
+    temperatures = [T_min + (T_max - T_min) * (math.exp(float(i) / float(n_replicas-1)) - 1.0) / (math.e - 1.0)
+                    for i in range(n_replicas)]
+    thermodynamic_states = [states.ThermodynamicState(system=testsystem.system, temperature=T)
+                            for T in temperatures]
+    move = mcmc.GHMCMove(timestep=2.0*unit.femtoseconds, n_steps=50)
+    simulation = MultiStateSampler(mcmc_moves=move, number_of_iterations=2, online_analysis_interval=None)
+    storage_path = tempfile.NamedTemporaryFile(delete=False).name + '.nc'
+    reporter = MultiStateReporter(storage_path, checkpoint_interval=1)
+    simulation.create(thermodynamic_states=thermodynamic_states,
+                      sampler_states=states.SamplerState(testsystem.positions), storage=reporter)
 #############
 
 class TestExtraSamplersMultiStateSampler(TestMultiStateSampler):
