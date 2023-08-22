@@ -2193,6 +2193,11 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         return self._equilibration_data[1]
 
     @property
+    def effective_length(self):
+        """float: The length of the production data as a number of uncorrelated samples"""
+        return self._equilibration_data[2]
+
+    @property
     def _decorrelated_iterations(self):
         """list of int: the indices of the decorrelated iterations truncated to max_n_iterations."""
         if self.use_full_trajectory:
