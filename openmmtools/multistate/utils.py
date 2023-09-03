@@ -293,3 +293,138 @@ def subsample_data_along_axis(data, subsample_rate, axis):
     indices = subsample_correlated_data(np.zeros(data_shape[axis]), g=subsample_rate)
     subsampled_data = np.take(cast_data, indices, axis=axis)
     return subsampled_data
+
+# =============================================================================================
+# SPECIAL MIXINS
+# =============================================================================================
+
+class NNPCompatibilityMixin(object):
+    """
+    Mixin for subclasses of `MultistateSampler` that supports `openmm-ml` exchanges of `lambda_interpolate`
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+    
+    def setup(self, n_states, mixed_system, 
+              init_positions, temperature, storage_kwargs, 
+              n_replicas=None, lambda_schedule=None, 
+              lambda_protocol=None, setup_equilibration_intervals=None,
+              steps_per_setup_equilibration_interval=None,
+              **unused_kwargs):
+        """try to gently equilibrate the setup of the different thermodynamic states;
+        make the number of `setup_equilibration_intervals` some multiple of `n_states`.
+        The number of initial equilibration steps will be equal to
+        `setup_equilibration_intervals * steps_per_setup_equilibration_interval`
+        """
+        import openmm
+        from openmm import unit
+        from openmmtools.states import ThermodynamicState, SamplerState, CompoundThermodynamicState
+        from openmmtools.alchemy import NNPAlchemicalState
+        from copy import deepcopy
+        from openmmtools.multistate import MultiStateReporter
+        from openmmtools.utils import get_fastest_platform
+        from openmmtools import cache
+        platform = get_fastest_platform(minimum_precision='mixed')
+        context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+
+        # get parameters, pass the `lambda_REST` parameter to the constructor of the protocol
+        #_parameters = {}
+        #_nbfs = [force for force in mixed_system.getForces() if force.__class__.__name__ == 'NonbondedForce']
+        #assert len(_nbfs) == 1, f"there can only be 1 nbf"
+        #num_global_params = _nbfs[0].getNumGlobalParameters()
+        #assert num_global_params == 1, f"there can only be 1 global parameter in the nbf"
+        #global_param_name = _nbfs[0].getGlobalParameterName(0)
+        #assert global_param_name == 'lambda_interREST', f"the global param name is {global_param_name}"
+        #temp_scale = _nbfs[0].getGlobalParameterDefaultValue(0)
+        
+
+        lambda_zero_alchemical_state = NNPAlchemicalState.from_system(mixed_system)
+        thermostate = ThermodynamicState(mixed_system,
+            temperature=temperature)
+        compound_thermostate = CompoundThermodynamicState(thermostate,
+            composable_states=[lambda_zero_alchemical_state])
+        thermostate_list, sampler_state_list, unsampled_thermostate_list = [], [], []
+        if n_replicas is None:
+            n_replicas = n_states
+        else:
+            raise NotImplementedError(f"""the number of states was given as {n_states} 
+                                        but the number of replicas was given as {n_replicas}. 
+                                        We currently only support equal states and replicas""")
+        if lambda_schedule is None:
+            lambda_schedule = np.linspace(0., 1., n_states)
+        else:
+            assert len(lambda_schedule) == n_states
+            assert np.isclose(lambda_schedule[0], 0.)
+            assert np.isclose(lambda_schedule[-1], 1.)
+
+        if setup_equilibration_intervals is not None:
+            # attempt to gently equilibrate
+            assert setup_equilibration_intervals % n_states == 0, f"""
+              the number of `n_states` must be divisible into `setup_equilibration_intervals`"""
+            interval_stepper = setup_equilibration_intervals // n_states
+        else:
+            raise Exception(f"At present, we require setup equilibration interval work.")
+        
+        if lambda_protocol is None:
+            from openmmtools.alchemy import NNPProtocol
+            #lambda_protocol = NNPProtocol(temp_scale = temp_scale)
+            lambda_protocol = NNPProtocol()
+
+        else:
+            raise NotImplementedError(f"""`lambda_protocol` is currently placeholding; only default `None` 
+                                      is allowed until the `lambda_protocol` class is appropriately generalized""")
+        
+        init_sampler_state = SamplerState(init_positions, box_vectors = mixed_system.getDefaultPeriodicBoxVectors())
+
+        # first, a context, integrator to equilibrate and minimize state 0
+        eq_context, eq_integrator = context_cache.get_context(deepcopy(compound_thermostate),
+                                                              openmm.LangevinMiddleIntegrator(temperature, 1., 0.001))
+        forces = eq_context.getSystem().getForces()
+        for force in forces: # this is to make sure i am not fucking force groups up
+            print(f"{force.__class__.__name__}: {force.getForceGroup()}")
+        init_sampler_state.apply_to_context(eq_context) # don't forget to set particle positions, bvs
+        openmm.LocalEnergyMinimizer.minimize(eq_context) # don't forget to minimize
+        init_sampler_state.update_from_context(eq_context) # update from context for good measure
+        eq_context.setVelocitiesToTemperature(temperature) # set velocities at appropriate temperature
+
+        logger.info(f"making lambda states...")
+        lambda_subinterval_schedule = np.linspace(0., 1., setup_equilibration_intervals)
+
+        # add unsampled state at lambda = 0 (also sample this...)
+        compound_thermostate_copy = deepcopy(compound_thermostate) # copy thermostate
+        compound_thermostate_copy.set_alchemical_parameters(0., lambda_protocol) # update thermostate
+        unsampled_thermostate_list.append(compound_thermostate_copy)
+
+        
+
+        print(f"running thermolist population...")
+        for lambda_subinterval in lambda_subinterval_schedule:
+            print(f"running lambda subinterval {lambda_subinterval}.")
+            compound_thermostate_copy = deepcopy(compound_thermostate) # copy thermostate
+            compound_thermostate_copy.set_alchemical_parameters(lambda_subinterval, lambda_protocol) # update thermostate
+            compound_thermostate_copy.apply_to_context(eq_context) # apply new alch val to context
+            eq_integrator.step(steps_per_setup_equilibration_interval) # step the integrator
+            init_sampler_state.update_from_context(eq_context) # update sampler_state
+
+            # pull the energy of the force groups
+            #int_state = eq_context.getState(getEnergy=True, groups = {1})
+            #int_g1_energy = int_state.getPotentialEnergy()
+            #print(f"\tinternal g1 energy: {int_g1_energy}")
+
+            matchers = [np.isclose(lambda_subinterval, i) for i in lambda_schedule]
+            ml_endstate_matcher = np.isclose(lambda_subinterval, 1.) # this is the last state, and we want to make it unsampled
+            if ml_endstate_matcher:
+                unsampled_thermostate_list.append(compound_thermostate_copy)
+                #sampler_state_list.append(deepcopy(init_sampler_state))
+            elif any(matchers): # if the lambda subinterval is in the lambda protocol, add thermostate and sampler state
+                print(f"this subinterval ({lambda_subinterval}) matched; adding to state...")
+                thermostate_list.append(compound_thermostate_copy)
+                sampler_state_list.append(deepcopy(init_sampler_state))
+
+        # put context, integrator into garbage collector
+        del eq_context
+        del eq_integrator
+        reporter = MultiStateReporter(**storage_kwargs)
+        print(f"thermostate len: {len(thermostate_list)}; samplerstate len: {len(sampler_state_list)}; unsampled: {len(unsampled_thermostate_list)}")
+        self.create(thermodynamic_states = thermostate_list, sampler_states = sampler_state_list, storage=reporter,
+            unsampled_thermodynamic_states = unsampled_thermostate_list)
