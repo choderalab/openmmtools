@@ -8,13 +8,22 @@
 Test utility functions in utils.py.
 
 """
-
+import abc
+import copy
 
 # =============================================================================
 # GLOBAL IMPORTS
 # =============================================================================
 
 import nose
+from nose.tools import nottest
+import numpy as np
+
+try:
+    import openmm
+    from openmm import unit
+except ImportError:  # OpenMM < 7.6
+    from simtk import openmm, unit
 
 from openmmtools.utils import _RESERVED_WORDS_PATTERNS
 from openmmtools.utils import *
@@ -26,10 +35,6 @@ from openmmtools.utils import *
 
 def test_platform_supports_precision():
     """Test that platform_supports_precision works correctly."""
-    try:
-        import openmm
-    except ImportError:  # OpenMM < 7.6
-        from simtk import openmm
 
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
@@ -326,16 +331,12 @@ class TestRestorableOpenMMObject(object):
             def __init__(self, *args, **kwargs):
                 super(DummyRestorableCustomForce, self).__init__(*args, **kwargs)
 
-        class DummierRestorableCustomForce(RestorableOpenMMObject, openmm.CustomAngleForce):
-            def __init__(self, *args, **kwargs):
-                super(DummierRestorableCustomForce, self).__init__(*args, **kwargs)
-
         class DummyRestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
             def __init__(self, *args, **kwargs):
                 super(DummyRestorableCustomIntegrator, self).__init__(*args, **kwargs)
 
         cls.dummy_force = DummyRestorableCustomForce('0.0;')
-        cls.dummier_force = DummierRestorableCustomForce('0.0;')
+        cls.dummier_force = DummyRestorableCustomForce('0.0;')
         cls.dummy_integrator= DummyRestorableCustomIntegrator(2.0*unit.femtoseconds)
 
     def test_restorable_openmm_object(self):
@@ -367,7 +368,16 @@ class TestRestorableOpenMMObject(object):
                 assert hasattr(copied_object, '_monkey_patching')
 
     def test_multiple_object_context_creation(self):
-        """Test that it is possible to create contexts with multiple restorable objects."""
+        """Test that it is possible to create contexts with multiple restorable objects.
+
+        The aim of this test is to make sure we can restore the force objects using to create the context;
+        after serialization.
+
+        Notes
+        -----
+        As of Openmm 8 having the same type of openmm objects with different default values for global parameters is
+        not allowed.
+        """
         system = openmm.System()
         for i in range(4):
             system.addParticle(1.0*unit.atom_mass_units)
@@ -385,11 +395,42 @@ class TestRestorableOpenMMObject(object):
         force1, force2 = system.getForce(0), system.getForce(1)
         assert RestorableOpenMMObject.restore_interface(force1)
         assert RestorableOpenMMObject.restore_interface(force2)
-        hash1 = force1._get_force_parameter_by_name(force1, force_hash_parameter_name)
-        hash2 = force2._get_force_parameter_by_name(force2, force_hash_parameter_name)
-        assert not np.isclose(hash1, hash2)
         assert isinstance(force1, self.dummy_force.__class__)
         assert isinstance(force2, self.dummier_force.__class__)
+
+    def test_context_from_restorable_with_different_globals(self):
+        """
+        Test that you cannot create a context from restorable objects with different default values for
+        global parameters.
+
+        Creates a system with two forces that have different default values for the hash global parameter and
+        expects an OpenmmException when trying to create a Context using these forces.
+
+        Notes
+        -----
+        As of Openmm 8 having the same type of openmm objects with different default values for global parameters is
+        not allowed.
+        """
+        dummy_force = copy.deepcopy(self.dummy_force)
+        dummier_force = copy.deepcopy(self.dummier_force)
+
+        # Change the global parameter default value for one of the forces
+        force_hash_parameter_name = dummy_force._hash_parameter_name
+        dummier_force.addGlobalParameter(force_hash_parameter_name, 3.141592)
+
+        system = openmm.System()
+        for i in range(4):
+            system.addParticle(1.0 * unit.atom_mass_units)
+        system.addForce(copy.deepcopy(dummy_force))
+        system.addForce(copy.deepcopy(dummier_force))
+
+        # TODO: Change this once we migrate to pytest -- using skipif as needed
+        # Skip assertion for openmm < 8
+        if int(openmm.__version__[0]) < 8:
+            pass
+        else:
+            with nose.tools.assert_raises(openmm.OpenMMException):
+                openmm.Context(system, copy.deepcopy(self.dummy_integrator))
 
     def test_restorable_openmm_object_failure(self):
         """An exception is raised if the class has a restorable hash but the class can't be found."""
@@ -414,3 +455,155 @@ class TestRestorableOpenMMObject(object):
             hash_float = RestorableOpenMMObject._compute_class_hash(restorable_cls)
             all_hashes.add(hash_float)
         assert len(all_hashes) == len(restorable_classes)
+
+
+class TestEquilibrationUtils(object):
+    """
+    Class for testing equilibration utility functions in openmmtools.utils.equilibration
+    """
+    def test_gentle_equilibration_setup(self):
+        """
+        Test gentle equilibration implementation using the Alanine dipeptide in explicit solvent
+        system found in `openmmtools.testsystems.AlanineDipeptideExplicit`
+
+        This only tests the gentle equilibration can be run with this system, only one iteration
+        of each stage is run.
+        """
+        from openmmtools.testsystems import AlanineDipeptideExplicit
+        from openmmtools.utils import run_gentle_equilibration
+
+        test_system = AlanineDipeptideExplicit()
+
+        # Retrieve positions, system and topology from the test_system object
+        positions = np.array(test_system.positions.value_in_unit(unit.nanometer))
+        system = test_system.system
+        topology = test_system.topology
+
+        stages = [
+            {'EOM': 'minimize', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD_interpolate', 'n_steps': 1, 'temperature': 100 * unit.kelvin,
+             'temperature_end': 300 * unit.kelvin,
+             'ensemble': 'NVT', 'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'minimize', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 1, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': None,
+             'force_constant': 0 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 2 * unit.femtoseconds},
+        ]
+
+        with temporary_directory() as tmp_path:
+            outfile_path = f"{tmp_path}/outfile.cif"
+            run_gentle_equilibration(topology, positions, system, stages, outfile_path, platform_name="CPU",
+                                 save_box_vectors=False)
+
+    # TODO: Marking as not a test until we solve our GPU CI
+    @nottest
+    def test_gentle_equilibration_cuda(self):
+        """
+        Test gentle equilibration implementation using the Alanine dipeptide in explicit solvent
+        system found in `openmmtools.testsystems.AlanineDipeptideExplicit`
+
+        To date it is meant to just test that the protocol can run with a test system and
+        do a quick comparison of the energies (this latter part not implemented yet).
+
+        Meant to be run using CUDA platform, similar to a production-ready environment.
+        """
+        # TODO: Perform the energy comparison part
+        from openmmtools.testsystems import AlanineDipeptideExplicit
+        from openmmtools.utils import run_gentle_equilibration
+
+        test_system = AlanineDipeptideExplicit()
+
+        # Retrieve positions, system and topology from the test_system object
+        positions = np.array(test_system.positions.value_in_unit(unit.nanometer))
+        system = test_system.system
+        topology = test_system.topology
+
+        stages = [
+            {'EOM': 'minimize', 'n_steps': 10000, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD_interpolate', 'n_steps': 100000, 'temperature': 100 * unit.kelvin,
+             'temperature_end': 300 * unit.kelvin,
+             'ensemble': 'NVT', 'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 100 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 10 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 250000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and not type H',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'minimize', 'n_steps': 10000, 'temperature': 300 * unit.kelvin, 'ensemble': None,
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 10 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 100000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': 'protein and backbone',
+             'force_constant': 0.1 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 1 * unit.femtoseconds},
+            {'EOM': 'MD', 'n_steps': 2500000, 'temperature': 300 * unit.kelvin, 'ensemble': 'NPT',
+             'restraint_selection': None,
+             'force_constant': 0 * unit.kilocalories_per_mole / unit.angstrom ** 2,
+             'collision_rate': 2 / unit.picoseconds,
+             'timestep': 2 * unit.femtoseconds},
+        ]
+
+        run_gentle_equilibration(topology, positions, system, stages, "outfile.cif", platform_name="CUDA",
+                             save_box_vectors=False)

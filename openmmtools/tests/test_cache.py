@@ -218,10 +218,10 @@ class TestContextCache(object):
         def read_attribute(integrator, attribute_name):
             try:
                 return getattr(integrator, attribute_name)
-            except:
+            except AttributeError:
                 try:
                     return getattr(integrator, 'get' + attribute_name)()
-                except:
+                except AttributeError:
                     return integrator.getGlobalVariableByName(attribute_name)
 
         test_cases[0].append('Temperature')  # Getter/setter.

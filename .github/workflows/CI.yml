@@ -13,27 +13,44 @@ on:
     #   (from https://help.github.com/en/actions/reference/events-that-trigger-workflows#scheduled-events-schedule)
     - cron: "0 0 * * *"
 
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 jobs:
   test:
-    name: Test on ${{ matrix.cfg.os }}, Python ${{ matrix.cfg.python-version }}, OpenMM ${{ matrix.cfg.openmm }}
-    runs-on: ${{ matrix.cfg.os }}
+    name: ${{ matrix.os }}, py-${{ matrix.python-version }}, OpenMM-${{ matrix.openmm }}, pymbar-${{ matrix.pymbar-version }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        cfg:
-          - { os: macOS-latest,   python-version: '3.8', openmm: latest  }
-          - { os: windows-latest, python-version: '3.8.10', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.9', openmm: latest  }
-          - { os: ubuntu-latest,  python-version: '3.8', openmm: nightly }
-          - { os: ubuntu-latest,  python-version: '3.10', openmm: latest  }
-
-    env:
-      OPENMM: ${{ matrix.cfg.openmm }}
+        python-version: ["3.8", "3.9", "3.10"]
+        openmm: ["7.7", "8.0"]
+        os: [macOS-latest, ubuntu-latest]
+        pymbar-version: ["4"]
+        include:
+          # Test openmm dev build on newest python + linux
+          - openmm: "dev"
+            python-version: "3.10"
+            os: ubuntu-latest
+            pymbar-version: "4"
+          # Test newest python, openmm, and pymbar we support on windows
+          - openmm: "8.0"
+            python-version: "3.10"
+            os: windows-latest
+            pymbar-version: "4"
+          # Have one job test pymbar 3 support
+          - openmm: "8.0"
+            python-version: "3.10"
+            os: ubuntu-latest
+            pymbar-version: "3"
+        exclude:
+          # There are no py 3.10 builds of openmm 7.7
+          - openmm: "7.7"
+            python-version: "3.10"
 
     steps:
-      - uses: actions/checkout@v1
-
+      - uses: actions/checkout@v3
       - name: Additional info about the build
         shell: bash
         run: |
@@ -41,38 +58,48 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/conda-incubator/setup-miniconda
-      - uses: conda-incubator/setup-miniconda@v2
+      - name: Setup micromamba for openmm dev
+        uses: mamba-org/provision-with-micromamba@main
+        if: ${{ matrix.openmm == 'dev' }}
         with:
-          python-version: ${{ matrix.cfg.python-version }}
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge
           environment-file: devtools/conda-envs/test_env.yaml
-          channels: conda-forge,defaults
-          activate-environment: test
-          auto-update-conda: true
-          auto-activate-base: false
-          show-channel-urls: true
+          channel-priority: flexible
+          environment-name: openmmtools-test
+          extra-specs: |
+            python==${{ matrix.python-version }}
+            openmm==8.0.0dev3
+            pymbar==${{ matrix.pymbar-version }}.*
 
-      - name: Install OpenMM nightly
-        shell: bash -l {0}
-        if: matrix.cfg.openmm == 'nightly'
-        run: |
-          conda install --yes -c omnia-dev openmm
-
+      - name: Setup micromamba
+        uses: mamba-org/provision-with-micromamba@main
+        if: ${{ matrix.openmm != 'dev' }}
+        with:
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge
+          environment-file: devtools/conda-envs/test_env.yaml
+          channel-priority: strict
+          environment-name: openmmtools-test
+          extra-specs: |
+            python==${{ matrix.python-version }}
+            openmm==${{ matrix.openmm }}
+            pymbar==${{ matrix.pymbar-version }}.*
+            
       - name: Install package
         shell: bash -l {0}
         run: |
           python -m pip install . --no-deps
-          conda list
+          micromamba list
+          micromamba info
 
       - name: Run tests
         shell: bash -l {0}
         run: |
           # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
-          nosetests openmmtools/tests --nocapture --verbosity=2 --with-timer --with-doctest -a '!slow'
+          nosetests openmmtools/tests --nocapture --cover-tests --with-coverage --cover-package=openmmtools --cover-xml --cover-xml-file=coverage.xml --verbosity=2 --with-timer --with-doctest -a '!slow'
 
       - name: CodeCov
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v3
         with:
           file: ./coverage.xml
           flags: unittests
-          name: codecov-${{ matrix.cfg.os }}-py${{ matrix.cfg.python-version }}
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}-openmm-${{ matrix.openmm }}

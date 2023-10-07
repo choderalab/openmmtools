@@ -36,9 +36,13 @@ except ImportError:  # OpenMM < 7.6
     from simtk import openmm
     import simtk.unit as units
 from scipy.special import logsumexp
-from pymbar import MBAR, timeseries
 
 from openmmtools import multistate, utils, forces
+from openmmtools.multistate.pymbar import (
+    statistical_inefficiency_multiple,
+    subsample_correlated_data,
+    MBAR,
+)
 
 
 ABC = abc.ABC
@@ -1164,15 +1168,15 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     statistical_inefficiency : float, optional
         Sub-sample rate, e.g. if the statistical_inefficiency is 10, we draw a sample every 10 iterations to get the decorrelated samples.
-        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations` 
+        If specified, overrides the statistical_inefficiency computed using _get_equilibration_data() and `n_equilibration_iterations`
         must be specified as well.
         Default is None, in which case the the statistical_inefficiency will be computed using _get_equilibration_data().
 
     max_subset : int >= 1 or None, optional, default: 100
-        Argument in ``multistate.utils.get_equilibration_data_per_sample()`` that specifies the maximum number of points from 
-        the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_data_per_sample()``) on which 
+        Argument in ``multistate.utils.get_equilibration_data_per_sample()`` that specifies the maximum number of points from
+        the ``timeseries_to_analyze`` (another argument to ``multistate.utils.get_equilibration_data_per_sample()``) on which
         to compute equilibration data.
-    
+
     Attributes
     ----------
     unbias_restraint
@@ -1286,7 +1290,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         # states[n][k] is the state index of replica k at iteration n, but
         # the functions wants a list of timeseries states[k][n].
         states_kn = np.transpose(states[number_equilibrated:self.max_n_iterations,])
-        g = timeseries.statisticalInefficiencyMultiple(states_kn)
+        g = statistical_inefficiency_multiple(states_kn)
 
         return self._MixingStatistics(transition_matrix=t_ij, eigenvalues=mu,
                                       statistical_inefficiency=g)
@@ -1915,11 +1919,13 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         logger.debug("Computing covariance matrix...")
 
         try:
-            # pymbar 2
-            (Deltaf_ij, dDeltaf_ij) = self.mbar.getFreeEnergyDifferences()
-        except ValueError:
             # pymbar 3
-            (Deltaf_ij, dDeltaf_ij, _) = self.mbar.getFreeEnergyDifferences()
+            Deltaf_ij, dDeltaf_ij = self.mbar.getFreeEnergyDifferences()
+        except AttributeError:
+            # pymbar 4
+            results = self.mbar.compute_free_energy_differences()
+            Deltaf_ij = results['Delta_f']
+            dDeltaf_ij = results['dDelta_f']
 
         # Matrix of free energy differences
         logger.debug("Deltaf_ij:")
@@ -2063,7 +2069,7 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
             i_t, g_i, n_effective_i = multistate.utils.get_equilibration_data_per_sample(u_n[t0:], max_subset=self._max_subset)
             n_effective_max = n_effective_i.max()
             i_max = n_effective_i.argmax()
-            n_equilibration = i_t[i_max] + t0 
+            n_equilibration = i_t[i_max] + t0
             g_t = self._statistical_inefficiency if self._statistical_inefficiency is not None else g_i[i_max]
 
         # Store equilibration data
@@ -2187,12 +2193,17 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
         return self._equilibration_data[1]
 
     @property
+    def effective_length(self):
+        """float: The length of the production data as a number of uncorrelated samples"""
+        return self._equilibration_data[2]
+
+    @property
     def _decorrelated_iterations(self):
         """list of int: the indices of the decorrelated iterations truncated to max_n_iterations."""
         if self.use_full_trajectory:
             return np.arange(self.max_n_iterations + 1, dtype=int)
         equilibrium_iterations = np.array(range(self.n_equilibration_iterations, self.max_n_iterations + 1))
-        decorrelated_iterations_indices = timeseries.subsampleCorrelatedData(equilibrium_iterations,
+        decorrelated_iterations_indices = subsample_correlated_data(equilibrium_iterations,
                                                                              self.statistical_inefficiency)
         return equilibrium_iterations[decorrelated_iterations_indices]
 
