@@ -17,7 +17,7 @@ from functools import partial
 
 from openmmtools.forcefactories import *
 from openmmtools import testsystems, states
-
+from simtk.openmm import Context, LangevinIntegrator, Platform
 
 # =============================================================================
 # CONSTANTS
@@ -196,3 +196,157 @@ def test_replace_reaction_field():
                     name=test_name, platform=platform)
         f.description = "Testing replace_reaction_field on system {} with shifted=True".format(test_name)
         yield f
+
+
+class LJPairTestBox(testsystems.LennardJonesPair):
+    """A helper class to facilitate energy evaluations of a Lennard-Jones interaction."""
+    def __init__(self, mass=1.0 * unit.atomic_mass_unit, epsilon=0.25*unit.kilojoule_per_mole,
+                 sigma=0.5*unit.nanometer, box_size=100.0*unit.nanometer):
+        super(LJPairTestBox, self).__init__(mass=mass, epsilon=epsilon, sigma=sigma)
+        self.box_size = box_size
+        self.system.getForce(0).setNonbondedMethod(openmm.NonbondedForce.CutoffPeriodic)
+        self.system.getForce(0).setUseDispersionCorrection(False)
+        self.system.getForce(0).setCutoffDistance(1.5 * unit.nanometer)
+        self.system.setDefaultPeriodicBoxVectors(*np.eye(3)*self.box_size)
+        self.update_context()
+
+    def update_context(self):
+        self.context = Context(self.system, LangevinIntegrator(
+            300.0*unit.kelvin, 5.0/unit.picosecond, 1.0*unit.femtosecond))
+
+    def calculate_energy(self, r_nm=1.0):
+        self.context.setPositions(
+            unit.Quantity(value=np.array([[0.0, 0.0, 0.0], [0.0, 0.0, r_nm]]),
+                          unit=unit.nanometer))
+        state = self.context.getState(getEnergy=True)
+        return state.getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+
+
+def test_use_custom_switch_function():
+    """Test if custom switch function is effective."""
+    # system without switch
+    ljpair = LJPairTestBox(epsilon=0.0*unit.kilojoule_per_mole)
+    custom_force = openmm.CustomNonbondedForce("1")
+    custom_force.setNonbondedMethod(openmm.CustomNonbondedForce.CutoffPeriodic)
+    custom_force.setCutoffDistance(1.5 * unit.nanometer)
+    custom_force.addParticle()
+    custom_force.addParticle()
+    ljpair.system.addForce(custom_force)
+    ljpair.update_context()
+    assert abs(ljpair.calculate_energy(1.25) - 1.0) < 1e-8
+
+    # add switch
+    custom_force.setUseSwitchingFunction(True)
+    custom_force.setSwitchingDistance(1.0 * unit.nanometer)
+    apply_custom_switching_function(custom_force, 1.0*unit.nanometer, 1.5*unit.nanometer,
+                                    switching_function="(r-cutoff)/(switch-cutoff)")
+    ljpair.update_context()
+    assert abs(ljpair.calculate_energy(1.25) - 0.5) < 1e-8
+
+
+def test_use_vdw_with_charmm_vswitch():
+    """Check Lennard-Jones switching using CHARMM's VSWITCH function."""
+    ljpair = LJPairTestBox()
+    assert is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
+    use_custom_vdw_switching_function(ljpair.system, 1.0*unit.nanometer, 1.5*unit.nanometer)
+    assert not is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
+    [nb, cnb, cb] = ljpair.system.getForces()
+    for i in range(ljpair.system.getNumForces()):
+        try:
+            print(i,ljpair.system.getForce(i).getEnergyFunction())
+        except:
+            pass
+    ljpair.update_context()
+
+    def switch(r, a=1.0, b=1.5):
+        """Steinbach and Brooks """
+        if r < a:
+            return 1.0
+        elif r > b:
+            return 0.0
+        else:
+            return (b ** 2 - r ** 2) ** 2 * (b ** 2 + 2 * r ** 2 - 3 * a ** 2) / (b ** 2 - a ** 2) ** 3
+
+    def lj_switch(r, sigma=ljpair.sigma, epsilon=ljpair.epsilon):
+        sigma = sigma.value_in_unit(unit.nanometer)
+        epsilon = epsilon.value_in_unit(unit.kilojoule_per_mole)
+        return switch(r) * (4*epsilon*((sigma/r)**12 - (sigma/r)**6))
+
+    for r in np.linspace(0.5, 2.0, 10, True):
+        assert abs(ljpair.calculate_energy(r) - lj_switch(r)) < 1e-7
+
+
+def test_use_vdw_with_charmm_force_switch():
+    """Check Lennard-Jones energy from CHARMM's force switching scheme."""
+    cutoff = 1.5 #*unit.nanometer
+    switch = 1.0 #*unit.nanometer
+    ljpair = LJPairTestBox()
+    assert is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
+    use_vdw_with_charmm_force_switch(ljpair.system, switch*unit.nanometer, cutoff*unit.nanometer)
+    assert not is_lj_active_in_nonbonded_force(ljpair.system.getForce(0))
+    ljpair.update_context()
+
+    def target_energy(r, epsilon=ljpair.epsilon.value_in_unit(unit.kilojoule_per_mole),
+                      sigma=ljpair.sigma.value_in_unit(unit.nanometer), switch=switch, cutoff=cutoff):
+        A = 4 * epsilon * sigma**12
+        B = 4 * epsilon * sigma**6
+        k6 = B * cutoff ** 3 / (cutoff ** 3 - switch ** 3)
+        k12 = A * cutoff ** 6 / (cutoff ** 6 - switch ** 6)
+        dv6 = -1 / (cutoff * switch) ** 3
+        dv12 = -1 / (cutoff * switch) ** 6
+        if r < switch:
+            return A * (1.0 / r ** 12 + dv12) - B * (1.0 / r ** 6 + dv6)
+        elif r > cutoff:
+            return 0.0
+        else:
+            return k12 * (r ** (-6) - cutoff ** (-6)) ** 2 - k6 * (r ** (-3) - cutoff ** (-3)) ** 2
+
+    for r in np.linspace(0.8, 1.5, 200, True):
+        assert abs(target_energy(r) - ljpair.calculate_energy(r)) < 1e-7
+
+
+def test_no_vdw_interactions_after_switch():
+    for switching in [use_vdw_with_charmm_force_switch, use_custom_vdw_switching_function]:
+        testsystem = testsystems.CharmmSolvated(annihilate_vdw=True)
+        switching(testsystem.system, 1.0*unit.nanometer, 1.2*unit.nanometer)
+        for i,f in enumerate(testsystem.system.getForces()):
+            f.setForceGroup(i)
+        context = Context(testsystem.system, openmm.VerletIntegrator(1.0*unit.femtosecond))
+        context.setPositions(testsystem.positions)
+        for i,f in enumerate(testsystem.system.getForces()):
+            if isinstance(f, openmm.CustomNonbondedForce):
+                assert np.isclose(
+                    0, context.getState(getEnergy=True, groups={i}).
+                        getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole), rtol=0)
+
+
+def test_switching_vs_charmm_energies():
+    """
+    Check the CHARMM reference energy.
+    """
+    for switch_string, switch in [
+        ("no", None),
+        ("vfswitch", use_vdw_with_charmm_force_switch),
+        ("vswitch", use_custom_vdw_switching_function)
+    ]:
+        testsystem = testsystems.CharmmSolvated(
+            ewald_tolerance=0.00005,
+            annihilate_vdw=False,
+            annihilate_charges=False,
+            hard_cutoff_at_10a=switch is None,
+        )
+        if switch is not None:
+            switch(testsystem.system, 1.0 * unit.nanometer, 1.2 * unit.nanometer)
+
+        context = Context(
+            testsystem.system,
+            openmm.VerletIntegrator(1.0*unit.femtosecond),
+            Platform.getPlatformByName("Reference")
+        )
+        context.setPositions(testsystem.positions)
+        energy = context.getState(getEnergy=True).getPotentialEnergy().value_in_unit(unit.kilojoule_per_mole)
+        reference = (testsystems.CharmmSolvated
+                     .charmm_reference(switch=switch_string, state_string="original")
+                     .value_in_unit(unit.kilojoules_per_mole))
+
+        assert np.isclose(energy, reference, atol=6, rtol=0)  # 4 kj ~ 1.5 kcal

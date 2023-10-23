@@ -123,7 +123,7 @@ fast_testsystems = [
     "AlchemicalLennardJonesCluster",
     "LennardJonesPair",
     "TolueneVacuum", "TolueneImplicit", "TolueneImplicitHCT", "TolueneImplicitOBC1", "TolueneImplicitOBC2", "TolueneImplicitGBn", "TolueneImplicitGBn2",
-    "HostGuestVacuum", "HostGuestImplicit", "HostGuestImplicitHCT", 'HostGuestImplicitOBC1',
+    "HostGuestVacuum", "HostGuestImplicit", "HostGuestImplicitHCT", 'HostGuestImplicitOBC1', 'CharmmSolvated'
     ]
 
 def check_potential_energy(system, positions):
@@ -239,3 +239,9 @@ def test_double_well_chain_errors():
         testsystems.DoubleWellChain_WCAFluid(nchained=-1)
     with assert_raises(ValueError) as context:
         testsystems.DoubleWellChain_WCAFluid(nchained=11, nparticles=10)
+
+def test_charmm_solvated():
+    charmm_solvated = testsystems.CharmmSolvated()
+    forces = [charmm_solvated.system.getForce(i) for i in range(charmm_solvated.system.getNumForces())]
+    # Make sure that there is an NBFIX in the system
+    assert any(isinstance(force, openmm.CustomNonbondedForce) for force in forces)
