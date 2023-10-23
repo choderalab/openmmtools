@@ -807,7 +807,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     if nsigma > NSIGMA_MAX:
         raise Exception("The free energy difference for the nonequilibrium switching for splitting '%s' and %d steps is not zero within statistical error." % (splitting, nsteps))
 
-def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nsteps_neq=1000, nsteps_eq=1000, write_trajectory=False):
+def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nsteps_neq=1000, nsteps_eq=1000, write_trajectory=False, test_FAH=False):
     """
     Test PeriodicNonequilibriumIntegrator
 
@@ -823,6 +823,8 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
         number of equilibration steps to run at endstates before annealing
     write_trajectory : bool, optional, default=True
         If True, will generate a PDB file that contains the harmonic oscillator trajectory
+    test_FAH : boolean, default False
+        whether to test the FAHCustomNEQIntegrator
     """
     #max deviation from the calculated free energy
     NSIGMA_MAX = 6
@@ -855,15 +857,33 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     topology = testsystem.topology
 
     # Create integrator
-    from openmmtools.integrators import PeriodicNonequilibriumIntegrator
-    integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=alchemical_functions,
-                                                  splitting=splitting,
-                                                  nsteps_eq=nsteps_eq,
-                                                  nsteps_neq=nsteps_neq,
-                                                  **integrator_kwargs)
+    from openmmtools.integrators import PeriodicNonequilibriumIntegrator, FAHCustomNEQIntegrator
+    if test_FAH:
+        from openmmtools.integrators import FAHCustomNEQIntegrator
+        integrator = FAHCustomNEQIntegrator(alchemical_functions=alchemical_functions,
+                                                      splitting=splitting,
+                                                      nsteps_eq=nsteps_eq,
+                                                      nsteps_neq=nsteps_neq,
+                                                      **integrator_kwargs)
+    else:
+        from openmmtools.integrators import PeriodicNonequilibriumIntegrator
+        integrator = PeriodicNonequilibriumIntegrator(alchemical_functions=alchemical_functions,
+                                                      splitting=splitting,
+                                                      nsteps_eq=nsteps_eq,
+                                                      nsteps_neq=nsteps_neq,
+                                                      **integrator_kwargs)
+
     platform = openmm.Platform.getPlatformByName("Reference")
     context = openmm.Context(system, integrator, platform)
     context.setPositions(positions)
+
+    if test_FAH: # we needto equip endstates
+        template = np.array([1., 1., 1.])
+        x0, x1 = (template * 0.*unit.angstroms).value_in_unit_system(unit.md_unit_system), (template * displacement).value_in_unit_system(unit.md_unit_system)
+        integrator.equip_equilibrium_cache(0, np.array([x0.tolist()]))
+        integrator.equip_equilibrium_cache(1, np.array([x1.tolist()]))
+
+
 
     nsteps_per_cycle = nsteps_eq + nsteps_neq + nsteps_eq + nsteps_neq
     assert integrator.getGlobalVariableByName("n_steps_per_cycle") == nsteps_per_cycle
@@ -899,9 +919,15 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
 
     step = 0
     for cycle in range(2):
+
         # eq (0)
         for i in range(nsteps_eq):
             integrator.step(1)
+            if test_FAH and i==0: #we have to assert that the equilibrium positions are appropriately set
+                state = context.getState(getPositions=True)
+                positions = state.getPositions()/unit.nanometers
+                assert np.allclose(integrator.getPerDofVariableByName('x0_eq_cache'), positions, atol=1e-1)
+
             step += 1
             assert integrator.getGlobalVariableByName("step") == (step % nsteps_per_cycle)
             assert np.isclose(integrator.getGlobalVariableByName("lambda"), 0.0)
@@ -914,6 +940,10 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
         # eq (1)
         for i in range(nsteps_eq):
             integrator.step(1)
+            if test_FAH and i==0: #we have to assert that the equilibrium positions are appropriately set for the
+                state = context.getState(getPositions=True)
+                positions = state.getPositions()/unit.nanometers
+                assert np.allclose(integrator.getPerDofVariableByName('x1_eq_cache'), positions, atol=1e-1)
             step += 1
             assert integrator.getGlobalVariableByName("step") == (step % nsteps_per_cycle)
             assert np.isclose(integrator.getGlobalVariableByName("lambda"), 1.0)
@@ -966,6 +996,9 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
     # Clean up
     del context
     del integrator
+
+def test_FAHCustomNEQIntegrator():
+    test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nsteps_neq=1000, nsteps_eq=1000, write_trajectory=False, test_FAH=True)
 
 def test_alchemical_langevin_integrator():
     for splitting in ["O V R H R V O", "H R V O V R H", "O { V R H R V } O"]:
