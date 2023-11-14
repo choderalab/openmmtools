@@ -32,3 +32,4 @@ dependencies:
   # docs
   - numpydoc
   - sphinxcontrib-bibtex
+  - sphinx-rtd-theme

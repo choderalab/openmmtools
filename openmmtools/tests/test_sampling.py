@@ -26,7 +26,6 @@ from io import StringIO
 
 import numpy as np
 import yaml
-import unittest
 from nose.plugins.attrib import attr
 from nose.tools import assert_raises
 try:
@@ -1445,8 +1444,6 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies_rep, _, _ = sampler._reporter.read_energies()
             assert np.all(energies_str == energies_rep)
 
-    #@unittest.skip("This test needs to fixed, see https://github.com/choderalab/openmmtools/pull/705")
-    #@unittest.skipIf(os.getenv("RUNNER_OS") == "macOS", "Test doesn't work on OSX on GHA")
     def test_online_analysis_works(self):
         """Test online analysis runs"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(self.alanine_test)
