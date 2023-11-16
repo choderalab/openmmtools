@@ -1,8 +1,57 @@
 Release History
 ***************
 
+
+0.23.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fix issue where if ``None`` was used for ``online_analysis_interval`` an error would be thrown (issue `#708 <https://github.com/choderalab/openmmtools/issues/708>`_ PR `#710 <https://github.com/choderalab/openmmtools/pull/710`_)
+
+0.23.0 - latest numba support and real time stats enhancements
+==============================================================
+
+Please note that there is an API breaking change. To ensure consistency of the data when appending real time stats make sure that you make the ``online_analysis_interval`` of your ``MultiStateSampler`` object match the ``checkpoint_interval`` of your ``MultiStateReporter``. It will error if this is not the case.
+
+Enhancements
+------------
+- Running with NVIDIA GPUs in Exclusive Process mode now raises a warning (issue `#697 <https://github.com/choderalab/openmmtools/issues/697>`_, PR `#699 <https://github.com/choderalab/openmmtools/pull/699>`_)
+
+Bugfixes
+--------
+- Fix metadata for netcdf files, specifying openmmtools for the ``program`` metadata (issue `#694 <https://github.com/choderalab/openmmtools/issues/694>`_, PR `#704 <https://github.com/choderalab/openmmtools/pull/704>`_).
+- Real time statistics YAML file gets appended instead of overwritten when extending or resumimng simulations (issue `#691 <https://github.com/choderalab/openmmtools/issues/691>`_, PR `#692 <https://github.com/choderalab/openmmtools/pull/692>`_).
+- Error when resuming simulations with numba 0.57 fixed by avoiding using ``numpy.MaskedArray`` when deserializing ``.nc`` files (issue `#700 <https://github.com/choderalab/openmmtools/issues/700>`_, PR `#701 <https://github.com/choderalab/openmmtools/pull/701>`_)
+
+
+0.22.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fixed issue where the error message thrown from openMM changed, so we need a case insensitive check. This was already fixed in most of the code base but one spot was missed. (PR `#684 <https://github.com/choderalab/openmmtools/pull/684>`_)
+
+0.22.0 - pymbar 4 support and gentle equilibration
+==================================================
+
+Enhancements
+------------
+- Openmmtools now supports both Pymbar 3 and 4 versions. (PR `#659 <https://github.com/choderalab/openmmtools/pull/659>`_)
+- Gentle equilibration protocol utility function available in ``openmmtools.utils.gentle_equilibration`` (PR `#669 <https://github.com/choderalab/openmmtools/pull/669>`_).
+- Timing information for multiple state sampler is now reported by default (PRs `#679 <https://github.com/choderalab/openmmtools/pull/679>`_ and `#671 <https://github.com/choderalab/openmmtools/issues/671>`_).
+
+Bugfixes
+--------
+- Users were not able to distinguish the exceptions caught during dynamics. Warnings are now raised when an exception is being caught (Issue `#643 <https://github.com/choderalab/openmmtools/issues/643>`_ PR `#658 <https://github.com/choderalab/openmmtools/pull/658>`_).
+- Deserializing MCMC moves objects from versions <=0.21.4 resulted in error finding the key. Fixed by catching the exception and raising a warning when key is not found (Issue `#618 <https://github.com/choderalab/openmmtools/issues/618>`_ PR `#675 <https://github.com/choderalab/openmmtools/pull/675>`_).
+- Different improvements in documentation strings and readthedocs documentation generation (Issues `#620 <https://github.com/choderalab/openmmtools/issues/620>`_ `#641 <https://github.com/choderalab/openmmtools/issues/641>`_ `#548 <https://github.com/choderalab/openmmtools/issues/548>`_. PR `#676 <https://github.com/choderalab/openmmtools/pull/676>`_)
+- Support for newer NetCDF versions (1.6 branch) by not using zlib compression for varying length variables. (PR `#654 <https://github.com/choderalab/openmmtools/pull/654>`_).
+
 0.21.5 - Bugfix release
-======================
+=======================
 
 Changed behaviors
 -----------------
@@ -115,7 +164,7 @@ Cleanup
 - Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
 
 0.20.1 - Bugfix release
-========================================
+=======================
 
 Enhancements
 ------------

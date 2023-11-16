@@ -1,21 +1,20 @@
-name: test
+name: openmmtools-test
 channels:
   - conda-forge
-  - defaults
-  - omnia
 dependencies:
     # Base depends
   - cython
+  - hdf5 <=1.14.0  # Macos has problem with newer releases (1.14.x) to date
   - libnetcdf >=4.6.2 # workaround for libssl issues
   - mdtraj
   - mpiplus
   - netcdf4 >=1.4.2 # after bugfix: "always return masked array by default, even if there are no masked values"
   - numba
   - numpy
-  - openmm >=7.5.0
+  - openmm
   #- parmed  # Test to see if this fixes the docs
   - pip
-  - pymbar <4
+  - pymbar
   - python
   - python
   - pyyaml
@@ -28,8 +27,9 @@ dependencies:
   - nose-timer
   - pytest
   - pytest-cov
+  - coverage
   
   # docs
   - numpydoc
   - sphinxcontrib-bibtex
-  
+  - sphinx-rtd-theme

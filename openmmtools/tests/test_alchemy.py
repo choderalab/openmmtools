@@ -16,6 +16,8 @@ Tests for alchemical factory in `alchemy.py`.
 
 from __future__ import print_function
 
+import copy
+import logging
 import os
 import sys
 import zlib
@@ -25,11 +27,16 @@ from functools import partial
 
 import nose
 import scipy
+import numpy as np
 from nose.plugins.attrib import attr
 
-from openmmtools import testsystems, forces
-from openmmtools.constants import kB
-from openmmtools.alchemy import *
+import openmm
+from openmm import unit
+from openmmtools import forces, forcefactories, states, testsystems, utils
+from openmmtools.constants import kB, ONE_4PI_EPS0
+from openmmtools.alchemy import AlchemicalFunction, AlchemicalState, AbsoluteAlchemicalFactory, \
+    AlchemicalRegion, AlchemicalStateError
+from openmmtools.multistate.pymbar import subsample_correlated_data, detect_equilibration, _pymbar_exp
 
 logger = logging.getLogger(__name__)
 
@@ -1153,13 +1160,12 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
 
     # Discard data to equilibration and subsample.
     du_n = np.array(data['du_n'])
-    from pymbar import timeseries, EXP
-    t0, g, Neff = timeseries.detectEquilibration(du_n)
-    indices = timeseries.subsampleCorrelatedData(du_n, g=g)
+    t0, g, Neff = detect_equilibration(du_n)
+    indices = subsample_correlated_data(du_n, g=g)
     du_n = du_n[indices]
 
     # Compute statistics.
-    DeltaF, dDeltaF = EXP(du_n)
+    DeltaF, dDeltaF = _pymbar_exp(du_n)
 
     # Raise an exception if the error is larger than 3kT.
     MAX_DEVIATION = 3.0  # kT
