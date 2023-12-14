@@ -24,6 +24,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        cfg:
+          - { os: macOS-latest,   python-version: '3.8', openmm: dev  }
+          - { os: windows-latest, python-version: '3.8.10', openmm: dev  }
+          - { os: ubuntu-latest,  python-version: '3.9', openmm: dev  }
+          - { os: ubuntu-latest,  python-version: '3.10', openmm: dev  }
+
+    env:
+      OPENMM: ${{ matrix.cfg.openmm }}
         python-version: ["3.9", "3.10"]
         openmm: ["7.7", "8.0"]
         os: [macOS-latest, ubuntu-latest]
@@ -34,20 +42,11 @@ jobs:
             python-version: "3.10"
             os: ubuntu-latest
             pymbar-version: "4"
-          # Test newest python, openmm, and pymbar we support on windows
-          - openmm: "8.0"
-            python-version: "3.10"
-            os: windows-latest
-            pymbar-version: "4"
           # Have one job test pymbar 3 support
-          - openmm: "8.0"
+          - openmm: "dev"
             python-version: "3.10"
             os: ubuntu-latest
             pymbar-version: "3"
-        exclude:
-          # There are no py 3.10 builds of openmm 7.7
-          - openmm: "7.7"
-            python-version: "3.10"
 
     steps:
       - uses: actions/checkout@v3
@@ -62,26 +61,13 @@ jobs:
         uses: mamba-org/provision-with-micromamba@main
         if: ${{ matrix.openmm == 'dev' }}
         with:
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_dev/linux-64,conda-forge
+          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge/label/openmm_rc,conda-forge
           environment-file: devtools/conda-envs/test_env.yaml
           channel-priority: flexible
           environment-name: openmmtools-test
           extra-specs: |
             python==${{ matrix.python-version }}
-            openmm==8.0.0dev3
-            pymbar==${{ matrix.pymbar-version }}.*
-
-      - name: Setup micromamba
-        uses: mamba-org/provision-with-micromamba@main
-        if: ${{ matrix.openmm != 'dev' }}
-        with:
-          channels: jaimergp/label/unsupported-cudatoolkit-shim,conda-forge
-          environment-file: devtools/conda-envs/test_env.yaml
-          channel-priority: strict
-          environment-name: openmmtools-test
-          extra-specs: |
-            python==${{ matrix.python-version }}
-            openmm==${{ matrix.openmm }}
+            openmm==8.1
             pymbar==${{ matrix.pymbar-version }}.*
             
       - name: Install package
