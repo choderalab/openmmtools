@@ -446,11 +446,18 @@ class TestReporter(object):
             # Second frame should not have positions or velocities
             restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
-                print(restored_state.positions)
-                assert np.allclose(restored_state.positions, 0.0)
+                # missing values are returned as numpy masked array
+                # so we check that these arrays are all masked
+                assert restored_state.positions._value.mask.all()
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
                 # By default stored velocities are zeros if not present in origin sampler_state
-                assert np.allclose(restored_state.velocities, 0.0)
-                assert np.allclose(restored_state.box_vectors, 0.0)
+                assert np.allclose(np.zeros((2, 3)), restored_state.velocities)
+                assert np.allclose(state.box_vectors / unit.nanometer, restored_state.box_vectors / unit.nanometer)
 
     def test_write_sampler_states_no_vel(self):
         pass
