@@ -1763,8 +1763,12 @@ class MultiStateReporter(object):
             sampler_states = list()
             for replica_index in range(n_replicas):
                 # Restore positions.
-                x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
-                positions = unit.Quantity(x, unit.nanometers)
+                try:
+                    x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
+                    positions = unit.Quantity(x, unit.nanometers)
+                except KeyError:
+                    positions = np.zeros((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
+                                          storage.dimensions['spatial'].size), dtype=np.float64)
 
                 # Restore velocities
                 # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
@@ -1778,6 +1782,7 @@ class MultiStateReporter(object):
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.
                     x = storage.variables['box_vectors'][read_iteration, replica_index, :, :].astype(np.float64)
+                    # TODO: Are box vectors also variably saved?
                     box_vectors = unit.Quantity(x, unit.nanometers)
                 else:
                     box_vectors = None
