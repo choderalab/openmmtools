@@ -460,7 +460,82 @@ class TestReporter(object):
                 assert np.allclose(state.box_vectors / unit.nanometer, restored_state.box_vectors / unit.nanometer)
 
     def test_write_sampler_states_no_vel(self):
-        pass
+        """do not write velocities to trajectory file"""
+        analysis_particles = (1, 2)
+        with self.temporary_reporter(analysis_particle_indices=analysis_particles,
+                                     position_interval=1, velocity_interval=0,
+                                     checkpoint_interval=2) as reporter:
+            # Create sampler states.
+            alanine_test = testsystems.AlanineDipeptideVacuum()
+            positions = alanine_test.positions
+            sampler_states = [mmtools.states.SamplerState(positions=positions)
+                              for _ in range(2)]
+
+            # Check that after writing and reading, states are identical.
+            for iteration in range(3):
+                reporter.write_sampler_states(sampler_states, iteration=iteration)
+                reporter.write_last_iteration(iteration)
+
+            # Check first frame
+            restored_sampler_states = reporter.read_sampler_states(iteration=0, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                # missing values are returned as numpy masked array
+                # so we check that these arrays are all masked
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            # Second frame should not have positions or velocities
+            restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
+
+    def test_write_sampler_states_no_pos(self):
+        """do not write positions or velocities to trajectory file"""
+        analysis_particles = (1, 2)
+        with self.temporary_reporter(analysis_particle_indices=analysis_particles,
+                                     position_interval=0, velocity_interval=0,
+                                     checkpoint_interval=2) as reporter:
+            # Create sampler states.
+            alanine_test = testsystems.AlanineDipeptideVacuum()
+            positions = alanine_test.positions
+            sampler_states = [mmtools.states.SamplerState(positions=positions)
+                              for _ in range(2)]
+
+            # Check that after writing and reading, states are identical.
+            for iteration in range(3):
+                reporter.write_sampler_states(sampler_states, iteration=iteration)
+                reporter.write_last_iteration(iteration)
+
+            # Check first frame
+            restored_sampler_states = reporter.read_sampler_states(iteration=0, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                # missing values are returned as numpy masked array
+                # so we check that these arrays are all masked
+                assert restored_state.positions._value.mask.all()
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            # Second frame should not have positions or velocities
+            restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert restored_state.positions._value.mask.all()
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert restored_state.positions._value.mask.all()
+                assert restored_state.velocities._value.mask.all()
+                assert restored_state.box_vectors is None  # not periodic
 
     def test_analysis_particle_mismatch(self):
         """Test that previously stored analysis particles is higher priority."""
