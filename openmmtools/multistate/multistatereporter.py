@@ -1766,7 +1766,7 @@ class MultiStateReporter(object):
                 try:
                     x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
                     positions = unit.Quantity(x, unit.nanometers)
-                except KeyError:
+                except (IndexError, KeyError):
                     positions = np.zeros((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
                                           storage.dimensions['spatial'].size), dtype=np.float64)
 
@@ -1775,7 +1775,7 @@ class MultiStateReporter(object):
                 try:
                     x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
                     velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
-                except KeyError:  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
+                except (IndexError, KeyError):  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
                     # pass zeros as velocities when key is not found (<0.21.3 behavior)
                     velocities = np.zeros_like(positions)
 
