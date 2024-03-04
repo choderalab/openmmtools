@@ -1576,6 +1576,8 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
         
     Parameters
     ----------
+        nstxout : int, write out frequency of simulation data
+        
         temperature : np.unit.Quantity compatible with kelvin, 
                       default: 298.0*unit.kelvin Fictitious "bath" temperature
 
@@ -1587,19 +1589,18 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
 
         constraint_tolerance : float, default: 1.0e-8
                                Tolerance for constraint solver
-
-        measure_shadow_work : boolean, default: False
             
 
         References
         ----------
+            [Schaefer and Keller, 2023] Implementation of Girsanov reweighting
             [Kieninger, Ghysbrecht and Keller, 2023] Girsanov reweighting for simulations 
                                                      of underdamped Langevin dynamics. Theory
 
         Example
         -------
-            # Import integratiom class
-            >>> import LangevinSplittingIntegratorWithGirsanovPathReweighting as LSIWGPR
+            # Import integration class
+            >>> import LangevinSplittingGirsanov as LSIWGPR
         
             # Create a splitting integrator.
             >>> integrator = LSIWGPR(nstxout=1,
@@ -1649,9 +1650,9 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
         self._init_rwght()
     
     def _add_integrator_steps(self):
-        """Add integrator steps, with updated difference of random variables 
-        (forces -> minus bias in force group 1). The exponent of the Euler's 
-        number in M reweighting factors expression is printed.
+        """Add integrator steps, with update for random variable differences 
+        (and bias forces -> in force group 1). The exponent of reweighting 
+        factors M is computed.
         """
         # Integrate
         self.addUpdateContextState()
@@ -1690,7 +1691,7 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
         self.addComputeGlobal("n", "n + 1")
         
     def _add_O_step(self, eta_idx):
-        """Add an O step (stochastic velocity update) for reweighting (use etai).
+        """Add a O step (stochastic velocity update) for reweighting (use Eta{idx}).
         """
         # update velocities with stored eta
         self.addComputePerDof("v", "(a * v) + (b * sigma * Eta{idx})".format(idx=eta_idx))
@@ -1741,7 +1742,7 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
             self.addComputePerDof("Eta{}".format(i),"gaussian")
                 
     def _get_delta_eta(self, idx):
-        """Add the difference in random numbers between the target and target 
+        """Add the difference in random numbers between the target and biased 
         simulation according to the splitting scheme. The forces associated 
         with the bias must be updated for the respective time step. An update 
         rule is given in _delta_eta_table()). The force of the bias must be in 
@@ -1753,8 +1754,8 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
         self.addComputePerDof("DeltaEta{}".format(idx), self._delta_eta_table[self._splitting][1][idx])  
         
     def _get_logM(self):
-        """Add the reweighting factor M in terms of the difference in random numbers
-        between the target and target simulation. 
+        """Add the pre-reweighting factor M in terms of the difference in random numbers
+        between the target and biased simulation. 
         """
         # AOBOA has a combined random number 
         # ToDo: check
