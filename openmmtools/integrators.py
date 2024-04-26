@@ -1593,7 +1593,7 @@ class LangevinSplittingGirsanov(LangevinIntegrator):
 
         References
         ----------
-            [Schaefer and Keller, 2024] Implementation of Girsanov reweighting
+            [Schaefer and Keller, 2024] Implementation of Girsanov reweighting in OpenMM and Deeptime
             [Kieninger, Ghysbrecht and Keller, 2023] Girsanov reweighting for simulations 
                                                      of underdamped Langevin dynamics. Theory
 
