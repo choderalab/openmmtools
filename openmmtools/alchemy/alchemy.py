@@ -516,7 +516,7 @@ class AbsoluteAlchemicalFactory(object):
     switch_width : float, optional, default = 1.0 * angstroms
         Default switch width for electrostatics in periodic cutoff systems
         used in alchemical interactions only.
-    alchemical_pme_treatment : str, optional, default = 'direct-space'
+    alchemical_pme_treatment : str, optional, default = 'exact'
         Controls how alchemical region electrostatics are treated when PME is used.
         Options are ['direct-space', 'coulomb', 'exact'].
         - 'direct-space' only models the direct space contribution
