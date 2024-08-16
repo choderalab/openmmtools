@@ -129,7 +129,7 @@ def test_directory_creation():
         ncfile = si.storage_driver.ncfile
         target = ncfile
         for i in range(3):
-            my_dir = 'dir{}'.format(i)
+            my_dir = f'dir{i}'
             assert my_dir in target.groups
             target = target.groups[my_dir]
         si.storage_driver.close()
@@ -138,7 +138,7 @@ def test_directory_creation():
         si = StorageInterface(driver)
         target = si
         for i in range(3):
-            my_dir = 'dir{}'.format(i)
+            my_dir = f'dir{i}'
             target = getattr(target, my_dir)
         assert target.var.read() == input_data
 

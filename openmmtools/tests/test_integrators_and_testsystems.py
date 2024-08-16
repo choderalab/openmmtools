@@ -106,5 +106,5 @@ def test_integrators_and_testsystems():
 
             # Create test.
             f = partial(check_combination, integrator, testsystem, platform)
-            f.description = "Checking combination of %s and %s" % (integrator_name, testsystem_name)
+            f.description = "Checking combination of {} and {}".format(integrator_name, testsystem_name)
             yield f

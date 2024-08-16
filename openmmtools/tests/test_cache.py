@@ -159,7 +159,7 @@ def test_lru_cache_time_to_live_property():
 # TEST CONTEXT CACHE
 # =============================================================================
 
-class TestContextCache(object):
+class TestContextCache:
     """Test ContextCache class."""
 
     @classmethod

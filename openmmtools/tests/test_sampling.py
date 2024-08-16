@@ -77,7 +77,7 @@ def check_thermodynamic_states_equality(original_states, restored_states):
 # Harmonic oscillator free energy test
 # ==============================================================================
 
-class TestHarmonicOscillatorsMultiStateSampler(object):
+class TestHarmonicOscillatorsMultiStateSampler:
     """Test multistate sampler can detect equilibration and compute free energies of harmonic oscillator"""
 
     # ------------------------------------
@@ -264,7 +264,7 @@ class TestHarmonicOscillatorsSAMSSampler(TestHarmonicOscillatorsMultiStateSample
 # TEST REPORTER
 # ==============================================================================
 
-class TestReporter(object):
+class TestReporter:
     """Test suite for Reporter class."""
 
     @staticmethod
@@ -581,7 +581,7 @@ class TestReporter(object):
 # TEST MULTISTATE SAMPLERS
 # ==============================================================================
 
-class TestBaseMultistateSampler(object):
+class TestBaseMultistateSampler:
     """Minimal Base class to test sampler objects"""
     # ------------------------------------
     # VARIABLES TO SET FOR EACH TEST CLASS
@@ -831,11 +831,11 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             options_to_store.pop('mcmc_moves')  # mcmc_moves are stored separately
             for key, value in options_to_store.items():
                 if np.isscalar(value):
-                    assert stored_options[key] == value, "stored_options['%s'] = %s, but value = %s" % (key, stored_options[key], value)
-                    assert getattr(sampler, '_' + key) == value, "getattr(sampler, '%s') = %s, but value = %s" % ('_' + key, getattr(sampler, '_' + key), value)
+                    assert stored_options[key] == value, "stored_options['{}'] = {}, but value = {}".format(key, stored_options[key], value)
+                    assert getattr(sampler, '_' + key) == value, "getattr(sampler, '{}') = {}, but value = {}".format('_' + key, getattr(sampler, '_' + key), value)
                 else:
-                    assert np.all(stored_options[key] == value), "stored_options['%s'] = %s, but value = %s" % (key, stored_options[key], value)
-                    assert np.all(getattr(sampler, '_' + key) == value), "getattr(sampler, '%s') = %s, but value = %s" % ('_' + key, getattr(sampler, '_' + key), value)
+                    assert np.all(stored_options[key] == value), "stored_options['{}'] = {}, but value = {}".format(key, stored_options[key], value)
+                    assert np.all(getattr(sampler, '_' + key) == value), "getattr(sampler, '{}') = {}, but value = {}".format('_' + key, getattr(sampler, '_' + key), value)
 
             # A default title has been added to the stored metadata.
             metadata = reporter.read_dict('metadata')
@@ -1178,7 +1178,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 state_index = sampler._replica_thermodynamic_states[replica_index]
                 old_energy = original_energies[replica_index]
                 new_energy = sampler._energy_thermodynamic_states[replica_index, state_index]
-                assert new_energy <= old_energy, "Energies did not decrease: Replica {} was originally {}, now {}".format(replica_index, old_energy, new_energy)
+                assert new_energy <= old_energy, f"Energies did not decrease: Replica {replica_index} was originally {old_energy}, now {new_energy}"
 
             # The storage has been updated.
             reporter.close()
@@ -1757,7 +1757,7 @@ class TestReplicaExchange(TestMultiStateSampler):
             print('MPI process mean number of thermo states visited:')
             for mpi_idx, (mean, sem) in enumerate(zip(mpi_avg_thermo_state_counts,
                                                       mpi_sem_thermo_state_counts)):
-                print('{}: {} +- {}'.format(mpi_idx, mean, 2*sem))
+                print(f'{mpi_idx}: {mean} +- {2*sem}')
 
             # Check if the confidence intervals overlap.
             def are_overlapping(interval1, interval2):

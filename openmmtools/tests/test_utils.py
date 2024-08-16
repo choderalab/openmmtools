@@ -41,13 +41,13 @@ def test_platform_supports_precision():
         platform_name = platform.getName()
         supported_precisions = { precision for precision in ['single', 'mixed', 'double'] if platform_supports_precision(platform, precision) }
         if platform_name == 'Reference':
-            if supported_precisions != set(['double']):
+            if supported_precisions != {'double'}:
                 raise Exception(f"'Reference' platform should only support 'double' precision, but platform_supports_precision reports {supported_precisions}")
         if platform_name == 'CUDA':
-            if supported_precisions != set(['single', 'mixed', 'double']):
+            if supported_precisions != {'single', 'mixed', 'double'}:
                 raise Exception(f"'CUDA' platform should support 'mixed' precision, but platform_supports_precision reports {supported_precisions}")
         if platform_name == 'CPU':
-            if supported_precisions != set(['mixed']):
+            if supported_precisions != {'mixed'}:
                 raise Exception(f"'CPU' platform should support 'mixed' precision, but platform_supports_precision reports {supported_precisions}")
 
 
@@ -80,7 +80,7 @@ def test_sanitize_expression():
         variables = {word: 5.0}
         for expression, result in test_cases[word]:
             sanitized_expression, sanitized_variables = sanitize_expression(expression, variables)
-            assert sanitized_expression == result, '{}, {}'.format(sanitized_expression, result)
+            assert sanitized_expression == result, f'{sanitized_expression}, {result}'
             assert word not in sanitized_variables
             assert sanitized_variables[prefix + word] == 5.0
 
@@ -177,7 +177,7 @@ def test_is_quantity_close():
 
     err_msg = 'obtained: {}, expected: {} (quantity1: {}, quantity2: {})'
     for quantity1, quantity2, test_result in test_cases:
-        msg = "Test failed: ({}, {}, {})".format(quantity1, quantity2, test_result)
+        msg = f"Test failed: ({quantity1}, {quantity2}, {test_result})"
         assert is_quantity_close(quantity1, quantity2) == test_result, msg
 
     # Passing quantities with different units raise an exception.
@@ -206,7 +206,7 @@ def test_quantity_from_string():
 # TEST SERIALIZATION UTILITIES
 # =============================================================================
 
-class MyClass(object):
+class MyClass:
     """Example of serializable class used by test_serialize_deserialize."""
     def __init__(self, a, b):
         self.a = a
@@ -266,7 +266,7 @@ def test_subhooked_abcmeta():
         def my_static_method(): pass
 
     # Define object implementing the interface with duck typing
-    class InterfaceImplementation(object):
+    class InterfaceImplementation:
         def my_method(self): pass
 
         def my_property(self): pass
@@ -278,7 +278,7 @@ def test_subhooked_abcmeta():
     assert isinstance(implementation_instance, IInterface)
 
     # Define incomplete implementation
-    class WrongInterfaceImplementation(object):
+    class WrongInterfaceImplementation:
         def my_method(self): pass
 
     implementation_instance = WrongInterfaceImplementation()
@@ -291,7 +291,7 @@ def test_find_all_subclasses():
     ABC = abc.ABCMeta('ABC', (), {})
 
     # Diamond inheritance.
-    class A(object):
+    class A:
         pass
 
     class B(A):
@@ -321,7 +321,7 @@ def test_find_all_subclasses():
 # RESTORABLE OPENMM OBJECT
 # =============================================================================
 
-class TestRestorableOpenMMObject(object):
+class TestRestorableOpenMMObject:
     """Test the RestorableOpenMMObject utility class."""
 
     @classmethod
@@ -329,11 +329,11 @@ class TestRestorableOpenMMObject(object):
         """Example restorable classes for tests."""
         class DummyRestorableCustomForce(RestorableOpenMMObject, openmm.CustomBondForce):
             def __init__(self, *args, **kwargs):
-                super(DummyRestorableCustomForce, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
 
         class DummyRestorableCustomIntegrator(RestorableOpenMMObject, openmm.CustomIntegrator):
             def __init__(self, *args, **kwargs):
-                super(DummyRestorableCustomIntegrator, self).__init__(*args, **kwargs)
+                super().__init__(*args, **kwargs)
 
         cls.dummy_force = DummyRestorableCustomForce('0.0;')
         cls.dummier_force = DummyRestorableCustomForce('0.0;')
@@ -351,7 +351,7 @@ class TestRestorableOpenMMObject(object):
 
         for openmm_object, is_restorable in test_cases:
             assert RestorableOpenMMObject.is_restorable(openmm_object) is is_restorable
-            err_msg = '{}: {}, {}'.format(openmm_object, RestorableOpenMMObject.restore_interface(openmm_object), is_restorable)
+            err_msg = f'{openmm_object}: {RestorableOpenMMObject.restore_interface(openmm_object)}, {is_restorable}'
             assert RestorableOpenMMObject.restore_interface(openmm_object) is is_restorable, err_msg
 
             # Serializing/deserializing restore the class correctly.
@@ -457,7 +457,7 @@ class TestRestorableOpenMMObject(object):
         assert len(all_hashes) == len(restorable_classes)
 
 
-class TestEquilibrationUtils(object):
+class TestEquilibrationUtils:
     """
     Class for testing equilibration utility functions in openmmtools.utils.equilibration
     """

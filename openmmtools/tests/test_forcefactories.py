@@ -147,7 +147,7 @@ def test_restrain_atoms():
 
     # Restrain all the host carbon atoms.
     restrained_atoms = [atom.index for atom in topology.atoms
-                        if atom.element.symbol is 'C' and atom.index <= 125]
+                        if atom.element.symbol == 'C' and atom.index <= 125]
     restrain_atoms(thermodynamic_state, sampler_state, restrained_atoms)
 
     # Compute host center_of_geometry.
@@ -179,7 +179,7 @@ def test_replace_reaction_field():
         # Test forces.
         f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
                     name=test_name, platform=platform)
-        f.description = "Testing replace_reaction_field on system {}".format(test_name)
+        f.description = f"Testing replace_reaction_field on system {test_name}"
         yield f
 
     for test_system in test_cases:
@@ -194,5 +194,5 @@ def test_replace_reaction_field():
         # Test forces.
         f = partial(compare_system_forces, test_system.system, modified_rf_system, positions,
                     name=test_name, platform=platform)
-        f.description = "Testing replace_reaction_field on system {} with shifted=True".format(test_name)
+        f.description = f"Testing replace_reaction_field on system {test_name} with shifted=True"
         yield f

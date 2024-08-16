@@ -14,7 +14,6 @@ Tests for alchemical factory in `alchemy.py`.
 # GLOBAL IMPORTS
 # =============================================================================
 
-from __future__ import print_function
 
 import copy
 import logging
@@ -521,8 +520,8 @@ def compare_system_energies(reference_system, alchemical_system, alchemical_regi
     if abs(delta) > MAX_DELTA:
         print("========")
         for description, potential in zip(['reference', 'alchemical', 'PME correction'], potentials):
-            print("{}: {} ".format(description, potential))
-        print("delta    : {}".format(delta))
+            print(f"{description}: {potential} ")
+        print(f"delta    : {delta}")
         err_msg = "Maximum allowable deviation exceeded (was {:.8f} kcal/mol; allowed {:.8f} kcal/mol)."
         raise Exception(err_msg.format(delta / unit.kilocalories_per_mole, MAX_DELTA / unit.kilocalories_per_mole))
 
@@ -587,7 +586,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     # Get energy components of reference system's nonbonded force
     if multi_regions:
         other_alchemical_atoms = all_alchemical_atoms.difference(alchemical_regions.alchemical_atoms)
-        print("Dissecting reference system's nonbonded force for region {}".format(alchemical_regions.name))
+        print(f"Dissecting reference system's nonbonded force for region {alchemical_regions.name}")
     else:
         other_alchemical_atoms = set()
         print("Dissecting reference system's nonbonded force")
@@ -602,7 +601,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     # Dissect unmodified nonbonded force in alchemical system
     if multi_regions:
-        print("Dissecting alchemical system's unmodified nonbonded force for region {}".format(alchemical_regions.name))
+        print(f"Dissecting alchemical system's unmodified nonbonded force for region {alchemical_regions.name}")
     else:
         print("Dissecting alchemical system's unmodified nonbonded force")
     energy_components = dissect_nonbonded_energy(alchemical_system, positions,
@@ -615,7 +614,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
 
     # Get alchemically-modified energy components
     if multi_regions:
-        print("Computing alchemical system components energies for region {}".format(alchemical_regions.name))
+        print(f"Computing alchemical system components energies for region {alchemical_regions.name}")
     else:
         print("Computing alchemical system components energies")
     alchemical_state = AlchemicalState.from_system(alchemical_system, parameters_name_suffix=alchemical_regions.name)
@@ -623,7 +622,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
     energy_components = AbsoluteAlchemicalFactory.get_energy_components(alchemical_system, alchemical_state,
                                                                         positions, platform=GLOBAL_ALCHEMY_PLATFORM)
     if multi_regions:
-        region_label = ' for region {}'.format(alchemical_regions.name)
+        region_label = f' for region {alchemical_regions.name}'
     else:
         region_label = ''
 
@@ -747,7 +746,7 @@ def check_interacting_energy_components(reference_system, alchemical_system, alc
         for energy in alchemical_forces_energies:
             tot_alchemical_forces_energies += energy
         assert_almost_equal(reference_force_energy, tot_alchemical_forces_energies,
-                            '{} energy '.format(force_name))
+                            f'{force_name} energy ')
 
 
 def check_multi_noninteracting_energy_components(reference_system, alchemical_system, alchemical_regions, positions):
@@ -796,7 +795,7 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
         if multi_regions:
             label = label + ' for region ' + alchemical_regions.name
         # Testing energy component of each region.
-        print('testing {}'.format(label))
+        print(f'testing {label}')
         value = energy_components[label]
         assert abs(value / GLOBAL_ENERGY_UNIT) == 0.0, ("'{}' should have zero energy in annihilated alchemical"
                                                         " state, but energy is {}").format(label, str(value))
@@ -902,7 +901,7 @@ def check_noninteracting_energy_components(reference_system, alchemical_system, 
         # Compute reference force energy.
         reference_force_energy = compute_force_energy(system, non_alchemical_positions, force_name)
         assert_almost_equal(reference_force_energy, alchemical_energy,
-                            'reference {}, alchemical {}'.format(reference_force_energy, alchemical_energy))
+                            f'reference {reference_force_energy}, alchemical {alchemical_energy}')
 
 
 def check_split_force_groups(system, region_names=None):
@@ -945,7 +944,7 @@ def check_split_force_groups(system, region_names=None):
         # be in the lambda_electrostatics force group.
         if is_alchemical_pme_treatment_exact(system):
             force_idx, nonbonded_force = forces.find_forces(system, openmm.NonbondedForce, only_one=True)
-            assert force_groups_by_lambda['lambda_electrostatics_{}'.format(region)] == {nonbonded_force.getForceGroup()}
+            assert force_groups_by_lambda[f'lambda_electrostatics_{region}'] == {nonbonded_force.getForceGroup()}
 
 
 # =============================================================================
@@ -1129,7 +1128,7 @@ def overlap_check(reference_system, alchemical_system, positions, nsteps=50, nsa
     reference_context.setPositions(positions)
     print()
     for sample in range(iteration, nsamples):
-        print('\rSample {}/{}'.format(sample+1, nsamples), end='')
+        print(f'\rSample {sample+1}/{nsamples}', end='')
         sys.stdout.flush()
 
         # Run dynamics.
@@ -1197,8 +1196,8 @@ def rstyle(ax):
     ax.set_axisbelow(True)
 
     #Set minor tick spacing to 1/2 of the major ticks
-    ax.xaxis.set_minor_locator((pylab.MultipleLocator((plt.xticks()[0][1] - plt.xticks()[0][0]) / 2.0)))
-    ax.yaxis.set_minor_locator((pylab.MultipleLocator((plt.yticks()[0][1] - plt.yticks()[0][0]) / 2.0)))
+    ax.xaxis.set_minor_locator(pylab.MultipleLocator((plt.xticks()[0][1] - plt.xticks()[0][0]) / 2.0))
+    ax.yaxis.set_minor_locator(pylab.MultipleLocator((plt.yticks()[0][1] - plt.yticks()[0][0]) / 2.0))
 
     #Remove axis border
     for child in ax.get_children():
@@ -1250,7 +1249,7 @@ def lambda_trace(reference_system, alchemical_regions, positions, nsteps=100):
         alchemical_state.set_alchemical_parameters(lambda_i[i])
         alchemical_state.apply_to_system(alchemical_system)
         u_i[i] = compute_energy(alchemical_system, positions)
-        logger.info("{:12.9f} {:24.8f} kcal/mol".format(lambda_i[i], u_i[i] / GLOBAL_ENERGY_UNIT))
+        logger.info(f"{lambda_i[i]:12.9f} {u_i[i] / GLOBAL_ENERGY_UNIT:24.8f} kcal/mol")
 
     # Write figure as PDF.
     from matplotlib.backends.backend_pdf import PdfPages
@@ -1320,7 +1319,7 @@ def test_resolve_alchemical_region():
         with nose.tools.assert_raises(ValueError):
             AbsoluteAlchemicalFactory._resolve_alchemical_region(system, alchemical_region)
 
-class TestAbsoluteAlchemicalFactory(object):
+class TestAbsoluteAlchemicalFactory:
     """Test AbsoluteAlchemicalFactory class."""
 
     @classmethod
@@ -1470,7 +1469,7 @@ class TestAbsoluteAlchemicalFactory(object):
         test_cases.update(self.filter_cases(lambda x: 'Explicit ' in x and 'exact PME' not in x, max_number=1))
         for test_name, (test_system, alchemical_system, alchemical_region) in test_cases.items():
             f = partial(check_split_force_groups, alchemical_system)
-            f.description = "Testing force splitting among groups of {}".format(test_name)
+            f.description = f"Testing force splitting among groups of {test_name}"
             yield f
 
     def test_fully_interacting_energy(self):
@@ -1478,7 +1477,7 @@ class TestAbsoluteAlchemicalFactory(object):
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             f = partial(compare_system_energies, test_system.system,
                         alchemical_system, alchemical_region, test_system.positions)
-            f.description = "Testing fully interacting energy of {}".format(test_name)
+            f.description = f"Testing fully interacting energy of {test_name}"
             yield f
 
     def test_noninteracting_energy_components(self):
@@ -1486,7 +1485,7 @@ class TestAbsoluteAlchemicalFactory(object):
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             f = partial(check_noninteracting_energy_components, test_system.system, alchemical_system,
                         alchemical_region, test_system.positions)
-            f.description = "Testing non-interacting energy of {}".format(test_name)
+            f.description = f"Testing non-interacting energy of {test_name}"
             yield f
 
     @attr('slow')
@@ -1521,11 +1520,11 @@ class TestAbsoluteAlchemicalFactory(object):
             for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
                 f = partial(compare_system_energies, test_system.system, alchemical_system,
                             alchemical_region, test_system.positions)
-                f.description = "Test fully interacting energy of {} on {}".format(test_name, platform.getName())
+                f.description = f"Test fully interacting energy of {test_name} on {platform.getName()}"
                 yield f
                 f = partial(check_noninteracting_energy_components, test_system.system, alchemical_system,
                             alchemical_region, test_system.positions)
-                f.description = "Test non-interacting energy of {} on {}".format(test_name, platform.getName())
+                f.description = f"Test non-interacting energy of {test_name} on {platform.getName()}"
                 yield f
 
         # Restore global platform
@@ -1540,7 +1539,7 @@ class TestAbsoluteAlchemicalFactory(object):
             cached_trajectory_filename = None
             f = partial(overlap_check, test_system.system, alchemical_system, test_system.positions,
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
-            f.description = "Testing reference/alchemical overlap for {}".format(test_name)
+            f.description = f"Testing reference/alchemical overlap for {test_name}"
             yield f
 
 class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
@@ -1692,7 +1691,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             for region in alchemical_region:
                 region_names.append(region.name)
             f = partial(check_split_force_groups, alchemical_system, region_names)
-            f.description = "Testing force splitting among groups of {}".format(test_name)
+            f.description = f"Testing force splitting among groups of {test_name}"
             yield f
 
     def test_noninteracting_energy_components(self):
@@ -1700,7 +1699,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
         for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
             f = partial(check_multi_noninteracting_energy_components, test_system.system, alchemical_system,
                         alchemical_region, test_system.positions)
-            f.description = "Testing non-interacting energy of {}".format(test_name)
+            f.description = f"Testing non-interacting energy of {test_name}"
             yield f
 
     @attr('slow')
@@ -1723,11 +1722,11 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             for test_name, (test_system, alchemical_system, alchemical_region) in self.test_cases.items():
                 f = partial(compare_system_energies, test_system.system, alchemical_system,
                             alchemical_region, test_system.positions)
-                f.description = "Test fully interacting energy of {} on {}".format(test_name, platform.getName())
+                f.description = f"Test fully interacting energy of {test_name} on {platform.getName()}"
                 yield f
                 f = partial(check_multi_noninteracting_energy_components, test_system.system, alchemical_system,
                             alchemical_region, test_system.positions)
-                f.description = "Test non-interacting energy of {} on {}".format(test_name, platform.getName())
+                f.description = f"Test non-interacting energy of {test_name} on {platform.getName()}"
                 yield f
 
         # Restore global platform
@@ -1746,7 +1745,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             yield f
 
 
-class TestDispersionlessAlchemicalFactory(object):
+class TestDispersionlessAlchemicalFactory:
     """
     Only test overlap for dispersionless alchemical factory, since energy agreement
     will be poor.
@@ -1814,7 +1813,7 @@ class TestDispersionlessAlchemicalFactory(object):
             cached_trajectory_filename = None
             f = partial(overlap_check, test_system.system, alchemical_system, test_system.positions,
                         cached_trajectory_filename=cached_trajectory_filename, name=test_name)
-            f.description = "Testing reference/alchemical overlap for no alchemical dispersion {}".format(test_name)
+            f.description = f"Testing reference/alchemical overlap for no alchemical dispersion {test_name}"
             yield f
 
 
@@ -1850,7 +1849,7 @@ class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
 
     @classmethod
     def define_regions(cls):
-        super(TestAbsoluteAlchemicalFactorySlow, cls).define_regions()
+        super().define_regions()
         cls.test_regions['WaterBox'] = AlchemicalRegion(alchemical_atoms=range(3))
         cls.test_regions['LysozymeImplicit'] = AlchemicalRegion(alchemical_atoms=range(2603, 2621))
         cls.test_regions['DHFRExplicit'] = AlchemicalRegion(alchemical_atoms=range(0, 2849))
@@ -1861,7 +1860,7 @@ class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
 # TEST ALCHEMICAL STATE
 # =============================================================================
 
-class TestAlchemicalState(object):
+class TestAlchemicalState:
     """Test AlchemicalState compatibility with CompoundThermodynamicState."""
 
     @classmethod
@@ -1936,9 +1935,9 @@ class TestAlchemicalState(object):
             for parameter in AlchemicalState._get_controlled_parameters():
                 property_value = getattr(alchemical_state, parameter)
                 if parameter in defined_lambdas:
-                    assert property_value == 1.0, '{}: {}'.format(parameter, property_value)
+                    assert property_value == 1.0, f'{parameter}: {property_value}'
                 else:
-                    assert property_value is None, '{}: {}'.format(parameter, property_value)
+                    assert property_value is None, f'{parameter}: {property_value}'
 
     @staticmethod
     def test_equality_operator():

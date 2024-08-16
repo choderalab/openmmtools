@@ -51,7 +51,7 @@ def get_barostat_temperature(barostat):
 # TEST THERMODYNAMIC STATE
 # =============================================================================
 
-class TestThermodynamicState(object):
+class TestThermodynamicState:
     """Test suite for states.ThermodynamicState class."""
 
     @classmethod
@@ -933,7 +933,7 @@ class TestThermodynamicState(object):
 # TEST SAMPLER STATE
 # =============================================================================
 
-class TestSamplerState(object):
+class TestSamplerState:
     """Test suite for states.SamplerState class."""
 
     @classmethod
@@ -1213,10 +1213,10 @@ class TestSamplerState(object):
 # TEST COMPOUND STATE
 # =============================================================================
 
-class TestCompoundThermodynamicState(object):
+class TestCompoundThermodynamicState:
     """Test suite for states.CompoundThermodynamicState class."""
 
-    class DummyState(object):
+    class DummyState:
         """A state that keeps track of a useless system parameter."""
 
         standard_dummy_parameter = 1.0
@@ -1533,7 +1533,7 @@ class ParameterStateExample(GlobalParameterState):
                 self._parameters[parameter_name] = value
 
 
-class TestGlobalParameterState(object):
+class TestGlobalParameterState:
     """Test GlobalParameterState stand-alone functionality.
 
     The compatibility with CompoundThermodynamicState is tested in the next
@@ -1560,13 +1560,13 @@ class TestGlobalParameterState(object):
         system.addParticle(40.0*unit.amu)
         system.addParticle(40.0*unit.amu)
         # Add a force defining lambda_bonds and gamma global parameters.
-        custom_force = openmm.CustomBondForce('lambda_bonds^gamma*60000*(r-{})^2;'.format(r0_nanometers))
+        custom_force = openmm.CustomBondForce(f'lambda_bonds^gamma*60000*(r-{r0_nanometers})^2;')
         custom_force.addGlobalParameter('lambda_bonds', cls.parameters_default_values['lambda_bonds'])
         custom_force.addGlobalParameter('gamma', cls.parameters_default_values['gamma'])
         custom_force.addBond(0, 1, [])
         system.addForce(custom_force)
         # Add a force defining the lambda_bonds_mysuffix global parameters.
-        custom_force_suffix = openmm.CustomBondForce('lambda_bonds_mysuffix*20000*(r-{})^2;'.format(r0_nanometers))
+        custom_force_suffix = openmm.CustomBondForce(f'lambda_bonds_mysuffix*20000*(r-{r0_nanometers})^2;')
         custom_force_suffix.addGlobalParameter('lambda_bonds_mysuffix', cls.parameters_default_values['lambda_bonds_mysuffix'])
         custom_force_suffix.addBond(0, 1, [])
         system.addForce(custom_force_suffix)
@@ -1652,7 +1652,7 @@ class TestGlobalParameterState(object):
                     state_attribute = parameter
 
                 # Check if parameter should is defined or undefined (i.e. set to None) as expected.
-                err_msg = 'Parameter: {} (Test case: {})'.format(parameter, test_kwargs)
+                err_msg = f'Parameter: {parameter} (Test case: {test_kwargs})'
                 if is_defined:
                     assert getattr(state, state_attribute) == test_kwargs[parameter], err_msg
                 else:
@@ -1676,7 +1676,7 @@ class TestGlobalParameterState(object):
                 controlling_state = state
                 noncontrolling_state = state_suffix
 
-            err_msg = '{}: {}'.format(parameter_name, parameter_value)
+            err_msg = f'{parameter_name}: {parameter_value}'
             assert getattr(controlling_state, parameter_name) == parameter_value, err_msg
             with nose.tools.assert_raises(AttributeError):
                 getattr(noncontrolling_state, parameter_name), parameter_name
@@ -1752,7 +1752,7 @@ class TestGlobalParameterState(object):
         def check_system_values():
             state, state_suffix = self.read_system_state(system)
             for parameter_name, parameter_value in expected_system_values.items():
-                err_msg = 'parameter: {}, expected_value: {}'.format(parameter_name, parameter_value)
+                err_msg = f'parameter: {parameter_name}, expected_value: {parameter_value}'
                 if 'suffix' in parameter_name:
                     assert getattr(state_suffix, parameter_name) == parameter_value, err_msg
                 else:
@@ -1861,7 +1861,7 @@ class TestGlobalParameterState(object):
             for s in states:
                 for parameter_name in s._get_controlled_parameters(s._parameters_name_suffix):
                     parameter_value = getattr(s, parameter_name)
-                    err_msg = 'Parameter: {}; Value: {};'.format(parameter_name, parameter_value)
+                    err_msg = f'Parameter: {parameter_name}; Value: {parameter_value};'
                     if parameter_value is not None:
                         assert (parameter_value  == standard_value) is is_standard, err_msg
 
@@ -1997,14 +1997,14 @@ class TestGlobalParameterState(object):
         for parameter_name in defined_parameters:
             setattr(compound_state, parameter_name, GlobalParameterFunction('lambda'))
             parameter_value = getattr(compound_state, parameter_name)
-            assert parameter_value == 0.25, '{}, {}'.format(parameter_name, parameter_value)
+            assert parameter_value == 0.25, f'{parameter_name}, {parameter_value}'
 
         system_states = self.read_system_state(compound_state.system)
         for state in system_states:
             for parameter_name in state._parameters:
                 if parameter_name in defined_parameters:
                     parameter_value = getattr(compound_state, parameter_name)
-                    assert parameter_value == 0.25, '{}, {}'.format(parameter_name, parameter_value)
+                    assert parameter_value == 0.25, f'{parameter_name}, {parameter_value}'
 
     def test_set_system_compound_state(self):
         """Setting inconsistent system in compound state raise errors."""

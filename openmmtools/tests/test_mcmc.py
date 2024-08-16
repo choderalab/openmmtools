@@ -70,7 +70,7 @@ def test_minimizer_all_testsystems():
         sampler.minimize(max_iterations=0)
 
         # Check if NaN.
-        err_msg = 'Minimization of system {} yielded NaN'.format(class_name)
+        err_msg = f'Minimization of system {class_name} yielded NaN'
         assert not sampler_state.has_nan(), err_msg
 
 
@@ -409,7 +409,7 @@ def test_move_restart():
     # We define a Move that counts the times it is attempted.
     class MyMove(BaseIntegratorMove):
         def __init__(self, **kwargs):
-            super(MyMove, self).__init__(n_steps=1, n_restart_attempts=n_restart_attempts, **kwargs)
+            super().__init__(n_steps=1, n_restart_attempts=n_restart_attempts, **kwargs)
             self.attempted_count = 0
 
         def _get_integrator(self, thermodynamic_state):

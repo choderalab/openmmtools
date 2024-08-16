@@ -36,7 +36,7 @@ def assert_pickles_equal(object1, object2):
 
 
 def assert_quantity_almost_equal(object1, object2):
-    assert utils.is_quantity_close(object1, object2), '{} != {}'.format(object1, object2)
+    assert utils.is_quantity_close(object1, object2), f'{object1} != {object2}'
 
 
 def assert_equal(*args, **kwargs):
@@ -107,7 +107,7 @@ def test_find_forces():
 # RESTRAINTS TESTS
 # =============================================================================
 
-class TestRadiallySymmetricRestraints(object):
+class TestRadiallySymmetricRestraints:
     """Test radially symmetric receptor-ligand restraint classes."""
 
     @classmethod
@@ -250,7 +250,7 @@ class TestRadiallySymmetricRestraints(object):
             expected_ssc = -math.log(STANDARD_STATE_VOLUME/expected_restraint_volume)
             ssc = restraint.compute_standard_state_correction(thermodynamic_state, square_well,
                                                               radius_cutoff, energy_cutoff, max_volume)
-            err_msg = '{} computed SSC != expected SSC'.format(restraint.__class__.__name__)
+            err_msg = f'{restraint.__class__.__name__} computed SSC != expected SSC'
             nose.tools.assert_equal(ssc, expected_ssc, msg=err_msg)
 
         for restraint in self.restraints:

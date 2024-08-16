@@ -379,7 +379,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             except Exception as e:
                 mm_min_version = '7.2.0'
                 if platform_name == 'CPU' and openmm.version.short_version < mm_min_version:
-                    print("Deterministic CPU forces not present in versions of OpenMM prior to {}".format(mm_min_version))
+                    print(f"Deterministic CPU forces not present in versions of OpenMM prior to {mm_min_version}")
                 else:
                     raise e
         context = openmm.Context(system, integrator, platform)
@@ -573,7 +573,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         for nonbonded_method in ['CutoffPeriodic']:
             testsystem = testsystems.AlchemicalWaterBox(nonbondedMethod=getattr(app, nonbonded_method), box_edge=12.0*unit.angstroms, cutoff=5.0*unit.angstroms)
             for platform_name in platform_names:
-                name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
+                name = '{} {} {}'.format(testsystem.name, nonbonded_method, platform_name)
                 self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
     def test_protocol_work_accumulation_waterbox_barostat(self, temperature=300*unit.kelvin):
@@ -596,7 +596,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         testsystem.system.addForce(openmm.MonteCarloBarostat(1*unit.atmospheres, temperature, 2))
 
         for platform_name in platform_names:
-            name = '%s %s %s' % (testsystem.name, nonbonded_method, platform_name)
+            name = '{} {} {}'.format(testsystem.name, nonbonded_method, platform_name)
             self.compare_external_protocol_work_accumulation(testsystem, parameter_name, parameter_initial, parameter_final, platform_name=platform_name, name=name)
 
     def compare_external_protocol_work_accumulation(self, testsystem, parameter_name, parameter_initial, parameter_final, platform_name='Reference', name=None):
@@ -629,7 +629,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
             integrator_protocol_work = integrator.get_protocol_work(dimensionless=True)
 
             message = '\n'
-            message += 'protocol work discrepancy noted for %s on platform %s\n' % (name, platform_name)
+            message += 'protocol work discrepancy noted for {} on platform {}\n'.format(name, platform_name)
             message += 'step %5d : external %16e kT | integrator %16e kT | difference %16e kT' % (step, external_protocol_work, integrator_protocol_work, external_protocol_work - integrator_protocol_work)
             self.assertAlmostEqual(external_protocol_work, integrator_protocol_work, msg=message)
 
@@ -723,8 +723,8 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
     parameters['testsystems_HarmonicOscillator_x0'] = (0 * sigma, 2 * sigma)
     parameters['testsystems_HarmonicOscillator_U0'] = (0 * kT, 1 * kT)
     alchemical_functions = {
-        'forward' : { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
-        'reverse' : { name : '(1-lambda)*%f + lambda*%f' % (value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
+        'forward' : { name : '(1-lambda)*{:f} + lambda*{:f}'.format(value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
+        'reverse' : { name : '(1-lambda)*{:f} + lambda*{:f}'.format(value[1].value_in_unit_system(unit.md_unit_system), value[0].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() },
         }
 
     # Create harmonic oscillator testsystem
@@ -786,7 +786,7 @@ def run_alchemical_langevin_integrator(nsteps=0, splitting="O { V R H R V } O"):
 
             # Check final conditions before reset
             current_lambda = nonequilibrium_integrator.getGlobalVariableByName('lambda')
-            assert current_lambda == 1.0, 'final lambda should be 1.0 (was %f) for splitting %s' % (current_lambda, splitting)
+            assert current_lambda == 1.0, 'final lambda should be 1.0 (was {:f}) for splitting {}'.format(current_lambda, splitting)
             current_step = nonequilibrium_integrator.getGlobalVariableByName('step')
             assert int(current_step) == max(1,nsteps), 'final step should be %d (was %f) for splitting %s' % (max(1,nsteps), current_step, splitting)
             nonequilibrium_integrator.reset()
@@ -847,7 +847,7 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
                          'timestep': timestep,
                          'measure_shadow_work': False,
                          'measure_heat': False}
-    alchemical_functions = { name : '(1-lambda)*%f + lambda*%f' % (value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
+    alchemical_functions = { name : '(1-lambda)*{:f} + lambda*{:f}'.format(value[0].value_in_unit_system(unit.md_unit_system), value[1].value_in_unit_system(unit.md_unit_system)) for (name, value) in parameters.items() }
     # Create harmonic oscillator testsystem
     testsystem = testsystems.HarmonicOscillator(K=K, mass=mass)
     system = testsystem.system
@@ -875,7 +875,7 @@ def test_periodic_langevin_integrator(splitting="H V R O R V H", ncycles=40, nst
             from simtk.openmm.app import PDBFile
         filename = 'neq-trajectory.pdb'
         print(f'Writing trajectory to {filename}')
-        with open(filename, 'wt') as outfile:
+        with open(filename, 'w') as outfile:
             # Write reference
             import copy
             pos1 = copy.deepcopy(positions)
