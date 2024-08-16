@@ -33,11 +33,6 @@ jobs:
         os: [macOS-latest, ubuntu-latest, macOS-12]
         pymbar-version: ["4"]
         include:
-          # Test openmm dev build on newest python + linux
-          - openmm: "dev"
-            python-version: "3.10"
-            os: ubuntu-latest
-            pymbar-version: "4"
           # Test newest python, openmm, and pymbar we support on windows
           - openmm: "8.0"
             python-version: "3.10"
