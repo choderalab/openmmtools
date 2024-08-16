@@ -16,6 +16,8 @@ Tests for alchemical factory in `alchemy.py`.
 
 from __future__ import print_function
 
+import copy
+import logging
 import os
 import sys
 import zlib
@@ -24,10 +26,14 @@ from functools import partial
 
 import pytest
 import scipy
+import numpy as np
 
-from openmmtools import testsystems, forces
-from openmmtools.constants import kB
-from openmmtools.alchemy import *
+import openmm
+from openmm import unit
+from openmmtools import forces, forcefactories, states, testsystems, utils
+from openmmtools.constants import kB, ONE_4PI_EPS0
+from openmmtools.alchemy import AlchemicalFunction, AlchemicalState, AbsoluteAlchemicalFactory, \
+    AlchemicalRegion, AlchemicalStateError
 from openmmtools.multistate.pymbar import subsample_correlated_data, detect_equilibration, _pymbar_exp
 
 logger = logging.getLogger(__name__)

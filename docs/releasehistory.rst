@@ -1,6 +1,31 @@
 Release History
 ***************
 
+
+0.23.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fix issue where if ``None`` was used for ``online_analysis_interval`` an error would be thrown (issue `#708 <https://github.com/choderalab/openmmtools/issues/708>`_ PR `#710 <https://github.com/choderalab/openmmtools/pull/710`_)
+
+0.23.0 - latest numba support and real time stats enhancements
+==============================================================
+
+Please note that there is an API breaking change. To ensure consistency of the data when appending real time stats make sure that you make the ``online_analysis_interval`` of your ``MultiStateSampler`` object match the ``checkpoint_interval`` of your ``MultiStateReporter``. It will error if this is not the case.
+
+Enhancements
+------------
+- Running with NVIDIA GPUs in Exclusive Process mode now raises a warning (issue `#697 <https://github.com/choderalab/openmmtools/issues/697>`_, PR `#699 <https://github.com/choderalab/openmmtools/pull/699>`_)
+
+Bugfixes
+--------
+- Fix metadata for netcdf files, specifying openmmtools for the ``program`` metadata (issue `#694 <https://github.com/choderalab/openmmtools/issues/694>`_, PR `#704 <https://github.com/choderalab/openmmtools/pull/704>`_).
+- Real time statistics YAML file gets appended instead of overwritten when extending or resumimng simulations (issue `#691 <https://github.com/choderalab/openmmtools/issues/691>`_, PR `#692 <https://github.com/choderalab/openmmtools/pull/692>`_).
+- Error when resuming simulations with numba 0.57 fixed by avoiding using ``numpy.MaskedArray`` when deserializing ``.nc`` files (issue `#700 <https://github.com/choderalab/openmmtools/issues/700>`_, PR `#701 <https://github.com/choderalab/openmmtools/pull/701>`_)
+
+
 0.22.1 - Bugfix release
 =======================
 
