@@ -7,6 +7,7 @@ import copy
 import numpy as np
 import scipy.stats as stats
 
+
 def mix_replicas(n_swaps=100, n_states=16, u_kl=None, nswap_attempts=None):
     """
     Utility function to generate replicas and call the mixing function a certain number of times
@@ -31,12 +32,15 @@ def mix_replicas(n_swaps=100, n_states=16, u_kl=None, nswap_attempts=None):
     replica_states = np.array(range(n_states), np.int64)
     if nswap_attempts is None:
         nswap_attempts = n_states**4
-    Nij_proposed =  np.zeros([n_states,n_states], dtype=np.int64)
-    Nij_accepted = np.zeros([n_states,n_states], dtype=np.int64)
+    Nij_proposed = np.zeros([n_states, n_states], dtype=np.int64)
+    Nij_accepted = np.zeros([n_states, n_states], dtype=np.int64)
     permutation_list = []
     from openmmtools.multistate import ReplicaExchangeSampler
+
     for i in range(n_swaps):
-        ReplicaExchangeSampler._mix_all_replicas_numba(nswap_attempts, n_states, replica_states, u_kl, Nij_proposed, Nij_accepted)
+        ReplicaExchangeSampler._mix_all_replicas_numba(
+            nswap_attempts, n_states, replica_states, u_kl, Nij_proposed, Nij_accepted
+        )
         permutation_list.append(copy.deepcopy(replica_states))
     permutation_list_np = np.array(permutation_list, dtype=np.int64)
     return permutation_list_np
@@ -73,7 +77,8 @@ def test_even_mixing(verbose=True):
     """
     Testing Cython mixing code with 1000 swap attempts and uniform 0 energies
     """
-    if verbose: print("Testing Cython mixing code with uniform zero energies")
+    if verbose:
+        print("Testing Cython mixing code with uniform zero energies")
     n_swaps = 1000
     n_states = 16
     corrected_threshold = 0.001 / n_states
