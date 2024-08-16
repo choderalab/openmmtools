@@ -32,17 +32,37 @@ from openmmtools.mcmc import *
 
 # Test various combinations of systems and MCMC schemes
 analytical_testsystems = [
-    ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-     GHMCMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
-    ("HarmonicOscillator", testsystems.HarmonicOscillator(),
-     WeightedMove([(GHMCMove(timestep=10.0 * unit.femtoseconds, n_steps=100), 0.5),
-                   (HMCMove(timestep=10 * unit.femtosecond, n_steps=10), 0.5)])),
-    ("HarmonicOscillatorArray", testsystems.HarmonicOscillatorArray(N=4),
-     LangevinDynamicsMove(timestep=10.0*unit.femtoseconds, n_steps=100)),
-    ("IdealGas", testsystems.IdealGas(nparticles=216),
-     SequenceMove([HMCMove(timestep=10*unit.femtosecond, n_steps=10),
-                   MonteCarloBarostatMove()]))
-    ]
+    (
+        "HarmonicOscillator",
+        testsystems.HarmonicOscillator(),
+        GHMCMove(timestep=10.0 * unit.femtoseconds, n_steps=100),
+    ),
+    (
+        "HarmonicOscillator",
+        testsystems.HarmonicOscillator(),
+        WeightedMove(
+            [
+                (GHMCMove(timestep=10.0 * unit.femtoseconds, n_steps=100), 0.5),
+                (HMCMove(timestep=10 * unit.femtosecond, n_steps=10), 0.5),
+            ]
+        ),
+    ),
+    (
+        "HarmonicOscillatorArray",
+        testsystems.HarmonicOscillatorArray(N=4),
+        LangevinDynamicsMove(timestep=10.0 * unit.femtoseconds, n_steps=100),
+    ),
+    (
+        "IdealGas",
+        testsystems.IdealGas(nparticles=216),
+        SequenceMove(
+            [
+                HMCMove(timestep=10 * unit.femtosecond, n_steps=10),
+                MonteCarloBarostatMove(),
+            ]
+        ),
+    ),
+]
 
 NSIGMA_CUTOFF = 6.0  # cutoff for significance testing
 
@@ -52,6 +72,7 @@ debug = True  # set to True only for manual debugging of this nose test
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
+
 
 def test_minimizer_all_testsystems():
     # testsystem_classes = testsystems.TestSystem.__subclasses__()
@@ -63,14 +84,14 @@ def test_minimizer_all_testsystems():
 
         testsystem = testsystem_class()
         sampler_state = SamplerState(testsystem.positions)
-        thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+        thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
 
         # Create sampler for minimization.
         sampler = MCMCSampler(thermodynamic_state, sampler_state, move=None)
         sampler.minimize(max_iterations=0)
 
         # Check if NaN.
-        err_msg = 'Minimization of system {} yielded NaN'.format(class_name)
+        err_msg = f"Minimization of system {class_name} yielded NaN"
         assert not sampler_state.has_nan(), err_msg
 
 
@@ -95,7 +116,7 @@ def subtest_mcmc_expectation(testsystem, move):
     temperature = 298.0 * unit.kelvin
     niterations = 500  # number of production iterations
     if system.usesPeriodicBoundaryConditions():
-        pressure = 1.0*unit.atmosphere
+        pressure = 1.0 * unit.atmosphere
     else:
         pressure = None
 
@@ -106,19 +127,29 @@ def subtest_mcmc_expectation(testsystem, move):
 
     # Create sampler and thermodynamic state.
     sampler_state = SamplerState(positions=positions)
-    thermodynamic_state = ThermodynamicState(system=system,
-                                             temperature=temperature,
-                                             pressure=pressure)
+    thermodynamic_state = ThermodynamicState(
+        system=system, temperature=temperature, pressure=pressure
+    )
 
     # Create MCMC sampler
     sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
 
     # Accumulate statistics.
-    x_n = np.zeros([niterations], np.float64)  # x_n[i] is the x position of atom 1 after iteration i, in angstroms
-    potential_n = np.zeros([niterations], np.float64)  # potential_n[i] is the potential energy after iteration i, in kT
-    kinetic_n = np.zeros([niterations], np.float64)  # kinetic_n[i] is the kinetic energy after iteration i, in kT
-    temperature_n = np.zeros([niterations], np.float64)  # temperature_n[i] is the instantaneous kinetic temperature from iteration i, in K
-    volume_n = np.zeros([niterations], np.float64)  # volume_n[i] is the volume from iteration i, in K
+    x_n = np.zeros(
+        [niterations], np.float64
+    )  # x_n[i] is the x position of atom 1 after iteration i, in angstroms
+    potential_n = np.zeros(
+        [niterations], np.float64
+    )  # potential_n[i] is the potential energy after iteration i, in kT
+    kinetic_n = np.zeros(
+        [niterations], np.float64
+    )  # kinetic_n[i] is the kinetic energy after iteration i, in kT
+    temperature_n = np.zeros(
+        [niterations], np.float64
+    )  # temperature_n[i] is the instantaneous kinetic temperature from iteration i, in K
+    volume_n = np.zeros(
+        [niterations], np.float64
+    )  # volume_n[i] is the volume from iteration i, in K
     for iteration in range(niterations):
         # Update sampler state.
         sampler.run(1)
@@ -137,51 +168,88 @@ def subtest_mcmc_expectation(testsystem, move):
         volume_n[iteration] = volume / (unit.nanometers**3)
 
     # Compute expected statistics.
-    if (hasattr(testsystem, 'get_potential_expectation') and
-            testsystem.get_potential_standard_deviation(thermodynamic_state) / kT.unit != 0.0):
-        assert potential_n.std() != 0.0, 'Test {} shows no potential fluctuations'.format(
-            testsystem.__class__.__name__)
+    if (
+        hasattr(testsystem, "get_potential_expectation")
+        and testsystem.get_potential_standard_deviation(thermodynamic_state) / kT.unit
+        != 0.0
+    ):
+        assert (
+            potential_n.std() != 0.0
+        ), "Test {} shows no potential fluctuations".format(
+            testsystem.__class__.__name__
+        )
 
-        potential_expectation = testsystem.get_potential_expectation(thermodynamic_state) / kT
+        potential_expectation = (
+            testsystem.get_potential_expectation(thermodynamic_state) / kT
+        )
         [t0, g, Neff_max] = detect_equilibration(potential_n)
         potential_mean = potential_n[t0:].mean()
         dpotential_mean = potential_n[t0:].std() / np.sqrt(Neff_max)
         potential_error = potential_mean - potential_expectation
         nsigma = abs(potential_error) / dpotential_mean
 
-        err_msg = ('Potential energy expectation\n'
-                   'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
-                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma) | t0 {:5d} | g {:5.1f} | Neff {:8.1f}\n'
-                   '----------------------------------------------------------------------------').format(
-            potential_mean, dpotential_mean, potential_expectation, potential_error, dpotential_mean, nsigma, t0, g, Neff_max)
+        err_msg = (
+            "Potential energy expectation\n"
+            "observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | "
+            "error {:10.5f} +- {:10.5f} ({:.1f} sigma) | t0 {:5d} | g {:5.1f} | Neff {:8.1f}\n"
+            "----------------------------------------------------------------------------"
+        ).format(
+            potential_mean,
+            dpotential_mean,
+            potential_expectation,
+            potential_error,
+            dpotential_mean,
+            nsigma,
+            t0,
+            g,
+            Neff_max,
+        )
         assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
         if debug:
             print(err_msg)
     elif debug:
-        print('Skipping potential expectation test.')
+        print("Skipping potential expectation test.")
 
-    if (hasattr(testsystem, 'get_volume_expectation') and
-            testsystem.get_volume_standard_deviation(thermodynamic_state) / (unit.nanometers**3) != 0.0):
-        assert volume_n.std() != 0.0, 'Test {} shows no volume fluctuations'.format(
-            testsystem.__class__.__name__)
+    if (
+        hasattr(testsystem, "get_volume_expectation")
+        and testsystem.get_volume_standard_deviation(thermodynamic_state)
+        / (unit.nanometers**3)
+        != 0.0
+    ):
+        assert volume_n.std() != 0.0, "Test {} shows no volume fluctuations".format(
+            testsystem.__class__.__name__
+        )
 
-        volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (unit.nanometers**3)
+        volume_expectation = testsystem.get_volume_expectation(thermodynamic_state) / (
+            unit.nanometers**3
+        )
         [t0, g, Neff_max] = detect_equilibration(volume_n)
         volume_mean = volume_n[t0:].mean()
         dvolume_mean = volume_n[t0:].std() / np.sqrt(Neff_max)
         volume_error = volume_mean - volume_expectation
         nsigma = abs(volume_error) / dvolume_mean
 
-        err_msg = ('Volume expectation\n'
-                   'observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | '
-                   'error {:10.5f} +- {:10.5f} ({:.1f} sigma) | t0 {:5d} | g {:5.1f} | Neff {:8.1f}\n'
-                   '----------------------------------------------------------------------------').format(
-            volume_mean, dvolume_mean, volume_expectation, volume_error, dvolume_mean, nsigma, t0, g, Neff_max)
+        err_msg = (
+            "Volume expectation\n"
+            "observed {:10.5f} +- {:10.5f}kT | expected {:10.5f} | "
+            "error {:10.5f} +- {:10.5f} ({:.1f} sigma) | t0 {:5d} | g {:5.1f} | Neff {:8.1f}\n"
+            "----------------------------------------------------------------------------"
+        ).format(
+            volume_mean,
+            dvolume_mean,
+            volume_expectation,
+            volume_error,
+            dvolume_mean,
+            nsigma,
+            t0,
+            g,
+            Neff_max,
+        )
         assert nsigma <= NSIGMA_CUTOFF, err_msg.format()
         if debug:
             print(err_msg)
     elif debug:
-        print('Skipping volume expectation test.')
+        print("Skipping volume expectation test.")
 
 
 def test_barostat_move_frequency():
@@ -191,11 +259,14 @@ def test_barostat_move_frequency():
         testsystem = test_case[1]
         if testsystem.system.usesPeriodicBoundaryConditions():
             break
-    assert testsystem.system.usesPeriodicBoundaryConditions(), "Can't find periodic test case!"
+    assert (
+        testsystem.system.usesPeriodicBoundaryConditions()
+    ), "Can't find periodic test case!"
 
     sampler_state = SamplerState(testsystem.positions)
-    thermodynamic_state = ThermodynamicState(testsystem.system, 298*unit.kelvin,
-                                             1*unit.atmosphere)
+    thermodynamic_state = ThermodynamicState(
+        testsystem.system, 298 * unit.kelvin, 1 * unit.atmosphere
+    )
     move = MonteCarloBarostatMove(n_attempts=5)
 
     # Test-precondition: the frequency must be different than 1 or it
@@ -214,7 +285,9 @@ def test_default_context_cache():
     """
     # By default an independent local context cache is used
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
-    context_cache = move._get_context_cache(context_cache_input=None)  # get default context cache
+    context_cache = move._get_context_cache(
+        context_cache_input=None
+    )  # get default context cache
     # Assert the default context_cache is the global one
     assert context_cache is cache.global_context_cache
 
@@ -260,22 +333,32 @@ def test_context_cache_sequence_apply():
     local_cache = cache.ContextCache()
     move = SequenceMove([LangevinDynamicsMove(n_steps=5), GHMCMove(n_steps=5)])
     # Context cache before apply without access
-    assert local_cache._lru._n_access == 0, f"Expected no access in local context cache."
+    assert (
+        local_cache._lru._n_access == 0
+    ), f"Expected no access in local context cache."
     move.apply(thermodynamic_state, sampler_state, context_cache=local_cache)
     # Context cache now must have 2 accesses
-    assert local_cache._lru._n_access == 2, "Expected two accesses in local context cache."
+    assert (
+        local_cache._lru._n_access == 2
+    ), "Expected two accesses in local context cache."
 
 
 def test_context_cache_compatibility():
     """Tests only one context cache is created and used for compatible moves."""
     testsystem = testsystems.AlanineDipeptideImplicit()
     sampler_state = SamplerState(testsystem.positions)
-    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
 
     # The ContextCache creates only one context with compatible moves.
     context_cache = cache.ContextCache(capacity=10, time_to_live=None)
-    move = SequenceMove([LangevinDynamicsMove(n_steps=1), LangevinDynamicsMove(n_steps=1),
-                         LangevinDynamicsMove(n_steps=1), LangevinDynamicsMove(n_steps=1)])
+    move = SequenceMove(
+        [
+            LangevinDynamicsMove(n_steps=1),
+            LangevinDynamicsMove(n_steps=1),
+            LangevinDynamicsMove(n_steps=1),
+            LangevinDynamicsMove(n_steps=1),
+        ]
+    )
     move.apply(thermodynamic_state, sampler_state, context_cache=context_cache)
     assert len(context_cache) == 1
 
@@ -311,7 +394,7 @@ def test_dummy_context_cache():
     """Test DummyContextCache works for all platforms."""
     testsystem = testsystems.AlanineDipeptideImplicit()
     sampler_state = SamplerState(testsystem.positions)
-    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
     # DummyContextCache works for all platforms.
     platforms = utils.get_available_platforms()
     dummy_cache = cache.DummyContextCache()
@@ -334,7 +417,9 @@ def test_mcmc_move_context_cache_shallow_copy():
     from openmmtools import multistate
 
     platform = get_fastest_platform()
-    context_cache = cache.ContextCache(capacity=None, time_to_live=None, platform=platform)
+    context_cache = cache.ContextCache(
+        capacity=None, time_to_live=None, platform=platform
+    )
     testsystem = testsystems.AlanineDipeptideExplicit()
     n_replicas = 5  # Number of temperature replicas.
     T_min = 300.0 * unit.kelvin  # Minimum temperature.
@@ -347,7 +432,8 @@ def test_mcmc_move_context_cache_shallow_copy():
         for i in range(n_replicas)
     ]
     thermodynamic_states = [
-        ThermodynamicState(system=testsystem.system, temperature=T) for T in temperatures
+        ThermodynamicState(system=testsystem.system, temperature=T)
+        for T in temperatures
     ]
     move = LangevinSplittingDynamicsMove(
         timestep=4.0 * unit.femtoseconds,
@@ -381,18 +467,18 @@ def test_mcmc_move_context_cache_shallow_copy():
 def test_moves_serialization():
     """Test serialization of various MCMCMoves."""
     # Test cases.
-    platform = openmm.Platform.getPlatformByName('Reference')
+    platform = openmm.Platform.getPlatformByName("Reference")
     context_cache = cache.ContextCache(capacity=1, time_to_live=1)
     dummy_cache = cache.DummyContextCache(platform=platform)
     test_cases = [
-        IntegratorMove(openmm.VerletIntegrator(1.0*unit.femtosecond), n_steps=10),
+        IntegratorMove(openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=10),
         LangevinDynamicsMove(),
         LangevinSplittingDynamicsMove(),
         GHMCMove(),
         HMCMove(context_cache=context_cache),
         MonteCarloBarostatMove(context_cache=dummy_cache),
         SequenceMove(move_list=[LangevinDynamicsMove(), GHMCMove()]),
-        WeightedMove(move_set=[(HMCMove(), 0.5), (MonteCarloBarostatMove(), 0.5)])
+        WeightedMove(move_set=[(HMCMove(), 0.5), (MonteCarloBarostatMove(), 0.5)]),
     ]
     for move in test_cases:
         original_pickle = pickle.dumps(move)
@@ -409,11 +495,11 @@ def test_move_restart():
     # We define a Move that counts the times it is attempted.
     class MyMove(BaseIntegratorMove):
         def __init__(self, **kwargs):
-            super(MyMove, self).__init__(n_steps=1, n_restart_attempts=n_restart_attempts, **kwargs)
+            super().__init__(n_steps=1, n_restart_attempts=n_restart_attempts, **kwargs)
             self.attempted_count = 0
 
         def _get_integrator(self, thermodynamic_state):
-            return integrators.GHMCIntegrator(temperature=300*unit.kelvin)
+            return integrators.GHMCIntegrator(temperature=300 * unit.kelvin)
 
         def _before_integration(self, context, thermodynamic_state):
             self.attempted_count += 1
@@ -429,16 +515,18 @@ def test_move_restart():
     system.addParticle(39.9 * unit.amu)
     force.addParticle(0.0, 1.0, 0.0)
     particle_position = np.array([np.nan, 0.2, 0.2])
-    positions = unit.Quantity(np.vstack((testsystem.positions, particle_position)),
-                              unit=testsystem.positions.unit)
+    positions = unit.Quantity(
+        np.vstack((testsystem.positions, particle_position)),
+        unit=testsystem.positions.unit,
+    )
 
     # Create and run move. An IntegratoMoveError is raised.
     sampler_state = SamplerState(positions)
-    thermodynamic_state = ThermodynamicState(system, 300*unit.kelvin)
+    thermodynamic_state = ThermodynamicState(system, 300 * unit.kelvin)
 
     # We use a local context cache with Reference platform since on the
     # CPU platform CustomIntegrators raises an error with NaN particles.
-    reference_platform = openmm.Platform.getPlatformByName('Reference')
+    reference_platform = openmm.Platform.getPlatformByName("Reference")
     context_cache = cache.ContextCache(platform=reference_platform)
     move = MyMove(context_cache=context_cache)
     with nose.tools.assert_raises(IntegratorMoveError) as cm:
@@ -449,19 +537,19 @@ def test_move_restart():
 
     # Test serialization of the error.
     with utils.temporary_directory() as tmp_dir:
-        prefix = os.path.join(tmp_dir, 'prefix')
+        prefix = os.path.join(tmp_dir, "prefix")
         cm.exception.serialize_error(prefix)
-        assert os.path.exists(prefix + '-move.json')
-        assert os.path.exists(prefix + '-system.xml')
-        assert os.path.exists(prefix + '-integrator.xml')
-        assert os.path.exists(prefix + '-state.xml')
+        assert os.path.exists(prefix + "-move.json")
+        assert os.path.exists(prefix + "-system.xml")
+        assert os.path.exists(prefix + "-integrator.xml")
+        assert os.path.exists(prefix + "-state.xml")
 
 
 def test_metropolized_moves():
     """Test Displacement and Rotation moves."""
     testsystem = testsystems.AlanineDipeptideVacuum()
     original_sampler_state = SamplerState(testsystem.positions)
-    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
 
     all_metropolized_moves = MetropolizedMove.__subclasses__()
     for move_class in all_metropolized_moves:
@@ -489,8 +577,11 @@ def test_metropolized_moves():
             old_n_accepted, old_n_proposed = move.n_accepted, move.n_proposed
 
         # Check that we were able to generate both an accepted and a rejected move.
-        assert len(move.atom_subset) != 0, ('Could not generate an accepted and rejected '
-                                            'move for class {}'.format(move_class.__name__))
+        assert len(move.atom_subset) != 0, (
+            "Could not generate an accepted and rejected " "move for class {}".format(
+                move_class.__name__
+            )
+        )
 
 
 def test_langevin_splitting_move():
@@ -498,12 +589,13 @@ def test_langevin_splitting_move():
     splittings = ["V R O R V", "V R R R O R R R V", "O { V R V } O"]
     testsystem = testsystems.AlanineDipeptideVacuum()
     sampler_state = SamplerState(testsystem.positions)
-    thermodynamic_state = ThermodynamicState(testsystem.system, 300*unit.kelvin)
+    thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
     for splitting in splittings:
         move = LangevinSplittingDynamicsMove(splitting=splitting)
         # Create MCMC sampler
         sampler = MCMCSampler(thermodynamic_state, sampler_state, move=move)
         sampler.run(1)
+
 
 def test_langevin_dynamics_move_constraint_tolerance():
     """Test constraint tolerance is properly set in LangevinDynamicsMove integrator."""
@@ -513,32 +605,40 @@ def test_langevin_dynamics_move_constraint_tolerance():
     default_move = LangevinDynamicsMove()
     default_constraint_tolerance = 1e-8
     move_tolerance = default_move.constraint_tolerance
-    assert move_tolerance == default_constraint_tolerance, f"LangevinDynamicsMove tolerance, {move_tolerance}, is" \
-                                                           f" not the same as the expected default tolerance," \
-                                                           f" {default_constraint_tolerance}."
+    assert move_tolerance == default_constraint_tolerance, (
+        f"LangevinDynamicsMove tolerance, {move_tolerance}, is"
+        f" not the same as the expected default tolerance,"
+        f" {default_constraint_tolerance}."
+    )
     default_integrator = default_move._get_integrator(thermodynamic_state)
     default_integrator_tolerance = default_integrator.getConstraintTolerance()
-    assert default_integrator_tolerance == default_constraint_tolerance, f"LangevinDynamicsMove integrator tolerance," \
-                                                                         f" {default_integrator_tolerance}, is not " \
-                                                                         f"the same as the expected default " \
-                                                                         f"tolerance, {default_constraint_tolerance}."
+    assert default_integrator_tolerance == default_constraint_tolerance, (
+        f"LangevinDynamicsMove integrator tolerance,"
+        f" {default_integrator_tolerance}, is not "
+        f"the same as the expected default "
+        f"tolerance, {default_constraint_tolerance}."
+    )
     # Now we change the tolerance in initializer and check
     new_constraint_tolerance = 1e-5
     new_move = LangevinDynamicsMove(constraint_tolerance=new_constraint_tolerance)
     new_integrator = new_move._get_integrator(thermodynamic_state)
     new_integrator_tolerance = new_integrator.getConstraintTolerance()
-    assert new_integrator_tolerance == new_constraint_tolerance, f"LangevinDynamicsMove integrator tolerance," \
-                                                                 f" {new_integrator_tolerance}, is not the same as" \
-                                                                 f" the specified value of {new_constraint_tolerance}."
+    assert new_integrator_tolerance == new_constraint_tolerance, (
+        f"LangevinDynamicsMove integrator tolerance,"
+        f" {new_integrator_tolerance}, is not the same as"
+        f" the specified value of {new_constraint_tolerance}."
+    )
     # Test by changing public attribute
     constraint_tolerance = 1e-7
     move = LangevinDynamicsMove()  # create default move
     move.constraint_tolerance = constraint_tolerance  # change the public attribute
     integrator = move._get_integrator(thermodynamic_state)
     integrator_tolerance = integrator.getConstraintTolerance()
-    assert integrator_tolerance == constraint_tolerance, f"LangevinDynamicsMove integrator tolerance," \
-                                                         f" {integrator_tolerance}, is not the same as" \
-                                                         f" the specified value of {constraint_tolerance}."
+    assert integrator_tolerance == constraint_tolerance, (
+        f"LangevinDynamicsMove integrator tolerance,"
+        f" {integrator_tolerance}, is not the same as"
+        f" the specified value of {constraint_tolerance}."
+    )
 
 
 # =============================================================================
