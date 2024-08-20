@@ -1278,7 +1278,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                         restored_value = restored_dict.pop(attr)
                         assert np.all(
                             original_value == restored_value
-                        ), "{}: {}\t{}".format(attr, original_value, restored_value)
+                        ), f"{attr}: {original_value}\t{restored_value}"
 
                 # Everything else should be a dict of builtins.
                 assert original_dict == restored_dict
@@ -1338,7 +1338,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                         else:
                             assert (
                                 restored_value == on_disk_value
-                            ), "Restored {} != {}".format(restored_value, on_disk_value)
+                            ), f"Restored {restored_value} != {on_disk_value}"
 
                 restored_sampler_states = reporter.read_sampler_states(iteration=0)
                 assert np.allclose(
