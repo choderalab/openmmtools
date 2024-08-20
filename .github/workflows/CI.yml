@@ -75,8 +75,7 @@ jobs:
 
       - name: Run tests
         run: |
-          # pytest -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
-          nosetests openmmtools/tests --nocapture --cover-tests --with-coverage --cover-package=openmmtools --cover-xml --cover-xml-file=coverage.xml --verbosity=2 --with-timer --with-doctest -a '!slow'
+          pytest -n logical -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
 
       - name: CodeCov
         uses: codecov/codecov-action@v3
