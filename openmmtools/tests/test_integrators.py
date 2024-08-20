@@ -755,7 +755,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
         )
 
         for platform_name in platform_names:
-            name = "{} {} {}".format(testsystem.name, nonbonded_method, platform_name)
+            name = f"{testsystem.name} {nonbonded_method} {platform_name}"
             self.compare_external_protocol_work_accumulation(
                 testsystem,
                 parameter_name,
