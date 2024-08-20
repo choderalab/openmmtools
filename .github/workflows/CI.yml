@@ -82,8 +82,9 @@ jobs:
           pytest -n logical -v --cov=openmmtools --cov-report=xml --color=yes openmmtools/tests/
 
       - name: CodeCov
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
         with:
           file: ./coverage.xml
           flags: unittests
           name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}-openmm-${{ matrix.openmm }}
+          token: ${{ secrets.CODECOV_TOKEN }}
