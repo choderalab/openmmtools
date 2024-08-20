@@ -21,7 +21,6 @@ import sys
 import zlib
 import pickle
 import itertools
-from functools import partial
 
 import scipy
 import numpy as np
@@ -2028,9 +2027,7 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in test_cases.items():
-            f = partial(check_split_force_groups, alchemical_system)
-            f.description = f"Testing force splitting among groups of {test_name}"
-            yield f
+            check_split_force_groups(alchemical_system)
 
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
@@ -2039,15 +2036,12 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in self.test_cases.items():
-            f = partial(
-                compare_system_energies,
+            compare_system_energies(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = f"Testing fully interacting energy of {test_name}"
-            yield f
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
@@ -2056,15 +2050,12 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in self.test_cases.items():
-            f = partial(
-                check_noninteracting_energy_components,
+            check_noninteracting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = f"Testing non-interacting energy of {test_name}"
-            yield f
 
     @pytest.mark.slow
     def test_fully_interacting_energy_components(self):
@@ -2077,15 +2068,12 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in test_cases.items():
-            f = partial(
-                check_interacting_energy_components,
+            check_interacting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = "Testing energy components of %s..." % test_name
-            yield f
 
     @pytest.mark.slow
     def test_platforms(self):
@@ -2112,24 +2100,18 @@ class TestAbsoluteAlchemicalFactory:
                 alchemical_system,
                 alchemical_region,
             ) in self.test_cases.items():
-                f = partial(
-                    compare_system_energies,
+                compare_system_energies(
+                        test_system.system,
+                    alchemical_system,
+                    alchemical_region,
+                    test_system.positions,
+                )
+                check_noninteracting_energy_components(
                     test_system.system,
                     alchemical_system,
                     alchemical_region,
                     test_system.positions,
                 )
-                f.description = f"Test fully interacting energy of {test_name} on {platform.getName()}"
-                yield f
-                f = partial(
-                    check_noninteracting_energy_components,
-                    test_system.system,
-                    alchemical_system,
-                    alchemical_region,
-                    test_system.positions,
-                )
-                f.description = f"Test non-interacting energy of {test_name} on {platform.getName()}"
-                yield f
 
         # Restore global platform
         GLOBAL_ALCHEMY_PLATFORM = old_global_platform
@@ -2145,16 +2127,13 @@ class TestAbsoluteAlchemicalFactory:
             # cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
-            f = partial(
-                overlap_check,
+            overlap_check(
                 test_system.system,
                 alchemical_system,
                 test_system.positions,
                 cached_trajectory_filename=cached_trajectory_filename,
                 name=test_name,
             )
-            f.description = f"Testing reference/alchemical overlap for {test_name}"
-            yield f
 
 
 class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
@@ -2386,9 +2365,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             region_names = []
             for region in alchemical_region:
                 region_names.append(region.name)
-            f = partial(check_split_force_groups, alchemical_system, region_names)
-            f.description = f"Testing force splitting among groups of {test_name}"
-            yield f
+            check_split_force_groups(alchemical_system, region_names)
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
@@ -2397,15 +2374,12 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             alchemical_system,
             alchemical_region,
         ) in self.test_cases.items():
-            f = partial(
-                check_multi_noninteracting_energy_components,
+            check_multi_noninteracting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = f"Testing non-interacting energy of {test_name}"
-            yield f
 
     @pytest.mark.slow
     def test_platforms(self):
@@ -2432,24 +2406,18 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
                 alchemical_system,
                 alchemical_region,
             ) in self.test_cases.items():
-                f = partial(
-                    compare_system_energies,
+                compare_system_energies(
+                        test_system.system,
+                    alchemical_system,
+                    alchemical_region,
+                    test_system.positions,
+                )
+                check_multi_noninteracting_energy_components(
                     test_system.system,
                     alchemical_system,
                     alchemical_region,
                     test_system.positions,
                 )
-                f.description = f"Test fully interacting energy of {test_name} on {platform.getName()}"
-                yield f
-                f = partial(
-                    check_multi_noninteracting_energy_components,
-                    test_system.system,
-                    alchemical_system,
-                    alchemical_region,
-                    test_system.positions,
-                )
-                f.description = f"Test non-interacting energy of {test_name} on {platform.getName()}"
-                yield f
 
         # Restore global platform
         GLOBAL_ALCHEMY_PLATFORM = old_global_platform
@@ -2465,15 +2433,12 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             alchemical_system,
             alchemical_region,
         ) in test_cases.items():
-            f = partial(
-                check_multi_interacting_energy_components,
+            check_multi_interacting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = "Testing energy components of %s..." % test_name
-            yield f
 
 
 class TestDispersionlessAlchemicalFactory:
@@ -2559,16 +2524,13 @@ class TestDispersionlessAlchemicalFactory:
             # cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
-            f = partial(
-                overlap_check,
+            overlap_check(
                 test_system.system,
                 alchemical_system,
                 test_system.positions,
                 cached_trajectory_filename=cached_trajectory_filename,
                 name=test_name,
             )
-            f.description = f"Testing reference/alchemical overlap for no alchemical dispersion {test_name}"
-            yield f
 
 
 @pytest.mark.slow

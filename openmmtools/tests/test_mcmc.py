@@ -16,7 +16,6 @@ Test State classes in mcmc.py.
 import math
 import pickle
 import tempfile
-from functools import partial
 
 from openmmtools.multistate.pymbar import detect_equilibration
 
@@ -98,10 +97,7 @@ def test_minimizer_all_testsystems():
 def test_mcmc_expectations():
     # Select system:
     for [system_name, testsystem, move] in analytical_testsystems:
-        f = partial(subtest_mcmc_expectation, testsystem, move)
-        f.description = "Testing MCMC expectation for %s" % system_name
-        logging.info(f.description)
-        yield f
+        subtest_mcmc_expectation(testsystem, move)
 
 
 def subtest_mcmc_expectation(testsystem, move):
