@@ -69,7 +69,9 @@ def test_find_forces():
 
     # Test find force and include subclasses.
     found_forces = find_forces(system, openmm.CustomBondForce, include_subclasses=True)
-    assert_forces_equal(found_forces, [(5, HarmonicRestraintBondForce), (6, openmm.CustomBondForce)])
+    assert_forces_equal(
+        found_forces, [(5, HarmonicRestraintBondForce), (6, openmm.CustomBondForce)]
+    )
     found_forces = find_forces(
         system, RadiallySymmetricRestraintForce, include_subclasses=True
     )
@@ -105,19 +107,19 @@ def test_find_forces():
     # An exception is raised with "only_one" if multiple forces are found.
     with pytest.raises(MultipleForcesError):
         find_forces(
-        system,
-        "CustomBondForce",
-        True,
-        True,
-    )
+            system,
+            "CustomBondForce",
+            True,
+            True,
+        )
 
     # An exception is raised with "only_one" if the force wasn't found.
     with pytest.raises(NoForceFoundError):
         find_forces(
-        system,
-        "NonExistentForce",
-        True,
-    )
+            system,
+            "NonExistentForce",
+            True,
+        )
 
 
 # =============================================================================
@@ -188,16 +190,26 @@ class TestRadiallySymmetricRestraints:
     def test_restraint_properties(self):
         """Test that properties work as expected."""
         for restraint in self.restraints:
-            assert_quantity_almost_equal(restraint.spring_constant, self.spring_constant)
+            assert_quantity_almost_equal(
+                restraint.spring_constant, self.spring_constant
+            )
             if isinstance(restraint, FlatBottomRestraintForceMixIn):
                 assert_quantity_almost_equal(restraint.well_radius, self.well_radius)
             if isinstance(restraint, RadiallySymmetricCentroidRestraintForce):
-                assert restraint.restrained_atom_indices1 == self.restrained_atom_indices1
-                assert restraint.restrained_atom_indices2 == self.restrained_atom_indices2
+                assert (
+                    restraint.restrained_atom_indices1 == self.restrained_atom_indices1
+                )
+                assert (
+                    restraint.restrained_atom_indices2 == self.restrained_atom_indices2
+                )
             else:
                 assert isinstance(restraint, RadiallySymmetricBondRestraintForce)
-                assert restraint.restrained_atom_indices1 == [self.restrained_atom_index1]
-                assert restraint.restrained_atom_indices2 == [self.restrained_atom_index2]
+                assert restraint.restrained_atom_indices1 == [
+                    self.restrained_atom_index1
+                ]
+                assert restraint.restrained_atom_indices2 == [
+                    self.restrained_atom_index2
+                ]
 
     def test_controlling_parameter_name(self):
         """Test that the controlling parameter name enters the energy function correctly."""
@@ -341,16 +353,12 @@ class TestRadiallySymmetricRestraints:
 
         for restraint in self.restraints:
             # In NPT ensemble, an exception is thrown if max_volume is not provided.
-            with pytest.raises(
-                TypeError, match="max_volume must be provided"
-            ):
+            with pytest.raises(TypeError, match="max_volume must be provided"):
                 restraint.compute_standard_state_correction(npt_state)
 
             # With non-periodic systems and reweighting to square-well
             # potential, a cutoff must be given.
-            with pytest.raises(
-                TypeError, match="One between radius_cutoff"
-            ):
+            with pytest.raises(TypeError, match="One between radius_cutoff"):
                 restraint.compute_standard_state_correction(
                     nonperiodic_state, square_well=True
                 )

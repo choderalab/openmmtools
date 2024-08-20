@@ -266,7 +266,10 @@ def test_write_at_index_must_exist():
         # Create a write and an append of the data
         append_path = "data_append"
         data_append = nc_io_driver.create_storage_variable(append_path, input_type)
-        with pytest.raises(OSError, match="Cannot write to a specific index for data that does not exist!"):
+        with pytest.raises(
+            OSError,
+            match="Cannot write to a specific index for data that does not exist!",
+        ):
             data_append.write(input_data, at_index=0)
 
 
@@ -281,5 +284,10 @@ def test_write_at_index_is_bound():
         append_path = "data_append"
         data_append = nc_io_driver.create_storage_variable(append_path, input_type)
         data_append.append(input_data)  # Creates the first data
-        with pytest.raises(ValueError, match="Cannot choose an index beyond the maximum length of the appended data of 1"):
-            data_append.write(input_data, at_index=1)  # should fail for out of bounds index
+        with pytest.raises(
+            ValueError,
+            match="Cannot choose an index beyond the maximum length of the appended data of 1",
+        ):
+            data_append.write(
+                input_data, at_index=1
+            )  # should fail for out of bounds index

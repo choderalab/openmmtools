@@ -2101,7 +2101,7 @@ class TestAbsoluteAlchemicalFactory:
                 alchemical_region,
             ) in self.test_cases.items():
                 compare_system_energies(
-                        test_system.system,
+                    test_system.system,
                     alchemical_system,
                     alchemical_region,
                     test_system.positions,
@@ -2407,7 +2407,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
                 alchemical_region,
             ) in self.test_cases.items():
                 compare_system_energies(
-                        test_system.system,
+                    test_system.system,
                     alchemical_system,
                     alchemical_region,
                     test_system.positions,

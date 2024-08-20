@@ -257,7 +257,9 @@ class TestThermodynamicState:
             ),
         ]
         for system, err_code in test_cases:
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[err_code]):
+            with pytest.raises(
+                ThermodynamicsError, match=ThermodynamicsError.error_messages[err_code]
+            ):
                 ThermodynamicState._find_barostat(system)
 
     def test_method_find_thermostat(self):
@@ -275,7 +277,12 @@ class TestThermodynamicState:
             self.std_temperature, 1.0 / unit.picosecond
         )
         system.addForce(thermostat2)
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.MULTIPLE_THERMOSTATS]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.MULTIPLE_THERMOSTATS
+            ],
+        ):
             ThermodynamicState._find_thermostat(system)
 
     def test_method_is_barostat_consistent(self):
@@ -325,7 +332,12 @@ class TestThermodynamicState:
             assert get_barostat_temperature(state.barostat) == temperature
 
             # Setting temperature to None raise error.
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NONE_TEMPERATURE]):
+            with pytest.raises(
+                ThermodynamicsError,
+                match=ThermodynamicsError.error_messages[
+                    ThermodynamicsError.NONE_TEMPERATURE
+                ],
+            ):
                 state.temperature = None
 
     def test_method_set_system_pressure(self):
@@ -356,9 +368,19 @@ class TestThermodynamicState:
             assert state.barostat is None
 
             # We can't set the pressure on non-periodic systems
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.BAROSTATED_NONPERIODIC]):
+            with pytest.raises(
+                ThermodynamicsError,
+                match=ThermodynamicsError.error_messages[
+                    ThermodynamicsError.BAROSTATED_NONPERIODIC
+                ],
+            ):
                 state.pressure = 1.0 * unit.bar
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.BAROSTATED_NONPERIODIC]):
+            with pytest.raises(
+                ThermodynamicsError,
+                match=ThermodynamicsError.error_messages[
+                    ThermodynamicsError.BAROSTATED_NONPERIODIC
+                ],
+            ):
                 state.barostat = new_barostat
 
             assert state.pressure is None
@@ -415,23 +437,43 @@ class TestThermodynamicState:
             # It is impossible to assign an unsupported barostat with incorrect temperature
             new_temperature = self.std_temperature + 10.0 * unit.kelvin
             ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTAT]):
+            with pytest.raises(
+                ThermodynamicsError,
+                match=ThermodynamicsError.error_messages[
+                    ThermodynamicsError.INCONSISTENT_BAROSTAT
+                ],
+            ):
                 state.barostat = barostat
 
             # Assign incompatible barostat raise error
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT]):
+            with pytest.raises(
+                ThermodynamicsError,
+                match=ThermodynamicsError.error_messages[
+                    ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT
+                ],
+            ):
                 state.barostat = self.unsupported_anisotropic_barostat
 
             # Assign barostat with different type raise error
             if state.barostat is not None and type(state.barostat) != type(
                 self.supported_anisotropic_barostat
             ):
-                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTA]):
+                with pytest.raises(
+                    ThermodynamicsError,
+                    match=ThermodynamicsError.error_messages[
+                        ThermodynamicsError.INCONSISTENT_BAROSTA
+                    ],
+                ):
                     state.barostat = self.supported_anisotropic_barostat
             if state.barostat is not None and type(state.barostat) != type(
                 self.membrane_barostat_gamma_zero
             ):
-                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTAT]):
+                with pytest.raises(
+                    ThermodynamicsError,
+                    match=ThermodynamicsError.error_messages[
+                        ThermodynamicsError.INCONSISTENT_BAROSTAT
+                    ],
+                ):
                     state.barostat = self.membrane_barostat_gamma_zero
 
             # After exception, state is left consistent
@@ -442,13 +484,23 @@ class TestThermodynamicState:
         # test setting and getting surface tension for a system without barostat
         state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
         assert state.surface_tension is None
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED
+            ],
+        ):
             state.surface_tension = self.std_surface_tension
 
         # test setting and getting surface tension for a system with a non-membrane barostat
         state = ThermodynamicState(self.barostated_alanine, self.std_temperature)
         assert state.surface_tension is None
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED
+            ],
+        ):
             state.surface_tension = self.std_surface_tension
 
         # test setting and getting surface tension
@@ -519,7 +571,10 @@ class TestThermodynamicState:
             (inconsistent_barostat_temperature, TE.INCONSISTENT_BAROSTAT),
         ]
         for i, (system, error_code) in enumerate(test_cases):
-            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[error_code]):
+            with pytest.raises(
+                ThermodynamicsError,
+                match=ThermodynamicsError.error_messages[error_code],
+            ):
                 state.system = system
 
         # It is possible to set an inconsistent system
@@ -537,7 +592,10 @@ class TestThermodynamicState:
         state = ThermodynamicState(system, self.std_temperature)
 
         # We can't set the system without adding a thermostat.
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_THERMOSTAT]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_THERMOSTAT],
+        ):
             state.set_system(system)
 
         state.set_system(system, fix_state=True)
@@ -551,7 +609,10 @@ class TestThermodynamicState:
         # In NPT, we can't set the system without adding a barostat.
         system = state.system  # System with thermostat.
         state.pressure = self.std_pressure
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_BAROSTAT]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_BAROSTAT],
+        ):
             state.set_system(system)
 
         state.set_system(system, fix_state=True)
@@ -630,7 +691,10 @@ class TestThermodynamicState:
         # If we don't specify a temperature without a thermostat, it complains.
         system = self.alanine_no_thermostat
         assert ThermodynamicState._find_thermostat(system) is None  # Test precondition.
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_THERMOSTAT]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_THERMOSTAT],
+        ):
             ThermodynamicState(system=system)
 
         # With thermostat, temperature is inferred correctly.
@@ -645,7 +709,12 @@ class TestThermodynamicState:
         system.addForce(
             openmm.MonteCarloBarostat(self.std_pressure, self.std_temperature)
         )
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTAT]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.INCONSISTENT_BAROSTAT
+            ],
+        ):
             ThermodynamicState(system=system)
 
         # Specifying temperature overwrite thermostat.
@@ -672,7 +741,12 @@ class TestThermodynamicState:
                         _integrator.setTemperature(inconsistent_temperature)
                     except AttributeError:  # handle CompoundIntegrator case
                         pass
-                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_INTEGRATOR]):
+                with pytest.raises(
+                    ThermodynamicsError,
+                    match=ThermodynamicsError.error_messages[
+                        ThermodynamicsError.INCONSISTENT_INTEGRATOR
+                    ],
+                ):
                     state._is_integrator_thermostated(integrator)
 
     def test_method_set_integrator_temperature(self):
@@ -753,7 +827,12 @@ class TestThermodynamicState:
                         _integrator.setTemperature(inconsistent_temperature)
                     except AttributeError:  # handle CompoundIntegrator case
                         pass
-                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_INTEGRATOR]):
+                with pytest.raises(
+                    ThermodynamicsError,
+                    match=ThermodynamicsError.error_messages[
+                        ThermodynamicsError.INCONSISTENT_INTEGRATOR
+                    ],
+                ):
                     state.create_context(inconsistent_integrator)
             else:
                 # The context system must have the thermostat.
@@ -766,7 +845,10 @@ class TestThermodynamicState:
         # test platform properties
         state = ThermodynamicState(self.toluene_vacuum, self.std_temperature)
         platform_properties = {"CpuThreads": "2"}
-        with pytest.raises(ValueError, match="To set platform_properties, you need to also specify the platform."):
+        with pytest.raises(
+            ValueError,
+            match="To set platform_properties, you need to also specify the platform.",
+        ):
             state.create_context(
                 openmm.VerletIntegrator(0.001),
                 platform=None,
@@ -909,13 +991,23 @@ class TestThermodynamicState:
 
         # Trying to apply to a system in a different ensemble raises an error.
         state2.pressure = None
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_ENSEMBLE]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
+            ],
+        ):
             state2.apply_to_context(context)
 
         state3 = ThermodynamicState(
             self.membrane_barostat_alanine_gamma_zero, self.std_temperature
         )
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_ENSEMBLE]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
+            ],
+        ):
             state3.apply_to_context(context)
 
         # apply surface tension
@@ -943,7 +1035,12 @@ class TestThermodynamicState:
 
         verlet_integrator = openmm.VerletIntegrator(time_step)
         nvt_context = create_default_context(state2, verlet_integrator)
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_ENSEMBLE]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
+            ],
+        ):
             state1.apply_to_context(nvt_context)
         del nvt_context, verlet_integrator
 
@@ -975,7 +1072,12 @@ class TestThermodynamicState:
 
         # Raise error if SamplerState is not compatible.
         incompatible_sampler_state = sampler_state[:-1]
-        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE]):
+        with pytest.raises(
+            ThermodynamicsError,
+            match=ThermodynamicsError.error_messages[
+                ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE
+            ],
+        ):
             state.reduced_potential(incompatible_sampler_state)
 
         # Compute constant surface tension reduced potential.
@@ -1136,19 +1238,39 @@ class TestSamplerState:
 
         # If velocities have different length, an error is raised.
         velocities = [0.0 for _ in range(len(positions) - 1)]
-        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_VELOCITIES]):
+        with pytest.raises(
+            SamplerStateError,
+            match=SamplerStateError.error_messages[
+                SamplerStateError.INCONSISTENT_VELOCITIES
+            ],
+        ):
             sampler_state.velocities = velocities
 
         # The same happens in constructor.
-        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_VELOCITIES]):
+        with pytest.raises(
+            SamplerStateError,
+            match=SamplerStateError.error_messages[
+                SamplerStateError.INCONSISTENT_VELOCITIES
+            ],
+        ):
             SamplerState(positions, velocities)
 
         # The same happens if we update positions.
-        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_POSITIONS]):
+        with pytest.raises(
+            SamplerStateError,
+            match=SamplerStateError.error_messages[
+                SamplerStateError.INCONSISTENT_POSITIONS
+            ],
+        ):
             sampler_state.positions = positions[:-1]
 
         # We cannot set positions to None.
-        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_POSITIONS]):
+        with pytest.raises(
+            SamplerStateError,
+            match=SamplerStateError.error_messages[
+                SamplerStateError.INCONSISTENT_POSITIONS
+            ],
+        ):
             sampler_state.positions = None
 
     def test_constructor_from_context(self):
@@ -1261,7 +1383,12 @@ class TestSamplerState:
 
         # Trying to update with an inconsistent context raise error.
         explicit_context.setPositions(self.alanine_explicit_positions)
-        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_POSITIONS]):
+        with pytest.raises(
+            SamplerStateError,
+            match=SamplerStateError.error_messages[
+                SamplerStateError.INCONSISTENT_POSITIONS
+            ],
+        ):
             sampler_state.update_from_context(explicit_context)
 
     def test_method_apply_to_context(self):
@@ -1887,9 +2014,7 @@ class TestGlobalParameterState:
             )
 
         # Raise an exception if parameter is not recognized.
-        with pytest.raises(
-            GlobalParameterError, match="Unknown parameters"
-        ):
+        with pytest.raises(GlobalParameterError, match="Unknown parameters"):
             MyState(lambda_steric=1.0)  # Typo.
 
         # Properties are initialized correctly.
@@ -1916,9 +2041,7 @@ class TestGlobalParameterState:
 
                 # The "unsuffixed" parameter should not be controlled by the state.
                 if "parameters_name_suffix" in test_kwargs:
-                    with pytest.raises(
-                        AttributeError, match="state does not control"
-                    ):
+                    with pytest.raises(AttributeError, match="state does not control"):
                         getattr(state, parameter)
                     # The state exposes a "suffixed" version of the parameter.
                     state_attribute = (
@@ -1939,9 +2062,7 @@ class TestGlobalParameterState:
     def test_from_system_constructor(self):
         """Test GlobalParameterState.from_system constructor."""
         # A system exposing no global parameters controlled by the state raises an error.
-        with pytest.raises(
-            GlobalParameterError, match="no global parameters"
-        ):
+        with pytest.raises(GlobalParameterError, match="no global parameters"):
             GlobalParameterState.from_system(openmm.System())
 
         system = self.diatomic_molecule_ts.system
