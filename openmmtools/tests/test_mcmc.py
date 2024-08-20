@@ -535,7 +535,7 @@ def test_move_restart():
     # TODO: MMH
     # cm used to be a with error as cm
     # we can get this test working again, just need to inspect the message
-    #with utils.temporary_directory() as tmp_dir:
+    # with utils.temporary_directory() as tmp_dir:
     #    prefix = os.path.join(tmp_dir, "prefix")
     #    cm.exception.serialize_error(prefix)
     #    assert os.path.exists(prefix + "-move.json")

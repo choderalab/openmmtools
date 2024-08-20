@@ -200,7 +200,10 @@ class TestHarmonicOscillatorsMultiStateSampler:
 
             # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and
             # check that it throws an exception
-            with pytest.raises(Exception, match="Cannot specify statistical_inefficiency without n_equilibration_iterations, because otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency."):
+            with pytest.raises(
+                Exception,
+                match="Cannot specify statistical_inefficiency without n_equilibration_iterations, because otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency.",
+            ):
                 self.ANALYZER(reporter, statistical_inefficiency=10)
 
             # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and

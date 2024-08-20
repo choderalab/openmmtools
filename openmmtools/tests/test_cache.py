@@ -404,26 +404,36 @@ class TestContextCache:
         # non-string value in properties
         cpu_platform = openmm.Platform.getPlatformByName("CPU")
         ref_platform = openmm.Platform.getPlatformByName("Reference")
-        with pytest.raises(ValueError, match="All platform properties must be strings."):
+        with pytest.raises(
+            ValueError, match="All platform properties must be strings."
+        ):
             ContextCache(platform=cpu_platform, platform_properties={"CpuThreads": 2})
         # non-dict properties
-        with pytest.raises(ValueError, match="platform_properties must be a dictionary"):
+        with pytest.raises(
+            ValueError, match="platform_properties must be a dictionary"
+        ):
             ContextCache(platform=cpu_platform, platform_properties="jambalaya")
         # invalid property
-        with pytest.raises(ValueError, match="Invalid platform property for this platform."):
+        with pytest.raises(
+            ValueError, match="Invalid platform property for this platform."
+        ):
             ContextCache(platform=cpu_platform, platform_properties={"jambalaya": "2"})
 
         # setter
         cache = ContextCache(
             platform=cpu_platform, platform_properties=platform_properties
         )
-        with pytest.raises(ValueError, match="Invalid platform property for this platform."):
+        with pytest.raises(
+            ValueError, match="Invalid platform property for this platform."
+        ):
             cache.platform = ref_platform
         # this should work
         cache.set_platform(ref_platform)
         assert cache.platform == ref_platform
         # assert errors are checked in set_platform
-        with pytest.raises(ValueError, match="Invalid platform property for this platform."):
+        with pytest.raises(
+            ValueError, match="Invalid platform property for this platform."
+        ):
             cache.set_platform(cpu_platform, platform_properties={"jambalaya": "2"})
         # assert that resetting the platform resets the properties
         cache = ContextCache(

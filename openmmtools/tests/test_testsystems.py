@@ -14,7 +14,6 @@ import pytest
 from openmmtools import testsystems
 
 
-
 def _equiv_topology(top_1, top_2):
     """Compare topologies using string reps of atoms and bonds"""
     for b1, b2 in zip(top_1.bonds(), top_2.bonds()):
