@@ -13,13 +13,13 @@ Test State classes in states.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
-import nose
 import pickle
 import operator
 
 from openmmtools import testsystems
 from openmmtools.states import *
 
+import pytest
 
 # =============================================================================
 # CONSTANTS
@@ -257,9 +257,8 @@ class TestThermodynamicState:
             ),
         ]
         for system, err_code in test_cases:
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[err_code]):
                 ThermodynamicState._find_barostat(system)
-            assert cm.exception.code == err_code
 
     def test_method_find_thermostat(self):
         """ThermodynamicState._find_thermostat() method."""
@@ -276,9 +275,8 @@ class TestThermodynamicState:
             self.std_temperature, 1.0 / unit.picosecond
         )
         system.addForce(thermostat2)
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.MULTIPLE_THERMOSTATS]):
             ThermodynamicState._find_thermostat(system)
-        cm.exception.code == ThermodynamicsError.MULTIPLE_THERMOSTATS
 
     def test_method_is_barostat_consistent(self):
         """ThermodynamicState._is_barostat_consistent() method."""
@@ -327,9 +325,8 @@ class TestThermodynamicState:
             assert get_barostat_temperature(state.barostat) == temperature
 
             # Setting temperature to None raise error.
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NONE_TEMPERATURE]):
                 state.temperature = None
-            assert cm.exception.code == ThermodynamicsError.NONE_TEMPERATURE
 
     def test_method_set_system_pressure(self):
         """ThermodynamicState._set_system_pressure() method."""
@@ -359,12 +356,10 @@ class TestThermodynamicState:
             assert state.barostat is None
 
             # We can't set the pressure on non-periodic systems
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.BAROSTATED_NONPERIODIC]):
                 state.pressure = 1.0 * unit.bar
-            assert cm.exception.code == ThermodynamicsError.BAROSTATED_NONPERIODIC
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.BAROSTATED_NONPERIODIC]):
                 state.barostat = new_barostat
-            assert cm.exception.code == ThermodynamicsError.BAROSTATED_NONPERIODIC
 
             assert state.pressure is None
             assert state.barostat is None
@@ -420,31 +415,24 @@ class TestThermodynamicState:
             # It is impossible to assign an unsupported barostat with incorrect temperature
             new_temperature = self.std_temperature + 10.0 * unit.kelvin
             ThermodynamicState._set_barostat_temperature(barostat, new_temperature)
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTAT]):
                 state.barostat = barostat
-            assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
 
             # Assign incompatible barostat raise error
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT]):
                 state.barostat = self.unsupported_anisotropic_barostat
-            assert (
-                cm.exception.code
-                == ThermodynamicsError.UNSUPPORTED_ANISOTROPIC_BAROSTAT
-            )
 
             # Assign barostat with different type raise error
             if state.barostat is not None and type(state.barostat) != type(
                 self.supported_anisotropic_barostat
             ):
-                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTA]):
                     state.barostat = self.supported_anisotropic_barostat
-                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTA
             if state.barostat is not None and type(state.barostat) != type(
                 self.membrane_barostat_gamma_zero
             ):
-                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTAT]):
                     state.barostat = self.membrane_barostat_gamma_zero
-                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
 
             # After exception, state is left consistent
             assert state.pressure is None
@@ -454,16 +442,14 @@ class TestThermodynamicState:
         # test setting and getting surface tension for a system without barostat
         state = ThermodynamicState(self.alanine_explicit, self.std_temperature)
         assert state.surface_tension is None
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED]):
             state.surface_tension = self.std_surface_tension
-        assert cm.exception.code == ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED
 
         # test setting and getting surface tension for a system with a non-membrane barostat
         state = ThermodynamicState(self.barostated_alanine, self.std_temperature)
         assert state.surface_tension is None
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED]):
             state.surface_tension = self.std_surface_tension
-        assert cm.exception.code == ThermodynamicsError.SURFACE_TENSION_NOT_SUPPORTED
 
         # test setting and getting surface tension
         state = ThermodynamicState(
@@ -533,9 +519,8 @@ class TestThermodynamicState:
             (inconsistent_barostat_temperature, TE.INCONSISTENT_BAROSTAT),
         ]
         for i, (system, error_code) in enumerate(test_cases):
-            with nose.tools.assert_raises(ThermodynamicsError) as cm:
+            with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[error_code]):
                 state.system = system
-            assert cm.exception.code == error_code
 
         # It is possible to set an inconsistent system
         # if thermodynamic state is changed first.
@@ -552,9 +537,8 @@ class TestThermodynamicState:
         state = ThermodynamicState(system, self.std_temperature)
 
         # We can't set the system without adding a thermostat.
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_THERMOSTAT]):
             state.set_system(system)
-        assert cm.exception.code == ThermodynamicsError.NO_THERMOSTAT
 
         state.set_system(system, fix_state=True)
         system = state.system
@@ -567,9 +551,8 @@ class TestThermodynamicState:
         # In NPT, we can't set the system without adding a barostat.
         system = state.system  # System with thermostat.
         state.pressure = self.std_pressure
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_BAROSTAT]):
             state.set_system(system)
-        assert cm.exception.code == ThermodynamicsError.NO_BAROSTAT
 
         state.set_system(system, fix_state=True)
         assert state.barostat.getDefaultPressure() == self.std_pressure
@@ -605,9 +588,8 @@ class TestThermodynamicState:
             ),
         ]
         for i, (system, err_code) in enumerate(test_cases):
-            with nose.tools.assert_raises(TE) as cm:
+            with pytest.raises(TE, match=ThermodynamicsError.error_messages[err_code]):
                 ThermodynamicState(system=system, temperature=self.std_temperature)
-            assert cm.exception.code == err_code
 
     def test_constructor_barostat(self):
         """The system barostat is properly configured on construction."""
@@ -648,9 +630,8 @@ class TestThermodynamicState:
         # If we don't specify a temperature without a thermostat, it complains.
         system = self.alanine_no_thermostat
         assert ThermodynamicState._find_thermostat(system) is None  # Test precondition.
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.NO_THERMOSTAT]):
             ThermodynamicState(system=system)
-        assert cm.exception.code == ThermodynamicsError.NO_THERMOSTAT
 
         # With thermostat, temperature is inferred correctly.
         system = copy.deepcopy(self.alanine_explicit)
@@ -664,9 +645,8 @@ class TestThermodynamicState:
         system.addForce(
             openmm.MonteCarloBarostat(self.std_pressure, self.std_temperature)
         )
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_BAROSTAT]):
             ThermodynamicState(system=system)
-        assert cm.exception.code == ThermodynamicsError.INCONSISTENT_BAROSTAT
 
         # Specifying temperature overwrite thermostat.
         state = ThermodynamicState(system=system, temperature=self.std_temperature)
@@ -692,9 +672,8 @@ class TestThermodynamicState:
                         _integrator.setTemperature(inconsistent_temperature)
                     except AttributeError:  # handle CompoundIntegrator case
                         pass
-                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_INTEGRATOR]):
                     state._is_integrator_thermostated(integrator)
-                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_INTEGRATOR
 
     def test_method_set_integrator_temperature(self):
         """ThermodynamicState._set_integrator_temperature() method."""
@@ -774,9 +753,8 @@ class TestThermodynamicState:
                         _integrator.setTemperature(inconsistent_temperature)
                     except AttributeError:  # handle CompoundIntegrator case
                         pass
-                with nose.tools.assert_raises(ThermodynamicsError) as cm:
+                with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCONSISTENT_INTEGRATOR]):
                     state.create_context(inconsistent_integrator)
-                assert cm.exception.code == ThermodynamicsError.INCONSISTENT_INTEGRATOR
             else:
                 # The context system must have the thermostat.
                 assert toluene_str == context.getSystem().__getstate__()
@@ -788,16 +766,12 @@ class TestThermodynamicState:
         # test platform properties
         state = ThermodynamicState(self.toluene_vacuum, self.std_temperature)
         platform_properties = {"CpuThreads": "2"}
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError, match="To set platform_properties, you need to also specify the platform."):
             state.create_context(
                 openmm.VerletIntegrator(0.001),
                 platform=None,
                 platform_properties=platform_properties,
             )
-        assert (
-            str(cm.exception)
-            == "To set platform_properties, you need to also specify the platform."
-        )
 
         platform = openmm.Platform.getPlatformByName("CPU")
         context = state.create_context(
@@ -935,16 +909,14 @@ class TestThermodynamicState:
 
         # Trying to apply to a system in a different ensemble raises an error.
         state2.pressure = None
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_ENSEMBLE]):
             state2.apply_to_context(context)
-        assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
 
         state3 = ThermodynamicState(
             self.membrane_barostat_alanine_gamma_zero, self.std_temperature
         )
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_ENSEMBLE]):
             state3.apply_to_context(context)
-        assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
 
         # apply surface tension
         gamma_context = openmm.Context(
@@ -971,9 +943,8 @@ class TestThermodynamicState:
 
         verlet_integrator = openmm.VerletIntegrator(time_step)
         nvt_context = create_default_context(state2, verlet_integrator)
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_ENSEMBLE]):
             state1.apply_to_context(nvt_context)
-        assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_ENSEMBLE
         del nvt_context, verlet_integrator
 
     def test_method_reduced_potential(self):
@@ -1004,9 +975,8 @@ class TestThermodynamicState:
 
         # Raise error if SamplerState is not compatible.
         incompatible_sampler_state = sampler_state[:-1]
-        with nose.tools.assert_raises(ThermodynamicsError) as cm:
+        with pytest.raises(ThermodynamicsError, match=ThermodynamicsError.error_messages[ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE]):
             state.reduced_potential(incompatible_sampler_state)
-        assert cm.exception.code == ThermodynamicsError.INCOMPATIBLE_SAMPLER_STATE
 
         # Compute constant surface tension reduced potential.
         state = ThermodynamicState(
@@ -1166,24 +1136,20 @@ class TestSamplerState:
 
         # If velocities have different length, an error is raised.
         velocities = [0.0 for _ in range(len(positions) - 1)]
-        with nose.tools.assert_raises(SamplerStateError) as cm:
+        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_VELOCITIES]):
             sampler_state.velocities = velocities
-        assert cm.exception.code == SamplerStateError.INCONSISTENT_VELOCITIES
 
         # The same happens in constructor.
-        with nose.tools.assert_raises(SamplerStateError) as cm:
+        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_VELOCITIES]):
             SamplerState(positions, velocities)
-        assert cm.exception.code == SamplerStateError.INCONSISTENT_VELOCITIES
 
         # The same happens if we update positions.
-        with nose.tools.assert_raises(SamplerStateError) as cm:
+        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_POSITIONS]):
             sampler_state.positions = positions[:-1]
-        assert cm.exception.code == SamplerStateError.INCONSISTENT_POSITIONS
 
         # We cannot set positions to None.
-        with nose.tools.assert_raises(SamplerStateError) as cm:
+        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_POSITIONS]):
             sampler_state.positions = None
-        assert cm.exception.code == SamplerStateError.INCONSISTENT_POSITIONS
 
     def test_constructor_from_context(self):
         """SamplerState.from_context constructor."""
@@ -1295,9 +1261,8 @@ class TestSamplerState:
 
         # Trying to update with an inconsistent context raise error.
         explicit_context.setPositions(self.alanine_explicit_positions)
-        with nose.tools.assert_raises(SamplerStateError) as cm:
+        with pytest.raises(SamplerStateError, match=SamplerStateError.error_messages[SamplerStateError.INCONSISTENT_POSITIONS]):
             sampler_state.update_from_context(explicit_context)
-        assert cm.exception.code == SamplerStateError.INCONSISTENT_POSITIONS
 
     def test_method_apply_to_context(self):
         """SamplerState.apply_to_context() method."""
@@ -1601,7 +1566,7 @@ class TestCompoundThermodynamicState:
         assert self.get_dummy_parameter(compound_state.system) == self.dummy_parameter
 
         # Default behavior for attribute error and monkey patching.
-        with nose.tools.assert_raises(AttributeError):
+        with pytest.raises(AttributeError):
             compound_state.temp
         compound_state.temp = 0
         assert "temp" in compound_state.__dict__
@@ -1612,7 +1577,7 @@ class TestCompoundThermodynamicState:
         compound_state = CompoundThermodynamicState(
             thermodynamic_state, [dummy_state, dummy_state2]
         )
-        with nose.tools.assert_raises(RuntimeError):
+        with pytest.raises(RuntimeError):
             compound_state.dummy_parameter
 
     def test_set_system(self):
@@ -1627,11 +1592,11 @@ class TestCompoundThermodynamicState:
         # Setting an inconsistent system for the dummy raises an error.
         system = compound_state.system
         self.DummyState.set_dummy_parameter(system, self.dummy_parameter + 1.0)
-        with nose.tools.assert_raises(ComposableStateError):
+        with pytest.raises(ComposableStateError):
             compound_state.system = system
 
         # Same for set_system when called with default arguments.
-        with nose.tools.assert_raises(ComposableStateError):
+        with pytest.raises(ComposableStateError):
             compound_state.set_system(system)
 
         # This doesn't happen if we fix the state.
@@ -1922,8 +1887,8 @@ class TestGlobalParameterState:
             )
 
         # Raise an exception if parameter is not recognized.
-        with nose.tools.assert_raises_regexp(
-            GlobalParameterError, "Unknown parameters"
+        with pytest.raises(
+            GlobalParameterError, match="Unknown parameters"
         ):
             MyState(lambda_steric=1.0)  # Typo.
 
@@ -1951,8 +1916,8 @@ class TestGlobalParameterState:
 
                 # The "unsuffixed" parameter should not be controlled by the state.
                 if "parameters_name_suffix" in test_kwargs:
-                    with nose.tools.assert_raises_regexp(
-                        AttributeError, "state does not control"
+                    with pytest.raises(
+                        AttributeError, match="state does not control"
                     ):
                         getattr(state, parameter)
                     # The state exposes a "suffixed" version of the parameter.
@@ -1974,8 +1939,8 @@ class TestGlobalParameterState:
     def test_from_system_constructor(self):
         """Test GlobalParameterState.from_system constructor."""
         # A system exposing no global parameters controlled by the state raises an error.
-        with nose.tools.assert_raises_regexp(
-            GlobalParameterError, "no global parameters"
+        with pytest.raises(
+            GlobalParameterError, match="no global parameters"
         ):
             GlobalParameterState.from_system(openmm.System())
 
@@ -1997,7 +1962,7 @@ class TestGlobalParameterState:
             assert (
                 getattr(controlling_state, parameter_name) == parameter_value
             ), err_msg
-            with nose.tools.assert_raises(AttributeError):
+            with pytest.raises(AttributeError):
                 getattr(noncontrolling_state, parameter_name), parameter_name
 
     def test_parameter_validator(self):
@@ -2023,9 +1988,9 @@ class TestGlobalParameterState:
 
         for suffix in [None, "mysuffix"]:
             # Raise an exception on init.
-            with nose.tools.assert_raises_regexp(ValueError, "must be between"):
+            with pytest.raises(ValueError, match="must be between"):
                 MyState(parameters_name_suffix=suffix, lambda_bonds=-1.0)
-            with nose.tools.assert_raises_regexp(ValueError, "must be between"):
+            with pytest.raises(ValueError, match="must be between"):
                 MyState.from_system(system, parameters_name_suffix=suffix)
 
             # Raise an exception when properties are set.
@@ -2033,7 +1998,7 @@ class TestGlobalParameterState:
             parameter_name = (
                 "lambda_bonds" if suffix is None else "lambda_bonds_" + suffix
             )
-            with nose.tools.assert_raises_regexp(ValueError, "must be between"):
+            with pytest.raises(ValueError, match="must be between"):
                 setattr(state, parameter_name, 5.0)
 
     def test_equality_operator(self):
@@ -2111,13 +2076,13 @@ class TestGlobalParameterState:
         # Raise an error if an extra parameter is defined in the system.
         state.gamma = None
         err_msg = "The system parameter gamma is not defined in this state."
-        with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+        with pytest.raises(GlobalParameterError, match=err_msg):
             state.apply_to_system(system)
 
         # Raise an error if an extra parameter is defined in the state.
         state_suffix.gamma_mysuffix = 2.0
         err_msg = "Could not find global parameter gamma_mysuffix in the system."
-        with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+        with pytest.raises(GlobalParameterError, match=err_msg):
             state_suffix.apply_to_system(system)
 
     def test_check_system_consistency(self):
@@ -2126,8 +2091,8 @@ class TestGlobalParameterState:
 
         def check_not_consistency(states):
             for s in states:
-                with nose.tools.assert_raises_regexp(
-                    GlobalParameterError, "Consistency check failed"
+                with pytest.raises(
+                    GlobalParameterError, match="Consistency check failed"
                 ):
                     s.check_system_consistency(system)
 
@@ -2161,7 +2126,7 @@ class TestGlobalParameterState:
 
         def check_not_applicable(states, error, context):
             for s in states:
-                with nose.tools.assert_raises_regexp(GlobalParameterError, error):
+                with pytest.raises(GlobalParameterError, match=error):
                     s.apply_to_context(context)
 
         # Raise error if the Context defines global parameters that are undefined in the state.
@@ -2272,7 +2237,7 @@ class TestGlobalParameterState:
         assert state.get_function_variable("lambda2") == 0.5
 
         # Cannot call an function variable as a supported parameter.
-        with nose.tools.assert_raises(GlobalParameterError):
+        with pytest.raises(GlobalParameterError):
             state.set_function_variable("lambda_bonds", 0.5)
 
         # Assign string global parameter functions to parameters.
@@ -2309,7 +2274,7 @@ class TestGlobalParameterState:
         # Trying to set in the constructor undefined global parameters raise an exception.
         composable_states[1].gamma_mysuffix = 2.0
         err_msg = "Could not find global parameter gamma_mysuffix in the system."
-        with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+        with pytest.raises(GlobalParameterError, match=err_msg):
             CompoundThermodynamicState(self.diatomic_molecule_ts, composable_states)
 
     def test_global_parameters_compound_state(self):
@@ -2327,7 +2292,7 @@ class TestGlobalParameterState:
                 assert getattr(compound_state, parameter_name) is None
                 # If undefined, setting the property should raise an error.
                 err_msg = "Cannot set the parameter gamma_mysuffix in the system"
-                with nose.tools.assert_raises_regexp(GlobalParameterError, err_msg):
+                with pytest.raises(GlobalParameterError, match=err_msg):
                     setattr(compound_state, parameter_name, 2.0)
                 continue
 
@@ -2388,11 +2353,11 @@ class TestGlobalParameterState:
             incompatible_state.apply_to_system(system)
 
             # Setting an inconsistent system raise an error.
-            with nose.tools.assert_raises_regexp(GlobalParameterError, parameter_name):
+            with pytest.raises(GlobalParameterError, match=parameter_name):
                 compound_state.system = system
 
             # Same for set_system when called with default arguments.
-            with nose.tools.assert_raises_regexp(GlobalParameterError, parameter_name):
+            with pytest.raises(GlobalParameterError, match=parameter_name):
                 compound_state.set_system(system)
 
             # This doesn't happen if we fix the state.
@@ -2570,21 +2535,21 @@ def test_create_thermodynamic_state_protocol():
     thermo_state = ThermodynamicState(system, temperature=400 * unit.kelvin)
 
     # The method raises an exception when the protocol is empty.
-    with nose.tools.assert_raises_regexp(ValueError, "No protocol"):
+    with pytest.raises(ValueError, match="No protocol"):
         create_thermodynamic_state_protocol(system, protocol={})
 
     # The method raises an exception when different parameters have different lengths.
-    with nose.tools.assert_raises_regexp(ValueError, "different lengths"):
+    with pytest.raises(ValueError, match="different lengths"):
         protocol = {"temperature": [1.0, 2.0], "pressure": [4.0]}
         create_thermodynamic_state_protocol(system, protocol=protocol)
 
     # An exception is raised if the temperature is not specified with a System.
-    with nose.tools.assert_raises_regexp(ValueError, "must specify the temperature"):
+    with pytest.raises(ValueError, match="must specify the temperature"):
         protocol = {"pressure": [5.0] * unit.atmosphere}
         create_thermodynamic_state_protocol(system, protocol=protocol)
 
     # An exception is raised if a parameter is specified both as constant and protocol.
-    with nose.tools.assert_raises_regexp(ValueError, "constants and protocol"):
+    with pytest.raises(ValueError, match="constants and protocol"):
         protocol = {"temperature": [5.0, 10.0] * unit.kelvin}
         const = {"temperature": 5.0 * unit.kelvin}
         create_thermodynamic_state_protocol(system, protocol=protocol, constants=const)

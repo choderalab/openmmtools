@@ -18,7 +18,7 @@ except ImportError:  # OpenMM < 7.6
 import contextlib
 import tempfile
 
-from nose import tools
+import pytest
 
 from openmmtools.storage import NetCDFIODriver
 from openmmtools.utils import temporary_directory
@@ -256,7 +256,6 @@ def test_netcdf_dictionary_type_codec():
     generic_append_to_check(input_data, overwrite_data)
 
 
-@tools.raises(Exception)
 def test_write_at_index_must_exist():
     """Ensure that the write(data, at_index) must exist first"""
     with temporary_directory() as tmp_dir:
@@ -267,10 +266,10 @@ def test_write_at_index_must_exist():
         # Create a write and an append of the data
         append_path = "data_append"
         data_append = nc_io_driver.create_storage_variable(append_path, input_type)
-        data_append.write(input_data, at_index=0)
+        with pytest.raises(OSError, match="Cannot write to a specific index for data that does not exist!"):
+            data_append.write(input_data, at_index=0)
 
 
-@tools.raises(Exception)
 def test_write_at_index_is_bound():
     """Ensure that the write(data, at_index) cannot write to an index beyond"""
     with temporary_directory() as tmp_dir:
@@ -282,4 +281,5 @@ def test_write_at_index_is_bound():
         append_path = "data_append"
         data_append = nc_io_driver.create_storage_variable(append_path, input_type)
         data_append.append(input_data)  # Creates the first data
-        data_append.write(input_data, at_index=1)  # should fail for out of bounds index
+        with pytest.raises(ValueError, match="Cannot choose an index beyond the maximum length of the appended data of 1"):
+            data_append.write(input_data, at_index=1)  # should fail for out of bounds index

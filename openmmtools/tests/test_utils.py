@@ -16,8 +16,7 @@ import copy
 # GLOBAL IMPORTS
 # =============================================================================
 
-import nose
-from nose.tools import nottest
+import pytest
 import numpy as np
 
 try:
@@ -212,7 +211,7 @@ def test_is_quantity_close():
         assert is_quantity_close(quantity1, quantity2) == test_result, msg
 
     # Passing quantities with different units raise an exception.
-    with nose.tools.assert_raises(TypeError):
+    with pytest.raises(TypeError):
         is_quantity_close(300 * unit.kelvin, 1 * unit.atmosphere)
 
 
@@ -491,7 +490,7 @@ class TestRestorableOpenMMObject:
         if int(openmm.__version__[0]) < 8:
             pass
         else:
-            with nose.tools.assert_raises(openmm.OpenMMException):
+            with pytest.raises(openmm.OpenMMException):
                 openmm.Context(system, copy.deepcopy(self.dummy_integrator))
 
     def test_restorable_openmm_object_failure(self):
@@ -499,7 +498,7 @@ class TestRestorableOpenMMObject:
         force = openmm.CustomBondForce("0.0")
         force_hash_parameter_name = self.dummy_force._hash_parameter_name
         force.addGlobalParameter(force_hash_parameter_name, 15.0)
-        with nose.tools.assert_raises(RestorableOpenMMObjectError):
+        with pytest.raises(RestorableOpenMMObjectError):
             RestorableOpenMMObject.restore_interface(force)
 
     def test_restorable_openmm_object_hash_collisions(self):
@@ -651,7 +650,7 @@ class TestEquilibrationUtils:
             )
 
     # TODO: Marking as not a test until we solve our GPU CI
-    @nottest
+    @pytest.mark.slow
     def test_gentle_equilibration_cuda(self):
         """
         Test gentle equilibration implementation using the Alanine dipeptide in explicit solvent
