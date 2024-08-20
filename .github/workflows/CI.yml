@@ -69,7 +69,6 @@ jobs:
             channels:
               - conda-forge
               - jaimergp/label/unsupported-cudatoolkit-shim
-
             
       - name: Install package
         run: |
@@ -86,5 +85,5 @@ jobs:
         with:
           file: ./coverage.xml
           flags: unittests
-          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}-openmm-${{ matrix.openmm }}
+          name: codecov-${{ matrix.os }}-py${{ matrix.python-version }}-openmm-${{ matrix.openmm }}-pymbar-${{ matrix.pymbar-version }}
           token: ${{ secrets.CODECOV_TOKEN }}
