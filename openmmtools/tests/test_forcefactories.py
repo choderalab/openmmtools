@@ -13,8 +13,6 @@ Test force factories in forcefactories.py.
 # GLOBAL IMPORTS
 # =============================================================================
 
-from functools import partial
-
 from openmmtools.forcefactories import *
 from openmmtools import testsystems, states
 
@@ -206,16 +204,13 @@ def test_replace_reaction_field():
         positions = generate_new_positions(test_system.system, test_system.positions)
 
         # Test forces.
-        f = partial(
-            compare_system_forces,
+        compare_system_forces(
             test_system.system,
             modified_rf_system,
             positions,
             name=test_name,
             platform=platform,
         )
-        f.description = f"Testing replace_reaction_field on system {test_name}"
-        yield f
 
     for test_system in test_cases:
         test_name = test_system.__class__.__name__
@@ -229,15 +224,10 @@ def test_replace_reaction_field():
         positions = generate_new_positions(test_system.system, test_system.positions)
 
         # Test forces.
-        f = partial(
-            compare_system_forces,
+        compare_system_forces(
             test_system.system,
             modified_rf_system,
             positions,
             name=test_name,
             platform=platform,
         )
-        f.description = (
-            f"Testing replace_reaction_field on system {test_name} with shifted=True"
-        )
-        yield f

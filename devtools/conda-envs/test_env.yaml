@@ -23,10 +23,9 @@ dependencies:
   - sphinxcontrib-bibtex
     # Testing
   - codecov
-  - nose
-  - nose-timer
   - pytest
   - pytest-cov
+  - pytest-xdist
   - coverage
   
   # docs

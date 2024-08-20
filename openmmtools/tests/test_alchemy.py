@@ -21,12 +21,10 @@ import sys
 import zlib
 import pickle
 import itertools
-from functools import partial
 
-import nose
 import scipy
 import numpy as np
-from nose.plugins.attrib import attr
+import pytest
 
 import openmm
 from openmm import unit
@@ -1788,14 +1786,14 @@ def test_resolve_alchemical_region():
 
         # An exception is if indices are not part of the system.
         alchemical_region = AlchemicalRegion(alchemical_atoms=[10000000])
-        with nose.tools.assert_raises(ValueError):
+        with pytest.raises(ValueError):
             AbsoluteAlchemicalFactory._resolve_alchemical_region(
                 system, alchemical_region
             )
 
         # An exception is raised if nothing is defined.
         alchemical_region = AlchemicalRegion()
-        with nose.tools.assert_raises(ValueError):
+        with pytest.raises(ValueError):
             AbsoluteAlchemicalFactory._resolve_alchemical_region(
                 system, alchemical_region
             )
@@ -2029,9 +2027,7 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in test_cases.items():
-            f = partial(check_split_force_groups, alchemical_system)
-            f.description = f"Testing force splitting among groups of {test_name}"
-            yield f
+            check_split_force_groups(alchemical_system)
 
     def test_fully_interacting_energy(self):
         """Compare the energies of reference and fully interacting alchemical system."""
@@ -2040,15 +2036,12 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in self.test_cases.items():
-            f = partial(
-                compare_system_energies,
+            compare_system_energies(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = f"Testing fully interacting energy of {test_name}"
-            yield f
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
@@ -2057,17 +2050,14 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in self.test_cases.items():
-            f = partial(
-                check_noninteracting_energy_components,
+            check_noninteracting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = f"Testing non-interacting energy of {test_name}"
-            yield f
 
-    @attr("slow")
+    @pytest.mark.slow
     def test_fully_interacting_energy_components(self):
         """Test interacting state energy by force component."""
         # This is a very expensive but very informative test. We can
@@ -2078,17 +2068,14 @@ class TestAbsoluteAlchemicalFactory:
             alchemical_system,
             alchemical_region,
         ) in test_cases.items():
-            f = partial(
-                check_interacting_energy_components,
+            check_interacting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = "Testing energy components of %s..." % test_name
-            yield f
 
-    @attr("slow")
+    @pytest.mark.slow
     def test_platforms(self):
         """Test interacting and noninteracting energies on all platforms."""
         global GLOBAL_ALCHEMY_PLATFORM
@@ -2113,29 +2100,23 @@ class TestAbsoluteAlchemicalFactory:
                 alchemical_system,
                 alchemical_region,
             ) in self.test_cases.items():
-                f = partial(
-                    compare_system_energies,
+                compare_system_energies(
+                        test_system.system,
+                    alchemical_system,
+                    alchemical_region,
+                    test_system.positions,
+                )
+                check_noninteracting_energy_components(
                     test_system.system,
                     alchemical_system,
                     alchemical_region,
                     test_system.positions,
                 )
-                f.description = f"Test fully interacting energy of {test_name} on {platform.getName()}"
-                yield f
-                f = partial(
-                    check_noninteracting_energy_components,
-                    test_system.system,
-                    alchemical_system,
-                    alchemical_region,
-                    test_system.positions,
-                )
-                f.description = f"Test non-interacting energy of {test_name} on {platform.getName()}"
-                yield f
 
         # Restore global platform
         GLOBAL_ALCHEMY_PLATFORM = old_global_platform
 
-    @attr("slow")
+    @pytest.mark.slow
     def test_overlap(self):
         """Tests overlap between reference and alchemical systems."""
         for test_name, (
@@ -2146,16 +2127,13 @@ class TestAbsoluteAlchemicalFactory:
             # cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
-            f = partial(
-                overlap_check,
+            overlap_check(
                 test_system.system,
                 alchemical_system,
                 test_system.positions,
                 cached_trajectory_filename=cached_trajectory_filename,
                 name=test_name,
             )
-            f.description = f"Testing reference/alchemical overlap for {test_name}"
-            yield f
 
 
 class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
@@ -2387,9 +2365,7 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             region_names = []
             for region in alchemical_region:
                 region_names.append(region.name)
-            f = partial(check_split_force_groups, alchemical_system, region_names)
-            f.description = f"Testing force splitting among groups of {test_name}"
-            yield f
+            check_split_force_groups(alchemical_system, region_names)
 
     def test_noninteracting_energy_components(self):
         """Check all forces annihilated/decoupled when their lambda variables are zero."""
@@ -2398,17 +2374,14 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             alchemical_system,
             alchemical_region,
         ) in self.test_cases.items():
-            f = partial(
-                check_multi_noninteracting_energy_components,
+            check_multi_noninteracting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = f"Testing non-interacting energy of {test_name}"
-            yield f
 
-    @attr("slow")
+    @pytest.mark.slow
     def test_platforms(self):
         """Test interacting and noninteracting energies on all platforms."""
         global GLOBAL_ALCHEMY_PLATFORM
@@ -2433,29 +2406,23 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
                 alchemical_system,
                 alchemical_region,
             ) in self.test_cases.items():
-                f = partial(
-                    compare_system_energies,
+                compare_system_energies(
+                        test_system.system,
+                    alchemical_system,
+                    alchemical_region,
+                    test_system.positions,
+                )
+                check_multi_noninteracting_energy_components(
                     test_system.system,
                     alchemical_system,
                     alchemical_region,
                     test_system.positions,
                 )
-                f.description = f"Test fully interacting energy of {test_name} on {platform.getName()}"
-                yield f
-                f = partial(
-                    check_multi_noninteracting_energy_components,
-                    test_system.system,
-                    alchemical_system,
-                    alchemical_region,
-                    test_system.positions,
-                )
-                f.description = f"Test non-interacting energy of {test_name} on {platform.getName()}"
-                yield f
 
         # Restore global platform
         GLOBAL_ALCHEMY_PLATFORM = old_global_platform
 
-    @attr("slow")
+    @pytest.mark.slow
     def test_fully_interacting_energy_components(self):
         """Test interacting state energy by force component."""
         # This is a very expensive but very informative test. We can
@@ -2466,15 +2433,12 @@ class TestMultiRegionAbsoluteAlchemicalFactory(TestAbsoluteAlchemicalFactory):
             alchemical_system,
             alchemical_region,
         ) in test_cases.items():
-            f = partial(
-                check_multi_interacting_energy_components,
+            check_multi_interacting_energy_components(
                 test_system.system,
                 alchemical_system,
                 alchemical_region,
                 test_system.positions,
             )
-            f.description = "Testing energy components of %s..." % test_name
-            yield f
 
 
 class TestDispersionlessAlchemicalFactory:
@@ -2560,19 +2524,16 @@ class TestDispersionlessAlchemicalFactory:
             # cached_trajectory_filename = os.path.join(os.environ['HOME'], '.cache', 'alchemy', 'tests',
             #                                           test_name + '.pickle')
             cached_trajectory_filename = None
-            f = partial(
-                overlap_check,
+            overlap_check(
                 test_system.system,
                 alchemical_system,
                 test_system.positions,
                 cached_trajectory_filename=cached_trajectory_filename,
                 name=test_name,
             )
-            f.description = f"Testing reference/alchemical overlap for no alchemical dispersion {test_name}"
-            yield f
 
 
-@attr("slow")
+@pytest.mark.slow
 class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
     """Test AbsoluteAlchemicalFactory class with a more comprehensive set of systems."""
 
@@ -2712,7 +2673,7 @@ class TestAlchemicalState:
     def test_constructor():
         """Test AlchemicalState constructor behave as expected."""
         # Raise an exception if parameter is not recognized.
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             AlchemicalState(lambda_electro=1.0)
 
         # Properties are initialized correctly.
@@ -2734,7 +2695,7 @@ class TestAlchemicalState:
     def test_from_system_constructor(self):
         """Test AlchemicalState.from_system constructor."""
         # A non-alchemical system raises an error.
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             AlchemicalState.from_system(testsystems.AlanineDipeptideVacuum().system)
 
         # Valid parameters are 1.0 by default in AbsoluteAlchemicalFactory,
@@ -2785,7 +2746,7 @@ class TestAlchemicalState:
             defined_lambdas.pop()  # Remove one element.
             kwargs = dict.fromkeys(defined_lambdas, 1.0)
             alchemical_state = AlchemicalState(**kwargs)
-            with nose.tools.assert_raises(AlchemicalStateError):
+            with pytest.raises(AlchemicalStateError):
                 alchemical_state.apply_to_system(state.system)
 
         # Raise an error if an extra parameter is defined in the state.
@@ -2796,7 +2757,7 @@ class TestAlchemicalState:
             defined_lambdas.add("lambda_bonds")  # Add extra parameter.
             kwargs = dict.fromkeys(defined_lambdas, 1.0)
             alchemical_state = AlchemicalState(**kwargs)
-            with nose.tools.assert_raises(AlchemicalStateError):
+            with pytest.raises(AlchemicalStateError):
                 alchemical_state.apply_to_system(state.system)
 
     def test_check_system_consistency(self):
@@ -2806,17 +2767,17 @@ class TestAlchemicalState:
         alchemical_state.check_system_consistency(self.alanine_state.system)
 
         # Raise error if system has MORE lambda parameters.
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             alchemical_state.check_system_consistency(self.full_alanine_state.system)
 
         # Raise error if system has LESS lambda parameters.
         alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             alchemical_state.check_system_consistency(self.alanine_state.system)
 
         # Raise error if system has different lambda values.
         alchemical_state.lambda_bonds = 0.5
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             alchemical_state.check_system_consistency(self.full_alanine_state.system)
 
     def test_apply_to_context(self):
@@ -2826,14 +2787,14 @@ class TestAlchemicalState:
         # Raise error if Context has more parameters than AlchemicalState.
         alchemical_state = AlchemicalState.from_system(self.alanine_state.system)
         context = self.full_alanine_state.create_context(copy.deepcopy(integrator))
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             alchemical_state.apply_to_context(context)
         del context
 
         # Raise error if AlchemicalState is applied to a Context with missing parameters.
         alchemical_state = AlchemicalState.from_system(self.full_alanine_state.system)
         context = self.alanine_state.create_context(copy.deepcopy(integrator))
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             alchemical_state.apply_to_context(context)
         del context
 
@@ -2931,7 +2892,7 @@ class TestAlchemicalState:
         assert alchemical_state.get_function_variable("lambda2") == 0.5
 
         # Cannot call an alchemical variable as a supported parameter.
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             alchemical_state.set_function_variable("lambda_sterics", 0.5)
 
         # Assign string alchemical functions to parameters.
@@ -3022,11 +2983,11 @@ class TestAlchemicalState:
         # Setting an inconsistent alchemical system raise an error.
         system = compound_state.system
         incompatible_state.apply_to_system(system)
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             compound_state.system = system
 
         # Same for set_system when called with default arguments.
-        with nose.tools.assert_raises(AlchemicalStateError):
+        with pytest.raises(AlchemicalStateError):
             compound_state.set_system(system)
 
         # This doesn't happen if we fix the state.

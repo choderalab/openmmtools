@@ -194,7 +194,7 @@ def test_stabilities():
                 "Testing {} for stability over a short number of "
                 "integration steps of a {}."
             ).format(integrator_name, test_name)
-            yield check_stability, integrator, test
+            check_stability(integrator, test)
 
 
 def test_integrator_decorators():
@@ -858,7 +858,7 @@ def test_temperature_getter_setter():
 
         # Integrator temperature is initialized correctly.
         check_integrator_temperature(integrator, temperature, 1)
-        yield check_integrator_temperature_getter_setter, integrator
+        check_integrator_temperature_getter_setter(integrator)
         del context
 
         # Test Context integrator wrapper.
@@ -876,7 +876,7 @@ def test_temperature_getter_setter():
         assert ThermostatedIntegrator.is_thermostated(integrator) is True
         assert ThermostatedIntegrator.restore_interface(integrator) is True
         assert isinstance(integrator, integrator_class)
-        yield check_integrator_temperature_getter_setter, integrator
+        check_integrator_temperature_getter_setter(integrator)
         del context
 
 

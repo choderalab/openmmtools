@@ -9,11 +9,10 @@ except ImportError:  # OpenMM < 7.6
 
 import os, os.path
 import logging
-from nose.tools import assert_raises
+import pytest
 
 from openmmtools import testsystems
 
-from functools import partial
 
 
 def _equiv_topology(top_1, top_2):
@@ -105,10 +104,7 @@ def test_properties_all_testsystems():
             print(e)
             print("Skipping %s due to missing dependency" % class_name)
             continue
-        f = partial(check_properties, testsystem)
-        f.description = "Testing properties for testsystem %s" % class_name
-        logging.info(f.description)
-        yield f
+        check_properties(testsystem)
 
 
 fast_testsystems = [
@@ -209,9 +205,7 @@ def test_energy_all_testsystems(skip_slow_tests=True):
             print(e)
             print("Skipping %s due to missing dependency" % class_name)
             continue
-        f = partial(check_potential_energy, testsystem.system, testsystem.positions)
-        f.description = "Testing potential energy for testsystem %s" % class_name
-        yield f
+        check_potential_energy(testsystem.system, testsystem.positions)
 
 
 def check_topology(system, topology):
@@ -242,9 +236,7 @@ def test_topology_all_testsystems():
             print(e)
             print("Skipping %s due to missing dependency" % class_name)
             continue
-        f = partial(check_topology, testsystem.system, testsystem.topology)
-        f.description = "Testing topology for testsystem %s" % class_name
-        yield f
+        check_topology(testsystem.system, testsystem.topology)
 
 
 def test_dw_systems_as_wca():
@@ -268,14 +260,14 @@ def test_dw_systems_1_dimer():
 
 
 def test_double_well_dimer_errors():
-    with assert_raises(ValueError) as context:
+    with pytest.raises(ValueError):
         testsystems.DoubleWellDimer_WCAFluid(ndimers=-1)
-    with assert_raises(ValueError) as context:
+    with pytest.raises(ValueError):
         testsystems.DoubleWellDimer_WCAFluid(ndimers=6, nparticles=10)
 
 
 def test_double_well_chain_errors():
-    with assert_raises(ValueError) as context:
+    with pytest.raises(ValueError):
         testsystems.DoubleWellChain_WCAFluid(nchained=-1)
-    with assert_raises(ValueError) as context:
+    with pytest.raises(ValueError):
         testsystems.DoubleWellChain_WCAFluid(nchained=11, nparticles=10)

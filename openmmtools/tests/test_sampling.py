@@ -26,8 +26,8 @@ from io import StringIO
 
 import numpy as np
 import yaml
-from nose.plugins.attrib import attr
-from nose.tools import assert_raises
+
+import pytest
 
 try:
     import openmm
@@ -200,9 +200,8 @@ class TestHarmonicOscillatorsMultiStateSampler:
 
             # Create Analyzer specfiying statistical_inefficiency without n_equilibration_iterations and
             # check that it throws an exception
-            assert_raises(
-                Exception, self.ANALYZER, reporter, statistical_inefficiency=10
-            )
+            with pytest.raises(Exception, match="Cannot specify statistical_inefficiency without n_equilibration_iterations, because otherwise n_equilibration_iterations cannot be computed for the given statistical_inefficiency."):
+                self.ANALYZER(reporter, statistical_inefficiency=10)
 
             # Create Analyzer specifying n_equilibration_iterations=10 without statistical_inefficiency and
             # check that equilibration detection returns n_equilibration_iterations > 10
@@ -669,8 +668,10 @@ class TestReporter:
             reporter._ensure_dimension_exists("dim1", 0)
             reporter._ensure_dimension_exists("dim2", 1)
             # These should raise an exception
-            assert_raises(ValueError, reporter._ensure_dimension_exists, "dim1", 1)
-            assert_raises(ValueError, reporter._ensure_dimension_exists, "dim2", 2)
+            with pytest.raises(ValueError):
+                reporter._ensure_dimension_exists("dim1", 1)
+            with pytest.raises(ValueError):
+                reporter._ensure_dimension_exists("dim2", 2)
 
     def test_store_dict(self):
         """Check correct storage and restore of dictionaries."""
@@ -1796,7 +1797,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             energies, _, _ = reporter.read_energies(slice(-1, None, -1))
             assert np.all(energies == all_energies[last_index::-1])
             # Errors
-            with assert_raises(IndexError):
+            with pytest.raises(IndexError):
                 reporter.read_energies(7)
 
     def test_separate_checkpoint_file(self):
@@ -1837,7 +1838,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             )
             reporter_mod.close()
             del reporter_main, reporter_mod
-            with assert_raises(IOError):
+            with pytest.raises(IOError):
                 self.REPORTER(
                     storage_path, checkpoint_storage=cp_file_mod, open_mode="r"
                 )
@@ -2176,7 +2177,7 @@ class TestReplicaExchange(TestMultiStateSampler):
         )
         self.actual_stored_properties_check(additional_properties=additional_values)
 
-    @attr("slow")  # Skip on Travis-CI
+    @pytest.mark.slow  # Skip on Travis-CI
     def test_uniform_mixing(self):
         """Test that mixing is uniform for a sequence of harmonic oscillators.
 

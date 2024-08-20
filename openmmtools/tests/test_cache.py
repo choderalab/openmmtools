@@ -15,8 +15,6 @@ Test Context cache classes in cache.py.
 
 import itertools
 
-import nose
-
 try:
     from openmm import unit
 except ImportError:  # OpenMM < 7.6
@@ -25,6 +23,8 @@ except ImportError:  # OpenMM < 7.6
 from openmmtools import testsystems, states
 
 from openmmtools.cache import *
+
+import pytest
 
 
 # =============================================================================
@@ -392,44 +392,39 @@ class TestContextCache:
         cache.platform = platforms[1]
         integrator = copy.deepcopy(self.compatible_integrators[0])
         cache.get_context(self.compatible_states[0], integrator)
-        with nose.tools.assert_raises(RuntimeError):
+        with pytest.raises(RuntimeError):
             cache.platform = platforms[0]
 
     def test_platform_properties(self):
         # Failure tests
         # no platform specified
         platform_properties = {"CpuThreads": "2"}
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError) as cm:
             ContextCache(platform=None, platform_properties=platform_properties)
         # non-string value in properties
         cpu_platform = openmm.Platform.getPlatformByName("CPU")
         ref_platform = openmm.Platform.getPlatformByName("Reference")
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError, match="All platform properties must be strings."):
             ContextCache(platform=cpu_platform, platform_properties={"CpuThreads": 2})
-        assert "All platform properties must be strings." in str(cm.exception)
         # non-dict properties
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError, match="platform_properties must be a dictionary"):
             ContextCache(platform=cpu_platform, platform_properties="jambalaya")
-        assert str(cm.exception) == "platform_properties must be a dictionary"
         # invalid property
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError, match="Invalid platform property for this platform."):
             ContextCache(platform=cpu_platform, platform_properties={"jambalaya": "2"})
-        assert "Invalid platform property for this platform." in str(cm.exception)
 
         # setter
         cache = ContextCache(
             platform=cpu_platform, platform_properties=platform_properties
         )
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError, match="Invalid platform property for this platform."):
             cache.platform = ref_platform
-        assert "Invalid platform property for this platform." in str(cm.exception)
         # this should work
         cache.set_platform(ref_platform)
         assert cache.platform == ref_platform
         # assert errors are checked in set_platform
-        with nose.tools.assert_raises(ValueError) as cm:
+        with pytest.raises(ValueError, match="Invalid platform property for this platform."):
             cache.set_platform(cpu_platform, platform_properties={"jambalaya": "2"})
-        assert "Invalid platform property for this platform." in str(cm.exception)
         # assert that resetting the platform resets the properties
         cache = ContextCache(
             platform=cpu_platform, platform_properties=platform_properties

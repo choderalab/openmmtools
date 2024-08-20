@@ -22,10 +22,9 @@ import contextlib
 import tempfile
 from openmmtools.utils import temporary_directory
 
-from nose import tools
-
 from openmmtools.storage import StorageInterface, NetCDFIODriver
 
+import pytest
 
 # =============================================================================================
 # TEST HELPER FUNCTIONS
@@ -52,14 +51,14 @@ def test_storage_interface_creation():
         assert si.storage_driver.ncfile.getncattr("name") == "data"
 
 
-@tools.raises(Exception)
 def test_read_trap():
     """Test that attempting to read a non-existent file fails"""
     with temporary_directory() as tmp_dir:
         test_store = tmp_dir + "/teststore.nc"
         driver = spawn_driver(test_store)
         si = StorageInterface(driver)
-        si.var1.read()
+        with pytest.raises(KeyError):
+            si.var1.read()
 
 
 def test_variable_write_read():
