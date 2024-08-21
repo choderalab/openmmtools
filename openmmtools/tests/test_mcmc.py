@@ -525,23 +525,20 @@ def test_move_restart():
     reference_platform = openmm.Platform.getPlatformByName("Reference")
     context_cache = cache.ContextCache(platform=reference_platform)
     move = MyMove(context_cache=context_cache)
-    with pytest.raises(IntegratorMoveError):
+    with pytest.raises(IntegratorMoveError) as excinfo:
         move.apply(thermodynamic_state, sampler_state, context_cache=context_cache)
 
     # We have counted the correct number of restart attempts.
     assert move.attempted_count == n_restart_attempts + 1
 
     # Test serialization of the error.
-    # TODO: MMH
-    # cm used to be a with error as cm
-    # we can get this test working again, just need to inspect the message
-    # with utils.temporary_directory() as tmp_dir:
-    #    prefix = os.path.join(tmp_dir, "prefix")
-    #    cm.exception.serialize_error(prefix)
-    #    assert os.path.exists(prefix + "-move.json")
-    #    assert os.path.exists(prefix + "-system.xml")
-    #    assert os.path.exists(prefix + "-integrator.xml")
-    #    assert os.path.exists(prefix + "-state.xml")
+    with utils.temporary_directory() as tmp_dir:
+        prefix = os.path.join(tmp_dir, "prefix")
+        excinfo.value.serialize_error(prefix)
+        assert os.path.exists(prefix + "-move.json")
+        assert os.path.exists(prefix + "-system.xml")
+        assert os.path.exists(prefix + "-integrator.xml")
+        assert os.path.exists(prefix + "-state.xml")
 
 
 def test_metropolized_moves():
