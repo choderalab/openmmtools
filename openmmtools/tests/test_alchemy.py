@@ -2540,7 +2540,7 @@ class TestAbsoluteAlchemicalFactorySlow(TestAbsoluteAlchemicalFactory):
     @classmethod
     def define_systems(cls):
         """Create test systems and shared objects."""
-        cls.test_systems = dict()
+        super().define_systems()
         cls.test_systems["LennardJonesFluid without dispersion correction"] = (
             testsystems.LennardJonesFluid(nparticles=100, dispersion_correction=False)
         )
