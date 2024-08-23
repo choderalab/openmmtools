@@ -15,7 +15,6 @@ Test combinations of custom integrators and testsystems to make sure there are n
 
 import re
 import inspect
-from functools import partial
 
 try:
     import openmm
@@ -110,8 +109,4 @@ def test_integrators_and_testsystems():
             # because it is being initialized without a system. That's OK.
 
             # Create test.
-            f = partial(check_combination, integrator, testsystem, platform)
-            f.description = "Checking combination of {} and {}".format(
-                integrator_name, testsystem_name
-            )
-            yield f
+            check_combination(integrator, testsystem, platform)
