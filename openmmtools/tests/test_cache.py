@@ -168,7 +168,7 @@ class TestContextCache:
     """Test ContextCache class."""
 
     @classmethod
-    def setup_class(cls):
+    def setup_method(cls):
         """Create the thermodynamic states used in the test suite."""
         water_test = testsystems.WaterBox(box_edge=2.0 * unit.nanometer)
         cls.water_300k = states.ThermodynamicState(water_test.system, 300 * unit.kelvin)

@@ -379,7 +379,7 @@ class TestRestorableOpenMMObject:
     """Test the RestorableOpenMMObject utility class."""
 
     @classmethod
-    def setup_class(cls):
+    def setup_method(cls):
         """Example restorable classes for tests."""
 
         class DummyRestorableCustomForce(
