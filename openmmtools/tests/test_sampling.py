@@ -101,7 +101,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
     ANALYZER = MultiStateSamplerAnalyzer
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         # Configure the global context cache to use the Reference platform
         from openmmtools import cache
 
@@ -886,7 +886,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
     # --------------------------------
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Shared test cases and variables."""
         # Test case with alanine in vacuum at 3 different positions and temperatures.
         # ---------------------------------------------------------------------------

@@ -57,7 +57,7 @@ class TestThermodynamicState:
     """Test suite for states.ThermodynamicState class."""
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create the test systems used in the test suite."""
         cls.std_pressure = ThermodynamicState._STANDARD_PRESSURE
         cls.std_temperature = ThermodynamicState._STANDARD_TEMPERATURE
@@ -1179,7 +1179,7 @@ class TestSamplerState:
     """Test suite for states.SamplerState class."""
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create various variables shared by tests in suite."""
         temperature = 300 * unit.kelvin
         alanine_vacuum = testsystems.AlanineDipeptideVacuum()
@@ -1627,7 +1627,7 @@ class TestCompoundThermodynamicState:
         return force.getGlobalParameterDefaultValue(parameter_id)
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create various variables shared by tests in suite."""
         cls.std_pressure = ThermodynamicState._STANDARD_PRESSURE
         cls.std_temperature = ThermodynamicState._STANDARD_TEMPERATURE
@@ -1904,7 +1904,7 @@ class TestGlobalParameterState:
     """
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create test systems and shared objects."""
         # Define a diatomic molecule System with two custom forces
         # using the simple version and the suffix'ed version.

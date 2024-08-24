@@ -1803,7 +1803,7 @@ class TestAbsoluteAlchemicalFactory:
     """Test AbsoluteAlchemicalFactory class."""
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create test systems and shared objects."""
         cls.define_systems()
         cls.define_regions()
@@ -2448,7 +2448,7 @@ class TestDispersionlessAlchemicalFactory:
     """
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create test systems and shared objects."""
         cls.define_systems()
         cls.define_regions()
@@ -2606,7 +2606,7 @@ class TestAlchemicalState:
     """Test AlchemicalState compatibility with CompoundThermodynamicState."""
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         """Create test systems and shared objects."""
         alanine_vacuum = testsystems.AlanineDipeptideVacuum()
         alanine_explicit = testsystems.AlanineDipeptideExplicit()

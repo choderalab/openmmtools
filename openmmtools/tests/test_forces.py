@@ -131,7 +131,7 @@ class TestRadiallySymmetricRestraints:
     """Test radially symmetric receptor-ligand restraint classes."""
 
     @classmethod
-    def setup_method(cls):
+    def setup_class(cls):
         cls.well_radius = 12.0 * unit.angstroms
         cls.spring_constant = 15000.0 * unit.joule / unit.mole / unit.nanometers**2
         cls.restrained_atom_indices1 = [2, 3, 4]
