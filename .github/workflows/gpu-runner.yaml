@@ -69,7 +69,7 @@ jobs:
 
       - name: "Run tests"
         run: |
-          pytest -n 4 -v --durations=10 --cov=openmmtools --cov-report=term
+          pytest -n 4 -v --durations=10 --cov=openmmtools --cov-report=term --runslow openmmtools/tests
 
   stop-aws-runner:
     runs-on: ubuntu-latest
