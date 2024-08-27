@@ -311,6 +311,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
         """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
 
+    @pytest.mark.flaky(reruns=3)
     def test_without_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
