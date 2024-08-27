@@ -1,6 +1,9 @@
 name: Self-Hosted Runner
 on:
   workflow_dispatch:
+  schedule:
+    # At 07:00 UTC daily.
+    - cron: "0 7 * * *"
 
 jobs:
   start-aws-runner:
