@@ -6,6 +6,7 @@ dependencies:
   - cython
   - mdtraj
   - mpiplus
+  - netcdf4
   - numba
   - numpy
   - openmm
@@ -19,12 +20,11 @@ dependencies:
   - sphinxcontrib-bibtex
   # Testing
   - codecov
+  - coverage
   - pytest
   - pytest-cov
   - pytest-xdist
-  - coverage
-  
   # docs
   - numpydoc
-  - sphinxcontrib-bibtex
   - sphinx-rtd-theme
+  - sphinxcontrib-bibtex
