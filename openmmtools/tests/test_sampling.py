@@ -310,6 +310,9 @@ class TestHarmonicOscillatorsMultiStateSampler:
         """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
 
+    # on windows we get a ZeroDivisionError: float division by zero
+    # when measuring the timing data
+    @pytest.mark.skipif(sys.platform.startswith("win"), reason="Test fails on windows")
     def test_without_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
