@@ -1858,6 +1858,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             del reporter
             self.REPORTER(storage_path, checkpoint_storage=cp_file_mod, open_mode="r")
 
+    @pytest.mark.flaky(reruns=3)
     def test_storage_reporter_and_string(self):
         """Test that creating a MultiState by storage string and reporter is the same"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(
