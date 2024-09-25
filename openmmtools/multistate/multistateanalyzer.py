@@ -24,6 +24,7 @@ import abc
 import copy
 import inspect
 import logging
+from packaging.version import Version
 import re
 from typing import Optional, NamedTuple, Union
 
@@ -37,6 +38,7 @@ except ImportError:  # OpenMM < 7.6
     import simtk.unit as units
 from scipy.special import logsumexp
 
+from openmmtools.multistate import pymbar
 from openmmtools import multistate, utils, forces
 from openmmtools.multistate.pymbar import (
     statistical_inefficiency_multiple,
@@ -566,6 +568,11 @@ class PhaseAnalyzer(ABC):
         self._reference_states = None  # Initialize the cache object.
         self.reference_states = reference_states
         self._user_extra_analysis_kwargs = analysis_kwargs  # Store the user-specified (higher priority) keywords
+
+        # If we are using pymbar 4, change the default behavior to use the robust solver protocol if the user
+        # didn't set a kwarg to control the solver protocol
+        if Version(pymbar.version.short_version) >= Version("4") and "solver_protocol" not in self._user_extra_analysis_kwargs:
+            self._user_extra_analysis_kwargs["solver_protocol"] = "robust"
 
         # Initialize cached values that are read or derived from the Reporter.
         self._cache = {}  # This cache should be always set with _update_cache().
