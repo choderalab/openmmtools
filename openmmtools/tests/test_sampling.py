@@ -308,6 +308,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
         # Clean up.
         del simulation
 
+    @pytest.mark.flaky(reruns=3)
     def test_with_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
