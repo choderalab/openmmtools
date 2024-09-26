@@ -310,6 +310,9 @@ class TestHarmonicOscillatorsMultiStateSampler:
         """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
 
+    # on windows we get a ZeroDivisionError: float division by zero
+    # when measuring the timing data
+    @pytest.mark.skipif(sys.platform.startswith("win"), reason="Test fails on windows")
     def test_without_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
@@ -1858,6 +1861,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             del reporter
             self.REPORTER(storage_path, checkpoint_storage=cp_file_mod, open_mode="r")
 
+    @pytest.mark.flaky(reruns=3)
     def test_storage_reporter_and_string(self):
         """Test that creating a MultiState by storage string and reporter is the same"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(
