@@ -571,7 +571,7 @@ class PhaseAnalyzer(ABC):
 
         # If we are using pymbar 4, change the default behavior to use the robust solver protocol if the user
         # didn't set a kwarg to control the solver protocol
-        if Version(pymbar.version.short_version) >= Version("4") and "solver_protocol" not in self._user_extra_analysis_kwargs:
+        if Version(pymbar.__version__) >= Version("4") and "solver_protocol" not in self._user_extra_analysis_kwargs:
             self._user_extra_analysis_kwargs["solver_protocol"] = "robust"
 
         # Initialize cached values that are read or derived from the Reporter.
