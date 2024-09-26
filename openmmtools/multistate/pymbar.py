@@ -10,7 +10,7 @@ try:
         subsample_correlated_data,
         statistical_inefficiency
     )
-    from pymbar import MBAR
+    from pymbar import MBAR, __version__
     from pymbar.utils import ParameterError
 except ImportError:
     # pymbar < 4
@@ -20,7 +20,7 @@ except ImportError:
         subsampleCorrelatedData as subsample_correlated_data,
         statisticalInefficiency as statistical_inefficiency
     )
-    from pymbar import MBAR
+    from pymbar import MBAR, __version__
     from pymbar.utils import ParameterError
 
 
