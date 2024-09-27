@@ -1,17 +1,17 @@
 #!/usr/local/bin/env python
 
-#=============================================================================================
+# =============================================================================================
 # MODULE DOCSTRING
-#=============================================================================================
+# =============================================================================================
 
 """
 Test combinations of custom integrators and testsystems to make sure there are no namespace collisions.
 
 """
 
-#=============================================================================================
+# =============================================================================================
 # GLOBAL IMPORTS
-#=============================================================================================
+# =============================================================================================
 
 import re
 import inspect
@@ -24,15 +24,16 @@ except ImportError:  # OpenMM < 7.6
     from simtk import unit
     from simtk import openmm
 
-#=============================================================================================
+# =============================================================================================
 # CONSTANTS
-#=============================================================================================
+# =============================================================================================
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA
 
-#=============================================================================================
+# =============================================================================================
 # UTILITY SUBROUTINES
-#=============================================================================================
+# =============================================================================================
+
 
 def check_combination(integrator, test, platform=None):
     """
@@ -59,9 +60,10 @@ def check_combination(integrator, test, platform=None):
     return
 
 
-#=============================================================================================
+# =============================================================================================
 # TESTS
-#=============================================================================================
+# =============================================================================================
+
 
 def test_integrators_and_testsystems():
     """
@@ -71,19 +73,22 @@ def test_integrators_and_testsystems():
     from openmmtools import integrators, testsystems
 
     # Get all the CustomIntegrators in the integrators module.
-    is_integrator = lambda x: (inspect.isclass(x) and
-                               issubclass(x, openmm.CustomIntegrator) and
-                               x != integrators.ThermostatedIntegrator)
+    is_integrator = lambda x: (
+        inspect.isclass(x)
+        and issubclass(x, openmm.CustomIntegrator)
+        and x != integrators.ThermostatedIntegrator
+    )
     custom_integrators = inspect.getmembers(integrators, predicate=is_integrator)
 
     def all_subclasses(cls):
         """Return list of all subclasses and subsubclasses for a given class."""
         return cls.__subclasses__() + [s for s in cls.__subclasses__()]
+
     testsystem_classes = all_subclasses(testsystems.TestSystem)
-    testsystem_names = [ cls.__name__ for cls in testsystem_classes ]
+    testsystem_names = [cls.__name__ for cls in testsystem_classes]
 
     # Use Reference platform.
-    platform = openmm.Platform.getPlatformByName('Reference')
+    platform = openmm.Platform.getPlatformByName("Reference")
 
     for testsystem_name in testsystem_names:
         # Create testsystem.
@@ -106,5 +111,7 @@ def test_integrators_and_testsystems():
 
             # Create test.
             f = partial(check_combination, integrator, testsystem, platform)
-            f.description = "Checking combination of %s and %s" % (integrator_name, testsystem_name)
+            f.description = "Checking combination of {} and {}".format(
+                integrator_name, testsystem_name
+            )
             yield f
