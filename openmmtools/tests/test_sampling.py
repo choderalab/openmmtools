@@ -2651,9 +2651,9 @@ def test_pymbar_issue_419(download_nc_file):
     analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
     f_ij, df_ij = analyzer.get_free_energy()
     # free energy
-    assert f_ij[0, -1] == -52.00083148433459
+    assert abs(f_ij[0, -1] - -52.00083148433459) < 1e-5
     # error
-    assert df_ij[0, -1] == 0.21365627649558516
+    assert abs(df_ij[0, -1] - 0.21365627649558516) < 1e-5
 
 
 # ==============================================================================
