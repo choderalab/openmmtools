@@ -2650,6 +2650,10 @@ def test_pymbar_issue_419(download_nc_file):
     reporter = MultiStateReporter(reporter_file)
     analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
     f_ij, df_ij = analyzer.get_free_energy()
+    # free energy
+    assert f_ij[0, -1] == -52.00083148433459
+    # error
+    assert df_ij[0, -1] == 0.21365627649558516
 
 
 # ==============================================================================
