@@ -2617,6 +2617,9 @@ class TestSerializedMultiStateSampler(TestBaseMultistateSampler):
 
 @pytest.fixture
 def download_nc_file(tmpdir):
+    # See https://github.com/choderalab/pymbar/issues/419#issuecomment-1718386779
+    # and https://github.com/choderalab/openmmtools/pull/735#issuecomment-2378070388
+    # if this file ever starts to 404
     FILE_URL = "https://github.com/user-attachments/files/17156868/ala-thr.zip"
     MAX_RETRIES = 3
     RETRY_DELAY = 2  # Delay between retries (in seconds)
@@ -2643,6 +2646,21 @@ def download_nc_file(tmpdir):
 
 
 def test_pymbar_issue_419(download_nc_file):
+    """
+    This test checks that a nc file from a ala-thr mutation simulation converges.
+
+    With pymbar 4 default (as of 2024-10-02) solver fails to converge.
+    With pymbar 3 defaults, the solver does converge.
+
+    With PR #735 (https://github.com/choderalab/openmmtools/pull/735) we updated
+    the MultiStateSamplerAnalyzer to use the "robust" sampler when using pymbar4.
+
+    See https://github.com/choderalab/pymbar/issues/419#issuecomment-1718386779 for more
+    information on how the file was generated.
+
+    """
+
+
     from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
 
     n_iterations = 1000
