@@ -22,12 +22,14 @@ import pickle
 import shutil
 import sys
 import tempfile
+import time
 from io import StringIO
 
 import numpy as np
 import yaml
 
 import pytest
+import requests
 
 try:
     import openmm
@@ -1863,7 +1865,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             del reporter
             self.REPORTER(storage_path, checkpoint_storage=cp_file_mod, open_mode="r")
 
-    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.skipif(sys.platform == "darwin", reason="seg faults on osx sometimes")
     def test_storage_reporter_and_string(self):
         """Test that creating a MultiState by storage string and reporter is the same"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(
@@ -2613,6 +2615,64 @@ class TestSerializedMultiStateSampler(TestBaseMultistateSampler):
                 assert np.any(
                     state.velocities.value_in_unit_system(unit.md_unit_system) != 0
                 ), "At least some velocity in sampler state from new checkpoint is expected to different from zero."
+
+@pytest.fixture
+def download_nc_file(tmpdir):
+    # See https://github.com/choderalab/pymbar/issues/419#issuecomment-1718386779
+    # and https://github.com/choderalab/openmmtools/pull/735#issuecomment-2378070388
+    # if this file ever starts to 404
+    FILE_URL = "https://github.com/user-attachments/files/17156868/ala-thr.zip"
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # Delay between retries (in seconds)
+    file_name = os.path.join(tmpdir, "ala-thr.nc")
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+          # Send GET request to download the file
+            response = requests.get(FILE_URL, timeout=20)  # Timeout to avoid hanging
+            response.raise_for_status()  # Raise HTTPError for bad responses (4xx/5xx)
+            with open(file_name, "wb") as f:
+                f.write(response.content)
+            # File downloaded successfully, break out of retry loop
+            break
+
+        except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+            retries += 1
+            if retries >= MAX_RETRIES:
+                pytest.fail(f"Failed to download file after {MAX_RETRIES} retries: {e}")
+            else:
+                print(f"Retrying download... ({retries}/{MAX_RETRIES})")
+                time.sleep(RETRY_DELAY)  # Wait before retrying
+    yield file_name
+
+
+def test_pymbar_issue_419(download_nc_file):
+    """
+    This test checks that a nc file from a ala-thr mutation simulation converges.
+
+    With pymbar 4 default (as of 2024-10-02) solver fails to converge.
+    With pymbar 3 defaults, the solver does converge.
+
+    With PR #735 (https://github.com/choderalab/openmmtools/pull/735) we updated
+    the MultiStateSamplerAnalyzer to use the "robust" sampler when using pymbar4.
+
+    See https://github.com/choderalab/pymbar/issues/419#issuecomment-1718386779 for more
+    information on how the file was generated.
+
+    """
+
+
+    from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
+
+    n_iterations = 1000
+    reporter_file = download_nc_file
+    reporter = MultiStateReporter(reporter_file)
+    analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
+    f_ij, df_ij = analyzer.get_free_energy()
+    # free energy
+    assert f_ij[0, -1] == pytest.approx(-52.00083148433459)
+    # error
+    assert df_ij[0, -1] == pytest.approx(0.21365627649558516)
 
 
 # ==============================================================================
