@@ -104,9 +104,9 @@ def run_gentle_equilibration(topology, positions, system, stages, filename, plat
 
         # Set up context
         platform = openmm.Platform.getPlatformByName(platform_name)
-        if platform_name in ['CUDA', 'OpenCL']:
+        if platform_name in ['CUDA', 'OpenCL', 'HIP']:
             platform.setPropertyDefaultValue('Precision', 'mixed')
-        if platform_name in ['CUDA']:
+        if platform_name in ['CUDA', 'HIP']:
             platform.setPropertyDefaultValue('DeterministicForces', 'true')
 
         context = openmm.Context(system_copy, integrator, platform)
