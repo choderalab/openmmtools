@@ -366,7 +366,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
                 print("delta_u_ij")
                 print(delta_u_ij)
                 print("delta_u_ij_analytical")
-                print(-delta_f_ij_analytical)
+                print(0)
                 print("error")
                 print(error)
                 print("stderr")
