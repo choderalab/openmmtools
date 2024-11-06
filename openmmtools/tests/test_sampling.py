@@ -305,10 +305,83 @@ class TestHarmonicOscillatorsMultiStateSampler:
                     % MAX_SIGMA
                 )
 
+            # Check if entropy and enthalpy can be calculated and are within tolerance
+            delta_s_ij, delta_s_ij_stderr = analyzer.get_entropy()
+
+            nstates, _ = delta_s_ij.shape
+
+            if include_unsampled_states:
+                nstates_expected = (
+                    self.N_STATES + 2
+                )  # We expect N_STATES plus two additional states
+            else:
+                nstates_expected = self.N_STATES  # We expect only N_STATES
+
+            assert (
+                nstates == nstates_expected
+            ), f"analyzer.get_entropy() returned {delta_s_ij.shape} but expected {nstates_expected,nstates_expected}"
+
+            error = np.abs(delta_s_ij + delta_f_ij_analytical) # We expect dS = -dF
+            indices = np.where(delta_s_ij_stderr > 0.0)
+            nsigma = np.zeros([nstates, nstates], np.float32)
+            nsigma[indices] = error[indices] / delta_s_ij_stderr[indices]
+            MAX_SIGMA = 6.0  # maximum allowed number of standard errors
+            if np.any(nsigma > MAX_SIGMA):
+                np.set_printoptions(precision=3)
+                print("delta_s_ij")
+                print(delta_s_ij)
+                print("delta_s_ij_analytical")
+                print(-delta_f_ij_analytical)
+                print("error")
+                print(error)
+                print("stderr")
+                print(delta_s_ij_stderr)
+                print("nsigma")
+                print(nsigma)
+                raise Exception(
+                    "Dimensionless (reduced) entropy exceeds MAX_SIGMA of %.1f"
+                    % MAX_SIGMA
+                )
+
+            delta_u_ij, delta_u_ij_stderr = analyzer.get_enthalpy()
+
+            if include_unsampled_states:
+                nstates_expected = (
+                    self.N_STATES + 2
+                )  # We expect N_STATES plus two additional states
+            else:
+                nstates_expected = self.N_STATES  # We expect only N_STATES
+
+            assert (
+                nstates == nstates_expected
+            ), f"analyzer.get_entropy() returned {delta_u_ij.shape} but expected {nstates_expected,nstates_expected}"
+
+            error = np.abs(delta_u_ij) # We expect du = 0
+            indices = np.where(delta_u_ij_stderr > 0.0)
+            nsigma = np.zeros([nstates, nstates], np.float32)
+            nsigma[indices] = error[indices] / delta_u_ij_stderr[indices]
+            MAX_SIGMA = 6.0  # maximum allowed number of standard errors
+            if np.any(nsigma > MAX_SIGMA):
+                np.set_printoptions(precision=3)
+                print("delta_u_ij")
+                print(delta_u_ij)
+                print("delta_u_ij_analytical")
+                print(-delta_f_ij_analytical)
+                print("error")
+                print(error)
+                print("stderr")
+                print(delta_u_ij_stderr)
+                print("nsigma")
+                print(nsigma)
+                raise Exception(
+                    "Dimensionless (reduced) potential (enthalpy) difference exceeds MAX_SIGMA of %.1f"
+                    % MAX_SIGMA
+                )
+
+
         # Clean up.
         del simulation
 
-    @pytest.mark.flaky(reruns=3)
     def test_with_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
