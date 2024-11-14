@@ -29,24 +29,21 @@ jobs:
       fail-fast: false
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
-        openmm: ["8.0", "8.1.1", "8.1.2"]
+        openmm: ["8.1.2", "8.2.0"]
         os: [macOS-latest, ubuntu-latest, macOS-12]
         pymbar-version: ["4"]
         include:
           # Test newest python, openmm, and pymbar we support on windows
-          - openmm: "8.0"
-            python-version: "3.10"
+          - openmm: "8.2"
+            python-version: "3.12"
             os: windows-latest
             pymbar-version: "4"
           # Have one job test pymbar 3 support
-          - openmm: "8.0"
-            python-version: "3.10"
+          - openmm: "8.2"
+            python-version: "3.12"
             os: ubuntu-latest
             pymbar-version: "3"
-        exclude:
-          # no py312 builds of openmm 8.0
-          - openmm: "8.0"
-            python-version: "3.12"
+
 
     steps:
       - uses: actions/checkout@v3
