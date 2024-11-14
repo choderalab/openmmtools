@@ -544,7 +544,7 @@ def platform_supports_precision(platform, precision):
     if platform.getName() == 'CPU':
         return precision in ['mixed']
 
-    if platform.getName() in ['CUDA', 'OpenCL']:
+    if platform.getName() in ['CUDA', 'OpenCL', 'HIP']:
         properties = { 'Precision' : precision }
         system = openmm.System()
         system.addParticle(1.0) # Cannot create Context on a system with no particles

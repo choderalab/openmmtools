@@ -406,10 +406,7 @@ def main():
 
                 for precision_model in precision_models:
                     # Set precision.
-                    if platform_name == 'CUDA':
-                        platform.setPropertyDefaultValue('CudaPrecision', precision_model)
-                    if platform_name == 'OpenCL':
-                        platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
+                    platform.setPropertyDefaultValue('Precision', precision_model)
 
                     # Compute potential and force.
                     [platform_potential, platform_force] = compute_potential_and_force(system, positions, platform)
@@ -505,10 +502,7 @@ def main():
 
                         for precision_model in precision_models:
                             # Set precision.
-                            if platform_name == 'CUDA':
-                                platform.setPropertyDefaultValue('CudaPrecision', precision_model)
-                            if platform_name == 'OpenCL':
-                                platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
+                            platform.setPropertyDefaultValue('Precision', precision_model)
 
                             # Compute potential and force.
                             [platform_potential, platform_force] = compute_potential_and_force_by_force_group(system, positions, platform, force_group)
