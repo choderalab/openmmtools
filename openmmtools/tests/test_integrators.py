@@ -448,7 +448,7 @@ class TestExternalPerturbationLangevinIntegrator(TestCase):
 
         # Create the context
         platform = openmm.Platform.getPlatformByName(platform_name)
-        if platform_name in ["CPU", "CUDA"]:
+        if platform_name in ["CPU", "CUDA", "HIP"]:
             try:
                 platform.setPropertyDefaultValue("DeterministicForces", "true")
             except Exception as e:

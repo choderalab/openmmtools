@@ -37,6 +37,7 @@ from openmmtools.utils import *
 def test_platform_supports_precision():
     """Test that platform_supports_precision works correctly."""
 
+    #TODO Add HIP
     for platform_index in range(openmm.Platform.getNumPlatforms()):
         platform = openmm.Platform.getPlatform(platform_index)
         platform_name = platform.getName()
@@ -649,7 +650,7 @@ class TestEquilibrationUtils:
                 save_box_vectors=False,
             )
 
-    # TODO: Marking as not a test until we solve our GPU CI
+    # TODO: Make a test for HIP as well
     @pytest.mark.slow
     def test_gentle_equilibration_cuda(self):
         """

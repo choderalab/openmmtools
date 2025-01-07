@@ -1,6 +1,51 @@
 Release History
 ***************
 
+0.24.0 - pyMBAR Behavior Changes + HIP Platform Added 
+=====================================================
+
+Bug Fixes
+---------
+
+- Update docstring default for ``alchemical_pme_treatment`` (`Pull Request #644`_).
+
+
+Behavior Changes
+----------------
+- Use ``robust`` solver for  ``pyMBAR`` by default. 
+  ``pyMBAR`` 3 & 4 used two different solvers by default.
+  We now use the ``robust`` solver by default regardless of the ``pyMBAR`` version.
+  We still respect whichever solver is specified in ``analysis_kwargs`` (i.e ``analysis_kwargs["solver_protocol"] = "robust"`` when creating the analyzer, but now set the solver to ``"robust"`` if no solver is specified.
+  This should improve convergence performance (`Pull Request #735`_).
+
+Enhancements
+------------
+
+- Added OpenMM's "HIP" platform as a selectable platform.
+  With the release of OpenMM 8.2, the "HIP" platform is now available to use on compatible AMD GPUs. This update will allow ``openmmtools`` to automatically select the HIP platform if it is available (`Pull Request #753`_).
+- Added ``effective_length`` to ``MultiStateSamplerAnalyzer`` (`Pull Request #589`_).
+- Create ``alchemy`` subpackage (`Pull Request #721`_).
+
+
+
+Testing
+-------
+
+- Testing framework overhauled to use pytest and flaky tests now automatically re-run if they fail (`Pull Request #714`_, `Pull Request #746`_, `Pull Request #749`_,  `Pull Request #751`_)
+- Use OMSF's `gha-runner`_ to test on GPUs.
+
+.. _gha-runner: https://github.com/omsf-eco-infra/gha-runner
+.. _Pull Request #589: https://github.com/choderalab/openmmtools/pull/589
+.. _Pull Request #714: https://github.com/choderalab/openmmtools/pull/714
+.. _Pull Request #721: https://github.com/choderalab/openmmtools/pull/721
+.. _Pull Request #644: https://github.com/choderalab/openmmtools/pull/644
+.. _Pull Request #744: https://github.com/choderalab/openmmtools/pull/744
+.. _Pull Request #746: https://github.com/choderalab/openmmtools/pull/746
+.. _Pull Request #749: https://github.com/choderalab/openmmtools/pull/749
+.. _Pull Request #735: https://github.com/choderalab/openmmtools/pull/735
+.. _Pull Request #751: https://github.com/choderalab/openmmtools/pull/751
+.. _Pull Request #753: https://github.com/choderalab/openmmtools/pull/753
+
 
 0.23.1 - Bugfix release
 =======================
