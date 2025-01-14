@@ -30,7 +30,7 @@ jobs:
             [
               {"Key": "Application", "Value": "chodera-lab"}, 
               {"Key": "Application-ID (APM)", "Value": "APM0003545"}, 
-              {"Key": "Cost-Center", "Value": "50612"}, 
+              {"Key": "cost-center", "Value": "50612"}, 
               {"Key": "Owner-Email", "Value": "choderaj@mskcc.org"}, 
               {"Key": "Env", "Value": "research"}
             ]
