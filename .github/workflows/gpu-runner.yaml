@@ -35,8 +35,6 @@ jobs:
     defaults:
       run:
         shell: bash -leo pipefail {0}
-    env:
-      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     needs:
       - start-aws-runner
@@ -69,13 +67,6 @@ jobs:
           micromamba info
           micromamba list
           pip list
-
-      - name: Test OE License & Write License to File
-        env:
-          OE_LICENSE_TEXT: ${{ secrets.OE_LICENSE }}
-        run: |
-          echo "${OE_LICENSE_TEXT}" > ${OE_LICENSE}
-          python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
 
       - name: "Run tests"
         run: |
