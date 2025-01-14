@@ -26,7 +26,14 @@ jobs:
           aws_instance_type: g4dn.xlarge
           aws_region_name: us-east-1
           aws_home_dir: /home/ubuntu
-          aws_tags: '[{"Application": "chodera-lab", "Application-ID (APM)": "APM0003545", "Cost-Center": "50612", "Owner-Email": "choderaj@mskcc.org", "Env": "research"}]'
+          aws_tags: >
+            [
+              {"Key": "Application", "Value": "chodera-lab"}, 
+              {"Key": "Application-ID (APM)", "Value": "APM0003545"}, 
+              {"Key": "Cost-Center", "Value": "50612"}, 
+              {"Key": "Owner-Email", "Value": "choderaj@mskcc.org"}, 
+              {"Key": "Env", "Value": "research"}
+            ]
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
