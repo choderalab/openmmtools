@@ -32,7 +32,7 @@ jobs:
               {"Key": "Application-ID (APM)", "Value": "APM0003545"}, 
               {"Key": "cost-center", "Value": "50612"}, 
               {"Key": "Owner-Email", "Value": "choderaj@mskcc.org"}, 
-              {"Key": "Env", "Value": "research"}
+              {"Key": "env", "Value": "research"}
             ]
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
