@@ -1765,19 +1765,31 @@ class MultiStateReporter(object):
                 # Restore positions.
                 try:
                     x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
-                    positions = unit.Quantity(x, unit.nanometers)
+                    # if any data is masked, treat as if iteration index didn't exist
+                    if x.mask.any():
+                        raise IndexError
+                    # pull the valid data out of masked array
+                    positions = unit.Quantity(x.data, unit.nanometers)
                 except (IndexError, KeyError):
-                    positions = np.zeros((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
+                    # nan array with right shape
+                    positions = np.empty((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
                                           storage.dimensions['spatial'].size), dtype=np.float64)
+                    positions[:] = np.nan
 
                 # Restore velocities
                 # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
                 try:
                     x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
-                    velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
+                    # if any data is masked, treat as if iteration index didn't exist
+                    if x.mask.any():
+                        raise IndexError
+                    # pull the valid data out of masked array
+                    velocities = unit.Quantity(x.data, unit.nanometer / unit.picoseconds)
                 except (IndexError, KeyError):  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
-                    # pass zeros as velocities when key is not found (<0.21.3 behavior)
+                    # Historic: "pass zeros as velocities when key is not found (<0.21.3 behavior)" Is this reasonable to continue doing? This may lead to very confusing results downstream.
+                    # nan array with right shape
                     velocities = np.zeros_like(positions)
+                    velocities[:] = np.nan
 
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.

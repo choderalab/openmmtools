@@ -595,10 +595,8 @@ class TestReporter:
             # Second frame should not have positions or velocities
             restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
-                # missing values are returned as numpy masked array
-                # so we check that these arrays are all masked
-                assert restored_state.positions._value.mask.all()
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.positions).all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
             restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
@@ -631,20 +629,20 @@ class TestReporter:
                 # missing values are returned as numpy masked array
                 # so we check that these arrays are all masked
                 assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
             # Second frame should not have positions or velocities
             restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
                 assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
             restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
                 assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
     def test_write_sampler_states_no_pos(self):
@@ -669,21 +667,21 @@ class TestReporter:
             for state, restored_state in zip(sampler_states, restored_sampler_states):
                 # missing values are returned as numpy masked array
                 # so we check that these arrays are all masked
-                assert restored_state.positions._value.mask.all()
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.positions).all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
             # Second frame should not have positions or velocities
             restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
-                assert restored_state.positions._value.mask.all()
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.positions).all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
             restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
             for state, restored_state in zip(sampler_states, restored_sampler_states):
-                assert restored_state.positions._value.mask.all()
-                assert restored_state.velocities._value.mask.all()
+                assert np.isnan(restored_state.positions).all()
+                assert np.isnan(restored_state.velocities).all()
                 assert restored_state.box_vectors is None  # not periodic
 
     def test_analysis_particle_mismatch(self):
