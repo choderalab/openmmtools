@@ -1771,10 +1771,9 @@ class MultiStateReporter(object):
                     # pull the valid data out of masked array
                     positions = unit.Quantity(x.data, unit.nanometers)
                 except (IndexError, KeyError):
-                    # nan array with right shape
-                    positions = np.empty((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
+                    # pass zeros as velocities when key is not found (<0.21.3 behavior)
+                    positions = np.zeros((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
                                           storage.dimensions['spatial'].size), dtype=np.float64)
-                    positions[:] = np.nan
 
                 # Restore velocities
                 # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
@@ -1786,10 +1785,8 @@ class MultiStateReporter(object):
                     # pull the valid data out of masked array
                     velocities = unit.Quantity(x.data, unit.nanometer / unit.picoseconds)
                 except (IndexError, KeyError):  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
-                    # Historic: "pass zeros as velocities when key is not found (<0.21.3 behavior)" Is this reasonable to continue doing? This may lead to very confusing results downstream.
-                    # nan array with right shape
+                    # pass zeros as velocities when key is not found (<0.21.3 behavior)
                     velocities = np.zeros_like(positions)
-                    velocities[:] = np.nan
 
                 if 'box_vectors' in storage.variables:
                     # Restore box vectors.
