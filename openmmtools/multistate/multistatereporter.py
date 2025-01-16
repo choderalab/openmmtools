@@ -1676,10 +1676,10 @@ class MultiStateReporter(object):
         # or if interval matches desired frequency
         write_pos = (storage_file == 'checkpoint' or
                      (self._position_interval != 0
-                      and not (write_iteration % self._position_interval)))
+                      and write_iteration % self._position_interval == 0))
         write_vel = (storage_file == 'checkpoint' or
                      (self._velocity_interval != 0
-                      and not (write_iteration % self._velocity_interval)))
+                      and write_iteration % self._velocity_interval == 0))
 
         # Write the sampler state if we are on the checkpoint interval OR if told to ignore the interval
         if write_iteration is not None:
