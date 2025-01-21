@@ -101,11 +101,13 @@ class MultiStateReporter(object):
         If specified, it will serialize positions and velocities for the specified particles, at every iteration, in the
         reporter storage (.nc) file. If empty, no positions or velocities will be stored in this file for any atoms.
     position_interval : int, default 1
-        the frequency at which to write positions relative to analysis
-        information, 0 would prevent information being written
+        The frequency at which to write positions and box vectors
+        relative to analysis information, 0 would prevent this
+        information from being written.
     velocity_interval : int, default 1
-        the frequency at which to write positions relative to analysis
-        information, 0 would prevent information being written
+        The frequency at which to write velocities relative to
+        analysis information, 0 would prevent this information from
+        being written.
 
     Attributes
     ----------
@@ -115,6 +117,8 @@ class MultiStateReporter(object):
     n_states
     n_replicas
     analysis_particle_indices
+    position_interval
+    velocity_interval
 
     """
     def __init__(self, storage, open_mode=None,
@@ -216,7 +220,7 @@ class MultiStateReporter(object):
 
     @property
     def position_interval(self):
-        """Interval relative to energies that positions are written at"""
+        """Interval relative to energies that positions (and box vectors) are written at"""
         return self._position_interval
 
     @property
