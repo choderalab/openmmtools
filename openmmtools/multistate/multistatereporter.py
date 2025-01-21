@@ -1666,7 +1666,7 @@ class MultiStateReporter(object):
 
         storage = self._storage_dict[storage_file]
         # Check if the schema must be initialized, do this regardless of the checkpoint_interval for consistency
-        is_periodic = True if (sampler_states[0].box_vectors is not None) else False
+        is_periodic = sampler_states[0].box_vectors is not None
         n_particles = sampler_states[0].n_particles
         n_replicas = len(sampler_states)
         self._initialize_sampler_variables_on_file(storage, n_particles,
@@ -1779,6 +1779,15 @@ class MultiStateReporter(object):
                     positions = np.zeros((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
                                           storage.dimensions['spatial'].size), dtype=np.float64)
 
+                # Restore box vectors.
+                try:
+                    x = storage.variables['box_vectors'][read_iteration, replica_index, :, :].astype(np.float64)
+                    if x.mask.any():
+                        raise IndexError
+                    box_vectors = unit.Quantity(x, unit.nanometers)
+                except (IndexError, KeyError):
+                    box_vectors = None
+
                 # Restore velocities
                 # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
                 try:
@@ -1791,14 +1800,6 @@ class MultiStateReporter(object):
                 except (IndexError, KeyError):  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
                     # pass zeros as velocities when key is not found (<0.21.3 behavior)
                     velocities = np.zeros_like(positions)
-
-                if 'box_vectors' in storage.variables:
-                    # Restore box vectors.
-                    x = storage.variables['box_vectors'][read_iteration, replica_index, :, :].astype(np.float64)
-                    # TODO: Are box vectors also variably saved?
-                    box_vectors = unit.Quantity(x, unit.nanometers)
-                else:
-                    box_vectors = None
 
                 # Create SamplerState.
                 sampler_states.append(states.SamplerState(positions=positions, velocities=velocities, box_vectors=box_vectors))
