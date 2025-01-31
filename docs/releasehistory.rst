@@ -1,6 +1,15 @@
 Release History
 ***************
 
+0.24.1 - Differential storage of positions and velocities
+=========================================================
+
+Enhancements
+------------
+
+- ``MultiStateReporter`` now accepts variable position and velocity checkpointing intervals. Note that when resuming simulations users have to specify again the keyword arguments for the reporter (`Pull Request #767 <https://github.com/choderalab/openmmtools/pull/767>`_).
+
+
 0.24.0 - pyMBAR Behavior Changes + HIP Platform Added 
 =====================================================
 
