@@ -6,7 +6,7 @@ on:
       - "main"
   pull_request:
     branches:
-      - "main"
+      - "*"
   schedule:
     # Nightly tests run on master by default:
     #   Scheduled workflows run on the latest commit on the default or base branch.
@@ -30,7 +30,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
         openmm: ["8.1.2", "8.2.0"]
-        os: [macOS-latest, ubuntu-latest, macOS-12]
+        os: [macOS-latest, ubuntu-latest, macOS-13]
         pymbar-version: ["4"]
         include:
           # Test newest python, openmm, and pymbar we support on windows

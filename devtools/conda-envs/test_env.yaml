@@ -24,6 +24,7 @@ dependencies:
   - pytest
   - pytest-cov
   - pytest-xdist
+  - pytest-rerunfailures
   # docs
   - numpydoc
   - sphinx-rtd-theme
