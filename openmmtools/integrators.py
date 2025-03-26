@@ -2371,7 +2371,7 @@ class FIREMinimizationIntegrator(mm.CustomIntegrator):
         self.addGlobalVariable("delta_t", timestep.value_in_unit_system(unit.md_unit_system))
 
         # Update context state.
-        self.addUpdateContextState()
+        #self.addUpdateContextState()
 
         # Assess convergence
         # TODO: Can we more closely match the OpenMM criterion here?
