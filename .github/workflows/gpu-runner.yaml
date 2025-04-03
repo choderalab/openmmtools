@@ -18,13 +18,10 @@ jobs:
           aws-region: us-east-1
       - name: Create cloud runner
         id: aws-start
-        uses: omsf-eco-infra/gha-runner@v0.4.0
+        uses: omsf/start-aws-gha-runner@v1.0.0
         with:
-          provider: "aws"
-          action: "start"
           aws_image_id: ami-053912f3a44543f8c 
           aws_instance_type: g4dn.xlarge
-          aws_region_name: us-east-1
           aws_home_dir: /home/ubuntu
           aws_tags: >
             [
@@ -96,11 +93,8 @@ jobs:
           role-to-assume: arn:aws:iam::009563297724:role/gha-runner-omsf
           aws-region: us-east-1
       - name: Stop instances
-        uses: omsf-eco-infra/gha-runner@v0.4.0
+        uses: omsf/stop-aws-gha-runner@v1.0.0
         with:
-          provider: "aws"
-          action: "stop"
           instance_mapping: ${{ needs.start-aws-runner.outputs.mapping }}
-          aws_region_name: us-east-1
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
