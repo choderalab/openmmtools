@@ -1360,6 +1360,12 @@ class MultiStateSampler(object):
         # Retrieve thermodynamic and sampler states.
         thermodynamic_state_id = self._replica_thermodynamic_states[replica_id]
         thermodynamic_state = self._thermodynamic_states[thermodynamic_state_id]
+
+        # Temporarily disable the barostat during minimization.
+        # Otherwise, the minimizer will modify the box
+        # vectors and may cause instabilities.
+        pressure = thermodynamic_state.pressure
+        thermodynamic_state.pressure = None
         sampler_state = self._sampler_states[replica_id]
 
         # Use the FIRE minimizer
@@ -1397,6 +1403,9 @@ class MultiStateSampler(object):
 
         # Get the minimized positions.
         sampler_state.update_from_context(context)
+        
+        # Restore the barostat
+        thermodynamic_state.pressure = pressure
 
         # Compute the final energy of the system for logging.
         final_energy = thermodynamic_state.reduced_potential(sampler_state)
