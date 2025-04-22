@@ -1415,7 +1415,7 @@ class GHMCMove(BaseIntegratorMove):
 
         """
         if self.n_proposed == 0:
-            return np.NaN
+            return np.nan
         # TODO drop the casting when stop Python2 support
         return float(self.n_accepted) / self.n_proposed
 

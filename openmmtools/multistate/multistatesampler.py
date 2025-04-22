@@ -1642,7 +1642,7 @@ class MultiStateSampler(object):
 
         self._last_mbar_f_k = -logZ
         free_energy = self._last_mbar_f_k[-1] - self._last_mbar_f_k[0]
-        self._last_err_free_energy = np.Inf
+        self._last_err_free_energy = np.inf
 
         # Store free energy estimate
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
