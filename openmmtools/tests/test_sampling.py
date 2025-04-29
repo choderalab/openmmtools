@@ -2227,6 +2227,79 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 len(yaml_contents) == expected_yaml_entries
             ), "Expected yaml entries do not match the actual number entries in the file."
 
+    @pytest.mark.parametrize("n_iterations,online_interval,checkpoint_interval,iterations_first_run", [(15, 3, 5, 11), (15, 3, 5, 3), (10, 2, 2, 3), (10, 2, 2, 4), (10, 2, 2, 2)])
+    def test_real_time_analysis_yaml_restore(self, n_iterations, online_interval, checkpoint_interval, iterations_first_run):
+        """Test that a restored sampler produces the expected output yaml file."""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(
+            self.alanine_test
+        )
+
+        with self.temporary_storage_path() as storage_path:
+
+            # calculated the expected number of entries and checkpoints
+            expected_yaml_entries = iterations_first_run // online_interval
+            expected_checkpoint_states = iterations_first_run // checkpoint_interval
+            expected_yaml_extra = expected_yaml_entries - checkpoint_interval * expected_checkpoint_states // online_interval
+            expected_yaml_total_at_end = n_iterations // online_interval + expected_yaml_extra
+
+            move = mmtools.mcmc.IntegratorMove(
+                openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1
+            )
+
+            # initialize the original sampler, which we don't complete
+            # the full set of iterations for
+            sampler = self.SAMPLER(
+                mcmc_moves=move,
+                number_of_iterations=n_iterations,
+                online_analysis_interval=online_interval,
+            )
+
+            reporter = self.REPORTER(storage_path, checkpoint_interval=checkpoint_interval)
+            self.call_sampler_create(
+                sampler,
+                reporter,
+                thermodynamic_states,
+                sampler_states,
+                unsampled_states,
+            )
+
+            sampler.run(n_iterations=iterations_first_run)
+
+            # load file and check number of iterations
+            storage_dir, reporter_filename = os.path.split(
+                sampler._reporter._storage_analysis_file_path
+            )
+            # remove extension from filename
+            yaml_prefix = os.path.splitext(reporter_filename)[0]
+            output_filepath = os.path.join(
+                storage_dir, f"{yaml_prefix}_real_time_analysis.yaml"
+            )
+            with open(output_filepath) as yaml_file:
+                yaml_contents = yaml.safe_load(yaml_file)
+
+            # Make sure we get the correct number of entries
+            assert len(yaml_contents) == expected_yaml_entries, "Expected yaml entries do not match the actual number entries in the file."
+
+            # Remove before restoring
+            del sampler
+
+            # Restore from storage and finish the rest of the
+            # iterations
+            sampler = self.SAMPLER.from_storage(reporter)
+
+            # Run for remaining iterations, we expect:
+            # 1) 1 checkpoint to be written
+            # 2) 3 real time analysis entries written
+            sampler.run()
+
+            # load file and check number of iterations
+            with open(output_filepath) as yaml_file:
+                yaml_contents = yaml.safe_load(yaml_file)
+
+            # Make sure we get the correct number of entries
+            assert (
+                len(yaml_contents) == expected_yaml_total_at_end
+            ), "Expected yaml entries do not match the actual number entries in the file."
 
 def test_real_time_analysis_can_be_none():
     """Test if real time analysis can be done"""

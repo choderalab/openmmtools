@@ -590,13 +590,9 @@ class MultiStateSampler(object):
             raise RuntimeError('Storage file {} already exists; cowardly '
                                'refusing to overwrite.'.format(self._reporter.filepath))
 
-        # Make sure online analysis interval is a multiples of the reporter's checkpoint interval
-        # this avoids having redundant iteration information in the real time yaml files
-        # only check if self.online_analysis_interval is set
         if self.online_analysis_interval:
             if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
-                raise ValueError(f"Online analysis interval: {self.online_analysis_interval}, must be a "
-                                 f"multiple of the checkpoint interval: {self._reporter.checkpoint_interval}")
+                logger.warning("An online_analysis_interval that is not a multiple of the checkpoint_interval can lead to redundant information in the real time yaml file.")
 
         # Make sure sampler_states is an iterable of SamplerStates.
         if isinstance(sampler_states, states.SamplerState):
