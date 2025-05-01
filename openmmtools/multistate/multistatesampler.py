@@ -592,7 +592,7 @@ class MultiStateSampler(object):
 
         if self.online_analysis_interval:
             if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
-                logger.warning("An online_analysis_interval that is not a multiple of the checkpoint_interval can lead to redundant information in the real time yaml file.")
+                logger.warning("An online_analysis_interval that is not a multiple of the checkpoint_interval can lead to redundant information in the real time yaml file after recovering from checkpoints.")
 
         # Make sure sampler_states is an iterable of SamplerStates.
         if isinstance(sampler_states, states.SamplerState):
