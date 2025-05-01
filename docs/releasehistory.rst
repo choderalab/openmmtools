@@ -1,6 +1,16 @@
 Release History
 ***************
 
+0.24.3
+======
+
+Enhancements
+------------
+
+- Remove the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval``
+  - Issue a logger warning rather than raise a ``ValueError``
+  - Note that the real time analysis output file may contain redundant information after restoring from checkpoints that would result in the repeated calculation of a specific iteration index
+
 0.24.2 - Numpy 2 support and FIRE minimization improvements
 ===========================================================
 
