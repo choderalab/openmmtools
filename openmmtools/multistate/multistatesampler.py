@@ -590,13 +590,9 @@ class MultiStateSampler(object):
             raise RuntimeError('Storage file {} already exists; cowardly '
                                'refusing to overwrite.'.format(self._reporter.filepath))
 
-        # Make sure online analysis interval is a multiples of the reporter's checkpoint interval
-        # this avoids having redundant iteration information in the real time yaml files
-        # only check if self.online_analysis_interval is set
         if self.online_analysis_interval:
             if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
-                raise ValueError(f"Online analysis interval: {self.online_analysis_interval}, must be a "
-                                 f"multiple of the checkpoint interval: {self._reporter.checkpoint_interval}")
+                logger.warning("An online_analysis_interval that is not a multiple of the checkpoint_interval can lead to redundant information in the real time yaml file after recovering from checkpoints.")
 
         # Make sure sampler_states is an iterable of SamplerStates.
         if isinstance(sampler_states, states.SamplerState):
@@ -1360,6 +1356,12 @@ class MultiStateSampler(object):
         # Retrieve thermodynamic and sampler states.
         thermodynamic_state_id = self._replica_thermodynamic_states[replica_id]
         thermodynamic_state = self._thermodynamic_states[thermodynamic_state_id]
+
+        # Temporarily disable the barostat during minimization.
+        # Otherwise, the minimizer will modify the box
+        # vectors and may cause instabilities.
+        pressure = thermodynamic_state.pressure
+        thermodynamic_state.pressure = None
         sampler_state = self._sampler_states[replica_id]
 
         # Use the FIRE minimizer
@@ -1397,6 +1399,9 @@ class MultiStateSampler(object):
 
         # Get the minimized positions.
         sampler_state.update_from_context(context)
+        
+        # Restore the barostat
+        thermodynamic_state.pressure = pressure
 
         # Compute the final energy of the system for logging.
         final_energy = thermodynamic_state.reduced_potential(sampler_state)
@@ -1633,7 +1638,7 @@ class MultiStateSampler(object):
 
         self._last_mbar_f_k = -logZ
         free_energy = self._last_mbar_f_k[-1] - self._last_mbar_f_k[0]
-        self._last_err_free_energy = np.Inf
+        self._last_err_free_energy = np.inf
 
         # Store free energy estimate
         self._reporter.write_online_data_dynamic_and_static(self._iteration,

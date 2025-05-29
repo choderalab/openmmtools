@@ -1,6 +1,33 @@
 Release History
 ***************
 
+0.24.3
+======
+
+Enhancements
+------------
+
+- Remove the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval``
+  - Issue a logger warning rather than raise a ``ValueError``
+  - Note that the real time analysis output file may contain redundant information after restoring from checkpoints that would result in the repeated calculation of a specific iteration index
+
+0.24.2 - Numpy 2 support and FIRE minimization improvements
+===========================================================
+
+This release enables numpy 2 support and makes the FIRE minimization more stable by disabling the barostat during the minimization.
+
+Enhancements
+------------
+
+- Add AWS Tags (`#766 <https://github.com/choderalab/openmmtools/pull/766>`_) by @mikemhenry
+- chore: migrate to new OMSF start/stop runners (`#775 <https://github.com/choderalab/openmmtools/pull/775>`_) by @ethanholz
+- Disable the barostat during FIRE minimization (`#773 <https://github.com/choderalab/openmmtools/pull/773>`_) by @hannahbaumann
+
+Bug Fixes
+---------
+
+- Fixes for numpy 2.0 (ruff NPY201) (`#777 <https://github.com/choderalab/openmmtools/pull/777>`_) by @IAlibay
+
 0.24.1 - Differential storage of positions and velocities
 =========================================================
 
