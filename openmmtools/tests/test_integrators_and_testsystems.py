@@ -114,4 +114,4 @@ def test_integrators_and_testsystems():
             f.description = "Checking combination of {} and {}".format(
                 integrator_name, testsystem_name
             )
-            yield f
+            check_combination(integrator, testsystem, platform)
