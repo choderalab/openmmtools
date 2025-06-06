@@ -4,7 +4,7 @@ Release History
 0.25.0
 ======
 
-This release removes the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval``.
+This release removes the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval``. See `#799 <https://github.com/choderalab/openmmtools/pull/779>`_ for more details.
 
 Enhancements
 ------------
