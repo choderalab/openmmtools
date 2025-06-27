@@ -90,7 +90,6 @@ def test_even_mixing(verbose=True):
             print("Detected a significant difference between expected even mixing\n")
             print("and observed mixing, p=%f" % p_val)
             raise Exception("Replica %d failed the even mixing test" % replica)
-    return 0
 
 
 if __name__ == "__main__":
