@@ -352,7 +352,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
         move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0 * unit.angstroms)
         simulation = self.SAMPLER(
             mcmc_moves=move,
-            number_of_iterations=self.N_ITERATIONS,
+            number_of_iterations=2*self.N_ITERATIONS,
             online_analysis_interval=self.N_ITERATIONS,
         )
         storage = os.path.join(tmp_path, "test_storage.nc")
