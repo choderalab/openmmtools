@@ -402,7 +402,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
         nsigma[indices] = error[indices] / delta_s_ij_stderr[indices]
         MAX_SIGMA = 6.0  # maximum allowed number of standard errors
         if np.any(nsigma > MAX_SIGMA):
-            np.set_printoptions(precision=3, supress=True)
+            np.set_printoptions(precision=3)
             debug_data = {
                 "delta_s_ij": delta_s_ij,
                 "delta_s_ij_analytical": delta_f_ij_analytical,
@@ -435,7 +435,7 @@ class TestHarmonicOscillatorsMultiStateSampler:
         nsigma[indices] = error[indices] / delta_u_ij_stderr[indices]
         MAX_SIGMA = 6.0  # maximum allowed number of standard errors
         if np.any(nsigma > MAX_SIGMA):
-            np.set_printoptions(precision=3, supress=True)
+            np.set_printoptions(precision=3)
             debug_data = {
                 "delta_u_ij": delta_u_ij,
                 "delta_u_ij_analytical": 0,
