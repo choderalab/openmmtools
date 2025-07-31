@@ -30,7 +30,7 @@ jobs:
       matrix:
         python-version: ["3.10", "3.11", "3.12"]
         openmm: ["8.1.2", "8.2.0"]
-        os: [macOS-latest, ubuntu-latest, macOS-13]
+        os: [macOS-latest, ubuntu-latest]
         pymbar-version: ["4"]
         include:
           # Test newest python, openmm, and pymbar we support on windows
