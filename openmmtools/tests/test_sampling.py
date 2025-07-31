@@ -30,6 +30,7 @@ import yaml
 
 import pytest
 import requests
+from coverage.data import debug_data_file
 
 try:
     import openmm
@@ -401,22 +402,20 @@ class TestHarmonicOscillatorsMultiStateSampler:
         nsigma[indices] = error[indices] / delta_s_ij_stderr[indices]
         MAX_SIGMA = 6.0  # maximum allowed number of standard errors
         if np.any(nsigma > MAX_SIGMA):
-            np.set_printoptions(precision=3)
-            print("delta_s_ij")
-            print(delta_s_ij)
-            print("delta_s_ij_analytical")
-            print(-delta_f_ij_analytical)
-            print("error")
-            print(error)
-            print("stderr")
-            print(delta_s_ij_stderr)
-            print("nsigma")
-            print(nsigma)
-            raise Exception(
-                "Dimensionless (reduced) entropy exceeds MAX_SIGMA of %.1f"
-                % MAX_SIGMA
-            )
+            np.set_printoptions(precision=3, supress=True)
+            debug_data = {
+                "delta_s_ij": delta_s_ij,
+                "delta_s_ij_analytical": delta_f_ij_analytical,
+                "error": error,
+                "stderr": delta_s_ij_stderr,
+                "nsigma": nsigma,
+            }
+            print("\n[DEBUG] Entropy test failed. Details:")
+            for key, value in debug_data.items():
+                print(f"{key}: {value}")
+            assert False, f"Dimensionless (reduced) entropy exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
 
+        # Check enthalpy
         delta_u_ij, delta_u_ij_stderr = analyzer.get_enthalpy()
 
         if include_unsampled_states:
@@ -436,21 +435,19 @@ class TestHarmonicOscillatorsMultiStateSampler:
         nsigma[indices] = error[indices] / delta_u_ij_stderr[indices]
         MAX_SIGMA = 6.0  # maximum allowed number of standard errors
         if np.any(nsigma > MAX_SIGMA):
-            np.set_printoptions(precision=3)
-            print("delta_u_ij")
-            print(delta_u_ij)
-            print("delta_u_ij_analytical")
-            print(0)
-            print("error")
-            print(error)
-            print("stderr")
-            print(delta_u_ij_stderr)
-            print("nsigma")
-            print(nsigma)
-            raise Exception(
-                "Dimensionless (reduced) potential (enthalpy) difference exceeds MAX_SIGMA of %.1f"
-                % MAX_SIGMA
-            )
+            np.set_printoptions(precision=3, supress=True)
+            debug_data = {
+                "delta_u_ij": delta_u_ij,
+                "delta_u_ij_analytical": 0,
+                "error": error,
+                "stderr": delta_u_ij_stderr,
+                "nsigma": nsigma,
+            }
+            print("\n[DEBUG] Enthalpy test failed. Details:")
+            for key, value in debug_data.items():
+                print(f"{key}:{value}")
+            assert False, f"Dimensionless (reduced) potential (enthalpy) difference exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+
 
 
 class TestHarmonicOscillatorsReplicaExchangeSampler(
