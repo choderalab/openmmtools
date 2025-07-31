@@ -347,17 +347,18 @@ class TestHarmonicOscillatorsMultiStateSampler:
         the appropriate submatrix of the analytical free energy matrix depending on whether
         unsampled boundary states are included.
         """
+        n_iterations = int(2.5*self.N_ITERATIONS)  # We want more iterations for entropy test
         # TODO: These can probably be fixtures, we use them in different tests
         # Create and configure simulation object
         move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0 * unit.angstroms)
         simulation = self.SAMPLER(
             mcmc_moves=move,
-            number_of_iterations=self.N_ITERATIONS,
-            online_analysis_interval=self.N_ITERATIONS,
+            number_of_iterations=n_iterations,
+            online_analysis_interval=n_iterations,
         )
         storage = os.path.join(tmp_path, "test_storage.nc")
         reporter = MultiStateReporter(
-            storage, checkpoint_interval=self.N_ITERATIONS
+            storage, checkpoint_interval=n_iterations
         )
 
         if include_unsampled_states:
