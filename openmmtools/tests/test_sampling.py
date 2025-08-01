@@ -30,6 +30,7 @@ import yaml
 
 import pytest
 import requests
+from coverage.data import debug_data_file
 
 try:
     import openmm
@@ -308,7 +309,6 @@ class TestHarmonicOscillatorsMultiStateSampler:
         # Clean up.
         del simulation
 
-    @pytest.mark.flaky(reruns=3)
     def test_with_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator with unsampled endstates"""
         self.run(include_unsampled_states=True)
@@ -320,6 +320,135 @@ class TestHarmonicOscillatorsMultiStateSampler:
     def test_without_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
+
+    @pytest.mark.parametrize("include_unsampled_states", [False, True])
+    def test_entropy_enthalpy(self, include_unsampled_states, tmp_path):
+        """
+        Test that the entropy and enthalpy matrices computed by the analyzer match analytical expectations.
+
+        This function initializes a MultiStateReporter, constructs an analyzer from stored simulation data,
+        and compares computed entropy (ΔS_ij) and enthalpy (ΔU_ij) matrices to analytical expectations.
+
+        Entropy is expected to satisfy ΔS_ij ≈ -ΔF_ij_analytical (assuming ΔU ≈ 0), and enthalpy is expected to be ≈ 0.
+        Deviations are tested against a threshold of 6 standard errors (σ). Any entry exceeding this threshold
+        raises an exception.
+
+        Parameters
+        ----------
+        include_unsampled_states : bool
+            Whether to include unsampled boundary states in the analysis. If True, additional
+            boundary states are expected in the computed matrices.
+        tmp_path : Path or str
+            Temporary path for creating the NetCDF storage file.
+
+        Notes
+        -----
+        This test assumes ΔU ≈ 0 for all states and checks that ΔS ≈ -ΔF. It dynamically selects
+        the appropriate submatrix of the analytical free energy matrix depending on whether
+        unsampled boundary states are included.
+        """
+        n_iterations = int(2.5*self.N_ITERATIONS)  # We want more iterations for entropy test
+        # TODO: These can probably be fixtures, we use them in different tests
+        # Create and configure simulation object
+        move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0 * unit.angstroms)
+        simulation = self.SAMPLER(
+            mcmc_moves=move,
+            number_of_iterations=n_iterations,
+            online_analysis_interval=n_iterations,
+        )
+        storage = os.path.join(tmp_path, "test_storage.nc")
+        reporter = MultiStateReporter(
+            storage, checkpoint_interval=n_iterations
+        )
+
+        if include_unsampled_states:
+            nstates_expected = (
+                    self.N_STATES + 2
+            )  # We expect N_STATES plus two additional states
+            delta_f_ij_analytical = (
+                self.delta_f_ij_analytical
+            )  # Use the whole matrix
+            simulation.create(
+                self.thermodynamic_states,
+                self.sampler_states,
+                reporter,
+                unsampled_thermodynamic_states=self.unsampled_states,
+            )
+        else:
+            nstates_expected = self.N_STATES  # We expect only N_STATES
+            delta_f_ij_analytical = self.delta_f_ij_analytical[
+                                    1:-1, 1:-1
+                                    ]  # Use only the intermediate, sampled states
+            simulation.create(
+                self.thermodynamic_states, self.sampler_states, reporter
+            )
+
+        # Run simulation to generate/populate data
+        simulation.run()
+
+        analyzer = self.ANALYZER(reporter)
+
+        # Check if entropy and enthalpy can be calculated and are within tolerance
+        delta_s_ij, delta_s_ij_stderr = analyzer.get_entropy()
+
+        nstates, _ = delta_s_ij.shape
+
+        assert (
+                nstates == nstates_expected
+        ), f"analyzer.get_entropy() returned {delta_s_ij.shape} but expected {nstates_expected, nstates_expected}"
+
+        error = np.abs(delta_s_ij + delta_f_ij_analytical)  # We expect dS = -dF
+        indices = np.where(delta_s_ij_stderr > 0.0)
+        nsigma = np.zeros([nstates, nstates], np.float32)
+        nsigma[indices] = error[indices] / delta_s_ij_stderr[indices]
+        MAX_SIGMA = 6.0  # maximum allowed number of standard errors
+        if np.any(nsigma > MAX_SIGMA):
+            np.set_printoptions(precision=3)
+            debug_data = {
+                "delta_s_ij": delta_s_ij,
+                "delta_s_ij_analytical": delta_f_ij_analytical,
+                "error": error,
+                "stderr": delta_s_ij_stderr,
+                "nsigma": nsigma,
+            }
+            print("\n[DEBUG] Entropy test failed. Details:")
+            for key, value in debug_data.items():
+                print(f"{key}: {value}")
+            assert False, f"Dimensionless (reduced) entropy exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+
+        # Check enthalpy
+        delta_u_ij, delta_u_ij_stderr = analyzer.get_enthalpy()
+
+        if include_unsampled_states:
+            nstates_expected = (
+                    self.N_STATES + 2
+            )  # We expect N_STATES plus two additional states
+        else:
+            nstates_expected = self.N_STATES  # We expect only N_STATES
+
+        assert (
+                nstates == nstates_expected
+        ), f"analyzer.get_entropy() returned {delta_u_ij.shape} but expected {nstates_expected, nstates_expected}"
+
+        error = np.abs(delta_u_ij)  # We expect du = 0
+        indices = np.where(delta_u_ij_stderr > 0.0)
+        nsigma = np.zeros([nstates, nstates], np.float32)
+        nsigma[indices] = error[indices] / delta_u_ij_stderr[indices]
+        MAX_SIGMA = 6.0  # maximum allowed number of standard errors
+        if np.any(nsigma > MAX_SIGMA):
+            np.set_printoptions(precision=3)
+            debug_data = {
+                "delta_u_ij": delta_u_ij,
+                "delta_u_ij_analytical": 0,
+                "error": error,
+                "stderr": delta_u_ij_stderr,
+                "nsigma": nsigma,
+            }
+            print("\n[DEBUG] Enthalpy test failed. Details:")
+            for key, value in debug_data.items():
+                print(f"{key}:{value}")
+            assert False, f"Dimensionless (reduced) potential (enthalpy) difference exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+
 
 
 class TestHarmonicOscillatorsReplicaExchangeSampler(
