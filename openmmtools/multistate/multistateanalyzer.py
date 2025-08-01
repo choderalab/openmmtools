@@ -1975,9 +1975,13 @@ class MultiStateSamplerAnalyzer(PhaseAnalyzer):
 
     def _compute_enthalpy_and_entropy(self):
         """Function to compute the cached values of enthalpy and entropy"""
-        (f_k, df_k, H_k, dH_k, S_k, dS_k) = self.mbar.computeEntropyAndEnthalpy()
-        enthalpy = {'value': H_k, 'error': dH_k}
-        entropy = {'value': S_k, 'error': dS_k}
+        try:
+            results = self.mbar.computeEntropyAndEnthalpy(return_dict=True)
+        except AttributeError:
+            results = self.mbar.compute_entropy_and_enthalpy()
+
+        enthalpy = {'value': results['Delta_u'], 'error': results['dDelta_u']}
+        entropy = {'value': results['Delta_s'], 'error': results['dDelta_s']}
         self._computed_observables['enthalpy'] = enthalpy
         self._computed_observables['entropy'] = entropy
 
