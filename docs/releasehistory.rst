@@ -1,6 +1,11 @@
 Release History
 ***************
 
+0.25.1
+======
+
+This release fixes a bug where ``get_entropy()`` and ``get_enthalpy() `` would return an ``AttributeError`` when using ``pymbar4``. See `#757 <https://github.com/choderalab/openmmtools/issues/757>`_ for more details.
+
 0.25.0
 ======
 
