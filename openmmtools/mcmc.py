@@ -720,7 +720,7 @@ class BaseIntegratorMove(MCMCMove):
             except Exception as e:
                 # Catches particle positions becoming nan during integration.
                 # Return the exception message as a warning
-                warnings.warn(str(e))
+                warnings.warning(str(e))
                 restart = True
             else:
                 timer.stop("{}: step({})".format(move_name, self.n_steps))
