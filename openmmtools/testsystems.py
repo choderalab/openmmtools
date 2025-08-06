@@ -4589,7 +4589,7 @@ class LennardJonesPair(TestSystem):
         xmin = 0.15  # in units of sigma
         xmax = 6.0  # in units of sigma
         from scipy.integrate import quad
-        [integral, abserr], _ = quad(integrand_numpy, xmin, xmax, args=[context])
+        integral, _ = quad(integrand_numpy, xmin, xmax, args=[context])
         # correct for performing unitless integration
         integral = integral * (self.sigma ** 3)
 
