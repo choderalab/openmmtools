@@ -179,7 +179,7 @@ def get_data_filename(relative_path):
     file_manager = ExitStack()
     atexit.register(file_manager.close)
 
-    fn = file_manager.enter_context(importlib.resources.as_file(importlib.resources.files("openmmtools") / relative_path))
+    fn = str(file_manager.enter_context(importlib.resources.as_file(importlib.resources.files("openmmtools") / relative_path)))
 
     if not os.path.exists(fn):
         raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
