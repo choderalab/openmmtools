@@ -28,19 +28,19 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11", "3.12"]
-        openmm: ["8.1.2", "8.2.0"]
+        python-version: ["3.11", "3.12", "3.13"]
+        openmm: ["8.2.0", "8.3.1"]
         os: [macOS-latest, ubuntu-latest]
         pymbar-version: ["4"]
         include:
           # Test newest python, openmm, and pymbar we support on windows
-          - openmm: "8.2"
-            python-version: "3.12"
+          - openmm: "8.3.1"
+            python-version: "3.13"
             os: windows-latest
             pymbar-version: "4"
           # Have one job test pymbar 3 support
-          - openmm: "8.2"
-            python-version: "3.12"
+          - openmm: "8.3.1"
+            python-version: "3.13"
             os: ubuntu-latest
             pymbar-version: "3"
 
@@ -54,9 +54,8 @@ jobs:
           ulimit -a
 
       - name: Setup micromamba
-        uses: mamba-org/setup-micromamba@v1
+        uses: mamba-org/setup-micromamba@v2
         with:
-          micromamba-version: '2.0.0-0'
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: openmmtools-test
           create-args: >-
@@ -66,7 +65,6 @@ jobs:
           condarc: |
             channels:
               - conda-forge
-              - jaimergp/label/unsupported-cudatoolkit-shim
             
       - name: Install package
         run: |
