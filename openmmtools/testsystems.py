@@ -172,9 +172,14 @@ def get_data_filename(relative_path):
         Name of the file to load (with respect to the repex folder).
 
     """
+    # See https://importlib-resources.readthedocs.io/en/latest/migration.html#pkg-resources-resource-filename
+    import importlib
+    from contextlib import ExitStack
+    import atexit
+    file_manager = ExitStack()
+    atexit.register(file_manager.close)
 
-    from pkg_resources import resource_filename
-    fn = resource_filename('openmmtools', relative_path)
+    fn = file_manager.enter_context(importlib.resources.as_file(importlib.resources.files("openmmtools") / relative_path))
 
     if not os.path.exists(fn):
         raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
