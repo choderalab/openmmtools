@@ -15,7 +15,7 @@ dependencies:
   - python
   - python
   - pyyaml
-  - scipy
+  - scipy >=1.15.0
   - setuptools
   - sphinxcontrib-bibtex
   # Testing

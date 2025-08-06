@@ -4588,8 +4588,8 @@ class LennardJonesPair(TestSystem):
         # Integrate the free energy of binding in unitless coordinate system.
         xmin = 0.15  # in units of sigma
         xmax = 6.0  # in units of sigma
-        from scipy.integrate import quadrature
-        [integral, abserr] = quadrature(integrand_numpy, xmin, xmax, args=[context], maxiter=500)
+        from scipy.integrate import quad
+        [integral, abserr], _ = quad(integrand_numpy, xmin, xmax, args=[context])
         # correct for performing unitless integration
         integral = integral * (self.sigma ** 3)
 
