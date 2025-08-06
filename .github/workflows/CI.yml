@@ -40,7 +40,7 @@ jobs:
             pymbar-version: "4"
           # Have one job test pymbar 3 support
           - openmm: "8.3.1"
-            python-version: "3.13"
+            python-version: "3.12"
             os: ubuntu-latest
             pymbar-version: "3"
 
