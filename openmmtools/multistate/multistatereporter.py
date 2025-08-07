@@ -129,7 +129,7 @@ class MultiStateReporter(object):
                  ):
 
         # Warn that API is experimental
-        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warning('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # Handle checkpointing
         if type(checkpoint_interval) != int:

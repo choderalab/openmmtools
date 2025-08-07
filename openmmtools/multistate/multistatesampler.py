@@ -197,7 +197,7 @@ class MultiStateSampler(object):
                  locality=None):
 
         # Warn that API is experimental
-        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warning('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # Display cuda device in debug log
         self._display_cuda_devices()
