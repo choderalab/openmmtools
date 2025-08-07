@@ -4,8 +4,11 @@ Release History
 0.25.1
 ======
 
-This release fixes a bug where ``get_entropy()`` and ``get_enthalpy() `` would return an ``AttributeError`` when using ``pymbar4``. See `#757 <https://github.com/choderalab/openmmtools/issues/757>`_ for more details.
+This release fixes a bug where ``get_entropy()`` and ``get_enthalpy() `` would return an ``AttributeError`` when using ``pymbar4``.
+See `#757 <https://github.com/choderalab/openmmtools/issues/757>`_ for more details.
 This release fixes deprecation warnings for ``pkg_resources`` and ``warnings.warn``.
+Replaced ``scipy.integrate.quadrature`` with ``scipy.integrate.quad`` to enable ``scipy >= 1.15.0`` support.
+See `#788 <https://github.com/choderalab/openmmtools/pull/788>`_ for more details.
 
 0.25.0
 ======
