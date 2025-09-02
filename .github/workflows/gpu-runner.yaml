@@ -18,14 +18,19 @@ jobs:
           aws-region: us-east-1
       - name: Create cloud runner
         id: aws-start
-        uses: omsf-eco-infra/gha-runner@v0.2.0
+        uses: omsf/start-aws-gha-runner@v1.0.0
         with:
-          provider: "aws"
-          action: "start"
           aws_image_id: ami-053912f3a44543f8c 
           aws_instance_type: g4dn.xlarge
-          aws_region_name: us-east-1
           aws_home_dir: /home/ubuntu
+          aws_tags: >
+            [
+              {"Key": "Application", "Value": "chodera-lab"}, 
+              {"Key": "Application-ID (APM)", "Value": "APM0003545"}, 
+              {"Key": "cost-center", "Value": "50612"}, 
+              {"Key": "owner-email", "Value": "choderaj@mskcc.org"}, 
+              {"Key": "env", "Value": "research"}
+            ]
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
 
@@ -35,8 +40,6 @@ jobs:
     defaults:
       run:
         shell: bash -leo pipefail {0}
-    env:
-      OE_LICENSE: ${{ github.workspace }}/oe_license.txt
 
     needs:
       - start-aws-runner
@@ -70,13 +73,6 @@ jobs:
           micromamba list
           pip list
 
-      - name: Test OE License & Write License to File
-        env:
-          OE_LICENSE_TEXT: ${{ secrets.OE_LICENSE }}
-        run: |
-          echo "${OE_LICENSE_TEXT}" > ${OE_LICENSE}
-          python -c "import openeye; assert openeye.oechem.OEChemIsLicensed(), 'OpenEye license checks failed!'"
-
       - name: "Run tests"
         run: |
           pytest -n 4 -v --durations=10 --cov=openmmtools --cov-report=term
@@ -97,11 +93,8 @@ jobs:
           role-to-assume: arn:aws:iam::009563297724:role/gha-runner-omsf
           aws-region: us-east-1
       - name: Stop instances
-        uses: omsf-eco-infra/gha-runner@v0.2.0
+        uses: omsf/stop-aws-gha-runner@v1.0.0
         with:
-          provider: "aws"
-          action: "stop"
           instance_mapping: ${{ needs.start-aws-runner.outputs.mapping }}
-          aws_region_name: us-east-1
         env:
           GH_PAT: ${{ secrets.GH_PAT }}

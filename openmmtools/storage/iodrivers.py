@@ -969,7 +969,7 @@ class NCVariableCodec(Codec):
                 raise TypeError("Storage target on NetCDF file is of type {} but this driver is designed to handle "
                                 "type {}!".format(self._bound_target.getncattr('IODriver_Type'), self.dtype_string()))
         except AttributeError:
-            warnings.warn("This Codec cannot detect storage type from on-disk variable. .write() and .append() "
+            warnings.warning("This Codec cannot detect storage type from on-disk variable. .write() and .append() "
                           "operations will not work and .read() operations may work", RuntimeWarning)
 
     def _check_storage_mode(self, expected_mode):

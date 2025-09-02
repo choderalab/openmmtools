@@ -720,7 +720,7 @@ class BaseIntegratorMove(MCMCMove):
             except Exception as e:
                 # Catches particle positions becoming nan during integration.
                 # Return the exception message as a warning
-                warnings.warn(str(e))
+                warnings.warning(str(e))
                 restart = True
             else:
                 timer.stop("{}: step({})".format(move_name, self.n_steps))
@@ -1415,7 +1415,7 @@ class GHMCMove(BaseIntegratorMove):
 
         """
         if self.n_proposed == 0:
-            return np.NaN
+            return np.nan
         # TODO drop the casting when stop Python2 support
         return float(self.n_accepted) / self.n_proposed
 

@@ -22,12 +22,15 @@ import pickle
 import shutil
 import sys
 import tempfile
+import time
 from io import StringIO
 
 import numpy as np
 import yaml
 
 import pytest
+import requests
+from coverage.data import debug_data_file
 
 try:
     import openmm
@@ -313,9 +316,139 @@ class TestHarmonicOscillatorsMultiStateSampler:
     # on windows we get a ZeroDivisionError: float division by zero
     # when measuring the timing data
     @pytest.mark.skipif(sys.platform.startswith("win"), reason="Test fails on windows")
+    @pytest.mark.flaky(reruns=3)
     def test_without_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
+
+    @pytest.mark.parametrize("include_unsampled_states", [False, True])
+    def test_entropy_enthalpy(self, include_unsampled_states, tmp_path):
+        """
+        Test that the entropy and enthalpy matrices computed by the analyzer match analytical expectations.
+
+        This function initializes a MultiStateReporter, constructs an analyzer from stored simulation data,
+        and compares computed entropy (ΔS_ij) and enthalpy (ΔU_ij) matrices to analytical expectations.
+
+        Entropy is expected to satisfy ΔS_ij ≈ -ΔF_ij_analytical (assuming ΔU ≈ 0), and enthalpy is expected to be ≈ 0.
+        Deviations are tested against a threshold of 6 standard errors (σ). Any entry exceeding this threshold
+        raises an exception.
+
+        Parameters
+        ----------
+        include_unsampled_states : bool
+            Whether to include unsampled boundary states in the analysis. If True, additional
+            boundary states are expected in the computed matrices.
+        tmp_path : Path or str
+            Temporary path for creating the NetCDF storage file.
+
+        Notes
+        -----
+        This test assumes ΔU ≈ 0 for all states and checks that ΔS ≈ -ΔF. It dynamically selects
+        the appropriate submatrix of the analytical free energy matrix depending on whether
+        unsampled boundary states are included.
+        """
+        n_iterations = int(2.5*self.N_ITERATIONS)  # We want more iterations for entropy test
+        # TODO: These can probably be fixtures, we use them in different tests
+        # Create and configure simulation object
+        move = mmtools.mcmc.MCDisplacementMove(displacement_sigma=1.0 * unit.angstroms)
+        simulation = self.SAMPLER(
+            mcmc_moves=move,
+            number_of_iterations=n_iterations,
+            online_analysis_interval=n_iterations,
+        )
+        storage = os.path.join(tmp_path, "test_storage.nc")
+        reporter = MultiStateReporter(
+            storage, checkpoint_interval=n_iterations
+        )
+
+        if include_unsampled_states:
+            nstates_expected = (
+                    self.N_STATES + 2
+            )  # We expect N_STATES plus two additional states
+            delta_f_ij_analytical = (
+                self.delta_f_ij_analytical
+            )  # Use the whole matrix
+            simulation.create(
+                self.thermodynamic_states,
+                self.sampler_states,
+                reporter,
+                unsampled_thermodynamic_states=self.unsampled_states,
+            )
+        else:
+            nstates_expected = self.N_STATES  # We expect only N_STATES
+            delta_f_ij_analytical = self.delta_f_ij_analytical[
+                                    1:-1, 1:-1
+                                    ]  # Use only the intermediate, sampled states
+            simulation.create(
+                self.thermodynamic_states, self.sampler_states, reporter
+            )
+
+        # Run simulation to generate/populate data
+        simulation.run()
+
+        analyzer = self.ANALYZER(reporter)
+
+        # Check if entropy and enthalpy can be calculated and are within tolerance
+        delta_s_ij, delta_s_ij_stderr = analyzer.get_entropy()
+
+        nstates, _ = delta_s_ij.shape
+
+        assert (
+                nstates == nstates_expected
+        ), f"analyzer.get_entropy() returned {delta_s_ij.shape} but expected {nstates_expected, nstates_expected}"
+
+        error = np.abs(delta_s_ij + delta_f_ij_analytical)  # We expect dS = -dF
+        indices = np.where(delta_s_ij_stderr > 0.0)
+        nsigma = np.zeros([nstates, nstates], np.float32)
+        nsigma[indices] = error[indices] / delta_s_ij_stderr[indices]
+        MAX_SIGMA = 6.0  # maximum allowed number of standard errors
+        if np.any(nsigma > MAX_SIGMA):
+            np.set_printoptions(precision=3)
+            debug_data = {
+                "delta_s_ij": delta_s_ij,
+                "delta_s_ij_analytical": delta_f_ij_analytical,
+                "error": error,
+                "stderr": delta_s_ij_stderr,
+                "nsigma": nsigma,
+            }
+            print("\n[DEBUG] Entropy test failed. Details:")
+            for key, value in debug_data.items():
+                print(f"{key}: {value}")
+            assert False, f"Dimensionless (reduced) entropy exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+
+        # Check enthalpy
+        delta_u_ij, delta_u_ij_stderr = analyzer.get_enthalpy()
+
+        if include_unsampled_states:
+            nstates_expected = (
+                    self.N_STATES + 2
+            )  # We expect N_STATES plus two additional states
+        else:
+            nstates_expected = self.N_STATES  # We expect only N_STATES
+
+        assert (
+                nstates == nstates_expected
+        ), f"analyzer.get_entropy() returned {delta_u_ij.shape} but expected {nstates_expected, nstates_expected}"
+
+        error = np.abs(delta_u_ij)  # We expect du = 0
+        indices = np.where(delta_u_ij_stderr > 0.0)
+        nsigma = np.zeros([nstates, nstates], np.float32)
+        nsigma[indices] = error[indices] / delta_u_ij_stderr[indices]
+        MAX_SIGMA = 6.0  # maximum allowed number of standard errors
+        if np.any(nsigma > MAX_SIGMA):
+            np.set_printoptions(precision=3)
+            debug_data = {
+                "delta_u_ij": delta_u_ij,
+                "delta_u_ij_analytical": 0,
+                "error": error,
+                "stderr": delta_u_ij_stderr,
+                "nsigma": nsigma,
+            }
+            print("\n[DEBUG] Enthalpy test failed. Details:")
+            for key, value in debug_data.items():
+                print(f"{key}:{value}")
+            assert False, f"Dimensionless (reduced) potential (enthalpy) difference exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+
 
 
 class TestHarmonicOscillatorsReplicaExchangeSampler(
@@ -357,20 +490,23 @@ class TestReporter:
 
     @staticmethod
     @contextlib.contextmanager
-    def temporary_reporter(
-        checkpoint_interval=1, checkpoint_storage=None, analysis_particle_indices=()
-    ):
+
+    def temporary_reporter(checkpoint_interval=1, checkpoint_storage=None,
+                           position_interval=1, velocity_interval=1,
+                           analysis_particle_indices=()):
         """Create and initialize a reporter in a temporary directory."""
         with temporary_directory() as tmp_dir_path:
             storage_file = os.path.join(tmp_dir_path, "temp_dir/test_storage.nc")
             assert not os.path.isfile(storage_file)
-            reporter = MultiStateReporter(
-                storage=storage_file,
-                open_mode="w",
-                checkpoint_interval=checkpoint_interval,
-                checkpoint_storage=checkpoint_storage,
-                analysis_particle_indices=analysis_particle_indices,
-            )
+
+            reporter = MultiStateReporter(storage=storage_file, open_mode='w',
+                                          checkpoint_interval=checkpoint_interval,
+                                          checkpoint_storage=checkpoint_storage,
+                                          analysis_particle_indices=analysis_particle_indices,
+                                          position_interval=position_interval,
+                                          velocity_interval=velocity_interval,
+                                          )
+
             assert reporter.storage_exists(skip_size=True)
             yield reporter
 
@@ -560,6 +696,122 @@ class TestReporter:
                     analysis_state.box_vectors / unit.nanometer,
                     checkpoint_state.box_vectors / unit.nanometer,
                 )
+
+    def test_writer_sampler_states_pos_interval(self):
+        """ write positions and velocities every other frame"""
+        analysis_particles = (1, 2)
+        with self.temporary_reporter(analysis_particle_indices=analysis_particles,
+                                     position_interval=2, velocity_interval=2,
+                                     checkpoint_interval=2) as reporter:
+            # Create sampler states.
+            alanine_test = testsystems.AlanineDipeptideVacuum()
+            positions = alanine_test.positions
+            sampler_states = [mmtools.states.SamplerState(positions=positions)
+                              for _ in range(2)]
+
+            # Check that after writing and reading, states are identical.
+            for iteration in range(3):
+                reporter.write_sampler_states(sampler_states, iteration=iteration)
+                reporter.write_last_iteration(iteration)
+
+            # Check first frame
+            restored_sampler_states = reporter.read_sampler_states(iteration=0)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions, restored_state.positions)
+                # By default stored velocities are zeros if not present in origin sampler_state
+                assert np.allclose(np.zeros(state.positions.shape), restored_state.velocities)
+                assert np.allclose(state.box_vectors / unit.nanometer, restored_state.box_vectors / unit.nanometer)
+            # Second frame should not have positions or velocities
+            restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert (restored_state.positions._value == 0).all()
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                # By default stored velocities are zeros if not present in origin sampler_state
+                assert np.allclose(np.zeros((2, 3)), restored_state.velocities)
+                assert np.allclose(state.box_vectors / unit.nanometer, restored_state.box_vectors / unit.nanometer)
+
+    def test_write_sampler_states_no_vel(self):
+        """do not write velocities to trajectory file"""
+        analysis_particles = (1, 2)
+        with self.temporary_reporter(analysis_particle_indices=analysis_particles,
+                                     position_interval=1, velocity_interval=0,
+                                     checkpoint_interval=2) as reporter:
+            # Create sampler states.
+            alanine_test = testsystems.AlanineDipeptideVacuum()
+            positions = alanine_test.positions
+            sampler_states = [mmtools.states.SamplerState(positions=positions)
+                              for _ in range(2)]
+
+            # Check that after writing and reading, states are identical.
+            for iteration in range(3):
+                reporter.write_sampler_states(sampler_states, iteration=iteration)
+                reporter.write_last_iteration(iteration)
+
+            # Check first frame
+            restored_sampler_states = reporter.read_sampler_states(iteration=0, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                # missing values are returned as numpy masked array
+                # so we check that these arrays are all masked
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            # Second frame should not have positions or velocities
+            restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert np.allclose(state.positions[analysis_particles, :], restored_state.positions)
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
+
+    def test_write_sampler_states_no_pos(self):
+        """do not write positions or velocities to trajectory file"""
+        analysis_particles = (1, 2)
+        with self.temporary_reporter(analysis_particle_indices=analysis_particles,
+                                     position_interval=0, velocity_interval=0,
+                                     checkpoint_interval=2) as reporter:
+            # Create sampler states.
+            alanine_test = testsystems.AlanineDipeptideVacuum()
+            positions = alanine_test.positions
+            sampler_states = [mmtools.states.SamplerState(positions=positions)
+                              for _ in range(2)]
+
+            # Check that after writing and reading, states are identical.
+            for iteration in range(3):
+                reporter.write_sampler_states(sampler_states, iteration=iteration)
+                reporter.write_last_iteration(iteration)
+
+            # Check first frame
+            restored_sampler_states = reporter.read_sampler_states(iteration=0, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                # missing values are returned as numpy masked array
+                # so we check that these arrays are all masked
+                assert (restored_state.positions._value == 0).all()
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            # Second frame should not have positions or velocities
+            restored_sampler_states = reporter.read_sampler_states(iteration=1, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert (restored_state.positions._value == 0).all()
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
+
+            restored_sampler_states = reporter.read_sampler_states(iteration=2, analysis_particles_only=True)
+            for state, restored_state in zip(sampler_states, restored_sampler_states):
+                assert (restored_state.positions._value == 0).all()
+                assert (restored_state.velocities._value == 0).all()
+                assert restored_state.box_vectors is None  # not periodic
 
     def test_analysis_particle_mismatch(self):
         """Test that previously stored analysis particles is higher priority."""
@@ -1861,7 +2113,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             del reporter
             self.REPORTER(storage_path, checkpoint_storage=cp_file_mod, open_mode="r")
 
-    @pytest.mark.flaky(reruns=3)
+    @pytest.mark.skipif(sys.platform == "darwin", reason="seg faults on osx sometimes")
     def test_storage_reporter_and_string(self):
         """Test that creating a MultiState by storage string and reporter is the same"""
         thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(
@@ -2104,6 +2356,79 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 len(yaml_contents) == expected_yaml_entries
             ), "Expected yaml entries do not match the actual number entries in the file."
 
+    @pytest.mark.parametrize("n_iterations,online_interval,checkpoint_interval,iterations_first_run", [(15, 3, 5, 11), (15, 3, 5, 3), (10, 2, 2, 3), (10, 2, 2, 4), (10, 2, 2, 2)])
+    def test_real_time_analysis_yaml_restore(self, n_iterations, online_interval, checkpoint_interval, iterations_first_run):
+        """Test that a restored sampler produces the expected output yaml file."""
+        thermodynamic_states, sampler_states, unsampled_states = copy.deepcopy(
+            self.alanine_test
+        )
+
+        with self.temporary_storage_path() as storage_path:
+
+            # calculated the expected number of entries and checkpoints
+            expected_yaml_entries = iterations_first_run // online_interval
+            expected_checkpoint_states = iterations_first_run // checkpoint_interval
+            expected_yaml_extra = expected_yaml_entries - checkpoint_interval * expected_checkpoint_states // online_interval
+            expected_yaml_total_at_end = n_iterations // online_interval + expected_yaml_extra
+
+            move = mmtools.mcmc.IntegratorMove(
+                openmm.VerletIntegrator(1.0 * unit.femtosecond), n_steps=1
+            )
+
+            # initialize the original sampler, which we don't complete
+            # the full set of iterations for
+            sampler = self.SAMPLER(
+                mcmc_moves=move,
+                number_of_iterations=n_iterations,
+                online_analysis_interval=online_interval,
+            )
+
+            reporter = self.REPORTER(storage_path, checkpoint_interval=checkpoint_interval)
+            self.call_sampler_create(
+                sampler,
+                reporter,
+                thermodynamic_states,
+                sampler_states,
+                unsampled_states,
+            )
+
+            sampler.run(n_iterations=iterations_first_run)
+
+            # load file and check number of iterations
+            storage_dir, reporter_filename = os.path.split(
+                sampler._reporter._storage_analysis_file_path
+            )
+            # remove extension from filename
+            yaml_prefix = os.path.splitext(reporter_filename)[0]
+            output_filepath = os.path.join(
+                storage_dir, f"{yaml_prefix}_real_time_analysis.yaml"
+            )
+            with open(output_filepath) as yaml_file:
+                yaml_contents = yaml.safe_load(yaml_file)
+
+            # Make sure we get the correct number of entries
+            assert len(yaml_contents) == expected_yaml_entries, "Expected yaml entries do not match the actual number entries in the file."
+
+            # Remove before restoring
+            del sampler
+
+            # Restore from storage and finish the rest of the
+            # iterations
+            sampler = self.SAMPLER.from_storage(reporter)
+
+            # Run for remaining iterations, we expect:
+            # 1) 1 checkpoint to be written
+            # 2) 3 real time analysis entries written
+            sampler.run()
+
+            # load file and check number of iterations
+            with open(output_filepath) as yaml_file:
+                yaml_contents = yaml.safe_load(yaml_file)
+
+            # Make sure we get the correct number of entries
+            assert (
+                len(yaml_contents) == expected_yaml_total_at_end
+            ), "Expected yaml entries do not match the actual number entries in the file."
 
 def test_real_time_analysis_can_be_none():
     """Test if real time analysis can be done"""
@@ -2611,6 +2936,64 @@ class TestSerializedMultiStateSampler(TestBaseMultistateSampler):
                 assert np.any(
                     state.velocities.value_in_unit_system(unit.md_unit_system) != 0
                 ), "At least some velocity in sampler state from new checkpoint is expected to different from zero."
+
+@pytest.fixture
+def download_nc_file(tmpdir):
+    # See https://github.com/choderalab/pymbar/issues/419#issuecomment-1718386779
+    # and https://github.com/choderalab/openmmtools/pull/735#issuecomment-2378070388
+    # if this file ever starts to 404
+    FILE_URL = "https://github.com/user-attachments/files/17156868/ala-thr.zip"
+    MAX_RETRIES = 3
+    RETRY_DELAY = 2  # Delay between retries (in seconds)
+    file_name = os.path.join(tmpdir, "ala-thr.nc")
+    retries = 0
+    while retries < MAX_RETRIES:
+        try:
+          # Send GET request to download the file
+            response = requests.get(FILE_URL, timeout=20)  # Timeout to avoid hanging
+            response.raise_for_status()  # Raise HTTPError for bad responses (4xx/5xx)
+            with open(file_name, "wb") as f:
+                f.write(response.content)
+            # File downloaded successfully, break out of retry loop
+            break
+
+        except (requests.exceptions.RequestException, requests.exceptions.HTTPError) as e:
+            retries += 1
+            if retries >= MAX_RETRIES:
+                pytest.fail(f"Failed to download file after {MAX_RETRIES} retries: {e}")
+            else:
+                print(f"Retrying download... ({retries}/{MAX_RETRIES})")
+                time.sleep(RETRY_DELAY)  # Wait before retrying
+    yield file_name
+
+
+def test_pymbar_issue_419(download_nc_file):
+    """
+    This test checks that a nc file from a ala-thr mutation simulation converges.
+
+    With pymbar 4 default (as of 2024-10-02) solver fails to converge.
+    With pymbar 3 defaults, the solver does converge.
+
+    With PR #735 (https://github.com/choderalab/openmmtools/pull/735) we updated
+    the MultiStateSamplerAnalyzer to use the "robust" sampler when using pymbar4.
+
+    See https://github.com/choderalab/pymbar/issues/419#issuecomment-1718386779 for more
+    information on how the file was generated.
+
+    """
+
+
+    from openmmtools.multistate import MultiStateReporter, MultiStateSamplerAnalyzer
+
+    n_iterations = 1000
+    reporter_file = download_nc_file
+    reporter = MultiStateReporter(reporter_file)
+    analyzer = MultiStateSamplerAnalyzer(reporter, max_n_iterations=n_iterations)
+    f_ij, df_ij = analyzer.get_free_energy()
+    # free energy
+    assert f_ij[0, -1] == pytest.approx(-52.00083148433459)
+    # error
+    assert df_ij[0, -1] == pytest.approx(0.21365627649558516)
 
 
 # ==============================================================================

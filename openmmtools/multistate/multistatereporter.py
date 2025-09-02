@@ -100,6 +100,14 @@ class MultiStateReporter(object):
     analysis_particle_indices : tuple of ints, Optional. Default: () (empty tuple)
         If specified, it will serialize positions and velocities for the specified particles, at every iteration, in the
         reporter storage (.nc) file. If empty, no positions or velocities will be stored in this file for any atoms.
+    position_interval : int, default 1
+        The frequency at which to write positions and box vectors
+        relative to analysis information, 0 would prevent this
+        information from being written.
+    velocity_interval : int, default 1
+        The frequency at which to write velocities relative to
+        analysis information, 0 would prevent this information from
+        being written.
 
     Attributes
     ----------
@@ -109,14 +117,19 @@ class MultiStateReporter(object):
     n_states
     n_replicas
     analysis_particle_indices
+    position_interval
+    velocity_interval
 
     """
     def __init__(self, storage, open_mode=None,
                  checkpoint_interval=50, checkpoint_storage=None,
-                 analysis_particle_indices=()):
+                 analysis_particle_indices=(),
+                 position_interval=1,
+                 velocity_interval=1,
+                 ):
 
         # Warn that API is experimental
-        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warning('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # Handle checkpointing
         if type(checkpoint_interval) != int:
@@ -136,6 +149,9 @@ class MultiStateReporter(object):
         self._checkpoint_interval = checkpoint_interval
         # Cast to tuple no mater what 1-D-like input was given
         self._analysis_particle_indices = tuple(analysis_particle_indices)
+        self._position_interval = position_interval
+        self._velocity_interval = velocity_interval
+
         if open_mode is not None:
             self.open(open_mode)
         # TODO: Maybe we want to expose this flag to control ovrwriting/appending
@@ -201,6 +217,16 @@ class MultiStateReporter(object):
     def checkpoint_interval(self):
         """Returns the checkpoint interval"""
         return self._checkpoint_interval
+
+    @property
+    def position_interval(self):
+        """Interval relative to energies that positions (and box vectors) are written at"""
+        return self._position_interval
+
+    @property
+    def velocity_interval(self):
+        """Interval relative to energies that velocities are written at"""
+        return self._velocity_interval
 
     def storage_exists(self, skip_size=False):
         """
@@ -415,6 +441,8 @@ class MultiStateReporter(object):
             ncfile.ConventionVersion = '0.2'
             ncfile.DataUsedFor = nc_name
             ncfile.CheckpointInterval = self._checkpoint_interval
+            ncfile.PositionInterval = self._position_interval
+            ncfile.VelocityInterval = self._velocity_interval
 
             # Create and initialize the global variables
             nc_last_good_iter = ncfile.createVariable('last_iteration', int, 'scalar')
@@ -1265,7 +1293,7 @@ class MultiStateReporter(object):
                 base_warn += "\n\t{}per-iteration: {}".format(iteration_str, failure)
             for missing in collected_not_found:
                 base_warn += "\n\tMissing: {}".format(missing)
-            warnings.warn(base_warn, RuntimeWarning)
+            warnings.warning(base_warn, RuntimeWarning)
         return collected_variables
 
     def write_online_analysis_data(self, iteration: Union[int, None], **kwargs):
@@ -1638,7 +1666,7 @@ class MultiStateReporter(object):
 
         storage = self._storage_dict[storage_file]
         # Check if the schema must be initialized, do this regardless of the checkpoint_interval for consistency
-        is_periodic = True if (sampler_states[0].box_vectors is not None) else False
+        is_periodic = sampler_states[0].box_vectors is not None
         n_particles = sampler_states[0].n_particles
         n_replicas = len(sampler_states)
         self._initialize_sampler_variables_on_file(storage, n_particles,
@@ -1647,35 +1675,47 @@ class MultiStateReporter(object):
             write_iteration = self._calculate_checkpoint_iteration(iteration)
         else:
             write_iteration = iteration
+
+        # write out pos/vel - if checkpointing,
+        # or if interval matches desired frequency
+        write_pos = (storage_file == 'checkpoint' or
+                     (self._position_interval != 0
+                      and write_iteration % self._position_interval == 0))
+        write_vel = (storage_file == 'checkpoint' or
+                     (self._velocity_interval != 0
+                      and write_iteration % self._velocity_interval == 0))
+
         # Write the sampler state if we are on the checkpoint interval OR if told to ignore the interval
         if write_iteration is not None:
             # Store sampler states.
-            # Create a numpy array to avoid making multiple (possibly inefficient) calls to netCDF assignments
-            positions = np.zeros([n_replicas, n_particles, 3])
-            for replica_index, sampler_state in enumerate(sampler_states):
-                # Store positions in memory first
-                x = sampler_state.positions / unit.nanometers
-                positions[replica_index, :, :] = x[:, :]
-            # Store positions
-            storage.variables['positions'][write_iteration, :, :, :] = positions
+            if write_pos:
+                # Create a numpy array to avoid making multiple (possibly inefficient) calls to netCDF assignments
+                positions = np.zeros([n_replicas, n_particles, 3])
+                for replica_index, sampler_state in enumerate(sampler_states):
+                    # Store positions in memory first
+                    x = sampler_state.positions / unit.nanometers
+                    positions[replica_index, :, :] = x[:, :]
+                # Store positions
+                storage.variables['positions'][write_iteration, :, :, :] = positions
 
-            # Create a numpy array to avoid making multiple (possibly inefficient) calls to netCDF assignments
-            velocities = np.zeros([n_replicas, n_particles, 3])
-            for replica_index, sampler_state in enumerate(sampler_states):
-                if sampler_state._unitless_velocities is not None:
-                    # Store velocities in memory first
-                    x = sampler_state.velocities / (unit.nanometer/unit.picoseconds) # _unitless_velocities
-                    velocities[replica_index, :, :] = x[:, :]
-             # Store velocites
-            # TODO: This stores velocities as zeros if no velocities are present in the sampler state. Making restored
-            #  sampler_state different from origin.
-            if 'velocities' not in storage.variables:
-                # create variable with expected dimensions and shape
-                storage.createVariable('velocities', storage.variables['positions'].dtype,
-                                       dimensions=storage.variables['positions'].dimensions)
-            storage.variables['velocities'][write_iteration, :, :, :] = velocities
+            if write_vel:
+                # Create a numpy array to avoid making multiple (possibly inefficient) calls to netCDF assignments
+                velocities = np.zeros([n_replicas, n_particles, 3])
+                for replica_index, sampler_state in enumerate(sampler_states):
+                    if sampler_state._unitless_velocities is not None:
+                        # Store velocities in memory first
+                        x = sampler_state.velocities / (unit.nanometer/unit.picoseconds) # _unitless_velocities
+                        velocities[replica_index, :, :] = x[:, :]
+                 # Store velocites
+                # TODO: This stores velocities as zeros if no velocities are present in the sampler state. Making restored
+                #  sampler_state different from origin.
+                if 'velocities' not in storage.variables:
+                    # create variable with expected dimensions and shape
+                    storage.createVariable('velocities', storage.variables['positions'].dtype,
+                                           dimensions=storage.variables['positions'].dimensions)
+                storage.variables['velocities'][write_iteration, :, :, :] = velocities
 
-            if is_periodic:
+            if is_periodic and write_pos:
                 # Store box vectors and volume.
                 # Allocate whole write to memory first
                 box_vectors = np.zeros([n_replicas, 3, 3])
@@ -1727,24 +1767,39 @@ class MultiStateReporter(object):
             sampler_states = list()
             for replica_index in range(n_replicas):
                 # Restore positions.
-                x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
-                positions = unit.Quantity(x, unit.nanometers)
+                try:
+                    x = storage.variables['positions'][read_iteration, replica_index, :, :].astype(np.float64)
+                    # if any data is masked, treat as if iteration index didn't exist
+                    if x.mask.any():
+                        raise IndexError
+                    # pull the valid data out of masked array
+                    positions = unit.Quantity(x.data, unit.nanometers)
+                except (IndexError, KeyError):
+                    # pass zeros as velocities when key is not found (<0.21.3 behavior)
+                    positions = np.zeros((storage.dimensions['atom'].size,  # TODO: analysis_particles or atom here?
+                                          storage.dimensions['spatial'].size), dtype=np.float64)
+
+                # Restore box vectors.
+                try:
+                    x = storage.variables['box_vectors'][read_iteration, replica_index, :, :].astype(np.float64)
+                    if x.mask.any():
+                        raise IndexError
+                    box_vectors = unit.Quantity(x, unit.nanometers)
+                except (IndexError, KeyError):
+                    box_vectors = None
 
                 # Restore velocities
                 # try-catch exception, enabling reading legacy/older serialized objects from openmmtools<0.21.3
                 try:
                     x = storage.variables['velocities'][read_iteration, replica_index, :, :].astype(np.float64)
-                    velocities = unit.Quantity(x, unit.nanometer / unit.picoseconds)
-                except KeyError:  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
+                    # if any data is masked, treat as if iteration index didn't exist
+                    if x.mask.any():
+                        raise IndexError
+                    # pull the valid data out of masked array
+                    velocities = unit.Quantity(x.data, unit.nanometer / unit.picoseconds)
+                except (IndexError, KeyError):  # Velocities key/variable not found in serialization (openmmtools<=0.21.2)
                     # pass zeros as velocities when key is not found (<0.21.3 behavior)
                     velocities = np.zeros_like(positions)
-
-                if 'box_vectors' in storage.variables:
-                    # Restore box vectors.
-                    x = storage.variables['box_vectors'][read_iteration, replica_index, :, :].astype(np.float64)
-                    box_vectors = unit.Quantity(x, unit.nanometers)
-                else:
-                    box_vectors = None
 
                 # Create SamplerState.
                 sampler_states.append(states.SamplerState(positions=positions, velocities=velocities, box_vectors=box_vectors))

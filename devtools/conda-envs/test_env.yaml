@@ -15,7 +15,7 @@ dependencies:
   - python
   - python
   - pyyaml
-  - scipy < 1.14
+  - scipy >=1.15.0
   - setuptools
   - sphinxcontrib-bibtex
   # Testing
@@ -24,6 +24,7 @@ dependencies:
   - pytest
   - pytest-cov
   - pytest-xdist
+  - pytest-rerunfailures
   # docs
   - numpydoc
   - sphinx-rtd-theme

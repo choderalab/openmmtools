@@ -1,6 +1,99 @@
 Release History
 ***************
 
+0.25.1
+======
+
+This release fixes a bug where ``get_entropy()`` and ``get_enthalpy() `` would return an ``AttributeError`` when using ``pymbar4``.
+See `#757 <https://github.com/choderalab/openmmtools/issues/757>`_ for more details.
+This release fixes deprecation warnings for ``pkg_resources`` and ``warnings.warn``.
+Replaced ``scipy.integrate.quadrature`` with ``scipy.integrate.quad`` to enable ``scipy >= 1.15.0`` support.
+See `#788 <https://github.com/choderalab/openmmtools/pull/788>`_ for more details.
+
+0.25.0
+======
+
+This release removes the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval``. See `#799 <https://github.com/choderalab/openmmtools/pull/779>`_ for more details.
+
+Enhancements
+------------
+
+- Removes the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval`` 
+  - Issue a logger warning rather than raise a ``ValueError``
+  - Note that the real time analysis output file may contain redundant information after restoring from checkpoints that would result in the repeated calculation of a specific iteration index
+  - See `#799 <https://github.com/choderalab/openmmtools/pull/779>`_ for more details
+
+0.24.2 - Numpy 2 support and FIRE minimization improvements
+===========================================================
+
+This release enables numpy 2 support and makes the FIRE minimization more stable by disabling the barostat during the minimization.
+
+Enhancements
+------------
+
+- Add AWS Tags (`#766 <https://github.com/choderalab/openmmtools/pull/766>`_) by @mikemhenry
+- chore: migrate to new OMSF start/stop runners (`#775 <https://github.com/choderalab/openmmtools/pull/775>`_) by @ethanholz
+- Disable the barostat during FIRE minimization (`#773 <https://github.com/choderalab/openmmtools/pull/773>`_) by @hannahbaumann
+
+Bug Fixes
+---------
+
+- Fixes for numpy 2.0 (ruff NPY201) (`#777 <https://github.com/choderalab/openmmtools/pull/777>`_) by @IAlibay
+
+0.24.1 - Differential storage of positions and velocities
+=========================================================
+
+Enhancements
+------------
+
+- ``MultiStateReporter`` now accepts variable position and velocity checkpointing intervals. Note that when resuming simulations users have to specify again the keyword arguments for the reporter (`Pull Request #767 <https://github.com/choderalab/openmmtools/pull/767>`_).
+
+
+0.24.0 - pyMBAR Behavior Changes + HIP Platform Added 
+=====================================================
+
+Bug Fixes
+---------
+
+- Update docstring default for ``alchemical_pme_treatment`` (`Pull Request #644`_).
+
+
+Behavior Changes
+----------------
+- Use ``robust`` solver for  ``pyMBAR`` by default. 
+  ``pyMBAR`` 3 & 4 used two different solvers by default.
+  We now use the ``robust`` solver by default regardless of the ``pyMBAR`` version.
+  We still respect whichever solver is specified in ``analysis_kwargs`` (i.e ``analysis_kwargs["solver_protocol"] = "robust"`` when creating the analyzer, but now set the solver to ``"robust"`` if no solver is specified.
+  This should improve convergence performance (`Pull Request #735`_).
+
+Enhancements
+------------
+
+- Added OpenMM's "HIP" platform as a selectable platform.
+  With the release of OpenMM 8.2, the "HIP" platform is now available to use on compatible AMD GPUs. This update will allow ``openmmtools`` to automatically select the HIP platform if it is available (`Pull Request #753`_).
+- Added ``effective_length`` to ``MultiStateSamplerAnalyzer`` (`Pull Request #589`_).
+- Create ``alchemy`` subpackage (`Pull Request #721`_).
+
+
+
+Testing
+-------
+
+- Testing framework overhauled to use pytest and flaky tests now automatically re-run if they fail (`Pull Request #714`_, `Pull Request #746`_, `Pull Request #749`_,  `Pull Request #751`_)
+- Use OMSF's `gha-runner`_ to test on GPUs.
+
+.. _gha-runner: https://github.com/omsf-eco-infra/gha-runner
+.. _Pull Request #589: https://github.com/choderalab/openmmtools/pull/589
+.. _Pull Request #714: https://github.com/choderalab/openmmtools/pull/714
+.. _Pull Request #721: https://github.com/choderalab/openmmtools/pull/721
+.. _Pull Request #644: https://github.com/choderalab/openmmtools/pull/644
+.. _Pull Request #744: https://github.com/choderalab/openmmtools/pull/744
+.. _Pull Request #746: https://github.com/choderalab/openmmtools/pull/746
+.. _Pull Request #749: https://github.com/choderalab/openmmtools/pull/749
+.. _Pull Request #735: https://github.com/choderalab/openmmtools/pull/735
+.. _Pull Request #751: https://github.com/choderalab/openmmtools/pull/751
+.. _Pull Request #753: https://github.com/choderalab/openmmtools/pull/753
+
 
 0.23.1 - Bugfix release
 =======================

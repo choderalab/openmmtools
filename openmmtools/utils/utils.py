@@ -544,7 +544,7 @@ def platform_supports_precision(platform, precision):
     if platform.getName() == 'CPU':
         return precision in ['mixed']
 
-    if platform.getName() in ['CUDA', 'OpenCL']:
+    if platform.getName() in ['CUDA', 'OpenCL', 'HIP']:
         properties = { 'Precision' : precision }
         system = openmm.System()
         system.addParticle(1.0) # Cannot create Context on a system with no particles
@@ -680,7 +680,7 @@ def deserialize(serialization):
     except AttributeError:
         raise ValueError('Cannot deserialize class {} without a __setstate__ method'.format(class_name))
     except KeyError as e:  # Key not found in options/variables -- backward compatibility for <=0.21.4
-        warnings.warn(f"Key {e} not found in {instance.__class__.__name__}.")
+        warnings.warning(f"Key {e} not found in {instance.__class__.__name__}.")
     return instance
 
 
