@@ -3014,7 +3014,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             import warnings
             old_signature = '_on_setattr(self, standard_system, attribute_name)'
             new_signature = old_signature[:-1] + ', old_composable_state)'
-            warnings.warning('The signature IComposableState.{} has been deprecated, '
+            warnings.warn('The signature IComposableState.{} has been deprecated, '
                           'and future versions of openmmtools will support only the '
                           'new one: {}.'.format(old_signature, new_signature))
         if change_standard_system:
