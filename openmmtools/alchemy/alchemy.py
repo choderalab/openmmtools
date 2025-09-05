@@ -328,7 +328,7 @@ class AlchemicalState(states.GlobalParameterState):
             The value of the alchemical variable.
         """
         import warnings
-        warnings.warning('AlchemicalState.get_alchemical_variable is deprecated. '
+        warnings.warn('AlchemicalState.get_alchemical_variable is deprecated. '
                       'Use AlchemicalState.get_function_variable instead.')
         return super().get_function_variable(variable_name)
 
@@ -347,7 +347,7 @@ class AlchemicalState(states.GlobalParameterState):
 
         """
         import warnings
-        warnings.warning('AlchemicalState.get_alchemical_variable is deprecated. '
+        warnings.warn('AlchemicalState.get_alchemical_variable is deprecated. '
                       'Use AlchemicalState.get_function_variable instead.')
         super().set_function_variable(variable_name, new_value)
 

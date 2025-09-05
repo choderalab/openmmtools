@@ -1293,7 +1293,7 @@ class MultiStateReporter(object):
                 base_warn += "\n\t{}per-iteration: {}".format(iteration_str, failure)
             for missing in collected_not_found:
                 base_warn += "\n\tMissing: {}".format(missing)
-            warnings.warning(base_warn, RuntimeWarning)
+            warnings.warn(base_warn, RuntimeWarning)
         return collected_variables
 
     def write_online_analysis_data(self, iteration: Union[int, None], **kwargs):

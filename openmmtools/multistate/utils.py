@@ -225,7 +225,7 @@ def get_equilibration_data(timeseries_to_analyze, fast=True, max_subset=1000):
     --------
     get_equilibration_data_per_sample
     """
-    warnings.warning("This function will be removed in future versions of YANK due to redundancy, "
+    warnings.warn("This function will be removed in future versions of YANK due to redundancy, "
                   "Please use the more general `get_equilibration_data_per_sample` function instead.")
     i_t, g_i, n_effective_i = get_equilibration_data_per_sample(timeseries_to_analyze, fast=fast, max_subset=max_subset)
     n_effective_max = n_effective_i.max()
