@@ -1,6 +1,12 @@
 Release History
 ***************
 
+0.25.2
+======
+This release fixes a bug caused by the use of an incorrect API from the warnings module. The issue could trigger errors when retrying simulations that had previously resulted in temporary NaNs.
+
+- Revert to using ``warnings.warn``. PR `#790 <https://github.com/choderalab/openmmtools/pull/79>`_
+
 0.25.1
 ======
 
