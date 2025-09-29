@@ -584,7 +584,7 @@ class TestReporter:
                 if variable.dtype == "S1":
                     # Handle variables stored in fixed_dimensions
                     data_chars = variable[:]
-                    data_str = data_chars.tostring().decode()
+                    data_str = data_chars.tobytes().decode()
                 else:
                     data_str = str(variable[0])
                 return data_str
