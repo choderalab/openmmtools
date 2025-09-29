@@ -1091,7 +1091,7 @@ class MultiStateReporter(object):
             if nc_element.dtype == 'S1':
                 # Handle variables stored in fixed_dimensions
                 data_chars = nc_element[:]
-                data_str = data_chars.tostring().decode()
+                data_str = data_chars.tobytes().decode()
             else:
                 data_str = str(nc_element[0])
             data = yaml.load(data_str, Loader=_DictYamlLoader)
