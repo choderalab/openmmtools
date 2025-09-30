@@ -1,11 +1,18 @@
 Release History
 ***************
 
+0.25.3
+======
+
+This release removes a numpy function deprecated in ``numpy 2.3``.
+
+- Switch deprecated ``tostring`` numpy calls to ``tobytes``. PR `#793 <https://github.com/choderalab/openmmtools/pull/793>`_
+
 0.25.2
 ======
 This release fixes a bug caused by the use of an incorrect API from the warnings module. The issue could trigger errors when retrying simulations that had previously resulted in temporary NaNs.
 
-- Revert to using ``warnings.warn``. PR `#790 <https://github.com/choderalab/openmmtools/pull/79>`_
+- Revert to using ``warnings.warn``. PR `#790 <https://github.com/choderalab/openmmtools/pull/790>`_
 
 0.25.1
 ======
