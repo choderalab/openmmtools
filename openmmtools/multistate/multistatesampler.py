@@ -1357,18 +1357,36 @@ class MultiStateSampler(object):
         thermodynamic_state_id = self._replica_thermodynamic_states[replica_id]
         thermodynamic_state = self._thermodynamic_states[thermodynamic_state_id]
 
-        # Temporarily disable the barostat during minimization.
-        # Otherwise, the minimizer will modify the box
-        # vectors and may cause instabilities.
-        pressure = thermodynamic_state.pressure
-        thermodynamic_state.pressure = None
         sampler_state = self._sampler_states[replica_id]
+        
+        # Determine whether we need a temporary NVT state
+        has_barostat = any(
+            isinstance(thermodynamic_state.system.getForce(i), (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat))
+            for i in range(thermodynamic_state.system.getNumForces())
+        )
 
+        if has_barostat:
+            # Deep copy system and remove all barostats
+            min_system = copy.deepcopy(thermodynamic_state.system)
+            for i in reversed(range(min_system.getNumForces())):
+                if isinstance(min_system.getForce(i), (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat)):
+                    min_system.removeForce(i)
+
+            # Temporary NVT ThermodynamicState for minimization
+            minimization_state = states.ThermodynamicState(
+                system=min_system,
+                temperature=thermodynamic_state.temperature,
+                pressure=None
+            )
+        else:
+            # Use original state if no barostat
+            minimization_state = thermodynamic_state
+ 
         # Use the FIRE minimizer
         integrator = FIREMinimizationIntegrator(tolerance=tolerance)
 
         # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(thermodynamic_state, integrator)
+        context, integrator = self.energy_context_cache.get_context(minimizatio_state, integrator)
         # inform of platform used in current context
         logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
@@ -1376,7 +1394,7 @@ class MultiStateSampler(object):
         sampler_state.apply_to_context(context)
 
         # Compute the initial energy of the system for logging.
-        initial_energy = thermodynamic_state.reduced_potential(context)
+        initial_energy = minimizatio_state.reduced_potential(context)
         logger.debug('Replica {}/{}: initial energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, initial_energy))
 
@@ -1400,11 +1418,8 @@ class MultiStateSampler(object):
         # Get the minimized positions.
         sampler_state.update_from_context(context)
         
-        # Restore the barostat
-        thermodynamic_state.pressure = pressure
-
         # Compute the final energy of the system for logging.
-        final_energy = thermodynamic_state.reduced_potential(sampler_state)
+        final_energy = minimizatio_state.reduced_potential(sampler_state)
         logger.debug('Replica {}/{}: final energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, final_energy))
         # TODO if energy > 0, use slower openmm minimizer
