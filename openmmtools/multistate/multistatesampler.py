@@ -1419,7 +1419,7 @@ class MultiStateSampler(object):
         sampler_state.update_from_context(context)
         
         # Compute the final energy of the system for logging.
-        final_energy = minimizatio_state.reduced_potential(sampler_state)
+        final_energy = minimization_state.reduced_potential(sampler_state)
         logger.debug('Replica {}/{}: final energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, final_energy))
         # TODO if energy > 0, use slower openmm minimizer
