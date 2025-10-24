@@ -1394,10 +1394,9 @@ class MultiStateSampler(object):
         sampler_state.apply_to_context(context)
 
         # Compute the initial energy of the system for logging.
-        initial_energy = minimizatio_state.reduced_potential(context)
+        initial_energy = minimization_state.reduced_potential(context)
         logger.debug('Replica {}/{}: initial energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, initial_energy))
-
         # Minimize energy.
         try:
             if max_iterations == 0:
@@ -1426,7 +1425,6 @@ class MultiStateSampler(object):
 
         # Clean up the integrator
         del context
-
         # Return minimized positions.
         return sampler_state.positions
 
