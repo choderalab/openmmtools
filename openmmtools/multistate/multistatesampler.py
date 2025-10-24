@@ -1386,7 +1386,7 @@ class MultiStateSampler(object):
         integrator = FIREMinimizationIntegrator(tolerance=tolerance)
 
         # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(minimizatio_state, integrator)
+        context, integrator = self.energy_context_cache.get_context(minimization_state, integrator)
         # inform of platform used in current context
         logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
