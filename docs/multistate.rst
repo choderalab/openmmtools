@@ -64,6 +64,9 @@ where :math:`x` is the configuration of the subscripted states :math:`i` or :mat
 While this scheme is typically carried out on neighboring states only, we also implement a much more efficient form of Gibbs sampling in which many swaps are attempted to generate an approximately uncorrelated sample of the state permutation over all :math:`K` :cite:`Chodera2011`.
 This speeds up mixing and reduces the total number of samples needed to produce uncorrelated samples.
 
+For the neighboring states mixing scheme (``swap-neighbors``), an optional deterministic even/odd (DEO) swap order can be enabled via ``deterministic_swap_order=True``.
+This has been shown to increase round-trip rates :cite:`Lingenheil2009` over the default random swap order (SEO).
+
 .. currentmodule:: openmmtools.multistate
 .. autosummary::
     :nosignatures:
