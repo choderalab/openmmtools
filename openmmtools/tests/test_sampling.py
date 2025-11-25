@@ -2654,6 +2654,51 @@ class TestReplicaExchange(TestMultiStateSampler):
             for i in range(1, len(cis)):
                 assert are_overlapping(cis[0], cis[i])
 
+    def test_deo_and_seo_swap_order(self):
+        """Test deterministic (DEO) vs stochastic (SEO) even/odd swap order."""
+        n_states = 3
+        oscillator = testsystems.HarmonicOscillator()
+        thermodynamic_states = [
+            mmtools.states.ThermodynamicState(copy.deepcopy(oscillator.system), 300 * unit.kelvin)
+            for _ in range(n_states)
+        ]
+        sampler_states = [
+            mmtools.states.SamplerState(copy.deepcopy(oscillator.positions))
+            for _ in range(n_states)
+        ]
+
+        with self.temporary_storage_path() as storage_path:
+            sampler = self.SAMPLER(number_of_iterations=1)
+            reporter = self.REPORTER(storage_path, checkpoint_interval=1)
+            sampler.create(thermodynamic_states, sampler_states, reporter)
+            sampler.replica_mixing_scheme = 'swap-neighbors'
+
+            # Test DEO: should strictly alternate (0,1) then (1,2)
+            sampler.deterministic_swap_order = True
+            pairs = []
+            for i in range(100):
+                sampler._mix_replicas()
+                if sampler._n_proposed_matrix[0, 1] > 0:
+                    pairs.append((0, 1))
+                else:
+                    pairs.append((1, 2))
+            assert all(pairs[i] == ((0, 1) if i % 2 == 0 else (1, 2)) for i in range(100))
+
+            # Test SEO: should have both pairs proposed and not strictly alternating (prob of each is $(0.5)^100 \approx 0$)
+            sampler.deterministic_swap_order = False
+            pairs = []
+            for i in range(100):
+                sampler._mix_replicas()
+                if sampler._n_proposed_matrix[0, 1] > 0:
+                    pairs.append((0, 1))
+                else:
+                    pairs.append((1, 2))
+
+            assert len(set(pairs)) == 2, "SEO did not propose both even/odd pairs."
+            assert not all(pairs[i] == ((0, 1) if i % 2 == 0 else (1, 2)) for i in range(100)), "SEO proposed only alternating pairs, suggesting it's actually running DEO."
+
+            del sampler, reporter
+
 
 class TestSingleReplicaSAMS(TestMultiStateSampler):
     """Test suite for SAMSSampler class."""
