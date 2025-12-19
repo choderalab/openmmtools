@@ -1360,8 +1360,14 @@ class MultiStateSampler(object):
         sampler_state = self._sampler_states[replica_id]
         
         # Determine whether we need a temporary NVT state
+        barostat_types = (
+            openmm.MonteCarloBarostat,
+            openmm.MonteCarloMembraneBarostat,
+            openmm.MonteCarloAnisotropicBarostat,
+        )
+
         has_barostat = any(
-            isinstance(thermodynamic_state.system.getForce(i), (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat))
+            isinstance(thermodynamic_state.system.getForce(i), barostat_types)
             for i in range(thermodynamic_state.system.getNumForces())
         )
 
@@ -1369,7 +1375,7 @@ class MultiStateSampler(object):
             # Deep copy system and remove all barostats
             min_system = copy.deepcopy(thermodynamic_state.system)
             for i in reversed(range(min_system.getNumForces())):
-                if isinstance(min_system.getForce(i), (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat)):
+                if isinstance(min_system.getForce(i), barostat_types):
                     min_system.removeForce(i)
 
             # Temporary NVT ThermodynamicState for minimization

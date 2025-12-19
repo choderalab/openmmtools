@@ -1716,7 +1716,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     sampler._energy_unsampled_states, energy_unsampled_states
                 )
 
-    @pytest.mark.parametrize("barostat_type", [openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat])
+    @pytest.mark.parametrize("barostat_type", [openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat, openmm.MonteCarloAnisotropicBarostat])
     def test_minimize(self, barostat_type):
         """
         Test MultiStateSampler minimize method.
@@ -1757,6 +1757,10 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     openmm.MonteCarloMembraneBarostat.XYIsotropic,
                     openmm.MonteCarloMembraneBarostat.ZFree,
                     25))
+            else:
+                system.addForce(openmm.MonteCarloAnisotropicBarostat(
+                    1.0 * unit.atmosphere, 300 * unit.kelvin
+                ))
 
         with self.temporary_storage_path() as storage_path:
             sampler = self.SAMPLER()
