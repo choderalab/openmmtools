@@ -291,8 +291,8 @@ def math_eval(expression, variables=None, functions=None):
     functions = extra_functions
 
     def _math_eval(node):
-        if isinstance(node, ast.Num):
-            return node.n
+        if isinstance(node, ast.Constant):
+            return node.value
         elif isinstance(node, ast.UnaryOp):
             return operators[type(node.op)](_math_eval(node.operand))
         elif isinstance(node, ast.BinOp):
