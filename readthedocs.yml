@@ -1,13 +1,19 @@
 version: 2
 
-conda:
-  environment: devtools/conda-envs/test_env.yaml
-
 build:
-  os: ubuntu-22.04
+  os: "ubuntu-24.04"
   tools:
-    python: mambaforge-4.10
+    python: "miniconda3-3.12-24.9"
 
 sphinx:
    configuration: docs/conf.py
-   fail_on_warning: false
+   fail_on_warning: true
+
+conda:
+  environment: devtools/conda-envs/test_env.yaml
+
+python:
+  # Install our python package before building the docs
+  install:
+    - method: pip
+      path: .
