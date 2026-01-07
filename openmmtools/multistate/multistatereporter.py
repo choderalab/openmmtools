@@ -48,6 +48,12 @@ try:
 except ImportError:  # OpenMM < 7.6
     from simtk import unit
 
+
+try:
+    from yaml import CLoader as Loader, CDumper as Dumper
+except ImportError:
+    from yaml import Loader, Dumper
+
 import openmmtools
 from openmmtools.utils import deserialize, with_timer, serialize, quantity_from_string
 from openmmtools import states
@@ -1882,7 +1888,7 @@ class MultiStateReporter(object):
 # MODULE INTERNAL USAGE UTILITIES
 # ==============================================================================
 
-class _DictYamlLoader(yaml.CLoader):
+class _DictYamlLoader(yaml.Loader):
     """PyYAML Loader that reads !Quantity tags."""
     def __init__(self, *args, **kwargs):
         super(_DictYamlLoader, self).__init__(*args, **kwargs)
@@ -1908,7 +1914,7 @@ class _DictYamlLoader(yaml.CLoader):
         return data
 
 
-class _DictYamlDumper(yaml.CDumper):
+class _DictYamlDumper(yaml.Dumper):
     """PyYAML Dumper that handle openmm Quantities through !Quantity tags."""
 
     def __init__(self, *args, **kwargs):
