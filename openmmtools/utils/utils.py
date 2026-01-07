@@ -97,7 +97,7 @@ def with_timer(task_name):
     return _with_timer
 
 
-class Timer(object):
+class Timer:
     """A class with stopwatch-style timing functions.
 
     Examples
@@ -146,7 +146,7 @@ class Timer(object):
         try:
             t0 = self._t0[benchmark_id]
         except KeyError:
-            logger.warning("Can't stop timing for {}".format(benchmark_id))
+            logger.warning(f"Can't stop timing for {benchmark_id}")
         else:
             self._t1[benchmark_id] = time.time()
             elapsed_time = self._t1[benchmark_id] - t0
@@ -158,7 +158,7 @@ class Timer(object):
         try:
             t0 = self._t0[benchmark_id]
         except KeyError:
-            logger.warning("Couldn't return partial timing for {}".format(benchmark_id))
+            logger.warning(f"Couldn't return partial timing for {benchmark_id}")
         else:
             return time.time() - t0
 
@@ -177,7 +177,7 @@ class Timer(object):
 
         """
         for benchmark_id, elapsed_time in self._completed.items():
-            logger.debug('{} took {:8.3f}s'.format(benchmark_id, elapsed_time))
+            logger.debug(f'{benchmark_id} took {elapsed_time:8.3f}s')
 
         if clear is True:
             self.reset_timing_statistics()
@@ -311,7 +311,7 @@ def math_eval(expression, variables=None, functions=None):
             try:
                 return variables[node.id]
             except KeyError:
-                raise ValueError('Variable {} was not provided'.format(node.id))
+                raise ValueError(f'Variable {node.id} was not provided')
         elif isinstance(node, ast.Call):
             args = [_math_eval(arg) for arg in node.args]
             try:
@@ -320,9 +320,9 @@ def math_eval(expression, variables=None, functions=None):
                 try:
                     return functions[node.func.id](*args)
                 except KeyError:
-                    raise ValueError('Function {} is not supported'.format(node.func.id))
+                    raise ValueError(f'Function {node.func.id} is not supported')
         else:
-            raise TypeError('Cannot parse expression: {}'.format(expression))
+            raise TypeError(f'Cannot parse expression: {expression}')
 
     if variables is None:
         variables = {}
@@ -350,14 +350,14 @@ class TrackedQuantity(unit.Quantity):
     """A quantity that keeps track of whether it has been changed."""
 
     def __init__(self, *args, **kwargs):
-        super(TrackedQuantity, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.has_changed = False
 
     def __getitem__(self, item):
         if isinstance(item, slice) and isinstance(self._value, np.ndarray):
-            return TrackedQuantityView(self, super(TrackedQuantity, self).__getitem__(item))
+            return TrackedQuantityView(self, super().__getitem__(item))
         # No need to track a copy.
-        return super(TrackedQuantity, self).__getitem__(item)
+        return super().__getitem__(item)
 
     __setitem__ = _changes_state(unit.Quantity.__setitem__)
     __delitem__ = _changes_state(unit.Quantity.__delitem__)
@@ -372,18 +372,18 @@ class TrackedQuantityView(unit.Quantity):
     """Keeps truck of a numpy view for TrackedQuantity."""
 
     def __init__(self, tracked_quantity, *args, **kwargs):
-        super(TrackedQuantityView, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._tracked_quantity = tracked_quantity  # Parent.
 
     def __getitem__(self, item):
         if isinstance(item, slice):
             return TrackedQuantityView(self._tracked_quantity,
-                                       super(TrackedQuantityView, self).__getitem__(item))
+                                       super().__getitem__(item))
         # No need to track a copy.
-        return super(TrackedQuantityView, self).__getitem__(item)
+        return super().__getitem__(item)
 
     def __setitem__(self, key, value):
-        super(TrackedQuantityView, self).__setitem__(key, value)
+        super().__setitem__(key, value)
         self._tracked_quantity.has_changed = True
 
 
@@ -640,7 +640,7 @@ def serialize(instance, **kwargs):
     try:
         serialization = instance.__getstate__(**kwargs)
     except AttributeError:
-        raise ValueError('Cannot serialize class {} without a __getstate__ method'.format(class_name))
+        raise ValueError(f'Cannot serialize class {class_name} without a __getstate__ method')
     serialization[_SERIALIZED_MANGLED_PREFIX + 'module_name'] = module_name
     serialization[_SERIALIZED_MANGLED_PREFIX + 'class_name'] = class_name
     return serialization
@@ -678,7 +678,7 @@ def deserialize(serialization):
     try:
         instance.__setstate__(serialization)
     except AttributeError:
-        raise ValueError('Cannot deserialize class {} without a __setstate__ method'.format(class_name))
+        raise ValueError(f'Cannot deserialize class {class_name} without a __setstate__ method')
     except KeyError as e:  # Key not found in options/variables -- backward compatibility for <=0.21.4
         warnings.warn(f"Key {e} not found in {instance.__class__.__name__}.")
     return instance
@@ -807,7 +807,7 @@ class RestorableOpenMMObjectError(Exception):
     pass
 
 
-class RestorableOpenMMObject(object):
+class RestorableOpenMMObject:
     """Base class for restorable custom integrators and forces.
 
     Normally, a custom OpenMM object loses its specific class (and all its
@@ -825,7 +825,7 @@ class RestorableOpenMMObject(object):
     _cached_hash_subclasses = {}
 
     def __init__(self, *args, **kwargs):
-        super(RestorableOpenMMObject, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self._add_global_parameter(self, self._hash_parameter_name,
                                    self._compute_class_hash(self.__class__))
 
@@ -961,7 +961,7 @@ class RestorableOpenMMObject(object):
         for parameter_idx in range(force.getNumGlobalParameters()):
             if force.getGlobalParameterName(parameter_idx) == parameter_name:
                 return force.getGlobalParameterDefaultValue(parameter_idx)
-        raise KeyError('No parameter called {} in force {}'.format(parameter_name, force))
+        raise KeyError(f'No parameter called {parameter_name} in force {force}')
 
     # -------------------------------------------------------------------------
     # Copy and serialization utilities
@@ -993,7 +993,7 @@ class RestorableOpenMMObject(object):
 
     def __copy__(self):
         """Overwrite implementation to copy class and attributes."""
-        copied_self = super(RestorableOpenMMObject, self).__copy__()
+        copied_self = super().__copy__()
 
         # Assign correct class instead of OpenMM class.
         copied_self.__class__ = self.__class__
@@ -1017,7 +1017,7 @@ class RestorableOpenMMObject(object):
         elif isinstance(openmm_object, openmm.CustomIntegrator):
             return False
         else:
-            raise TypeError('Object of type {} is not supported.'.format(type(openmm_object)))
+            raise TypeError(f'Object of type {type(openmm_object)} is not supported.')
 
     @staticmethod
     def _compute_class_hash(openmm_class):

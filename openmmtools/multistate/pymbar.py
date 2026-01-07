@@ -28,7 +28,7 @@ except ImportError:
 def _pymbar_bar(
     work_forward: np.ndarray,
     work_backward: np.ndarray,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     https://github.com/shirtsgroup/physical_validation/blob/v1.0.5/physical_validation/util/ensemble.py#L37
     """
@@ -43,7 +43,7 @@ def _pymbar_bar(
 
 def _pymbar_exp(
         w_F: np.ndarray,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     try:
         # pymbar < 4
         from pymbar import EXP

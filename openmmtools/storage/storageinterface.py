@@ -25,7 +25,7 @@ ABC = abc.ABCMeta('ABC', (object,), {})  # compatible with Python 2 *and* 3
 # =============================================================================
 
 
-class StorageInterfaceDirVar(object):
+class StorageInterfaceDirVar:
     """
     Storage Interface Directory/Variable (SIDV) class is a versatile, dynamic class which gives structure to the
     variables stored on disk by representing them as methods of the StorageInterface and other instances of itself.
@@ -337,7 +337,7 @@ class StorageInterfaceDirVar(object):
         """Check that the file exists before trying to read"""
         file_name = self._storage_interface.file_name
         if not os.path.isfile(file_name):
-            raise NameError("No such file exists at {}! Cannot read from non-existent file!".format(file_name))
+            raise NameError(f"No such file exists at {file_name}! Cannot read from non-existent file!")
 
     def _bind_to_variable_with_read(self):
         """Check that we are not a directory and all predecessors can read as well"""
@@ -380,7 +380,7 @@ class StorageInterfaceDirVar(object):
 # =============================================================================
 
 
-class StorageInterface(object):
+class StorageInterface:
     """
     This class interfaces with a StorageIODriver class to internally hold what folders and variables are known to the
     file on the disk, and dynamically creates them on the fly. Any attempt to reference a property which is not

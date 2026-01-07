@@ -214,7 +214,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     def __init__(self, replica_mixing_scheme='swap-all', **kwargs):
 
         # Initialize multi-state sampler simulation.
-        super(ReplicaExchangeSampler, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.replica_mixing_scheme = replica_mixing_scheme
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):

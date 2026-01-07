@@ -65,7 +65,7 @@ def decompose_path(path):
     structure : tuple of strings
         Tuple of split apart path
     """
-    return tuple((path_entry for path_entry in path.split('/') if path_entry != ''))
+    return tuple(path_entry for path_entry in path.split('/') if path_entry != '')
 
 
 def normalize_path(path):
@@ -85,7 +85,7 @@ def normalize_path(path):
 
     """
     split_path = decompose_path(path)
-    return '/'.join([path_part.strip('/ ') for path_part in split_path if path_part is not ''])
+    return '/'.join([path_part.strip('/ ') for path_part in split_path if path_part != ''])
 
 
 # =============================================================================
@@ -326,7 +326,7 @@ class NetCDFIODriver(StorageIODriver):
                     # Bind to the specific variable instead since its not a group
                     variable = head_group.variables[split_path[-1]]
             except KeyError:
-                raise KeyError("No variable found at {} on file!".format(path))
+                raise KeyError(f"No variable found at {path} on file!")
             try:
                 # Bind to the storage type by mapping IODriver_Type -> Known Codec
                 data_type = variable.getncattr('IODriver_Type')
@@ -343,7 +343,7 @@ class NetCDFIODriver(StorageIODriver):
             except AttributeError:
                 raise AttributeError("Cannot auto-detect variable type, ensure that 'IODriver_Type' is a set ncattr")
             except KeyError:
-                raise KeyError("No mapped type codecs known for 'IODriver_Type' = '{}'".format(data_type))
+                raise KeyError(f"No mapped type codecs known for 'IODriver_Type' = '{data_type}'")
         return codec
 
     def create_storage_variable(self, path, type_key):
@@ -398,10 +398,10 @@ class NetCDFIODriver(StorageIODriver):
 
         """
         if type(length) is not int:
-            raise TypeError("length must be an integer, not {}!".format(type(length)))
+            raise TypeError(f"length must be an integer, not {type(length)}!")
         if length < 0:
             raise ValueError("length must be >= 0")
-        name = 'iterable{}'.format(length)
+        name = f'iterable{length}'
         if name not in self.ncfile.dimensions:
             self.ncfile.createDimension(name, length)
 
@@ -417,7 +417,7 @@ class NetCDFIODriver(StorageIODriver):
         self._check_bind_to_file()
         created_dim = False
         while not created_dim:
-            infinite_dim_name = 'unlimited{}'.format(self._auto_iterable_count)
+            infinite_dim_name = f'unlimited{self._auto_iterable_count}'
             if infinite_dim_name not in self.ncfile.dimensions:
                 self.ncfile.createDimension(infinite_dim_name, 0)
                 created_dim = True
@@ -507,16 +507,16 @@ class NetCDFIODriver(StorageIODriver):
                                    self._codec_type_maps}
 
     def set_codec(self, type_key, codec):
-        super(NetCDFIODriver, self).set_codec(type_key, codec)
+        super().set_codec(type_key, codec)
         self._update_IOMetaDataReaders()
 
     def __init__(self, file_name, access_mode=None):
-        super(NetCDFIODriver, self).__init__(file_name, access_mode=access_mode)
+        super().__init__(file_name, access_mode=access_mode)
         # Initialize the file bind variable. All actions involving files
         self.ncfile = None
         self._groups = {}
         # Bind all of the Type Codecs
-        super_codec = super(NetCDFIODriver, self).set_codec  # Shortcut for this init to avoid excess loops
+        super_codec = super().set_codec  # Shortcut for this init to avoid excess loops
         super_codec(str, NCString)  # String
         super_codec(int, NCInt)  # Int
         super_codec(dict, NCDict)  # Dict
@@ -625,7 +625,7 @@ class NCVariableCodec(Codec):
     """
 
     def __init__(self, parent_driver, target, storage_object=None):
-        super(NCVariableCodec, self).__init__(parent_driver, target)
+        super().__init__(parent_driver, target)
         # Eventual NetCDF object this class will be bound to
         self._bound_target = None
         # Target object where the data read/written to this instance resides
@@ -700,7 +700,7 @@ class NCVariableCodec(Codec):
         self._attempt_storage_read()
         # Handle variable size objects
         # This line will not happen unless target is real, so output_mode will return the correct value
-        if self._output_mode is 'a':
+        if self._output_mode == 'a':
             self._save_shape = self._bound_target.shape[1:]
         else:
             self._save_shape = self._bound_target.shape
@@ -811,7 +811,7 @@ class NCVariableCodec(Codec):
         """
         # Check type
         if not isinstance(data, self.dtype):
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
+            raise TypeError(f"Invalid data type on variable {self._target}.")
         if at_index is not None:
             self._write_to_append_at_index(data, at_index)
             return
@@ -838,7 +838,7 @@ class NCVariableCodec(Codec):
         """
         # Check type
         if not isinstance(data, self.dtype):
-            raise TypeError("Invalid data type on variable {}.".format(self._target))
+            raise TypeError(f"Invalid data type on variable {self._target}.")
         # Bind
         if self._bound_target is None:
             self._bind_append(data)
@@ -1016,7 +1016,7 @@ class NCVariableCodec(Codec):
                 self._bind_read()
             except KeyError:
                 # Trap the NetCDF Key Error to raise an issue that data must exist first
-                raise IOError("Cannot write to a specific index for data that does not exist!")
+                raise OSError("Cannot write to a specific index for data that does not exist!")
         if type(index) is not int:
             raise ValueError("to_index must be an integer!")
         self._check_storage_mode('a')  # We want this in append mode
@@ -1119,7 +1119,7 @@ def determine_appendable_chunk_size(data, max_iteration=128, max_memory=10485760
 
     """
     if max_iteration < 1 or not isinstance(max_iteration, int):
-        raise ValueError("max_iteration was {} but must be an integer greater than 1!".format(max_iteration))
+        raise ValueError(f"max_iteration was {max_iteration} but must be an integer greater than 1!")
     iteration_chunk = int(max_iteration)
     data_size = getsizeof(data)
     while iteration_chunk * data_size > max_memory and iteration_chunk > 1:
@@ -1282,7 +1282,7 @@ class NCArray(NCVariableCodec):
             dims = []
             for length in data_shape:
                 self._parent_driver.check_iterable_dimension(length=length)
-                dims.append('iterable{}'.format(length))
+                dims.append(f'iterable{length}')
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
                                                                      chunksizes=data_shape)
@@ -1300,7 +1300,7 @@ class NCArray(NCVariableCodec):
             dims = [infinite_name]
             for length in data_shape:
                 self._parent_driver.check_iterable_dimension(length=length)
-                dims.append('iterable{}'.format(length))
+                dims.append(f'iterable{length}')
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
                                                                      chunksizes=(appendable_chunk_size,) + data_shape)
@@ -1354,7 +1354,7 @@ class NCIterable(NCVariableCodec):
             data_shape, data_base_type, data_type_name = self._determine_data_information(data)
             self._parent_driver.check_iterable_dimension(length=data_shape)
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
-                                                                     dimensions='iterable{}'.format(data_shape),
+                                                                     dimensions=f'iterable{data_shape}',
                                                                      chunksizes=(data_shape,))
             self._common_bind_output_actions(data_type_name, 0)
             self._save_shape = data_shape
@@ -1369,7 +1369,7 @@ class NCIterable(NCVariableCodec):
             infinite_name = self._parent_driver.generate_infinite_dimension()
             appendable_chunk_size = determine_appendable_chunk_size(data)
             self._parent_driver.check_iterable_dimension(length=data_shape)
-            dims = [infinite_name, 'iterable{}'.format(data_shape)]
+            dims = [infinite_name, f'iterable{data_shape}']
             self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                      dimensions=dims,
                                                                      chunksizes=(appendable_chunk_size, data_shape))
@@ -1412,7 +1412,7 @@ class NCQuantity(NCVariableCodec):
 
     def _bind_read(self):
         # Method of this subclass as it calls extra data
-        super(NCQuantity, self)._bind_read()
+        super()._bind_read()
         self._unit = self._bound_target.getncattr('IODriver_Unit')
         self._set_codifiers(self._bound_target.getncattr('type'))
 
@@ -1430,7 +1430,7 @@ class NCQuantity(NCVariableCodec):
                 dims = []
                 for length in data_shape:
                     self._parent_driver.check_iterable_dimension(length=length)
-                    dims.append('iterable{}'.format(length))
+                    dims.append(f'iterable{length}')
                 self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                          dimensions=dims,
                                                                          chunksizes=data_shape)
@@ -1457,7 +1457,7 @@ class NCQuantity(NCVariableCodec):
                 dims = [infinite_name]
                 for length in data_shape:
                     self._parent_driver.check_iterable_dimension(length=length)
-                    dims.append('iterable{}'.format(length))
+                    dims.append(f'iterable{length}')
                 self._bound_target = self._storage_object.createVariable(self._target, data_base_type,
                                                                          dimensions=dims,
                                                                          chunksizes=(appendable_chunk_size,) + data_shape)
@@ -1511,7 +1511,7 @@ class NCQuantity(NCVariableCodec):
             self._value_encoder = simple_encoder
             self._value_decoder = nc_numpy_array_decoder
         else:
-            raise TypeError("NCQuantity does not know how to handle a quantity of type {}!".format(stype))
+            raise TypeError(f"NCQuantity does not know how to handle a quantity of type {stype}!")
 
     @property
     def _encoder(self):
@@ -1547,8 +1547,8 @@ class NCQuantity(NCVariableCodec):
 class _DictYamlLoader(Loader):
     """PyYAML Loader that recognized !Quantity nodes, converts YAML output -> Python type"""
     def __init__(self, *args, **kwargs):
-        super(_DictYamlLoader, self).__init__(*args, **kwargs)
-        self.add_constructor(u'!Quantity', self.quantity_constructor)
+        super().__init__(*args, **kwargs)
+        self.add_constructor('!Quantity', self.quantity_constructor)
 
     @staticmethod
     def quantity_constructor(loader, node):
@@ -1561,7 +1561,7 @@ class _DictYamlLoader(Loader):
 class _DictYamlDumper(Dumper):
     """PyYAML Dumper that convert from Python -> YAML output"""
     def __init__(self, *args, **kwargs):
-        super(_DictYamlDumper, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.add_representer(unit.Quantity, self.quantity_representer)
 
     @staticmethod
@@ -1571,7 +1571,7 @@ class _DictYamlDumper(Dumper):
         data_value = data / data_unit
         data_dump = {'QuantityUnit': str(data_unit), 'QuantityValue': data_value}
         # Uses "self (DictYamlDumper)" as the dumper to allow nested !Quantity types
-        return dumper.represent_mapping(u'!Quantity', data_dump)
+        return dumper.represent_mapping('!Quantity', data_dump)
 
 
 class NCDict(NCScalar):

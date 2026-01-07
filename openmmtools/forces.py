@@ -158,9 +158,9 @@ def find_forces(system, force_type, only_one=False, include_subclasses=False):
     # Handle only_one.
     if only_one is True:
         if len(forces) == 0:
-            raise NoForceFoundError('No force of type {} could be found.'.format(force_type))
+            raise NoForceFoundError(f'No force of type {force_type} could be found.')
         if len(forces) > 1:
-            raise MultipleForcesError('Found multiple forces of type {}'.format(force_type))
+            raise MultipleForcesError(f'Found multiple forces of type {force_type}')
         return forces.popitem(last=False)
 
     return forces
@@ -276,7 +276,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
     def __init__(self, restraint_parameters, restrained_atom_indices1,
                  restrained_atom_indices2, controlling_parameter_name,
                  *args, **kwargs):
-        super(RadiallySymmetricRestraintForce, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Unzip bond parameters names and values from dict.
         assert len(restraint_parameters) == 1 or isinstance(restraint_parameters, collections.OrderedDict)
@@ -585,7 +585,7 @@ class RadiallySymmetricRestraintForce(utils.RestorableOpenMMObject):
         restraint_volume, restraint_volume_error = scipy.integrate.quad(
             lambda r: integrand(r), r_min / distance_unit, r_max / distance_unit)
         restraint_volume = restraint_volume * distance_unit**3 + analytical_volume
-        logger.debug("restraint_volume = {} nm^3".format(restraint_volume / distance_unit**3))
+        logger.debug(f"restraint_volume = {restraint_volume / distance_unit**3} nm^3")
 
         return restraint_volume
 
@@ -714,7 +714,7 @@ class RadiallySymmetricCentroidRestraintForce(RadiallySymmetricRestraintForce,
         # Initialize CustomCentroidBondForce.
         energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
         custom_centroid_bond_force_args = [2, energy_function]
-        super(RadiallySymmetricCentroidRestraintForce, self).__init__(
+        super().__init__(
             restraint_parameters, restrained_atom_indices1, restrained_atom_indices2,
             controlling_parameter_name, *custom_centroid_bond_force_args)
 
@@ -762,7 +762,7 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
         # Initialize CustomBondForce.
         energy_function = energy_function.replace('distance(g1,g2)', 'r')
         energy_function = controlling_parameter_name + ' * (' + energy_function + ')'
-        super(RadiallySymmetricBondRestraintForce, self).__init__(
+        super().__init__(
             restraint_parameters, [restrained_atom_index1], [restrained_atom_index2],
             controlling_parameter_name, energy_function)
 
@@ -803,13 +803,13 @@ class RadiallySymmetricBondRestraintForce(RadiallySymmetricRestraintForce,
 # HARMONIC RESTRAINTS
 # =============================================================================
 
-class HarmonicRestraintForceMixIn(object):
+class HarmonicRestraintForceMixIn:
     """A mix-in providing the interface for harmonic restraints."""
 
     def __init__(self, spring_constant, *args, **kwargs):
         energy_function = '(K/2)*distance(g1,g2)^2'
         restraint_parameters = collections.OrderedDict([('K', spring_constant)])
-        super(HarmonicRestraintForceMixIn, self).__init__(energy_function, restraint_parameters,
+        super().__init__(energy_function, restraint_parameters,
                                                           *args, **kwargs)
 
     @property
@@ -936,7 +936,7 @@ class HarmonicRestraintBondForce(HarmonicRestraintForceMixIn,
 # FLAT-BOTTOM RESTRAINTS
 # =============================================================================
 
-class FlatBottomRestraintForceMixIn(object):
+class FlatBottomRestraintForceMixIn:
     """A mix-in providing the interface for flat-bottom restraints."""
 
     def __init__(self, spring_constant, well_radius, *args, **kwargs):
@@ -945,7 +945,7 @@ class FlatBottomRestraintForceMixIn(object):
             ('K', spring_constant),
             ('r0', well_radius)
         ])
-        super(FlatBottomRestraintForceMixIn, self).__init__(energy_function, restraint_parameters,
+        super().__init__(energy_function, restraint_parameters,
                                                             *args, **kwargs)
 
     @property
@@ -1132,11 +1132,11 @@ class UnshiftedReactionFieldForce(openmm.CustomNonbondedForce):
         # Energy expression omits c_rf constant term.
         energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2);"
         energy_expression += "chargeprod = charge1*charge2;"
-        energy_expression += "k_rf = {:f};".format(k_rf.value_in_unit_system(unit.md_unit_system))
-        energy_expression += "ONE_4PI_EPS0 = {:f};".format(ONE_4PI_EPS0)  # already in OpenMM units
+        energy_expression += f"k_rf = {k_rf.value_in_unit_system(unit.md_unit_system):f};"
+        energy_expression += f"ONE_4PI_EPS0 = {ONE_4PI_EPS0:f};"  # already in OpenMM units
 
         # Create CustomNonbondedForce.
-        super(UnshiftedReactionFieldForce, self).__init__(energy_expression)
+        super().__init__(energy_expression)
 
         # Add parameters.
         self.addPerParticleParameter("charge")
@@ -1250,12 +1250,12 @@ class SwitchedReactionFieldForce(openmm.CustomNonbondedForce):
         # Energy expression omits c_rf constant term.
         energy_expression = "ONE_4PI_EPS0*chargeprod*(r^(-1) + k_rf*r^2 - c_rf);"
         energy_expression += "chargeprod = charge1*charge2;"
-        energy_expression += "k_rf = {:f};".format(k_rf.value_in_unit_system(unit.md_unit_system))
-        energy_expression += "c_rf = {:f};".format(c_rf.value_in_unit_system(unit.md_unit_system))
-        energy_expression += "ONE_4PI_EPS0 = {:f};".format(ONE_4PI_EPS0)  # already in OpenMM units
+        energy_expression += f"k_rf = {k_rf.value_in_unit_system(unit.md_unit_system):f};"
+        energy_expression += f"c_rf = {c_rf.value_in_unit_system(unit.md_unit_system):f};"
+        energy_expression += f"ONE_4PI_EPS0 = {ONE_4PI_EPS0:f};"  # already in OpenMM units
 
         # Create CustomNonbondedForce.
-        super(SwitchedReactionFieldForce, self).__init__(energy_expression)
+        super().__init__(energy_expression)
 
         # Add parameters.
         self.addPerParticleParameter("charge")

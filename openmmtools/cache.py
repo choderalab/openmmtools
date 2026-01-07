@@ -31,7 +31,7 @@ from openmmtools import integrators
 # GENERAL LRU CACHE
 # =============================================================================
 
-class LRUCache(object):
+class LRUCache:
     """A simple LRU cache with a dictionary-like interface that supports maximum capacity and expiration.
 
     It can be configured to have a maximum number of elements (capacity)
@@ -211,7 +211,7 @@ class LRUCache(object):
 # GENERAL CONTEXT CACHE
 # =============================================================================
 
-class ContextCache(object):
+class ContextCache:
     """LRU cache hosting the minimum amount of incompatible Contexts.
 
     Two Contexts are compatible if they are in a compatible ThermodynamicState,
@@ -691,7 +691,7 @@ class ContextCache(object):
             return True
         except Exception as e:
             if "Illegal property name" in str(e):
-                raise ValueError("Invalid platform property for this platform. {}".format(e))
+                raise ValueError(f"Invalid platform property for this platform. {e}")
             else:
                 raise e
 
@@ -700,7 +700,7 @@ class ContextCache(object):
 # DUMMY CONTEXT CACHE
 # =============================================================================
 
-class DummyContextCache(object):
+class DummyContextCache:
     """A dummy ContextCache which always create a new Context.
 
     Parameters
@@ -795,7 +795,7 @@ global_context_cache = ContextCache(capacity=None, time_to_live=None)
 # CACHE ENTRY (MODULE INTERNAL USAGE)
 # =============================================================================
 
-class _CacheEntry(object):
+class _CacheEntry:
     """A cache entry holding an optional expiration attribute."""
     def __init__(self, value, expiration=None):
         self.value = value

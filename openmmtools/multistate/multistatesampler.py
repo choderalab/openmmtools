@@ -60,7 +60,7 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 
 
-class MultiStateSampler(object):
+class MultiStateSampler:
     """
     Base class for samplers that sample multiple thermodynamic states using
     one or more replicas.
@@ -299,11 +299,10 @@ class MultiStateSampler(object):
         return sampler
 
     # TODO use Python 3.6 namedtuple syntax when we drop Python 3.5 support.
-    Status = typing.NamedTuple('Status', [
-        ('iteration', int),
-        ('target_error', float),
-        ('is_completed', bool)
-    ])
+    class Status(typing.NamedTuple):
+        iteration: int
+        target_error: float
+        is_completed: bool
 
     @classmethod
     def read_status(cls, storage):
@@ -436,7 +435,7 @@ class MultiStateSampler(object):
             return None
         return self._thermodynamic_states[0].is_periodic
 
-    class _StoredProperty(object):
+    class _StoredProperty:
         """
         Descriptor of a property stored as an option.
 
@@ -684,7 +683,7 @@ class MultiStateSampler(object):
         production_mcmc_moves = self._mcmc_moves
         self._mcmc_moves = mcmc_moves
         for iteration in range(1, 1 + n_iterations):
-            logger.info("Equilibration iteration {}/{}".format(iteration, n_iterations))
+            logger.info(f"Equilibration iteration {iteration}/{n_iterations}")
             timer.start('Equilibration Iteration')
 
             # NOTE: Unlike run(), do NOT increment iteration counter.
@@ -708,7 +707,7 @@ class MultiStateSampler(object):
             estimated_finish_time = time.time() + estimated_time_remaining
             # TODO: Transmit timing information
 
-            logger.info("Iteration took {:.3f}s.".format(iteration_time))
+            logger.info(f"Iteration took {iteration_time:.3f}s.")
             if estimated_time_remaining != float('inf'):
                 logger.info("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
                     str(datetime.timedelta(seconds=estimated_time_remaining)),
@@ -769,7 +768,7 @@ class MultiStateSampler(object):
             self._iteration += 1
 
             logger.info('*' * 80)
-            logger.info('Iteration {}/{}'.format(self._iteration, iteration_limit))
+            logger.info(f'Iteration {self._iteration}/{iteration_limit}')
             logger.info('*' * 80)
             timer.start('Iteration')
 
@@ -823,7 +822,7 @@ class MultiStateSampler(object):
 
     def __repr__(self):
         """Return a 'formal' representation that can be used to reconstruct the class, if possible."""
-        return "<instance of {}>".format(self.__class__.__name__)
+        return f"<instance of {self.__class__.__name__}>"
 
     def __del__(self):
         # The reporter could be None if MultiStateSampler was not created.
@@ -976,7 +975,7 @@ class MultiStateSampler(object):
         """
         # Read the last iteration reported to ensure we don't include junk
         # data written just before a crash.
-        logger.debug("Reading storage file {}...".format(reporter.filepath))
+        logger.debug(f"Reading storage file {reporter.filepath}...")
         metadata = reporter.read_dict('metadata')
         thermodynamic_states, unsampled_states = reporter.read_thermodynamic_states()
 
@@ -1074,7 +1073,7 @@ class MultiStateSampler(object):
         # Raise exception if we have found some NaN energies.
         if len(nan_replicas) > 0:
             # Log failed replica, its thermo state, and the energy matrix row.
-            err_msg = "NaN encountered in {} energies for the following replicas and states".format(state_type)
+            err_msg = f"NaN encountered in {state_type} energies for the following replicas and states"
             for replica_id, energy_row in nan_replicas:
                 err_msg += '\n\tEnergies for positions at replica {} (current state {}): {} kT'.format(
                     replica_id, self._replica_thermodynamic_states[replica_id], energy_row)
@@ -1406,11 +1405,11 @@ class MultiStateSampler(object):
         # Minimize energy.
         try:
             if max_iterations == 0:
-                logger.debug('Using FIRE: tolerance {} minimizing to convergence'.format(tolerance))
+                logger.debug(f'Using FIRE: tolerance {tolerance} minimizing to convergence')
                 while integrator.getGlobalVariableByName('converged') < 1:
                     integrator.step(50)
             else:
-                logger.debug('Using FIRE: tolerance {} max_iterations {}'.format(tolerance, max_iterations))
+                logger.debug(f'Using FIRE: tolerance {tolerance} max_iterations {max_iterations}')
                 integrator.step(max_iterations)
         except Exception as e:
             if 'particle coordinate is nan' in str(e).lower():

@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 #
 # openmmtools documentation build configuration file, created by
 # sphinx-quickstart on Sat May 13 13:35:37 2017.

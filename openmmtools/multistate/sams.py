@@ -217,7 +217,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             Initial guess for logZ for all states, if available.
         """
         # Initialize multi-state sampler
-        super(SAMSSampler, self).__init__(number_of_iterations=number_of_iterations, **kwargs)
+        super().__init__(number_of_iterations=number_of_iterations, **kwargs)
         # Options
         self.log_target_probabilities = log_target_probabilities
         self.state_update_scheme = state_update_scheme
@@ -366,7 +366,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     def _restore_sampler_from_reporter(self, reporter, **kwargs):
         super()._restore_sampler_from_reporter(reporter, **kwargs)
         self._cached_state_histogram = self._compute_state_histogram(reporter=reporter)
-        logger.debug('Restored state histogram: {}'.format(self._cached_state_histogram))
+        logger.debug(f'Restored state histogram: {self._cached_state_histogram}')
         data = reporter.read_online_analysis_data(self._iteration, 'logZ', 'stage', 't0')
         self._logZ = data['logZ']
         self._stage = int(data['stage'][0])
@@ -381,7 +381,7 @@ class SAMSSampler(multistate.MultiStateSampler):
     @mpiplus.on_single_node(rank=0, broadcast_result=False, sync_nodes=False)
     @mpiplus.delayed_termination
     def _report_iteration_items(self):
-        super(SAMSSampler, self)._report_iteration_items()
+        super()._report_iteration_items()
 
         self._reporter.write_online_data_dynamic_and_static(self._iteration, logZ=self._logZ, stage=self._stage, t0=self._t0)
         # Split into which states and how many samplers are in each state
@@ -557,7 +557,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         if reporter is None:
             reporter = self._reporter
         replica_thermodynamic_states = reporter.read_replica_thermodynamic_states()
-        logger.debug('Read replica thermodynamic states: {}'.format(replica_thermodynamic_states))
+        logger.debug(f'Read replica thermodynamic states: {replica_thermodynamic_states}')
         n_k, _ = np.histogram(replica_thermodynamic_states, bins=np.arange(-0.5, self.n_states + 0.5))
         return n_k
 
@@ -569,7 +569,7 @@ class SAMSSampler(multistate.MultiStateSampler):
         # TODO: Make minimum_visits a user option
         minimum_visits = 1
         N_k = self._state_histogram
-        logger.debug('    state histogram counts ({} total): {}'.format(self._cached_state_histogram.sum(), self._cached_state_histogram))
+        logger.debug(f'    state histogram counts ({self._cached_state_histogram.sum()} total): {self._cached_state_histogram}')
         if (self.update_stages == 'two-stage') and (self._stage == 0):
             advance = False
             if N_k.sum() == 0:
@@ -640,7 +640,7 @@ class SAMSSampler(multistate.MultiStateSampler):
             elif self._stage == 1:
                 gamma = self.gamma0 * min(pi_star, (t - self._t0 + self._t0**beta_factor)**(-1)) # Eq. 15 of [1]
             else:
-                raise Exception('stage {} unknown'.format(self._stage))
+                raise Exception(f'stage {self._stage} unknown')
 
             #logger.debug('  gamma: %s' % gamma)
 
