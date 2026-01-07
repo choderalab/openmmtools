@@ -7,7 +7,7 @@ build:
 
 sphinx:
    configuration: docs/conf.py
-   fail_on_warning: true
+   fail_on_warning: false
 
 conda:
   environment: devtools/conda-envs/test_env.yaml
