@@ -7,7 +7,7 @@ Release History
 This release removes the barostat force during system minimization and fixes various warnings.
 
 - Fix AST deprecation warning & support pyyaml when built without c extensions PR `#800 <https://github.com/choderalab/openmmtools/pull/800>`_
-- Remove the barostat force from the system during minimization PR `#798 <https://github.com/choderalab/openmmtools/pull/798>`_
+- Remove the barostat force from the system during minimization PR `#798 <https://github.com/choderalab/openmmtools/pull/798>`_. Minimization is now explicitly made without any barostats, before these changes it only worked for the ``MonteCarloBarostat``.
 
 
 0.25.3
