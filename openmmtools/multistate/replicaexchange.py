@@ -3,7 +3,6 @@
 # ==============================================================================
 # MODULE DOCSTRING
 # ==============================================================================
-
 """
 ReplicaExchangeSampler
 ======================
@@ -41,13 +40,12 @@ from openmmtools import multistate, utils
 from openmmtools.multistate.multistateanalyzer import MultiStateSamplerAnalyzer
 import mpiplus
 
-
 logger = logging.getLogger(__name__)
-
 
 # ==============================================================================
 # REPLICA-EXCHANGE SIMULATION
 # ==============================================================================
+
 
 class ReplicaExchangeSampler(multistate.MultiStateSampler):
     """Replica-exchange simulation facility.
@@ -80,6 +78,9 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         be sure to set also ``online_analysis_interval``.
     replica_mixing_scheme : 'swap-all', 'swap-neighbors' or None, Default: 'swap-all'
         The scheme used to swap thermodynamic states between replicas.
+    deterministic_swap_order : bool, optional, default: False
+        If True, use deterministic odd/even swap order based on iteration number
+        (deterministic even/odd algorithm). If False, randomly choose swap order.
     online_analysis_interval : None or Int >= 1, optional, default None
         Choose the interval at which to perform online analysis of the free energy.
 
@@ -109,6 +110,8 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     sampler_states
     metadata
     is_completed
+    replica_mixing_scheme
+    deterministic_swap_order
 
     Examples
     --------
@@ -211,11 +214,13 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     # Constructors.
     # -------------------------------------------------------------------------
 
-    def __init__(self, replica_mixing_scheme='swap-all', **kwargs):
+    def __init__(self, replica_mixing_scheme='swap-all', deterministic_swap_order=False, **kwargs):
 
         # Initialize multi-state sampler simulation.
         super().__init__(**kwargs)
         self.replica_mixing_scheme = replica_mixing_scheme
+        self.deterministic_swap_order = deterministic_swap_order
+        self._deo_odd_offset = False  # Toggle for DEO alternation; start with even.
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):
 
@@ -230,8 +235,18 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                     raise ValueError("replica_mixing_scheme must be 'swap-neighbors' if locality is used")
             return replica_mixing_scheme
 
+        @staticmethod
+        def _deterministic_swap_order_validator(instance, value):
+            supported_schemes = [True, False]
+            if value not in supported_schemes:
+                raise ValueError("Unknown deterministic_swap_order '{}'. Supported values "
+                                 "are {}.".format(value, supported_schemes))
+            return value
+
     replica_mixing_scheme = _StoredProperty('replica_mixing_scheme',
                                             validate_function=_StoredProperty._repex_mixing_scheme_validator)
+    deterministic_swap_order = _StoredProperty('deterministic_swap_order',
+                                               validate_function=_StoredProperty._deterministic_swap_order_validator)
 
     _TITLE_TEMPLATE = ('Replica-exchange sampler simulation created using ReplicaExchangeSampler class '
                        'of openmmtools.multistate on {}')
@@ -270,11 +285,9 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
                 # Try to use numba-accelerated mixing code if possible,
                 # otherwise fall back to Python-accelerated code.
                 try:
-                    self._mix_all_replicas_numba(
-                        nswap_attempts, self.n_replicas,
-                        self._replica_thermodynamic_states, self._energy_thermodynamic_states,
-                        self._n_accepted_matrix, self._n_proposed_matrix
-                        )
+                    self._mix_all_replicas_numba(nswap_attempts, self.n_replicas, self._replica_thermodynamic_states,
+                                                 self._energy_thermodynamic_states, self._n_accepted_matrix,
+                                                 self._n_proposed_matrix)
                 except (ValueError, ImportError) as e:
                     logger.warning(str(e))
                     self._mix_all_replicas(nswap_attempts)
@@ -293,10 +306,8 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
 
     @staticmethod
     @njit
-    def _mix_all_replicas_numba(
-        nswap_attempts,
-        n_replicas, _replica_thermodynamic_states, _energy_thermodynamic_states,
-        _n_accepted_matrix, _n_proposed_matrix):
+    def _mix_all_replicas_numba(nswap_attempts, n_replicas, _replica_thermodynamic_states,
+                                _energy_thermodynamic_states, _n_accepted_matrix, _n_proposed_matrix):
         """
         numba-accelerated version of _mix_all_replicas()
 
@@ -333,7 +344,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             energy_ji = _energy_thermodynamic_states[replica_j, thermodynamic_state_i]
             energy_ii = _energy_thermodynamic_states[replica_i, thermodynamic_state_i]
             energy_jj = _energy_thermodynamic_states[replica_j, thermodynamic_state_j]
-            log_p_accept = - (energy_ij + energy_ji) + energy_ii + energy_jj
+            log_p_accept = -(energy_ij + energy_ji) + energy_ii + energy_jj
 
             # Record that this move has been proposed.
             _n_proposed_matrix[thermodynamic_state_i, thermodynamic_state_j] += 1
@@ -370,8 +381,12 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         # TODO: Extend this to allow more remote swaps or more thorough mixing if locality > 1.
 
         # Attempt swaps of pairs of replicas using traditional scheme (e.g. [0,1], [2,3], ...).
-        offset = np.random.randint(2)  # Offset is 0 or 1.
-        for thermodynamic_state_i in range(offset, self.n_replicas-1, 2):
+        if self.deterministic_swap_order:
+            offset = int(self._deo_odd_offset)
+            self._deo_odd_offset = not self._deo_odd_offset  # DEO: alternate even/odd.
+        else:
+            offset = np.random.randint(2)  # Random offset (0 or 1).
+        for thermodynamic_state_i in range(offset, self.n_replicas - 1, 2):
             thermodynamic_state_j = thermodynamic_state_i + 1  # Neighboring state.
 
             # Determine which replicas currently hold the thermodynamic states.
@@ -390,7 +405,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
         energy_ji = self._energy_thermodynamic_states[replica_j, thermodynamic_state_i]
         energy_ii = self._energy_thermodynamic_states[replica_i, thermodynamic_state_i]
         energy_jj = self._energy_thermodynamic_states[replica_j, thermodynamic_state_j]
-        log_p_accept = - (energy_ij + energy_ji) + energy_ii + energy_jj
+        log_p_accept = -(energy_ij + energy_ji) + energy_ii + energy_jj
 
         # Record that this move has been proposed.
         self._n_proposed_matrix[thermodynamic_state_i, thermodynamic_state_j] += 1
@@ -425,7 +440,6 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
 
 
 class ReplicaExchangeAnalyzer(MultiStateSamplerAnalyzer):
-
     """
     The ReplicaExchangeAnalyzer is the analyzer for a simulation generated from a Replica Exchange sampler simulation,
     implemented as an instance of the :class:`MultiStateSamplerAnalyzer`.
@@ -437,6 +451,7 @@ class ReplicaExchangeAnalyzer(MultiStateSamplerAnalyzer):
 
     """
     pass
+
 
 # ==============================================================================
 # MAIN AND TESTS
