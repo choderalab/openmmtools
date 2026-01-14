@@ -1929,19 +1929,11 @@ class MCDihedralRotationMove(MetropolizedMove):
     desired_angle : float, default -np.inf
         Desired angle to rotate to. If not specified, this will be chosen randomly. Must be between -pi and pi.
         Example: If the current angle is pi, and desired_angle is 0, the atoms will be rotated by -pi.
-    context_cache : openmmtools.cache.ContextCache, optional
-        The ContextCache to use for Context creation. If None, the global cache
-        openmmtools.cache.global_context_cache is used (default is None).
 
     Attributes
     ----------
     atom_subset
     desired_angle
-    context_cache
-    n_accepted : int
-        The number of proposals accepted.
-    n_proposed : int
-        The total number of attempted moves.
     proposed_positions : np.array of floats
         Proposed positions of atoms in atom_subset
 
@@ -1971,12 +1963,9 @@ class MCDihedralRotationMove(MetropolizedMove):
     >>> sampler.run(n_iterations=2)
     """
 
-    def __init__(self, atom_subset, desired_angle=-np.inf, context_cache=None):
-        self.atom_subset = atom_subset
+    def __init__(self, atom_subset, desired_angle=-np.inf, **kwargs):
+        super().__init__(atom_subset=atom_subset, **kwargs)
         self.desired_angle = desired_angle
-        self.context_cache = context_cache
-        self.n_accepted = 0
-        self.n_proposed = 0
         self.proposed_positions = None
 
     @staticmethod
