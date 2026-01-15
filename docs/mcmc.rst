@@ -136,3 +136,4 @@ A number of MCMC component move types that can be arranged into groups or subcla
     MonteCarloBarostatMove
     MCDisplacementMove
     MCRotationMove
+    MCDihedralRotationMove
