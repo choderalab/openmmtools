@@ -2107,7 +2107,82 @@ class MCDihedralRotationMove(MetropolizedMove):
         """Implement MetropolizedMove._propose_positions for apply()"""
         self.proposed_positions = self.rotate_positions(initial_positions)
         return self.proposed_positions
+    
+    @staticmethod
+    def get_atom_subsets_from_dihedrals(topology, dihedrals):
+        """Given dihedrals, get the full atom subsets needed to instantiate a MCDihedralRotationMove
+         Raises a ValueError if the dihedral bond is in a cycle or nonexistent.
 
+        Parameters
+        ----------
+        topology : openmm.app.topology.Topology
+            The topology of the system being simulated
+        dihedrals : list[list[int]]
+            A list of dihedrals to find the corresponding dihedral groups for. 
+            Each dihedral should be a list of 4 int values (atom indices). Dihedrals
+            should not be part of a cycle.
+
+        Returns
+        -------
+        dihedral_groups : list[list[int]]
+            A list of corresponding atom subsets for each dihedral that can be used
+            to create MCDihedralRotationMove instances. The smaller of the two dihedral
+            groups will be used.
+        """
+        def _build_bond_graph(topology):
+            """Create a graph of the atom connectivities"""
+            bond_graph = [[] for _ in range(topology.getNumAtoms())]
+            for bond in topology.bonds():
+                i = bond.atom1.index
+                j = bond.atom2.index
+                bond_graph[i].append(j)
+                bond_graph[j].append(i)
+            return bond_graph
+        
+        def _get_dihedral_groups(bond_graph, j, k):
+            """Determine the dihedral groups by performing a BFS on each side of the bond"""
+            if j not in bond_graph[k]:
+                raise ValueError(f"Atoms {j} and {k} are not bonded")
+            visited = set([j])
+            stack = [j]
+            while stack:
+                a = stack.pop()
+                for b in bond_graph[a]:
+                    if (a == j and b == k) or (a == k and b == j):
+                        continue
+                    if b == k:
+                        ValueError(f"A cycle connects atoms {j} and {k}")
+                    if b not in visited:
+                        visited.add(b)
+                        stack.append(b)
+            group_j = visited
+            group_k = set(range(len(bond_graph))) - group_j
+            return group_j, group_k
+        
+        mc_move_inputs = []
+        bond_graph = _build_bond_graph(topology)
+
+        for dihedral in dihedrals:
+            dihedral_and_group = []
+            group1, group2 = _get_dihedral_groups(bond_graph, dihedral[1], dihedral[2])
+            smaller_group = group1 if len(group1) < len(group2) else group2
+            
+            # Ensure that the fourth atom in the list is on the side being rotated
+            if dihedral[3] not in smaller_group:
+                dihedral_and_group.extend(reversed(dihedral))
+            else:
+                dihedral_and_group.extend(dihedral)
+                
+            # Remove the dihedral atoms from the dihedral group
+            for dihedral_atom in dihedral:
+                smaller_group.discard(dihedral_atom)
+            
+            # Add in the dihedral group atoms
+            dihedral_and_group.extend(smaller_group)
+
+            # Add to list of all inputs
+            mc_move_inputs.append(dihedral_and_group)
+        return mc_move_inputs
 
 # =============================================================================
 # MAIN AND TESTS
