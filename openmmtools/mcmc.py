@@ -1324,7 +1324,13 @@ class GHMCMove(BaseIntegratorMove):
     """Generalized hybrid Monte Carlo (GHMC) Markov chain Monte Carlo move.
 
     This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized
-    Langevin dynamics, to propagate the system.
+    Langevin dynamics, to propagate the system. Because GHMC includes
+    Metropolization and acceptance-statistics bookkeeping, it can be
+    substantially more expensive per integration step than non-Metropolized
+    dynamics moves such as :class:`LangevinDynamicsMove`, especially for small
+    systems, short propagation segments, or simulations with many thermodynamic
+    states. Benchmark throughput and monitor ``fraction_accepted`` when using
+    this move in performance-sensitive workflows.
 
     Parameters
     ----------
