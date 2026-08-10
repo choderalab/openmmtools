@@ -60,10 +60,14 @@ You can combine them to form a sequence of moves
    statistics through ``n_proposed``, ``n_accepted``, and
    ``fraction_accepted``. This can make it substantially more expensive per
    integration step than non-Metropolized dynamics moves such as
-   ``LangevinDynamicsMove``, particularly for small systems, short
-   propagation segments, or workflows with many thermodynamic states. When
-   replacing a Langevin dynamics move with ``GHMCMove``, benchmark throughput
-   and monitor the acceptance statistics for the specific system and platform.
+   ``LangevinDynamicsMove``. The additional cost primarily comes from the
+   potential-energy evaluations required by the Metropolis acceptance test,
+   rather than from the relatively small cost of acceptance/rejection
+   bookkeeping. The overhead can be particularly noticeable for small
+   systems, short propagation segments, or workflows with many thermodynamic
+   states. When replacing a Langevin dynamics move with ``GHMCMove``, benchmark
+   throughput and monitor the acceptance statistics for the specific system and
+   platform.
 
 or create a move that selects one of them at random with given probability
 at each iteration.

@@ -1325,9 +1325,12 @@ class GHMCMove(BaseIntegratorMove):
 
     This move uses generalized Hybrid Monte Carlo (GHMC), a form of Metropolized
     Langevin dynamics, to propagate the system. Because GHMC includes
-    Metropolization and acceptance-statistics bookkeeping, it can be
-    substantially more expensive per integration step than non-Metropolized
-    dynamics moves such as :class:`LangevinDynamicsMove`, especially for small
+    Metropolization, it can be substantially more expensive per integration
+    step than non-Metropolized dynamics moves such as
+    :class:`LangevinDynamicsMove`. The additional cost primarily comes from the
+    potential-energy evaluations required by the Metropolis acceptance test,
+    rather than from the relatively small cost of acceptance/rejection
+    bookkeeping. This overhead can be particularly noticeable for small
     systems, short propagation segments, or simulations with many thermodynamic
     states. Benchmark throughput and monitor ``fraction_accepted`` when using
     this move in performance-sensitive workflows.
