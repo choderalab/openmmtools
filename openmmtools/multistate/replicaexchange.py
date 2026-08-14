@@ -377,8 +377,10 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             # Determine which replicas currently hold the thermodynamic states.
             # Replica state arrays are one-dimensional here. `np.flatnonzero` gives indices instead
             # of tuples if we were to use `np.where`.
-            replica_i = np.flatnonzero(self._replica_thermodynamic_states == thermodynamic_state_i)
-            replica_j = np.flatnonzero(self._replica_thermodynamic_states == thermodynamic_state_j)
+            replica_i = np.flatnonzero(
+                self._replica_thermodynamic_states == thermodynamic_state_i).item()
+            replica_j = np.flatnonzero(
+                self._replica_thermodynamic_states == thermodynamic_state_j).item()
             self._attempt_swap(replica_i, replica_j)
 
     def _attempt_swap(self, replica_i, replica_j):
