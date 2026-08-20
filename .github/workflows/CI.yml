@@ -28,8 +28,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
-        openmm: ["8.2.0", "8.3.1"]
+        python-version: ["3.12", "3.13", "3.14"]
+        openmm: ["8.4.0", "8.5.2"]
         os: [macOS-latest, ubuntu-latest]
         pymbar-version: ["4"]
         include:
