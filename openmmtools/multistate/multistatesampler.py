@@ -1385,11 +1385,8 @@ class MultiStateSampler:
             # Use original state if no barostat
             minimization_state = thermodynamic_state
  
-        # Use the FIRE minimizer
-        integrator = FIREMinimizationIntegrator(tolerance=tolerance)
-
         # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(minimization_state, integrator)
+        context, integrator = self.energy_context_cache.get_context(minimization_state)
         # inform of platform used in current context
         logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
@@ -1410,9 +1407,11 @@ class MultiStateSampler:
         final_energy = minimization_state.reduced_potential(sampler_state)
         logger.debug(f'Replica {replica_id + 1}/{self.n_replicas}: final energy {final_energy:8.3f}kT')
         # TODO if energy > 0, use slower openmm minimizer
+        # TODO the NVT Context created above for barostat-free minimization is left in
+        #  energy_context_cache indefinitely (capacity=None means it's never evicted) even
+        #  though nothing else reuses it after this point. Consider explicitly removing it
+        #  from the cache here.
 
-        # Clean up the integrator
-        del context
         # Return minimized positions.
         return sampler_state.positions
 
