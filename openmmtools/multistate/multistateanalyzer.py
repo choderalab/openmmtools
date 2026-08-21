@@ -587,12 +587,6 @@ class PhaseAnalyzer(ABC):
         self._use_online_data = use_online_data
         self._read_online_data_if_present()
 
-    def __del__(self):
-        # Explicitly close storage
-        self.clear()
-        if self._reporter is not None:
-            del self._reporter
-
     def clear(self):
         """Reset all cached objects.
 
