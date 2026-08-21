@@ -1395,8 +1395,7 @@ class MultiStateSampler:
 
         # Compute the initial energy of the system for logging.
         initial_energy = minimization_state.reduced_potential(context)
-        logger.debug('Replica {}/{}: initial energy {:8.3f}kT'.format(
-            replica_id + 1, self.n_replicas, initial_energy))
+        logger.debug(f"Replica {replica_id + 1}/{self.n_replicas}: initial energy {initial_energy:8.3f}kT")
         # Minimize energy.
         openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
 
