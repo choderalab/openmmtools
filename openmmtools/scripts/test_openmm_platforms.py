@@ -33,7 +33,6 @@ TODO
 # PYTHON 3 COMPATIBILITY CRAP
 #=============================================================================================
 
-from __future__ import print_function
 
 #=============================================================================================
 # ENABLE LOGGING
@@ -179,7 +178,7 @@ def assert_approximately_equal(computed_potential, expected_potential, tolerance
 
     # Raise an exception if the error is larger than the tolerance.
     if abs(error) > tolerance:
-        raise Exception("Computed potential %s, expected %s.  Error %s is larger than acceptable tolerance of %s." % (computed_potential, expected_potential, error, tolerance))
+        raise Exception("Computed potential {}, expected {}.  Error {} is larger than acceptable tolerance of {}.".format(computed_potential, expected_potential, error, tolerance))
 
     return
 
@@ -406,10 +405,7 @@ def main():
 
                 for precision_model in precision_models:
                     # Set precision.
-                    if platform_name == 'CUDA':
-                        platform.setPropertyDefaultValue('CudaPrecision', precision_model)
-                    if platform_name == 'OpenCL':
-                        platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
+                    platform.setPropertyDefaultValue('Precision', precision_model)
 
                     # Compute potential and force.
                     [platform_potential, platform_force] = compute_potential_and_force(system, positions, platform)
@@ -505,10 +501,7 @@ def main():
 
                         for precision_model in precision_models:
                             # Set precision.
-                            if platform_name == 'CUDA':
-                                platform.setPropertyDefaultValue('CudaPrecision', precision_model)
-                            if platform_name == 'OpenCL':
-                                platform.setPropertyDefaultValue('OpenCLPrecision', precision_model)
+                            platform.setPropertyDefaultValue('Precision', precision_model)
 
                             # Compute potential and force.
                             [platform_potential, platform_force] = compute_potential_and_force_by_force_group(system, positions, platform, force_group)

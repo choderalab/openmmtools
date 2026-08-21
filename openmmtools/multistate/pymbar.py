@@ -10,7 +10,7 @@ try:
         subsample_correlated_data,
         statistical_inefficiency
     )
-    from pymbar import MBAR
+    from pymbar import MBAR, __version__
     from pymbar.utils import ParameterError
 except ImportError:
     # pymbar < 4
@@ -22,12 +22,13 @@ except ImportError:
     )
     from pymbar import MBAR
     from pymbar.utils import ParameterError
+    from pymbar.version import short_version as __version__
 
 
 def _pymbar_bar(
     work_forward: np.ndarray,
     work_backward: np.ndarray,
-) -> Dict[str, float]:
+) -> dict[str, float]:
     """
     https://github.com/shirtsgroup/physical_validation/blob/v1.0.5/physical_validation/util/ensemble.py#L37
     """
@@ -42,7 +43,7 @@ def _pymbar_bar(
 
 def _pymbar_exp(
         w_F: np.ndarray,
-) -> Tuple[float, float]:
+) -> tuple[float, float]:
     try:
         # pymbar < 4
         from pymbar import EXP

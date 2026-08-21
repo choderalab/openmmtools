@@ -333,7 +333,7 @@ class ThermodynamicsError(Exception):
 
     def __init__(self, code, *args):
         error_message = self.error_messages[code].format(*args)
-        super(ThermodynamicsError, self).__init__(error_message)
+        super().__init__(error_message)
         self.code = code
 
 
@@ -373,7 +373,7 @@ class SamplerStateError(Exception):
 
     def __init__(self, code, *args):
         error_message = self.error_messages[code].format(*args)
-        super(SamplerStateError, self).__init__(error_message)
+        super().__init__(error_message)
         self.code = code
 
 
@@ -382,7 +382,7 @@ class SamplerStateError(Exception):
 # =============================================================================
 
 
-class ThermodynamicState(object):
+class ThermodynamicState:
     """Thermodynamic state of a system.
 
     Represent the portion of the state of a Context that does not
@@ -834,14 +834,14 @@ class ThermodynamicState(object):
         The reduced potential is defined as in Ref. [1],
         with a additional term for the surface tension
 
-        u = \beta [U(x) + p V(x) + \mu N(x) - \gamma A]
+        u = \beta [U(x) + p V(x) + \\mu N(x) - \\gamma A]
 
         where the thermodynamic parameters are
 
         \beta = 1/(kB T) is the inverse temperature
         p is the pressure
-        \mu is the chemical potential
-        \gamma is the surface tension
+        \\mu is the chemical potential
+        \\gamma is the surface tension
 
         and the configurational properties are
 
@@ -1291,8 +1291,7 @@ class ThermodynamicState(object):
             serialized_system = zlib.decompress(serialized_system)
             # Py2 returns the string, Py3 returns a byte string to decode, but if we
             # decode the string in Py2 we get a unicode object that OpenMM can't parse.
-            if sys.version_info > (3, 0):
-                serialized_system = serialized_system.decode(self._ENCODING)
+            serialized_system = serialized_system.decode(self._ENCODING)
         except (TypeError, zlib.error):  # Py3/2 throws different error types
             # Catch the "serialization is not compressed" error, do nothing to string.
             # Preserves backwards compatibility
@@ -1931,7 +1930,7 @@ class ThermodynamicState(object):
 # SAMPLER STATE
 # =============================================================================
 
-class SamplerState(object):
+class SamplerState:
     """State carrying the configurational properties of a system.
 
     Represent the portion of the state of a Context that changes with
@@ -2809,7 +2808,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             The system of this ThermodynamicState.
 
         """
-        system = super(CompoundThermodynamicState, self).get_system(**kwargs)
+        system = super().get_system(**kwargs)
 
         # The system returned by ThermodynamicState has standard parameters,
         # so we need to set them to the actual value of the composable states.
@@ -2843,7 +2842,7 @@ class CompoundThermodynamicState(ThermodynamicState):
                 s.apply_to_system(system)
             else:
                 s.check_system_consistency(system)
-        super(CompoundThermodynamicState, self)._unsafe_set_system(system, fix_state)
+        super()._unsafe_set_system(system, fix_state)
 
     def is_context_compatible(self, context):
         """Check compatibility of the given context.
@@ -2867,7 +2866,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         # handle the case in which one of the composable states
         # raises ComposableStateError when standardizing the context system.
         try:
-            return super(CompoundThermodynamicState, self).is_context_compatible(context)
+            return super().is_context_compatible(context)
         except ComposableStateError:
             return False
 
@@ -2879,7 +2878,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState.apply_to_context
 
         """
-        super(CompoundThermodynamicState, self).apply_to_context(context)
+        super().apply_to_context(context)
         for s in self._composable_states:
             s.apply_to_context(context)
 
@@ -2922,19 +2921,19 @@ class CompoundThermodynamicState(ThermodynamicState):
             return attr
 
         # Attribute not found, fall back to normal behavior.
-        return super(CompoundThermodynamicState, self).__getattribute__(name)
+        return super().__getattribute__(name)
 
     def __setattr__(self, name, value):
         # Add new attribute to CompoundThermodynamicState.
         if '_composable_states' not in self.__dict__:
-            super(CompoundThermodynamicState, self).__setattr__(name, value)
+            super().__setattr__(name, value)
 
         # Update existing ThermodynamicState attribute (check ancestors).
         # We can't use hasattr here because it calls __getattr__, which
         # search in all composable states as well. This means that this
         # will catch only properties and methods.
         elif any(name in C.__dict__ for C in self.__class__.__mro__):
-            super(CompoundThermodynamicState, self).__setattr__(name, value)
+            super().__setattr__(name, value)
 
         # Update composable states attributes. This catches also normal
         # attributes besides properties and methods.
@@ -2952,7 +2951,7 @@ class CompoundThermodynamicState(ThermodynamicState):
 
             # No attribute found. This is monkey patching.
             if old_state is None:
-                super(CompoundThermodynamicState, self).__setattr__(name, value)
+                super().__setattr__(name, value)
 
     def __getstate__(self, **kwargs):
         """Return a dictionary representation of the state."""
@@ -3000,7 +2999,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         ThermodynamicState._standardize_system
 
         """
-        super(CompoundThermodynamicState, self)._standardize_system(system)
+        super()._standardize_system(system)
         for composable_state in self._composable_states:
             composable_state._standardize_system(system)
 
@@ -3024,7 +3023,7 @@ class CompoundThermodynamicState(ThermodynamicState):
             self._update_standard_system(new_standard_system)
 
     def _apply_to_context_in_state(self, context, thermodynamic_state):
-        super(CompoundThermodynamicState, self)._apply_to_context_in_state(context, thermodynamic_state)
+        super()._apply_to_context_in_state(context, thermodynamic_state)
         for s in self._composable_states:
             s.apply_to_context(context)
 
@@ -3038,7 +3037,7 @@ class CompoundThermodynamicState(ThermodynamicState):
         if len(memo) == 0:
             memo.update({i: {} for i in range(len(self._composable_states))})
         # Find force group to update for parent class.
-        force_groups = super(CompoundThermodynamicState, self)._find_force_groups_to_update(
+        force_groups = super()._find_force_groups_to_update(
             context, current_context_state, memo)
         # Find force group to update for composable states.
         for composable_state_idx, composable_state in enumerate(self._composable_states):
@@ -3056,7 +3055,7 @@ class GlobalParameterError(ComposableStateError):
     pass
 
 
-class GlobalParameterFunction(object):
+class GlobalParameterFunction:
     """A function of global parameters.
 
     All the functions supported by ``openmmtools.utils.math_eval``
@@ -3098,7 +3097,7 @@ class GlobalParameterFunction(object):
         return utils.math_eval(self._expression, variables)
 
 
-class GlobalParameterState(object):
+class GlobalParameterState:
     """A composable state controlling one or more OpenMM ``Force``'s global parameters.
 
     This is a partially abstract class that provides facilities to implement
@@ -3360,7 +3359,7 @@ class GlobalParameterState(object):
         try:
             variable_value = self._function_variables[variable_name]
         except KeyError:
-            err_msg = 'Unknown function variable {}'.format(variable_name)
+            err_msg = f'Unknown function variable {variable_name}'
             raise self._GLOBAL_PARAMETER_ERROR(err_msg)
         return variable_value
 
@@ -3432,7 +3431,7 @@ class GlobalParameterState(object):
     # dynamically discovered by _get_controlled_parameters() by checking
     # which descriptors are GlobalParameter objects.
 
-    class GlobalParameter(object):
+    class GlobalParameter:
         """Descriptor for a global parameter.
 
         Parameters
@@ -3836,7 +3835,7 @@ class GlobalParameterState(object):
             parameter_value = self._get_global_parameter_value(key)
         except KeyError:
             # Parameter not found, fall back to normal behavior.
-            parameter_value = super(GlobalParameterState, self).__getattribute__(key)
+            parameter_value = super().__getattribute__(key)
         return parameter_value
 
     def __setattr__(self, key, value):
@@ -3851,7 +3850,7 @@ class GlobalParameterState(object):
             else:
                 return
         # This is not a "suffixed" parameter. Fallback to normal behavior.
-        super(GlobalParameterState, self).__setattr__(key, value)
+        super().__setattr__(key, value)
 
     @classmethod
     def _get_system_controlled_parameters(cls, system, parameters_name_suffix):
@@ -3944,7 +3943,7 @@ class GlobalParameterState(object):
         # Check for unknown parameters
         unknown_parameters = set(kwargs) - controlled_parameters
         if len(unknown_parameters) > 0:
-            err_msg = "Unknown parameters {}".format(unknown_parameters)
+            err_msg = f"Unknown parameters {unknown_parameters}"
             raise self._GLOBAL_PARAMETER_ERROR(err_msg)
 
         # Append suffix to parameters before storing them internally.

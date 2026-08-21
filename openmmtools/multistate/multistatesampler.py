@@ -35,6 +35,7 @@ import typing
 import inspect
 import logging
 import datetime
+import subprocess
 
 import numpy as np
 
@@ -57,7 +58,7 @@ logger = logging.getLogger(__name__)
 # ==============================================================================
 
 
-class MultiStateSampler(object):
+class MultiStateSampler:
     """
     Base class for samplers that sample multiple thermodynamic states using
     one or more replicas.
@@ -194,7 +195,7 @@ class MultiStateSampler(object):
                  locality=None):
 
         # Warn that API is experimental
-        logger.warn('Warning: The openmmtools.multistate API is experimental and may change in future releases')
+        logger.warning('Warning: The openmmtools.multistate API is experimental and may change in future releases')
 
         # Display cuda device in debug log
         self._display_cuda_devices()
@@ -296,11 +297,10 @@ class MultiStateSampler(object):
         return sampler
 
     # TODO use Python 3.6 namedtuple syntax when we drop Python 3.5 support.
-    Status = typing.NamedTuple('Status', [
-        ('iteration', int),
-        ('target_error', float),
-        ('is_completed', bool)
-    ])
+    class Status(typing.NamedTuple):
+        iteration: int
+        target_error: float
+        is_completed: bool
 
     @classmethod
     def read_status(cls, storage):
@@ -433,7 +433,7 @@ class MultiStateSampler(object):
             return None
         return self._thermodynamic_states[0].is_periodic
 
-    class _StoredProperty(object):
+    class _StoredProperty:
         """
         Descriptor of a property stored as an option.
 
@@ -587,6 +587,10 @@ class MultiStateSampler(object):
             raise RuntimeError('Storage file {} already exists; cowardly '
                                'refusing to overwrite.'.format(self._reporter.filepath))
 
+        if self.online_analysis_interval:
+            if self.online_analysis_interval % self._reporter.checkpoint_interval != 0:
+                logger.warning("An online_analysis_interval that is not a multiple of the checkpoint_interval can lead to redundant information in the real time yaml file after recovering from checkpoints.")
+
         # Make sure sampler_states is an iterable of SamplerStates.
         if isinstance(sampler_states, states.SamplerState):
             sampler_states = [sampler_states]
@@ -677,7 +681,7 @@ class MultiStateSampler(object):
         production_mcmc_moves = self._mcmc_moves
         self._mcmc_moves = mcmc_moves
         for iteration in range(1, 1 + n_iterations):
-            logger.debug("Equilibration iteration {}/{}".format(iteration, n_iterations))
+            logger.info(f"Equilibration iteration {iteration}/{n_iterations}")
             timer.start('Equilibration Iteration')
 
             # NOTE: Unlike run(), do NOT increment iteration counter.
@@ -701,14 +705,12 @@ class MultiStateSampler(object):
             estimated_finish_time = time.time() + estimated_time_remaining
             # TODO: Transmit timing information
 
-            # Show timing statistics if debug level is activated.
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(iteration_time))
-                if estimated_time_remaining != float('inf'):
-                    logger.debug("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
-                        str(datetime.timedelta(seconds=estimated_time_remaining)),
-                        time.ctime(estimated_finish_time),
-                        str(datetime.timedelta(seconds=estimated_total_time))))
+            logger.info(f"Iteration took {iteration_time:.3f}s.")
+            if estimated_time_remaining != float('inf'):
+                logger.info("Estimated completion (of equilibration only) in {}, at {} (consuming total wall clock time {}).".format(
+                    str(datetime.timedelta(seconds=estimated_time_remaining)),
+                    time.ctime(estimated_finish_time),
+                    str(datetime.timedelta(seconds=estimated_total_time))))
         timer.report_timing()
 
         # Restore production MCMCMoves.
@@ -763,9 +765,9 @@ class MultiStateSampler(object):
             # Increment iteration counter.
             self._iteration += 1
 
-            logger.debug('*' * 80)
-            logger.debug('Iteration {}/{}'.format(self._iteration, iteration_limit))
-            logger.debug('*' * 80)
+            logger.info('*' * 80)
+            logger.info(f'Iteration {self._iteration}/{iteration_limit}')
+            logger.info('*' * 80)
             timer.start('Iteration')
 
             # Update thermodynamic states
@@ -788,14 +790,13 @@ class MultiStateSampler(object):
             partial_total_time = timer.partial('Run ReplicaExchange')
             self._update_timing(iteration_time, partial_total_time, run_initial_iteration, iteration_limit)
 
-            # Show timing statistics if debug level is activated.
-            if logger.isEnabledFor(logging.DEBUG):
-                logger.debug("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
-                if self._timing_data["estimated_time_remaining"] != float('inf'):
-                    logger.debug("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
-                        self._timing_data["estimated_time_remaining"],
-                        self._timing_data["estimated_localtime_finish_date"],
-                        self._timing_data["estimated_total_time"]))
+            # Log timing data as info level -- useful for users by default
+            logger.info("Iteration took {:.3f}s.".format(self._timing_data["iteration_seconds"]))
+            if self._timing_data["estimated_time_remaining"] != float('inf'):
+                logger.info("Estimated completion in {}, at {} (consuming total wall clock time {}).".format(
+                    self._timing_data["estimated_time_remaining"],
+                    self._timing_data["estimated_localtime_finish_date"],
+                    self._timing_data["estimated_total_time"]))
 
             # Perform sanity checks to see if we should terminate here.
             self._check_nan_energy()
@@ -819,7 +820,7 @@ class MultiStateSampler(object):
 
     def __repr__(self):
         """Return a 'formal' representation that can be used to reconstruct the class, if possible."""
-        return "<instance of {}>".format(self.__class__.__name__)
+        return f"<instance of {self.__class__.__name__}>"
 
     def __del__(self):
         # The reporter could be None if MultiStateSampler was not created.
@@ -972,7 +973,7 @@ class MultiStateSampler(object):
         """
         # Read the last iteration reported to ensure we don't include junk
         # data written just before a crash.
-        logger.debug("Reading storage file {}...".format(reporter.filepath))
+        logger.debug(f"Reading storage file {reporter.filepath}...")
         metadata = reporter.read_dict('metadata')
         thermodynamic_states, unsampled_states = reporter.read_thermodynamic_states()
 
@@ -1026,12 +1027,12 @@ class MultiStateSampler(object):
         self._thermodynamic_states = thermodynamic_states
         self._unsampled_states = unsampled_states
         self._sampler_states = sampler_states
-        self._replica_thermodynamic_states = state_indices
+        self._replica_thermodynamic_states = np.array(state_indices)
         self._energy_thermodynamic_states = energy_thermodynamic_states
         self._neighborhoods = neighborhoods
         self._energy_unsampled_states = energy_unsampled_states
-        self._n_accepted_matrix = n_accepted_matrix
-        self._n_proposed_matrix = n_proposed_matrix
+        self._n_accepted_matrix = np.array(n_accepted_matrix)
+        self._n_proposed_matrix = np.array(n_proposed_matrix)
         self._metadata = metadata
 
         self._last_mbar_f_k = last_mbar_f_k
@@ -1070,7 +1071,7 @@ class MultiStateSampler(object):
         # Raise exception if we have found some NaN energies.
         if len(nan_replicas) > 0:
             # Log failed replica, its thermo state, and the energy matrix row.
-            err_msg = "NaN encountered in {} energies for the following replicas and states".format(state_type)
+            err_msg = f"NaN encountered in {state_type} energies for the following replicas and states"
             for replica_id, energy_row in nan_replicas:
                 err_msg += '\n\tEnergies for positions at replica {} (current state {}): {} kT'.format(
                     replica_id, self._replica_thermodynamic_states[replica_id], energy_row)
@@ -1352,10 +1353,43 @@ class MultiStateSampler(object):
         # Retrieve thermodynamic and sampler states.
         thermodynamic_state_id = self._replica_thermodynamic_states[replica_id]
         thermodynamic_state = self._thermodynamic_states[thermodynamic_state_id]
+
         sampler_state = self._sampler_states[replica_id]
+        
+        # Determine whether we need a temporary NVT state
+        barostat_types = (
+            openmm.MonteCarloBarostat,
+            openmm.MonteCarloMembraneBarostat,
+            openmm.MonteCarloAnisotropicBarostat,
+        )
+
+        has_barostat = any(
+            isinstance(thermodynamic_state.system.getForce(i), barostat_types)
+            for i in range(thermodynamic_state.system.getNumForces())
+        )
+
+        if has_barostat:
+            # Deep copy system and remove all barostats
+            min_system = copy.deepcopy(thermodynamic_state.system)
+            for i in reversed(range(min_system.getNumForces())):
+                if isinstance(min_system.getForce(i), barostat_types):
+                    min_system.removeForce(i)
+
+            # Temporary NVT ThermodynamicState for minimization
+            minimization_state = states.ThermodynamicState(
+                system=min_system,
+                temperature=thermodynamic_state.temperature,
+                pressure=None
+            )
+        else:
+            # Use original state if no barostat
+            minimization_state = thermodynamic_state
+ 
+        # Use the FIRE minimizer
+        integrator = FIREMinimizationIntegrator(tolerance=tolerance)
 
         # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(thermodynamic_state)
+        context, integrator = self.energy_context_cache.get_context(minimization_state, integrator)
         # inform of platform used in current context
         logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
@@ -1363,20 +1397,22 @@ class MultiStateSampler(object):
         sampler_state.apply_to_context(context)
 
         # Compute the initial energy of the system for logging.
-        initial_energy = thermodynamic_state.reduced_potential(context)
+        initial_energy = minimization_state.reduced_potential(context)
         logger.debug('Replica {}/{}: initial energy {:8.3f}kT'.format(
             replica_id + 1, self.n_replicas, initial_energy))
-
         # Minimize energy.
         openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
 
         # Get the minimized positions.
         sampler_state.update_from_context(context)
-
+        
         # Compute the final energy of the system for logging.
-        final_energy = thermodynamic_state.reduced_potential(sampler_state)
+        final_energy = minimization_state.reduced_potential(sampler_state)
         logger.debug(f'Replica {replica_id + 1}/{self.n_replicas}: final energy {final_energy:8.3f}kT')
+        # TODO if energy > 0, use slower openmm minimizer
 
+        # Clean up the integrator
+        del context
         # Return minimized positions.
         return sampler_state.positions
 
@@ -1603,7 +1639,7 @@ class MultiStateSampler(object):
 
         self._last_mbar_f_k = -logZ
         free_energy = self._last_mbar_f_k[-1] - self._last_mbar_f_k[0]
-        self._last_err_free_energy = np.Inf
+        self._last_err_free_energy = np.inf
 
         # Store free energy estimate
         self._reporter.write_online_data_dynamic_and_static(self._iteration,
@@ -1752,11 +1788,19 @@ class MultiStateSampler(object):
     @staticmethod
     def _display_cuda_devices():
         """Query system nvidia-smi to get available GPUs indices and names in debug log."""
-        # Read nvidia-smi query, should return empty strip if no GPU is found.
-        cuda_query_output = os.popen("nvidia-smi --query-gpu=index,gpu_name --format=csv,noheader").read().strip()
-        # Split by line jump and comma
-        cuda_devices_list = [entry.split(',') for entry in cuda_query_output.split('\n')]
-        logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+
+        cuda_query_output = subprocess.run("nvidia-smi --query-gpu=gpu_uuid,gpu_name,compute_mode  --format=csv", shell=True, capture_output=True, text=True)
+        # Check if command worked
+        if cuda_query_output.returncode == 0:
+            # Split by line jump and comma
+            cuda_devices_list = [entry for entry in cuda_query_output.stdout.splitlines()]
+            logger.debug(f"CUDA devices available: {*cuda_devices_list,}")
+            # We only support "Default" and not "Exclusive_Process" for the compute mode
+            if "Default" not in cuda_query_output.stdout:
+                logger.warning(f"GPU in 'Exclusive_Process' mode (or Prohibited), one context is allowed per device. This may prevent some openmmtools features from working. GPU must be in 'Default' compute mode")
+        # Handel the case where the command had some error
+        else:
+            logger.debug(f"nvidia-smi command failed: {cuda_query_output.stderr}, this is expected if there is no GPU available")
 
     def _flatten_moves_iterator(self):
         """Recursively flatten MCMC moves. Handles the cases where each move can be a set of moves, for example with

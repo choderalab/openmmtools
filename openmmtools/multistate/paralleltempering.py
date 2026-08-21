@@ -160,7 +160,7 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
                 from simtk import unit
             temperature_unit = unit.kelvin
             temperatures = np.logspace(np.log10(min_temperature/temperature_unit), np.log10(max_temperature/temperature_unit), num=n_temperatures) * temperature_unit
-            logger.debug('using temperatures {}'.format(temperatures))
+            logger.debug(f'using temperatures {temperatures}')
         else:
             raise ValueError("Either 'temperatures' or ('min_temperature', 'max_temperature', "
                              "and 'n_temperatures') must be provided.")
@@ -170,7 +170,7 @@ class ParallelTemperingSampler(ReplicaExchangeSampler):
             state.temperature = temperature
 
         # Initialize replica-exchange simulation.
-        super(ParallelTemperingSampler, self).create(thermodynamic_states, sampler_states, storage=storage, **kwargs)
+        super().create(thermodynamic_states, sampler_states, storage=storage, **kwargs)
 
     def _compute_replica_energies(self, replica_id):
         """Compute the energy for the replica at every temperature.

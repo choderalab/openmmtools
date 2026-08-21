@@ -46,7 +46,7 @@ for resname in molecules:
     ofs.close()
 
     # Replace <0> with resname.
-    infile = open(filename, 'r')
+    infile = open(filename)
     lines = infile.readlines()
     infile.close()
     newlines = [line.replace('<0>', resname) for line in lines]

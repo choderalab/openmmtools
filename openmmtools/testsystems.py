@@ -172,9 +172,14 @@ def get_data_filename(relative_path):
         Name of the file to load (with respect to the repex folder).
 
     """
+    # See https://importlib-resources.readthedocs.io/en/latest/migration.html#pkg-resources-resource-filename
+    import importlib
+    from contextlib import ExitStack
+    import atexit
+    file_manager = ExitStack()
+    atexit.register(file_manager.close)
 
-    from pkg_resources import resource_filename
-    fn = resource_filename('openmmtools', relative_path)
+    fn = str(file_manager.enter_context(importlib.resources.as_file(importlib.resources.files("openmmtools") / relative_path)))
 
     if not os.path.exists(fn):
         raise ValueError("Sorry! %s does not exist. If you just added it, you'll have to re-install" % fn)
@@ -378,7 +383,7 @@ def construct_restraining_potential(particle_indices, K):
 # Thermodynamic state description
 #=============================================================================================
 
-class ThermodynamicState(object):
+class ThermodynamicState:
 
     """Object describing a thermodynamic state obeying Boltzmann statistics.
 
@@ -440,7 +445,7 @@ class ThermodynamicState(object):
 #=============================================================================================
 
 
-class TestSystem(object):
+class TestSystem:
 
     """Abstract base class for test systems, demonstrating how to implement a test system.
 
@@ -1266,7 +1271,7 @@ class UnconstrainedDiatomicFluid(DiatomicFluid):
     """
 
     def __init__(self, *args, **kwargs):
-        super(UnconstrainedDiatomicFluid, self).__init__(constraint=False, *args, **kwargs)
+        super().__init__(constraint=False, *args, **kwargs)
 
 
 class ConstrainedDiatomicFluid(DiatomicFluid):
@@ -1283,7 +1288,7 @@ class ConstrainedDiatomicFluid(DiatomicFluid):
     """
 
     def __init__(self, *args, **kwargs):
-        super(ConstrainedDiatomicFluid, self).__init__(constraint=True, *args, **kwargs)
+        super().__init__(constraint=True, *args, **kwargs)
 
 
 class DipolarFluid(DiatomicFluid):
@@ -1300,7 +1305,7 @@ class DipolarFluid(DiatomicFluid):
     """
 
     def __init__(self, *args, **kwargs):
-        super(DipolarFluid, self).__init__(charge=0.25 * unit.elementary_charge, *args, **kwargs)
+        super().__init__(charge=0.25 * unit.elementary_charge, *args, **kwargs)
 
 
 class UnconstrainedDipolarFluid(DipolarFluid):
@@ -1317,7 +1322,7 @@ class UnconstrainedDipolarFluid(DipolarFluid):
     """
 
     def __init__(self, *args, **kwargs):
-        super(UnconstrainedDipolarFluid, self).__init__(constraint=False, *args, **kwargs)
+        super().__init__(constraint=False, *args, **kwargs)
 
 
 class ConstrainedDipolarFluid(DipolarFluid):
@@ -1334,7 +1339,7 @@ class ConstrainedDipolarFluid(DipolarFluid):
     """
 
     def __init__(self, *args, **kwargs):
-        super(ConstrainedDipolarFluid, self).__init__(constraint=True, *args, **kwargs)
+        super().__init__(constraint=True, *args, **kwargs)
 
 #=============================================================================================
 # Constraint-coupled harmonic oscillator
@@ -1812,7 +1817,7 @@ class WaterCluster(TestSystem):
         supported_models = ['tip3p', 'tip4pew', 'tip5p', 'spce']
         if model not in supported_models:
             raise Exception(
-                "Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
+                "Specified water model '{}' is not in list of supported models: {}".format(model, str(supported_models)))
 
         # Load forcefield for solvent model and ions.
         ff = app.ForceField(model + '.xml')
@@ -2045,7 +2050,7 @@ class LennardJonesFluidTruncated(LennardJonesFluid):
         >>> [system, positions] = [testsystem.system, testsystem.positions]
 
         """
-        super(LennardJonesFluidTruncated, self).__init__(switch_width=None, *args, **kwargs)
+        super().__init__(switch_width=None, *args, **kwargs)
 
 
 class LennardJonesFluidSwitched(LennardJonesFluid):
@@ -2068,7 +2073,7 @@ class LennardJonesFluidSwitched(LennardJonesFluid):
         >>> [system, positions] = [testsystem.system, testsystem.positions]
 
         """
-        super(LennardJonesFluidSwitched, self).__init__(switch_width=3.4 * unit.angstrom, *args, **kwargs)
+        super().__init__(switch_width=3.4 * unit.angstrom, *args, **kwargs)
 
 #=============================================================================================
 # Lennard-Jones grid
@@ -2122,7 +2127,7 @@ class LennardJonesGrid(LennardJonesFluid):
 
         # Create system with quasirandom particle positions.
         nparticles = nx * ny * nz
-        super(LennardJonesGrid, self).__init__(nparticles, *args, **kwargs)
+        super().__init__(nparticles, *args, **kwargs)
 
         # Compute volume per particle.
         box = self._system.getDefaultPeriodicBoxVectors()
@@ -2460,7 +2465,7 @@ class DoubleWellDimer_WCAFluid(WCAFluid):
         if not (0 <= ndimers <= self._max_bonds(nparticles)):
             raise ValueError("Can't create %s bonds with %s particles" %
                              (str(ndimers), str(nparticles)))
-        super(DoubleWellDimer_WCAFluid, self).__init__(nparticles, density,
+        super().__init__(nparticles, density,
                                                        mass, epsilon, sigma,
                                                        **kwargs)
         # create the double well dimer force
@@ -2604,7 +2609,7 @@ class DoubleWellChain_WCAFluid(DoubleWellDimer_WCAFluid):
         """
         nchained = 1 if nchained == 0 else nchained  # 0 is allowed input
         # the number of bonds is nchained-1 here; ndimers in the dimer fluid
-        super(DoubleWellChain_WCAFluid, self).__init__(nchained - 1,
+        super().__init__(nchained - 1,
                                                        nparticles, density,
                                                        mass, epsilon,
                                                        sigma, h, r0, w)
@@ -2922,7 +2927,7 @@ class WaterBox(TestSystem):
 
         supported_models = ['tip3p', 'tip4pew', 'tip5p', 'spce']
         if model not in supported_models:
-            raise Exception("Specified water model '%s' is not in list of supported models: %s" % (model, str(supported_models)))
+            raise Exception("Specified water model '{}' is not in list of supported models: {}".format(model, str(supported_models)))
 
         # Load forcefield for solvent model and ions.
         force_fields = [model + '.xml']
@@ -2993,7 +2998,7 @@ class FlexibleWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(FlexibleWaterBox, self).__init__(constrained=False, *args, **kwargs)
+        super().__init__(constrained=False, *args, **kwargs)
 
 class FlexibleReactionFieldWaterBox(WaterBox):
 
@@ -3017,7 +3022,7 @@ class FlexibleReactionFieldWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(FlexibleReactionFieldWaterBox, self).__init__(constrained=False, nonbonedMethod=app.CutoffPeriodic, *args, **kwargs)
+        super().__init__(constrained=False, nonbonedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 class FlexiblePMEWaterBox(WaterBox):
 
@@ -3041,7 +3046,7 @@ class FlexiblePMEWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(FlexiblePMEWaterBox, self).__init__(constrained=False, nonbonedMethod=app.PME, *args, **kwargs)
+        super().__init__(constrained=False, nonbonedMethod=app.PME, *args, **kwargs)
 
 class PMEWaterBox(WaterBox):
 
@@ -3065,7 +3070,7 @@ class PMEWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(PMEWaterBox, self).__init__(nonbonedMethod=app.PME, *args, **kwargs)
+        super().__init__(nonbonedMethod=app.PME, *args, **kwargs)
 
 class GiantFlexibleWaterBox(WaterBox):
 
@@ -3089,7 +3094,7 @@ class GiantFlexibleWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(GiantFlexibleWaterBox, self).__init__(constrained=False, box_edge=50.0*unit.angstroms, *args, **kwargs)
+        super().__init__(constrained=False, box_edge=50.0*unit.angstroms, *args, **kwargs)
 
 class FourSiteWaterBox(WaterBox):
 
@@ -3117,7 +3122,7 @@ class FourSiteWaterBox(WaterBox):
         >>> waterbox = FourSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
         """
-        super(FourSiteWaterBox, self).__init__(model='tip4pew', *args, **kwargs)
+        super().__init__(model='tip4pew', *args, **kwargs)
 
 
 class FiveSiteWaterBox(WaterBox):
@@ -3146,7 +3151,7 @@ class FiveSiteWaterBox(WaterBox):
         >>> waterbox = FiveSiteWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
         """
-        super(FiveSiteWaterBox, self).__init__(model='tip5p', *args, **kwargs)
+        super().__init__(model='tip5p', *args, **kwargs)
 
 class DischargedWaterBox(WaterBox):
 
@@ -3174,7 +3179,7 @@ class DischargedWaterBox(WaterBox):
         >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
         """
-        super(DischargedWaterBox, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Zero charges.
         system = self.system
@@ -3215,7 +3220,7 @@ class FlexibleDischargedWaterBox(FlexibleWaterBox):
         >>> waterbox = FlexibleDischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
         """
-        super(FlexibleDischargedWaterBox, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Zero charges.
         system = self.system
@@ -3252,7 +3257,7 @@ class GiantFlexibleDischargedWaterBox(FlexibleDischargedWaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(GiantFlexibleDischargedWaterBox, self).__init__(box_edge=50.0*unit.angstroms, *args, **kwargs)
+        super().__init__(box_edge=50.0*unit.angstroms, *args, **kwargs)
 
 class DischargedWaterBoxHsites(WaterBox):
 
@@ -3280,7 +3285,7 @@ class DischargedWaterBoxHsites(WaterBox):
         >>> waterbox = DischargedWaterBox(box_edge=3.0*unit.nanometers, cutoff=1.0*unit.nanometers)
 
         """
-        super(DischargedWaterBoxHsites, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Zero charges.
         system = self.system
@@ -3329,7 +3334,7 @@ class AlchemicalWaterBox(WaterBox):
         >>> [system, positions] = [waterbox.system, waterbox.positions]
 
         """
-        super(AlchemicalWaterBox, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Alchemically modify the system
         from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
@@ -3400,7 +3405,7 @@ class AlchemicalAlanineDipeptide(AlanineDipeptideVacuum):
         >>> [system, positions] = [alanine_dipeptide.system, alanine_dipeptide.positions]
 
         """
-        super(AlchemicalAlanineDipeptide, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
         # Alchemically modify the system
         from openmmtools.alchemy import AlchemicalRegion, AbsoluteAlchemicalFactory
@@ -3642,7 +3647,7 @@ class TolueneImplicitGBn2(TolueneImplicit):
 # Host-guest in vacuum
 #=============================================================================================
 
-class _HostGuestBase(object):
+class _HostGuestBase:
     """Mixin to add ability to retrieve hosts and guests as OEMols.
     """
 
@@ -4131,7 +4136,7 @@ class SrcExplicitReactionField(SrcExplicit):
         >>> system, positions = src.system, src.positions
 
         """
-        super(SrcExplicitReactionField, self).__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
+        super().__init__(nonbondedMethod=app.CutoffPeriodic, *args, **kwargs)
 
 #=============================================================================================
 # Methanol box.
@@ -4161,8 +4166,8 @@ class MethanolBox(TestSystem):
         TestSystem.__init__(self, **kwargs)
 
         system_name = 'methanol-box'
-        prmtop_filename = get_data_filename("data/%s/%s.prmtop" % (system_name, system_name))
-        crd_filename = get_data_filename("data/%s/%s.crd" % (system_name, system_name))
+        prmtop_filename = get_data_filename("data/{}/{}.prmtop".format(system_name, system_name))
+        crd_filename = get_data_filename("data/{}/{}.crd".format(system_name, system_name))
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
@@ -4206,8 +4211,8 @@ class MolecularIdealGas(TestSystem):
         TestSystem.__init__(self, **kwargs)
 
         system_name = 'methanol-box'
-        prmtop_filename = get_data_filename("data/%s/%s.prmtop" % (system_name, system_name))
-        crd_filename = get_data_filename("data/%s/%s.crd" % (system_name, system_name))
+        prmtop_filename = get_data_filename("data/{}/{}.prmtop".format(system_name, system_name))
+        crd_filename = get_data_filename("data/{}/{}.crd".format(system_name, system_name))
 
         # Initialize system.
         prmtop = app.AmberPrmtopFile(prmtop_filename)
@@ -4588,8 +4593,8 @@ class LennardJonesPair(TestSystem):
         # Integrate the free energy of binding in unitless coordinate system.
         xmin = 0.15  # in units of sigma
         xmax = 6.0  # in units of sigma
-        from scipy.integrate import quadrature
-        [integral, abserr] = quadrature(integrand_numpy, xmin, xmax, args=[context], maxiter=500)
+        from scipy.integrate import quad
+        integral, _ = quad(integrand_numpy, xmin, xmax, args=[context])
         # correct for performing unitless integration
         integral = integral * (self.sigma ** 3)
 

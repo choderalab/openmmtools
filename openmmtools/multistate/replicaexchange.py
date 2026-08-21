@@ -214,7 +214,7 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
     def __init__(self, replica_mixing_scheme='swap-all', **kwargs):
 
         # Initialize multi-state sampler simulation.
-        super(ReplicaExchangeSampler, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.replica_mixing_scheme = replica_mixing_scheme
 
     class _StoredProperty(multistate.MultiStateSampler._StoredProperty):
@@ -375,8 +375,12 @@ class ReplicaExchangeSampler(multistate.MultiStateSampler):
             thermodynamic_state_j = thermodynamic_state_i + 1  # Neighboring state.
 
             # Determine which replicas currently hold the thermodynamic states.
-            replica_i = np.where(self._replica_thermodynamic_states == thermodynamic_state_i)
-            replica_j = np.where(self._replica_thermodynamic_states == thermodynamic_state_j)
+            # Replica state arrays are one-dimensional here. `np.flatnonzero` gives indices instead
+            # of tuples if we were to use `np.where`.
+            replica_i = np.flatnonzero(
+                self._replica_thermodynamic_states == thermodynamic_state_i).item()
+            replica_j = np.flatnonzero(
+                self._replica_thermodynamic_states == thermodynamic_state_j).item()
             self._attempt_swap(replica_i, replica_j)
 
     def _attempt_swap(self, replica_i, replica_j):

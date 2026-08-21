@@ -1,8 +1,172 @@
 Release History
 ***************
 
+0.26.0
+======
+
+This release removes the barostat force during system minimization and fixes various warnings.
+
+- Fix AST deprecation warning & support pyyaml when built without c extensions PR `#800 <https://github.com/choderalab/openmmtools/pull/800>`_
+- Remove the barostat force from the system during minimization PR `#798 <https://github.com/choderalab/openmmtools/pull/798>`_. Minimization is now explicitly made without any barostats, before these changes it only worked for the ``MonteCarloBarostat``.
+
+
+0.25.3
+======
+
+This release removes a numpy function deprecated in ``numpy 2.3``.
+
+- Switch deprecated ``tostring`` numpy calls to ``tobytes``. PR `#793 <https://github.com/choderalab/openmmtools/pull/793>`_
+
+0.25.2
+======
+This release fixes a bug caused by the use of an incorrect API from the warnings module. The issue could trigger errors when retrying simulations that had previously resulted in temporary NaNs.
+
+- Revert to using ``warnings.warn``. PR `#790 <https://github.com/choderalab/openmmtools/pull/790>`_
+
+0.25.1
+======
+
+This release fixes a bug where ``get_entropy()`` and ``get_enthalpy() `` would return an ``AttributeError`` when using ``pymbar4``.
+See `#757 <https://github.com/choderalab/openmmtools/issues/757>`_ for more details.
+This release fixes deprecation warnings for ``pkg_resources`` and ``warnings.warn``.
+Replaced ``scipy.integrate.quadrature`` with ``scipy.integrate.quad`` to enable ``scipy >= 1.15.0`` support.
+See `#788 <https://github.com/choderalab/openmmtools/pull/788>`_ for more details.
+
+0.25.0
+======
+
+This release removes the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval``. See `#799 <https://github.com/choderalab/openmmtools/pull/779>`_ for more details.
+
+Enhancements
+------------
+
+- Removes the requirement that the ``online_analysis_interval`` is a multiple of ``checkpoint_interval`` 
+  - Issue a logger warning rather than raise a ``ValueError``
+  - Note that the real time analysis output file may contain redundant information after restoring from checkpoints that would result in the repeated calculation of a specific iteration index
+  - See `#799 <https://github.com/choderalab/openmmtools/pull/779>`_ for more details
+
+0.24.2 - Numpy 2 support and FIRE minimization improvements
+===========================================================
+
+This release enables numpy 2 support and makes the FIRE minimization more stable by disabling the barostat during the minimization.
+
+Enhancements
+------------
+
+- Add AWS Tags (`#766 <https://github.com/choderalab/openmmtools/pull/766>`_) by @mikemhenry
+- chore: migrate to new OMSF start/stop runners (`#775 <https://github.com/choderalab/openmmtools/pull/775>`_) by @ethanholz
+- Disable the barostat during FIRE minimization (`#773 <https://github.com/choderalab/openmmtools/pull/773>`_) by @hannahbaumann
+
+Bug Fixes
+---------
+
+- Fixes for numpy 2.0 (ruff NPY201) (`#777 <https://github.com/choderalab/openmmtools/pull/777>`_) by @IAlibay
+
+0.24.1 - Differential storage of positions and velocities
+=========================================================
+
+Enhancements
+------------
+
+- ``MultiStateReporter`` now accepts variable position and velocity checkpointing intervals. Note that when resuming simulations users have to specify again the keyword arguments for the reporter (`Pull Request #767 <https://github.com/choderalab/openmmtools/pull/767>`_).
+
+
+0.24.0 - pyMBAR Behavior Changes + HIP Platform Added 
+=====================================================
+
+Bug Fixes
+---------
+
+- Update docstring default for ``alchemical_pme_treatment`` (`Pull Request #644`_).
+
+
+Behavior Changes
+----------------
+- Use ``robust`` solver for  ``pyMBAR`` by default. 
+  ``pyMBAR`` 3 & 4 used two different solvers by default.
+  We now use the ``robust`` solver by default regardless of the ``pyMBAR`` version.
+  We still respect whichever solver is specified in ``analysis_kwargs`` (i.e ``analysis_kwargs["solver_protocol"] = "robust"`` when creating the analyzer, but now set the solver to ``"robust"`` if no solver is specified.
+  This should improve convergence performance (`Pull Request #735`_).
+
+Enhancements
+------------
+
+- Added OpenMM's "HIP" platform as a selectable platform.
+  With the release of OpenMM 8.2, the "HIP" platform is now available to use on compatible AMD GPUs. This update will allow ``openmmtools`` to automatically select the HIP platform if it is available (`Pull Request #753`_).
+- Added ``effective_length`` to ``MultiStateSamplerAnalyzer`` (`Pull Request #589`_).
+- Create ``alchemy`` subpackage (`Pull Request #721`_).
+
+
+
+Testing
+-------
+
+- Testing framework overhauled to use pytest and flaky tests now automatically re-run if they fail (`Pull Request #714`_, `Pull Request #746`_, `Pull Request #749`_,  `Pull Request #751`_)
+- Use OMSF's `gha-runner`_ to test on GPUs.
+
+.. _gha-runner: https://github.com/omsf-eco-infra/gha-runner
+.. _Pull Request #589: https://github.com/choderalab/openmmtools/pull/589
+.. _Pull Request #714: https://github.com/choderalab/openmmtools/pull/714
+.. _Pull Request #721: https://github.com/choderalab/openmmtools/pull/721
+.. _Pull Request #644: https://github.com/choderalab/openmmtools/pull/644
+.. _Pull Request #744: https://github.com/choderalab/openmmtools/pull/744
+.. _Pull Request #746: https://github.com/choderalab/openmmtools/pull/746
+.. _Pull Request #749: https://github.com/choderalab/openmmtools/pull/749
+.. _Pull Request #735: https://github.com/choderalab/openmmtools/pull/735
+.. _Pull Request #751: https://github.com/choderalab/openmmtools/pull/751
+.. _Pull Request #753: https://github.com/choderalab/openmmtools/pull/753
+
+
+0.23.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fix issue where if ``None`` was used for ``online_analysis_interval`` an error would be thrown (issue `#708 <https://github.com/choderalab/openmmtools/issues/708>`_ PR `#710 <https://github.com/choderalab/openmmtools/pull/710`_)
+
+0.23.0 - latest numba support and real time stats enhancements
+==============================================================
+
+Please note that there is an API breaking change. To ensure consistency of the data when appending real time stats make sure that you make the ``online_analysis_interval`` of your ``MultiStateSampler`` object match the ``checkpoint_interval`` of your ``MultiStateReporter``. It will error if this is not the case.
+
+Enhancements
+------------
+- Running with NVIDIA GPUs in Exclusive Process mode now raises a warning (issue `#697 <https://github.com/choderalab/openmmtools/issues/697>`_, PR `#699 <https://github.com/choderalab/openmmtools/pull/699>`_)
+
+Bugfixes
+--------
+- Fix metadata for netcdf files, specifying openmmtools for the ``program`` metadata (issue `#694 <https://github.com/choderalab/openmmtools/issues/694>`_, PR `#704 <https://github.com/choderalab/openmmtools/pull/704>`_).
+- Real time statistics YAML file gets appended instead of overwritten when extending or resumimng simulations (issue `#691 <https://github.com/choderalab/openmmtools/issues/691>`_, PR `#692 <https://github.com/choderalab/openmmtools/pull/692>`_).
+- Error when resuming simulations with numba 0.57 fixed by avoiding using ``numpy.MaskedArray`` when deserializing ``.nc`` files (issue `#700 <https://github.com/choderalab/openmmtools/issues/700>`_, PR `#701 <https://github.com/choderalab/openmmtools/pull/701>`_)
+
+
+0.22.1 - Bugfix release
+=======================
+
+Bugfixes
+--------
+
+- Fixed issue where the error message thrown from openMM changed, so we need a case insensitive check. This was already fixed in most of the code base but one spot was missed. (PR `#684 <https://github.com/choderalab/openmmtools/pull/684>`_)
+
+0.22.0 - pymbar 4 support and gentle equilibration
+==================================================
+
+Enhancements
+------------
+- Openmmtools now supports both Pymbar 3 and 4 versions. (PR `#659 <https://github.com/choderalab/openmmtools/pull/659>`_)
+- Gentle equilibration protocol utility function available in ``openmmtools.utils.gentle_equilibration`` (PR `#669 <https://github.com/choderalab/openmmtools/pull/669>`_).
+- Timing information for multiple state sampler is now reported by default (PRs `#679 <https://github.com/choderalab/openmmtools/pull/679>`_ and `#671 <https://github.com/choderalab/openmmtools/issues/671>`_).
+
+Bugfixes
+--------
+- Users were not able to distinguish the exceptions caught during dynamics. Warnings are now raised when an exception is being caught (Issue `#643 <https://github.com/choderalab/openmmtools/issues/643>`_ PR `#658 <https://github.com/choderalab/openmmtools/pull/658>`_).
+- Deserializing MCMC moves objects from versions <=0.21.4 resulted in error finding the key. Fixed by catching the exception and raising a warning when key is not found (Issue `#618 <https://github.com/choderalab/openmmtools/issues/618>`_ PR `#675 <https://github.com/choderalab/openmmtools/pull/675>`_).
+- Different improvements in documentation strings and readthedocs documentation generation (Issues `#620 <https://github.com/choderalab/openmmtools/issues/620>`_ `#641 <https://github.com/choderalab/openmmtools/issues/641>`_ `#548 <https://github.com/choderalab/openmmtools/issues/548>`_. PR `#676 <https://github.com/choderalab/openmmtools/pull/676>`_)
+- Support for newer NetCDF versions (1.6 branch) by not using zlib compression for varying length variables. (PR `#654 <https://github.com/choderalab/openmmtools/pull/654>`_).
+
 0.21.5 - Bugfix release
-======================
+=======================
 
 Changed behaviors
 -----------------
@@ -115,7 +279,7 @@ Cleanup
 - Remove leftover `six` imports and `xrange` (`#504 <https://github.com/choderalab/openmmtools/pull/504>`_)
 
 0.20.1 - Bugfix release
-========================================
+=======================
 
 Enhancements
 ------------
