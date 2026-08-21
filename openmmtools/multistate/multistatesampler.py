@@ -609,8 +609,8 @@ class MultiStateSampler:
         self._initialize_reporter()
 
     @utils.with_timer('Minimizing all replicas')
-    def minimize(self, tolerance=1.0 * unit.kilojoules_per_mole / unit.nanometers,
-                 max_iterations=0):
+    def minimize(self, tolerance=2.0 * unit.kilojoules_per_mole / unit.nanometers,
+                 max_iterations=1000):
         """Minimize all replicas.
 
         Minimized positions are stored at the end.
