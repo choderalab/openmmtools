@@ -1743,25 +1743,10 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         else:
             n_states = 1
 
-        # Create thermodynamic states and sampler states
-        thermodynamic_states = [
-            states.ThermodynamicState(system=alanine_test.system,
-                                       temperature=300*unit.kelvin,
-                                       pressure=1.0*unit.atmosphere)
-            for _ in range(n_states)
-        ]
-        # Small offset to avoid periodic-wrapping artifacts.
-        translation_offset = 0.1 * unit.nanometer
-        sampler_states = [
-            states.SamplerState(positions=alanine_test.positions + i * translation_offset,
-                                 box_vectors=box_vectors)
-            for i in range(n_replicas)
-        ]
-        unsampled_states = []
-
-        # Add the specified barostat to each thermodynamic state
-        for ts in thermodynamic_states:
-            system = ts.system
+        # ThermodynamicState.system is a copy, so add the barostat to the raw
+        # system first, before constructing the ThermodynamicState.
+        def _system_with_barostat():
+            system = copy.deepcopy(alanine_test.system)
             if barostat_type is openmm.MonteCarloBarostat:
                 system.addForce(openmm.MonteCarloBarostat(1.0*unit.atmosphere, 300*unit.kelvin, 25))
             elif barostat_type is openmm.MonteCarloMembraneBarostat:
@@ -1776,6 +1761,23 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 system.addForce(openmm.MonteCarloAnisotropicBarostat(
                     openmm.Vec3(1.0, 1.0, 1.0) * unit.atmosphere, 300 * unit.kelvin
                 ))
+            return system
+
+        # Create thermodynamic states and sampler states
+        thermodynamic_states = [
+            states.ThermodynamicState(system=_system_with_barostat(),
+                                       temperature=300*unit.kelvin,
+                                       pressure=1.0*unit.atmosphere)
+            for _ in range(n_states)
+        ]
+        # Small offset to avoid periodic-wrapping artifacts.
+        translation_offset = 0.1 * unit.nanometer
+        sampler_states = [
+            states.SamplerState(positions=alanine_test.positions + i * translation_offset,
+                                 box_vectors=box_vectors)
+            for i in range(n_replicas)
+        ]
+        unsampled_states = []
 
         with self.temporary_storage_path() as storage_path:
             sampler = self.SAMPLER()
