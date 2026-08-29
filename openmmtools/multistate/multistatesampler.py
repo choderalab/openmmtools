@@ -205,6 +205,7 @@ class MultiStateSampler:
         self._thermodynamic_states = None
         self._unsampled_states = None
         self._sampler_states = None
+        # Maps replica_id (0..n_replicas-1) to its current index into _thermodynamic_states (0..n_states-1).
         self._replica_thermodynamic_states = None
         self._iteration = None
         self._energy_thermodynamic_states = None
