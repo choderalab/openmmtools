@@ -1828,8 +1828,10 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
     
             sampler._minimize_replica = tracking_minimize
 
-            # Minimize.
-            sampler.minimize()
+            # Loose tolerance and capped iterations: we only need energy to
+            # decrease, not a fully converged minimum.
+            sampler.minimize(tolerance=10.0 * unit.kilojoules_per_mole / unit.nanometers,
+                              max_iterations=25)
 
             # Restore original method
             sampler._minimize_replica = original_minimize
