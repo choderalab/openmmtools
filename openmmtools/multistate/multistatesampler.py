@@ -50,8 +50,6 @@ import mpiplus
 from openmmtools.multistate.utils import SimulationNaNError
 from openmmtools.multistate.pymbar import ParameterError
 
-from openmmtools.integrators import FIREMinimizationIntegrator
-
 logger = logging.getLogger(__name__)
 
 
@@ -207,6 +205,7 @@ class MultiStateSampler:
         self._thermodynamic_states = None
         self._unsampled_states = None
         self._sampler_states = None
+        # Maps replica_id (0..n_replicas-1) to its current index into _thermodynamic_states (0..n_states-1).
         self._replica_thermodynamic_states = None
         self._iteration = None
         self._energy_thermodynamic_states = None
@@ -1387,11 +1386,8 @@ class MultiStateSampler:
             # Use original state if no barostat
             minimization_state = thermodynamic_state
  
-        # Use the FIRE minimizer
-        integrator = FIREMinimizationIntegrator(tolerance=tolerance)
-
         # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(minimization_state, integrator)
+        context, integrator = self.energy_context_cache.get_context(minimization_state)
         # inform of platform used in current context
         logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
 
@@ -1400,36 +1396,22 @@ class MultiStateSampler:
 
         # Compute the initial energy of the system for logging.
         initial_energy = minimization_state.reduced_potential(context)
-        logger.debug('Replica {}/{}: initial energy {:8.3f}kT'.format(
-            replica_id + 1, self.n_replicas, initial_energy))
+        logger.debug(f"Replica {replica_id + 1}/{self.n_replicas}: initial energy {initial_energy:8.3f}kT")
         # Minimize energy.
-        try:
-            if max_iterations == 0:
-                logger.debug(f'Using FIRE: tolerance {tolerance} minimizing to convergence')
-                while integrator.getGlobalVariableByName('converged') < 1:
-                    integrator.step(50)
-            else:
-                logger.debug(f'Using FIRE: tolerance {tolerance} max_iterations {max_iterations}')
-                integrator.step(max_iterations)
-        except Exception as e:
-            if 'particle coordinate is nan' in str(e).lower():
-                logger.debug('NaN encountered in FIRE minimizer; falling back to L-BFGS after resetting positions')
-                sampler_state.apply_to_context(context)
-                openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
-            else:
-                raise e
+        openmm.LocalEnergyMinimizer.minimize(context, tolerance, max_iterations)
 
         # Get the minimized positions.
         sampler_state.update_from_context(context)
         
         # Compute the final energy of the system for logging.
         final_energy = minimization_state.reduced_potential(sampler_state)
-        logger.debug('Replica {}/{}: final energy {:8.3f}kT'.format(
-            replica_id + 1, self.n_replicas, final_energy))
+        logger.debug(f'Replica {replica_id + 1}/{self.n_replicas}: final energy {final_energy:8.3f}kT')
         # TODO if energy > 0, use slower openmm minimizer
+        # TODO the NVT Context created above for barostat-free minimization is left in
+        #  energy_context_cache indefinitely (capacity=None means it's never evicted) even
+        #  though nothing else reuses it after this point. Consider explicitly removing it
+        #  from the cache here.
 
-        # Clean up the integrator
-        del context
         # Return minimized positions.
         return sampler_state.positions
 

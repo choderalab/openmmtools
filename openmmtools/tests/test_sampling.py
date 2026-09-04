@@ -1716,7 +1716,9 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     sampler._energy_unsampled_states, energy_unsampled_states
                 )
 
-    @pytest.mark.parametrize("barostat_type", [openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat, openmm.MonteCarloAnisotropicBarostat])
+    BAROSTAT_TYPES = (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat, openmm.MonteCarloAnisotropicBarostat)
+
+    @pytest.mark.parametrize("barostat_type", BAROSTAT_TYPES)
     def test_minimize(self, barostat_type):
         """
         Test MultiStateSampler minimize method.
@@ -1730,23 +1732,21 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         """
         # Use periodic alanine system
         alanine_test = testsystems.AlanineDipeptideExplicit(constraints=None)
-        
-        # Create thermodynamic states and sampler states
-        thermodynamic_states = [states.ThermodynamicState(system=alanine_test.system,
-                                                          temperature=300*unit.kelvin,
-                                                          pressure=1.0*unit.atmosphere)]
-        sampler_states = [states.SamplerState(positions=alanine_test.positions)]
-        unsampled_states = []
+        box_vectors = alanine_test.system.getDefaultPeriodicBoxVectors()
 
-        n_states = len(thermodynamic_states)
-        n_replicas = len(sampler_states)
-        if n_replicas == 1:
-            # This test is intended for use with more than one replica
-            return
-         
-        # Add the specified barostat to each thermodynamic state
-        for ts in thermodynamic_states:
-            system = ts.system
+        n_replicas = 2
+
+        # ReplicaExchangeSampler requires n_states >= n_replicas; other samplers
+        # support n_replicas != n_states, so exercise that with a single state.
+        if self.SAMPLER is ReplicaExchangeSampler:
+            n_states = n_replicas
+        else:
+            n_states = 1
+
+        # ThermodynamicState.system is a copy, so add the barostat to the raw
+        # system first, before constructing the ThermodynamicState.
+        def _system_with_barostat():
+            system = copy.deepcopy(alanine_test.system)
             if barostat_type is openmm.MonteCarloBarostat:
                 system.addForce(openmm.MonteCarloBarostat(1.0*unit.atmosphere, 300*unit.kelvin, 25))
             elif barostat_type is openmm.MonteCarloMembraneBarostat:
@@ -1759,8 +1759,25 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     25))
             else:
                 system.addForce(openmm.MonteCarloAnisotropicBarostat(
-                    1.0 * unit.atmosphere, 300 * unit.kelvin
+                    openmm.Vec3(1.0, 1.0, 1.0) * unit.atmosphere, 300 * unit.kelvin
                 ))
+            return system
+
+        # Create thermodynamic states and sampler states
+        thermodynamic_states = [
+            states.ThermodynamicState(system=_system_with_barostat(),
+                                       temperature=300*unit.kelvin,
+                                       pressure=1.0*unit.atmosphere)
+            for _ in range(n_states)
+        ]
+        # Small offset to avoid periodic-wrapping artifacts.
+        translation_offset = 0.1 * unit.nanometer
+        sampler_states = [
+            states.SamplerState(positions=alanine_test.positions + i * translation_offset,
+                                 box_vectors=box_vectors)
+            for i in range(n_replicas)
+        ]
+        unsampled_states = []
 
         with self.temporary_storage_path() as storage_path:
             sampler = self.SAMPLER()
@@ -1797,37 +1814,37 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             systems_used_in_minimization = []
     
             def tracking_minimize(replica_id, tolerance, max_iterations):
-                thermodynamic_state = sampler._thermodynamic_states[replica_id]
+                thermodynamic_state_id = sampler._replica_thermodynamic_states[replica_id]
+                thermodynamic_state = sampler._thermodynamic_states[thermodynamic_state_id]
                 # Temporary NVT system as in minimization
                 min_system = copy.deepcopy(thermodynamic_state.system)
                 # Remove any barostats
                 for i in reversed(range(min_system.getNumForces())):
                     f = min_system.getForce(i)
-                    if isinstance(f, (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat)):
+                    if isinstance(f, self.BAROSTAT_TYPES):
                         min_system.removeForce(i)
                 systems_used_in_minimization.append(min_system)
                 return original_minimize(replica_id, tolerance, max_iterations)
     
             sampler._minimize_replica = tracking_minimize
 
-            # Minimize.
-            sampler.minimize()
+            # Loose tolerance and capped iterations: we only need energy to
+            # decrease, not a fully converged minimum.
+            sampler.minimize(tolerance=10.0 * unit.kilojoules_per_mole / unit.nanometers,
+                              max_iterations=25)
 
             # Restore original method
             sampler._minimize_replica = original_minimize
 
-            # The relative positions between the new sampler states should
-            # be still translated the same way (i.e. we are not assigning
-            # the minimized positions to the incorrect sampler states).
+            # Each replica's minimized positions should stay close to that
+            # same replica's own starting positions (minimization is local),
+            # not another replica's -- catches replica-id mixups.
             new_sampler_states = sampler._sampler_states
-            new_diffs = [
-                np.average(
-                    new_sampler_states[i].positions
-                    - new_sampler_states[i + 1].positions
+            for i in range(n_replicas):
+                own_shift = np.average(new_sampler_states[i].positions - sampler_states[i].positions)
+                assert abs(own_shift) < 0.5 * (translation_offset / unit.nanometer), (
+                    f"Replica {i} minimized positions drifted too far from its own starting positions"
                 )
-                for i in range(n_replicas - 1)
-            ]
-            assert np.allclose(original_diffs, new_diffs, atol=0.1)
 
             # Each replica keeps only the info for the replicas it is
             # responsible for to minimize network traffic.
@@ -1847,7 +1864,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
 
             # The storage has been updated.
             reporter.close()
-            if len(node_replica_ids) == n_states:
+            if len(node_replica_ids) == n_replicas:
                 reporter = self.REPORTER(storage_path, open_mode="r")
                 stored_sampler_states = reporter.read_sampler_states(iteration=0)
                 for new_state, stored_state in zip(
@@ -1859,7 +1876,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             for system in systems_used_in_minimization:
                 forces = system.getForces()
                 assert not any(
-                    isinstance(f, (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat))
+                    isinstance(f, self.BAROSTAT_TYPES)
                     for f in forces
                 ), "Barostat should be disabled during minimization"
         
@@ -1869,7 +1886,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 forces = thermodynamic_state.system.getForces()
                 # Check if the system originally had any volume-changing barostats
                 barostat_present = any(
-                    isinstance(f, (openmm.MonteCarloBarostat, openmm.MonteCarloMembraneBarostat))
+                    isinstance(f, self.BAROSTAT_TYPES)
                     for f in forces
                 )
                 # Assert that at least one barostat is present
