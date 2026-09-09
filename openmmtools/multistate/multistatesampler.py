@@ -1386,10 +1386,11 @@ class MultiStateSampler:
             # Use original state if no barostat
             minimization_state = thermodynamic_state
  
-        # Get context and bound integrator from energy_context_cache
-        context, integrator = self.energy_context_cache.get_context(minimization_state)
-        # inform of platform used in current context
-        logger.debug(f"{type(integrator).__name__}: Minimize using {context.getPlatform().getName()} platform.")
+        # Get context from energy_context_cache. Its integrator is an
+        # arbitrary placeholder.
+        context, _ = self.energy_context_cache.get_context(minimization_state)
+        logger.debug(f"Replica {replica_id + 1}/{self.n_replicas}: minimizing on "
+                     f"{context.getPlatform().getName()} platform.")
 
         # Set initial positions and box vectors.
         sampler_state.apply_to_context(context)
