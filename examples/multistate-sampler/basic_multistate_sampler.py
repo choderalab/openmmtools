@@ -18,6 +18,7 @@ from openmmtools.multistate import MultiStateSampler, MultiStateReporter
 
 # Logging capabilities, default DEBUG
 logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 testsystem = testsystems.AlanineDipeptideImplicit()
 
@@ -49,5 +50,5 @@ sampler.create(thermodynamic_states=thermodynamic_states,
 sampler.minimize()
 sampler.run()
 
-print(f"Ran {sampler.iteration} iterations across {n_replicas} temperatures: "
-      f"{[T / unit.kelvin for T in temperatures]} K")
+logger.info(f"Ran {sampler.iteration} iterations across {n_replicas} temperatures: "
+            f"{[T / unit.kelvin for T in temperatures]} K")
