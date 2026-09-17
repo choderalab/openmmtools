@@ -6,6 +6,8 @@ Release History
 
 This release removes the barostat force during system minimization and fixes various warnings.
 
+- Scale replica velocities by ``sqrt(T_new/T_old)`` after a temperature permutation in replica exchange. Fixes `#807 <https://github.com/choderalab/openmmtools/issues/807>`_.
+
 - Fix AST deprecation warning & support pyyaml when built without c extensions PR `#800 <https://github.com/choderalab/openmmtools/pull/800>`_
 - Remove the barostat force from the system during minimization PR `#798 <https://github.com/choderalab/openmmtools/pull/798>`_. Minimization is now explicitly made without any barostats, before these changes it only worked for the ``MonteCarloBarostat``.
 
