@@ -1556,6 +1556,248 @@ class LangevinIntegrator(ThermostatedIntegrator):
         self.addComputeGlobal("naccept", "ntrials - nreject")
         self.addComputeGlobal("shadow_work", "0")
 
+class LangevinSplittingGirsanov(LangevinIntegrator):
+    r"""Creates a Langevin splitting integrator method that allows you to 
+    output the reweighting factors on-the-fly in addition to standard 
+    trajectory properties. 
+    This custom integrator is based on the :class:`openmmtools.integrators.LangevinIntegrator`. 
+    For information about the splitting rules see the documentation there. 
+    However, not all functionalities of the :class:`LangevinIntegrator` can 
+    be used, since the theoretical background for this method is so far only 
+    available for selective (ABO) splitting schemes (mts integrators bias 
+    overlaps, etc.):
+    
+        A B O       ->   "R V O"
+        A B O B A   ->   "R V O V R"
+        A O B O A   ->   "R O V O R" 
+        B O A O B   ->   "V O R O V" 
+        O B A B O   ->   "O V R V O" 
+        
+    Parameters
+    ----------
+        nstxout : int, write out frequency of simulation data
+        
+        temperature : np.unit.Quantity compatible with kelvin, 
+                      default: 298.0*unit.kelvin Fictitious "bath" temperature
+
+        collision_rate : np.unit.Quantity compatible with 1/picoseconds, 
+                         default: 91.0/unit.picoseconds Collision rate
+
+        timestep : np.unit.Quantity compatible with femtoseconds, 
+                   default: 1.0*unit.femtoseconds Integration timestep
+
+        constraint_tolerance : float, default: 1.0e-8
+                               Tolerance for constraint solver
+            
+
+        References
+        ----------
+            [Schaefer and Keller, 2024] Implementation of Girsanov reweighting in OpenMM and Deeptime
+            [Kieninger, Ghysbrecht and Keller, 2023] Girsanov reweighting for simulations 
+                                                     of underdamped Langevin dynamics. Theory
+
+        Example
+        -------
+            # Import integration class
+            >>> import LangevinSplittingGirsanov as LSIWGPR
+        
+            # Create a splitting integrator.
+            >>> integrator = LSIWGPR(nstxout=1,
+            >>>                      temperature=298.0 * unit.kelvin,
+            >>>                      collision_rate=1.0 / unit.picoseconds,
+            >>>                      timestep=1.0 * unit.femtoseconds,
+            >>>                      splitting="R O V O R" ,
+            >>>                      constraint_tolerance=1e-8
+            >>>                     )
+        
+            # Prepare openMM simulation object (not shown in detail)
+            ...
+            >>> simulation = simulation.Simulation(top.topology, system, integrator, platform)
+        
+            # Run openMM simulation
+            >>> simulation.step(nsteps)
+    """
+    
+    def __init__(self, nstxout, *args, **kwargs):
+        '''
+        Langevin integrator with Girsanov reweighting 
+        based on openmmtools.integrators.LangevinIntegrator
+        '''
+        # Check splitting input keyword
+        if np.array([kwargs['splitting'].split()[i] in ['A', 'B'] for i in range(len(kwargs['splitting'].split()))]).any():
+            raise Exception("Please use different notation for the splitting algorithm.\n A = R\n B = V") 
+        if kwargs['splitting'] not in self._delta_eta_table.keys():
+            raise Exception("Unfortunately, the splitting algorithm is not implemented.\n Modify '_delta_eta_table' according to\n \"string of splitting elements\" : (number of random variables, expression for delta eta, update rule)\n to include.") 
+        if self._delta_eta_table[kwargs['splitting']] == 'nan':
+            raise Exception("Unfortunately, the splitting algorithm is not suitable for Girsanov reweighting.") 
+            
+        # Set global variables       
+        self._nstxout   = nstxout
+        self._splitting = kwargs['splitting']
+        self._timestep = kwargs['timestep']
+        
+        # Initialize a new CustomIntegrator
+        super(LangevinSplittingGirsanov, self).__init__(*args, **kwargs)
+    
+    # Extend inherited functions 
+    def _add_global_variables(self):
+        """Add global variables needed for reweighting.
+        """
+        # Add global variables defined in LangevinIntegrator
+        super(LangevinSplittingGirsanov, self)._add_global_variables()
+        # Add variables for reweighting 
+        self._init_rwght()
+    
+    def _add_integrator_steps(self):
+        """Add integrator steps, with update for random variable differences 
+        (and bias forces -> in force group 1). The exponent of reweighting 
+        factors M is computed.
+        """
+        # Integrate
+        self.addUpdateContextState()
+        self.addComputeTemperatureDependentConstants({"sigma": "sqrt(kT/m)"}) 
+        
+        # Add random number
+        self._get_eta()
+        
+        # Create variable for reweighting factor M 
+        U_idx = 0 
+        O_idx = 0
+        for i, step in enumerate(self._delta_eta_table[self._splitting][2].split()):
+            if step == 'U':
+                # Because biase needs to be updated depending on position index
+                U_idx +=1
+                self._get_delta_eta(U_idx-1)
+            elif step == 'O':
+                O_idx +=1
+                function, _ = self._step_dispatch_table[step]
+                # Because _add_O_step needs extra input of eta_idx
+                function(O_idx-1)
+            else:
+                # Like in setup function but without possibility of mts
+                function, _ = self._step_dispatch_table[step]
+                function()
+       
+        # Trick to enable sumation over the path 
+        # for n=0 and after tau steps of a path delta gives 0
+        # so the integrals for the new path are recalculate  
+        self.addComputeGlobal("ndivtau", "n/tau")
+        self.addComputeGlobal("onedelta","1 - delta(ndivtau-floor(ndivtau))") 
+
+        # Random number based reweighting factor logM(\eta)
+        self._get_logM()
+        # Increase timestep n for the next integration step
+        self.addComputeGlobal("n", "n + 1")
+        
+    def _add_O_step(self, eta_idx):
+        """Add a O step (stochastic velocity update) for reweighting (use Eta{idx}).
+        """
+        # update velocities with stored eta
+        self.addComputePerDof("v", "(a * v) + (b * sigma * Eta{idx})".format(idx=eta_idx))
+        self.addConstrainVelocities()
+
+    # Additional functions needed to output reweighting factors
+    @property
+    def _delta_eta_table(self): 
+        """The dictionary provides information to set up the reweighting factors.
+        (number of random variables, expression for delta eta, update rule).
+        The expression for delta eta are derived in [Kieninger and Keller, 2023].
+        The timestep dependent factors a and b (d, f or d', f' in [Kieninger and Keller, 2023]) 
+        are provided in LangevinIntegrator with the inizialisation of global variables. 
+        To set correct units for b (dimensionless in LangevinIntegrator) one needs to multiply 
+        by the term 'sigma*m' (sigma=sqrt(kT/m)). 
+        """
+        dispatch_table = {
+            "R V O"     : (1, ['a/(b*sigma*m) * timestep * ff0'], "R U V O"),
+            "R V O V R" : (1, ['1/(b*sigma*m) * (1 + a) * timestep/2 * ff0'], "R U V O V R"),
+            "V R O R V" : ('nan'),
+            "V R O R"   : ('nan'),
+            "R O V O R" : (2, ['a/(b*sigma*m) * timestep * ff0'], "R U O V O R"),
+            "V O R O V" : (2, ['a/(b*sigma*m) * timestep/2 * ff0', '1/(b*sigma*m) * timestep/2 * ff1'], "U V O R U O V"),
+            "O V R V O" : (2, ['1/(b*sigma*m) * timestep/2 * ff0', 'a/(b*sigma*m) * timestep/2 * ff1'], "U O V R U V O")
+        }
+        return dispatch_table
+    
+    def _init_eta(self):
+        """Initialize random numbers according to the splitting scheme.
+        """
+        for i in range(self._delta_eta_table[self._splitting][0]):
+            self.addPerDofVariable("Eta{}".format(i),0)
+                
+    def _init_delta_eta(self):
+        """Initialize difference in random numbers between biased and target 
+        simulation according to the splitting scheme.
+        """
+        for i in range(len(self._delta_eta_table[self._splitting][1])):
+            self.addPerDofVariable("DeltaEta{}".format(i),0)
+            self.addPerDofVariable("ff{}".format(i),0)
+
+
+    def _get_eta(self):
+        """Add random numbers drawn from Gaussian distribution 
+        according to the splitting scheme.
+        """
+        for i in range(self._delta_eta_table[self._splitting][0]):
+            self.addComputePerDof("Eta{}".format(i),"gaussian")
+                
+    def _get_delta_eta(self, idx):
+        """Add the difference in random numbers between the target and biased 
+        simulation according to the splitting scheme. The forces associated 
+        with the bias must be updated for the respective time step. An update 
+        rule is given in _delta_eta_table()). The force of the bias must be in 
+        force group 1.
+        """
+        # Update forces
+        self.addComputePerDof("ff{}".format(idx),"f1")  
+        # Set delta eta 
+        self.addComputePerDof("DeltaEta{}".format(idx), self._delta_eta_table[self._splitting][1][idx])  
+        
+    def _get_logM(self):
+        """Add the pre-reweighting factor M in terms of the difference in random numbers
+        between the target and biased simulation. 
+        """
+        # AOBOA has a combined random number 
+        # ToDo: check
+        if self._splitting=='R O V O R':
+            self.addComputePerDof("Eta0","a*Eta0+Eta1")   
+            SOP="(Eta0 * DeltaEta0)/(a*a+1) + 0.5 * (DeltaEta0 * DeltaEta0)/(a*a+1)"
+            
+        else:
+            # Sum over the path (SOP) of length \tau 
+            SOP = str()
+            for i in range(len(self._delta_eta_table[self._splitting][1])):
+                SOP+="Eta{idx} * DeltaEta{idx} + 0.5 * (DeltaEta{idx} * DeltaEta{idx})".format(idx=i)
+                if i+1 < len(self._delta_eta_table[self._splitting][1]):
+                    SOP+=" + "
+        self.addComputeSum("SumOverPath", SOP) 
+        self.addComputeGlobal('M', "M * onedelta + SumOverPath")
+
+    def _init_rwght(self):
+        """ Initialize
+        """
+        ## Add a variable for the timestep n and size
+        self.addGlobalVariable("n", 0)
+        self.addGlobalVariable("timestep", self._timestep)
+        
+        ## Add a variable for \tau the length of a path \omega; 
+        ## here given by the write-out freuquency nstxout
+        self.addGlobalVariable("tau", self._nstxout) 
+        
+        ## Add variables to enable sumation over the path 
+        ## cf. J. Chem. Phys. 146, 244112 (2017) EQ:(29)
+        self.addGlobalVariable("ndivtau", 0)
+        self.addGlobalVariable("onedelta", 0)
+        
+        ## Abb variable give the sum over the path                     
+        ## cf. J. Chem. Phys. 146, 244112 (2017) EQ:(25) 
+        self.addGlobalVariable("SumOverPath", 0)
+        self.addGlobalVariable("M", 0)
+        
+        ## Add variable for \eta and \Delta\eta needed to give reweighting factor M(\eta)
+        ## cf. J. Chem. Phys. 154, 094102 (2021) EQ:(10)
+        self._init_eta()
+        self._init_delta_eta()
+
 class NonequilibriumLangevinIntegrator(LangevinIntegrator):
     """Nonequilibrium integrator mix-in.
 
