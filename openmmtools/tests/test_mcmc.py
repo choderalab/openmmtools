@@ -547,12 +547,13 @@ def test_metropolized_moves():
     original_sampler_state = SamplerState(testsystem.positions)
     thermodynamic_state = ThermodynamicState(testsystem.system, 300 * unit.kelvin)
 
-    all_metropolized_moves = MetropolizedMove.__subclasses__()
+    # Test subclasses of MetropolizedMove except MCDihedralRotationMove
+    all_metropolized_moves = [move_class for move_class in MetropolizedMove.__subclasses__() if move_class.__name__ != 'MCDihedralRotationMove']
     for move_class in all_metropolized_moves:
         move = move_class(atom_subset=range(thermodynamic_state.n_particles))
         sampler_state = copy.deepcopy(original_sampler_state)
 
-        # Start applying the move and remove one at each iteration tyring
+        # Start applying the move and remove one at each iteration trying
         # to generate both an accepted and rejected move.
         old_n_accepted, old_n_proposed = 0, 0
         while len(move.atom_subset) > 0:
@@ -578,6 +579,76 @@ def test_metropolized_moves():
                 move_class.__name__
             )
         )
+    # Test MCDihedralRotationMove
+    # Generate an accepted move
+    move = MCDihedralRotationMove([6, 8, 10, 11, 12, 13], desired_angle=-0.95549) # Rotate the sidechain by 2pi/3, which should always be accepted
+    sampler_state = copy.deepcopy(original_sampler_state)
+    initial_positions = copy.deepcopy(sampler_state.positions)
+    move.apply(thermodynamic_state, sampler_state)
+    final_positions = copy.deepcopy(sampler_state.positions)
+    assert move.n_accepted == 1, ('Rotating alanine dipeptide sidechain by 2pi/3 was not accepted.')
+    if move.n_accepted > old_n_accepted:
+        assert not np.allclose(initial_positions, final_positions)
+
+    # Generate a rejected move
+    for i in range(10):
+        move = MCDihedralRotationMove([6, 8, 10, 11, 12, 13]) # Choose a random rotation
+        move.apply(thermodynamic_state, sampler_state)
+        if move.n_accepted < move.n_proposed:
+            break
+    assert move.n_proposed - move.n_accepted == 1, ('Could not generate a rejected move in 10 iterations.')
+
+
+def test_generate_rotation_matrix():
+    """Test that MCDihedralRotationMove.generate_rotation_matrix() generates the rotation matrix for rotating the alanine sidechain by 2pi/3 correctly. """
+    theta = -(2*math.pi)/3
+    axis = np.array([-0.0808399, 0.03868687, 0.12475653])
+    rotation_matrix = np.array([[-0.08456292, 0.50454367, -0.85923501],
+                                [-0.90216812, -0.40485611, -0.14894367],
+                                [-0.42301512,  0.76257932, 0.48941903]])
+    assert np.allclose(MCDihedralRotationMove.generate_rotation_matrix(axis, theta), rotation_matrix)
+
+
+def test_compute_dihedral():
+    """Test that MCDihedralRotationMove.compute_dihedral() computes the N-CA-CB-HB1 dihedral of alanine correctly. """
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    assert np.allclose(MCDihedralRotationMove.compute_dihedral(testsystem.positions[[6, 8, 10, 11]]), 1.04719)
+
+
+def test_rotate_positions():
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    atom_subset = [6, 8, 10, 11, 12, 13]
+    move = MCDihedralRotationMove(atom_subset, desired_angle=-0.95549) # Rotate the sidechain by 2pi/3
+    new_positions = np.array([[3.55537540e-01, 3.96964880e-01, -3.10000000e-07],
+                            [4.85326210e-01, 4.61392530e-01, -4.30000000e-07],
+                            [5.66130440e-01, 4.22084250e-01, -1.23214800e-01],
+                            [6.59099143e-01, 4.78943429e-01, -1.25418242e-01],
+                            [5.88841910e-01, 3.15546115e-01, -1.19365331e-01],
+                            [5.08287672e-01, 4.43627550e-01, -2.13054053e-01]])
+    assert np.allclose(move.rotate_positions(testsystem.positions[atom_subset]), new_positions)
+
+
+def test_atom_subsets_from_dihedrals():
+    """Test MCDihedralRotationMove.get_atom_subsets_from_dihedrals"""
+    # Test we get the correct the atom subset for the dialanine N-CA-CB-HB1 dihedral
+    testsystem = testsystems.AlanineDipeptideVacuum()
+    top = testsystem.topology
+    atom_subsets = MCDihedralRotationMove.get_atom_subsets_from_dihedrals(top, [[6,8,10,11], [11,10,8,6]])
+    assert atom_subsets[0][:4] == [6,8,10,11], ("Incorrect dihedral in atom subset")
+    assert set(atom_subsets[0][4:]) == {12, 13}, ("Incorrect atoms to be rotated on dihedral")
+    
+    assert atom_subsets[1][:4] == [6,8,10,11], ("Incorrect dihedral in atom subset - with reversal")
+    assert set(atom_subsets[1][4:]) == {12, 13}, ("Incorrect atoms to be rotated on dihedral - with reversal")
+
+    # Test an exception is thrown for a ring; C2-C5 of toluene
+    testsystem = testsystems.TolueneVacuum()
+    top = testsystem.topology
+    with pytest.raises(ValueError):
+        MCDihedralRotationMove.get_atom_subsets_from_dihedrals(top, [[1,2,3,4]])
+    
+    # Test an exception is thrown for a nonexistent bond (C1, C2, C6, C3) of toluene
+    with pytest.raises(ValueError):
+        MCDihedralRotationMove.get_atom_subsets_from_dihedrals(top, [[0,1,5,2]])
 
 
 def test_langevin_splitting_move():
