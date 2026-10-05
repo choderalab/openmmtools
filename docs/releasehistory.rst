@@ -1,6 +1,16 @@
 Release History
 ***************
 
+0.27.0
+======
+
+This release mainly focuses on minimization changes (improvements) and detailed documentation.
+We are now using upstream OpenMM's local minimizer for replica minimization in ``MultiStateSampler``.
+
+- Replacing Fire Minimization with ``LocalEnergyMinimizer`` when using the ``MultiStateSampler``. PR `#672 <https://github.com/choderalab/openmmtools/pull/672>`_.
+- Improved documentation on General Hybrid Monte Carlo dynamic moves. PR `#812 <https://github.com/choderalab/openmmtools/pull/812>`_.
+- Better support for recent numpy 2.x releases. PR `#813 <https://github.com/choderalab/openmmtools/pull/813>`_.
+
 0.26.0
 ======
 
