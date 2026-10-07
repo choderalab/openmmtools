@@ -682,7 +682,7 @@ class ThermodynamicState:
 
         If the pressure is allowed to fluctuate, this is None. Setting
         this will automatically add/configure a barostat to the system.
-        If it is set to None, the barostat will be removed.
+        If it is set to None, the surface tension is also removed as well as the barostat.
 
         """
         return self._pressure

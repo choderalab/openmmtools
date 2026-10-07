@@ -16,6 +16,7 @@ TODO
 import contextlib
 import copy
 import inspect
+import itertools
 import math
 import os
 import pickle
@@ -1808,6 +1809,15 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 for i, j in enumerate(state_indices)
             ]
 
+            # Use a fresh cache so everything in it from this point is due to minimization.
+            sampler.energy_context_cache = cache.ContextCache(
+                capacity=None,
+                time_to_live=None,
+                platform=openmm.Platform.getPlatformByName("Reference"),
+            )
+
+            assert len(sampler.energy_context_cache) == 0
+
             # Before minimization: Barostat should be present
             for thermodynamic_state in sampler._thermodynamic_states:
                 assert isinstance(thermodynamic_state.barostat, barostat_type)
@@ -1816,6 +1826,18 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             # decrease, not a fully converged minimum.
             sampler.minimize(tolerance=10.0 * unit.kilojoules_per_mole / unit.nanometers,
                               max_iterations=25)
+
+            # Every Context created during minimization must be barostat-free.
+            assert len(sampler.energy_context_cache) == 1
+
+            for context_id in sampler.energy_context_cache._lru:
+                context = sampler.energy_context_cache._lru[context_id]
+                assert (
+                        states.ThermodynamicState._find_barostat(
+                            context.getSystem()
+                        )
+                        is None
+                )
 
             # Minimization should not modify the barostat
             for thermodynamic_state in sampler._thermodynamic_states:
@@ -1859,9 +1881,14 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 ):
                     assert np.allclose(new_state.positions, stored_state.positions)
 
-
     def test_minimize_compound_states_share_context(self):
-        """Alchemical replicas share a single context during minimization."""
+        """Alchemical replicas share one correct NVT context during minimization."""
+        if self.SAMPLER is ParallelTemperingSampler:
+            pytest.skip(
+                "ParallelTemperingSampler creates a temperature ladder from "
+                "the first thermodynamic state only"
+            )
+
         temperature = 300.0 * unit.kelvin
         pressure = 1.0 * unit.atmosphere
 
@@ -1877,7 +1904,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             alchemical_region,
         )
 
-        lambda_values = [0.0, 0.5, 1.0]
+        # Use a non-monotonic order so that stale lambda state is easier to detect.
+        lambda_values = [1.0, 0.0, 0.5]
 
         thermodynamic_states = []
         for lambda_value in lambda_values:
@@ -1892,13 +1920,14 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 pressure=pressure,
             )
 
-            compound_state = states.CompoundThermodynamicState(
-                thermodynamic_state=thermodynamic_state,
-                composable_states=[alchemical_state],
+            thermodynamic_states.append(
+                states.CompoundThermodynamicState(
+                    thermodynamic_state=thermodynamic_state,
+                    composable_states=[alchemical_state],
+                )
             )
-            thermodynamic_states.append(compound_state)
 
-        # Preconditions: the NPT states are compatible even though lambda differs.
+        # the states differ in lambda but are context-compatible.
         assert all(
             state.is_state_compatible(thermodynamic_states[0])
             for state in thermodynamic_states[1:]
@@ -1912,6 +1941,22 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             )
             for _ in lambda_values
         ]
+
+        tolerance = (
+                10.0
+                * unit.kilojoules_per_mole
+                / unit.nanometers
+        )
+        max_iterations = 10
+
+        # Positional tolerance used both for the final comparison and to ensure
+        # the reference minimizations are sufficiently distinct to detect a stale
+        # lambda value.
+        position_rtol = 1e-6
+        position_atol = 1e-7  # nm
+        sensitivity_margin = 100 * position_atol
+
+        platform = openmm.Platform.getPlatformByName("Reference")
 
         with self.temporary_storage_path() as storage_path:
             sampler = self.SAMPLER()
@@ -1928,16 +1973,31 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 [],
             )
 
-            # Use a fresh cache so its contents are due solely to minimization.
+            # Use a fresh cache so its contents are only due to minimization.
             sampler.energy_context_cache = cache.ContextCache(
                 capacity=None,
                 time_to_live=None,
-                platform=openmm.Platform.getPlatformByName("Reference"),
+                platform=platform,
             )
 
             assert len(sampler.energy_context_cache) == 0
 
-            # Persistent states are barostated before minimization.
+            # Save exactly the states and thermodynamic-state assignments used as
+            # input to minimization so the independent reference calculation starts
+            # from the same configuration.
+            initial_sampler_states = copy.deepcopy(sampler._sampler_states)
+            initial_state_indices = copy.deepcopy(
+                sampler._replica_thermodynamic_states
+            )
+
+            # Save the actual systems. Minimization must not mutate the
+            # persistent thermodynamic states.
+            persistent_systems_before = [
+                openmm.XmlSerializer.serialize(thermodynamic_state.system)
+                for thermodynamic_state in sampler._thermodynamic_states
+            ]
+
+            # Persistent states are NPT before minimization.
             for thermodynamic_state in sampler._thermodynamic_states:
                 assert isinstance(
                     thermodynamic_state,
@@ -1947,17 +2007,14 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 assert thermodynamic_state.barostat is not None
 
             sampler.minimize(
-                tolerance=(
-                        10.0
-                        * unit.kilojoules_per_mole
-                        / unit.nanometers
-                ),
-                max_iterations=1,
+                tolerance=tolerance,
+                max_iterations=max_iterations,
             )
 
-            # All lambda states should reuse the same barostat-free Context.
+            # compatible lambda states must reuse a single minimization Context.
             assert len(sampler.energy_context_cache) == 1
 
+            # That shared minimization Context must be NVT.
             context_id = next(iter(sampler.energy_context_cache._lru))
             minimization_context = sampler.energy_context_cache._lru[
                 context_id]
@@ -1969,9 +2026,87 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     is None
             )
 
+            # Independently minimize every local replica in a fresh Context whose
+            # System has that replica's alchemical parameters..
+            node_replica_ids = self.get_node_replica_ids(len(sampler_states))
+            expected_positions = {}
+
+            for replica_id in node_replica_ids:
+                state_id = initial_state_indices[replica_id]
+                thermodynamic_state = sampler._thermodynamic_states[state_id]
+
+                system = thermodynamic_state.get_system(
+                    remove_barostat=True
+                )
+
+                integrator = openmm.VerletIntegrator(
+                    1.0 * unit.femtoseconds
+                )
+                context = openmm.Context(
+                    system,
+                    integrator,
+                    platform,
+                )
+
+                initial_sampler_states[replica_id].apply_to_context(context)
+
+                openmm.LocalEnergyMinimizer.minimize(
+                    context,
+                    tolerance,
+                    max_iterations,
+                )
+
+                reference_state = copy.deepcopy(
+                    initial_sampler_states[replica_id]
+                )
+                reference_state.update_from_context(context)
+
+                expected_positions[replica_id] = copy.deepcopy(
+                    reference_state.positions
+                )
+
+                del context, integrator
+
+            # Check that this is sensitive to the different lambda states.
+            if len(expected_positions) > 1:
+                reference_positions = [
+                    positions.value_in_unit(unit.nanometer)
+                    for positions in expected_positions.values()
+                ]
+
+                for first, second in itertools.combinations(
+                        reference_positions, 2
+                ):
+                    assert (
+                            np.max(np.abs(first - second))
+                            > sensitivity_margin
+                    )
+
+            # Cached minimization must agree with an independent minimization at
+            # each replica's assigned lambda.
+            for replica_id, expected in expected_positions.items():
+                actual = sampler._sampler_states[replica_id].positions
+
+                np.testing.assert_allclose(
+                    actual.value_in_unit(unit.nanometer),
+                    expected.value_in_unit(unit.nanometer),
+                    rtol=position_rtol,
+                    atol=position_atol,
+                )
+
             # Minimization must not modify the persistent thermodynamic states.
+            persistent_systems_after = [
+                openmm.XmlSerializer.serialize(thermodynamic_state.system)
+                for thermodynamic_state in sampler._thermodynamic_states
+            ]
+
+            assert persistent_systems_after == persistent_systems_before
+
             for thermodynamic_state in sampler._thermodynamic_states:
-                assert isinstance(thermodynamic_state, states.CompoundThermodynamicState)
+                assert isinstance(
+                    thermodynamic_state,
+                    states.CompoundThermodynamicState,
+                )
                 assert thermodynamic_state.pressure is not None
                 assert thermodynamic_state.barostat is not None
                 assert (
