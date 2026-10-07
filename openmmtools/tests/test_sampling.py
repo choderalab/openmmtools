@@ -1727,8 +1727,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         - Ensure that MPI doesn't mix the information of the minimized 
           StateSamplers when it communicates the new positions
         - Checks that energies decrease
-        - Barostats are temporarily disabled during minimization
-        - Barostats are restored afterward
+        - Minimization does not modify the barostat-containing thermodynamic states
         """
         # Use periodic alanine system
         alanine_test = testsystems.AlanineDipeptideExplicit(constraints=None)
@@ -1808,33 +1807,21 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 sampler._energy_thermodynamic_states[i, j]
                 for i, j in enumerate(state_indices)
             ]
-            
-            # Wrap _minimize_replica to track temporary systems
-            original_minimize = sampler._minimize_replica
-            systems_used_in_minimization = []
-    
-            def tracking_minimize(replica_id, tolerance, max_iterations):
-                thermodynamic_state_id = sampler._replica_thermodynamic_states[replica_id]
-                thermodynamic_state = sampler._thermodynamic_states[thermodynamic_state_id]
-                # Temporary NVT system as in minimization
-                min_system = copy.deepcopy(thermodynamic_state.system)
-                # Remove any barostats
-                for i in reversed(range(min_system.getNumForces())):
-                    f = min_system.getForce(i)
-                    if isinstance(f, self.BAROSTAT_TYPES):
-                        min_system.removeForce(i)
-                systems_used_in_minimization.append(min_system)
-                return original_minimize(replica_id, tolerance, max_iterations)
-    
-            sampler._minimize_replica = tracking_minimize
+
+            # Before minimization: Barostat should be present
+            for thermodynamic_state in sampler._thermodynamic_states:
+                assert isinstance(thermodynamic_state.barostat, barostat_type)
 
             # Loose tolerance and capped iterations: we only need energy to
             # decrease, not a fully converged minimum.
             sampler.minimize(tolerance=10.0 * unit.kilojoules_per_mole / unit.nanometers,
                               max_iterations=25)
 
-            # Restore original method
-            sampler._minimize_replica = original_minimize
+            # Minimization should not modify the barostat
+            for thermodynamic_state in sampler._thermodynamic_states:
+                assert isinstance(thermodynamic_state.barostat, barostat_type)
+                assert isinstance(states.ThermodynamicState._find_barostat(
+                        thermodynamic_state.system), barostat_type)
 
             # Each replica's minimized positions should stay close to that
             # same replica's own starting positions (minimization is local),
@@ -1871,26 +1858,119 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     new_sampler_states, stored_sampler_states
                 ):
                     assert np.allclose(new_state.positions, stored_state.positions)
-            
-            # Check that the barostat was removed during minimization
-            for system in systems_used_in_minimization:
-                forces = system.getForces()
-                assert not any(
-                    isinstance(f, self.BAROSTAT_TYPES)
-                    for f in forces
-                ), "Barostat should be disabled during minimization"
-        
-            # Check that the barostat is present after the minimization
+
+
+    def test_minimize_compound_states_share_context(self):
+        """Alchemical replicas share a single context during minimization."""
+        temperature = 300.0 * unit.kelvin
+        pressure = 1.0 * unit.atmosphere
+
+        alanine = testsystems.AlanineDipeptideExplicit(constraints=None)
+
+        # Create an alchemical system.
+        factory = mmtools.alchemy.AbsoluteAlchemicalFactory()
+        alchemical_region = mmtools.alchemy.AlchemicalRegion(
+            alchemical_atoms=range(22)
+        )
+        alchemical_system = factory.create_alchemical_system(
+            alanine.system,
+            alchemical_region,
+        )
+
+        lambda_values = [0.0, 0.5, 1.0]
+
+        thermodynamic_states = []
+        for lambda_value in lambda_values:
+            alchemical_state = mmtools.alchemy.AlchemicalState.from_system(
+                alchemical_system
+            )
+            alchemical_state.set_alchemical_parameters(lambda_value)
+
+            thermodynamic_state = states.ThermodynamicState(
+                system=alchemical_system,
+                temperature=temperature,
+                pressure=pressure,
+            )
+
+            compound_state = states.CompoundThermodynamicState(
+                thermodynamic_state=thermodynamic_state,
+                composable_states=[alchemical_state],
+            )
+            thermodynamic_states.append(compound_state)
+
+        # Preconditions: the NPT states are compatible even though lambda differs.
+        assert all(
+            state.is_state_compatible(thermodynamic_states[0])
+            for state in thermodynamic_states[1:]
+        )
+
+        box_vectors = alanine.system.getDefaultPeriodicBoxVectors()
+        sampler_states = [
+            states.SamplerState(
+                positions=copy.deepcopy(alanine.positions),
+                box_vectors=box_vectors,
+            )
+            for _ in lambda_values
+        ]
+
+        with self.temporary_storage_path() as storage_path:
+            sampler = self.SAMPLER()
+            reporter = self.REPORTER(
+                storage_path,
+                checkpoint_interval=1,
+            )
+
+            self.call_sampler_create(
+                sampler,
+                reporter,
+                thermodynamic_states,
+                sampler_states,
+                [],
+            )
+
+            # Use a fresh cache so its contents are due solely to minimization.
+            sampler.energy_context_cache = cache.ContextCache(
+                capacity=None,
+                time_to_live=None,
+                platform=openmm.Platform.getPlatformByName("Reference"),
+            )
+
+            assert len(sampler.energy_context_cache) == 0
+
+            # Persistent states are barostated before minimization.
             for thermodynamic_state in sampler._thermodynamic_states:
-                # Get all forces
-                forces = thermodynamic_state.system.getForces()
-                # Check if the system originally had any volume-changing barostats
-                barostat_present = any(
-                    isinstance(f, self.BAROSTAT_TYPES)
-                    for f in forces
+                assert isinstance(
+                    thermodynamic_state,
+                    states.CompoundThermodynamicState,
                 )
-                # Assert that at least one barostat is present
-                assert barostat_present, "Barostat should be restored after minimization"
+                assert thermodynamic_state.pressure is not None
+                assert thermodynamic_state.barostat is not None
+
+            sampler.minimize(
+                tolerance=(
+                        10.0
+                        * unit.kilojoules_per_mole
+                        / unit.nanometers
+                ),
+                max_iterations=1,
+            )
+
+            # All lambda states should reuse the same barostat-free Context.
+            assert len(sampler.energy_context_cache) == 1
+
+            # Minimization must not modify the persistent thermodynamic states.
+            for thermodynamic_state in sampler._thermodynamic_states:
+                assert isinstance(thermodynamic_state, states.CompoundThermodynamicState)
+                assert thermodynamic_state.pressure is not None
+                assert thermodynamic_state.barostat is not None
+                assert (
+                        states.ThermodynamicState._find_barostat(
+                            thermodynamic_state.system
+                        )
+                        is not None
+                )
+
+            reporter.close()
 
     def test_equilibrate(self):
         """Test equilibration of MultiStateSampler simulation.

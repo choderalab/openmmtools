@@ -1358,30 +1358,12 @@ class MultiStateSampler:
         sampler_state = self._sampler_states[replica_id]
         
         # Determine whether we need a temporary NVT state
-        barostat_types = (
-            openmm.MonteCarloBarostat,
-            openmm.MonteCarloMembraneBarostat,
-            openmm.MonteCarloAnisotropicBarostat,
-        )
-
-        has_barostat = any(
-            isinstance(thermodynamic_state.system.getForce(i), barostat_types)
-            for i in range(thermodynamic_state.system.getNumForces())
-        )
-
-        if has_barostat:
-            # Deep copy system and remove all barostats
-            min_system = copy.deepcopy(thermodynamic_state.system)
-            for i in reversed(range(min_system.getNumForces())):
-                if isinstance(min_system.getForce(i), barostat_types):
-                    min_system.removeForce(i)
-
+        if thermodynamic_state.barostat is not None:
             # Temporary NVT ThermodynamicState for minimization
-            minimization_state = states.ThermodynamicState(
-                system=min_system,
-                temperature=thermodynamic_state.temperature,
-                pressure=None
-            )
+            # Otherwise, the minimizer will modify the box
+            # vectors and may cause instabilities.
+            minimization_state = copy.deepcopy(thermodynamic_state)
+            minimization_state.barostat = None
         else:
             # Use original state if no barostat
             minimization_state = thermodynamic_state
@@ -1407,10 +1389,6 @@ class MultiStateSampler:
         final_energy = minimization_state.reduced_potential(sampler_state)
         logger.debug(f'Replica {replica_id + 1}/{self.n_replicas}: final energy {final_energy:8.3f}kT')
         # TODO if energy > 0, use slower openmm minimizer
-        # TODO the NVT Context created above for barostat-free minimization is left in
-        #  energy_context_cache indefinitely (capacity=None means it's never evicted) even
-        #  though nothing else reuses it after this point. Consider explicitly removing it
-        #  from the cache here.
 
         # Return minimized positions.
         return sampler_state.positions

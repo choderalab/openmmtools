@@ -690,16 +690,23 @@ class ThermodynamicState:
     @pressure.setter
     def pressure(self, new_pressure):
         old_pressure = self._pressure
+        old_surface_tension = self._surface_tension
+
+        # If pressure=None, the barostat is removed. A membrane surface tension
+        # can't exist without its membrane barostat, so both should change
         self._pressure = new_pressure
+        if new_pressure is None:
+            self._surface_tension = None
 
         # If we change ensemble, we need to modify the standard system.
         if (new_pressure is None) != (old_pressure is None):
             # The barostat will be removed/added since fix_state is True.
             try:
                 self.set_system(self._standard_system, fix_state=True)
-            except ThermodynamicsError:
+            except Exception:
                 # Restore old pressure to keep object consistent.
                 self._pressure = old_pressure
+                self._surface_tension = old_surface_tension
                 raise
 
     @property
@@ -730,7 +737,6 @@ class ThermodynamicState:
         # If None, just remove the barostat from the standard system.
         if new_barostat is None:
             self.pressure = None
-            self.surface_tension = None
             return
 
         # Remember old pressure and surface tension in case something goes wrong.
@@ -750,7 +756,7 @@ class ThermodynamicState:
             self._pressure = self._get_barostat_pressure(new_barostat)
             self._surface_tension = self._get_barostat_surface_tension(new_barostat)
             self._unsafe_set_system(system, fix_state=False)
-        except ThermodynamicsError:
+        except Exception:
             self._pressure = old_pressure
             self._surface_tension = old_surface_tension
             raise
@@ -1795,7 +1801,7 @@ class ThermodynamicState:
 
     @staticmethod
     def _get_barostat_pressure(barostat):
-        """Set barostat pressure."""
+        """Get barostat pressure."""
         if isinstance(barostat, openmm.MonteCarloAnisotropicBarostat):
             scaled = [barostat.getScaleX(), barostat.getScaleY(), barostat.getScaleZ()]
             first_scaled_axis = scaled.index(True)
