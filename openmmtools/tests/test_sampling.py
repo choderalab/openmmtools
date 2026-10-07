@@ -1958,6 +1958,17 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             # All lambda states should reuse the same barostat-free Context.
             assert len(sampler.energy_context_cache) == 1
 
+            context_id = next(iter(sampler.energy_context_cache._lru))
+            minimization_context = sampler.energy_context_cache._lru[
+                context_id]
+
+            assert (
+                    states.ThermodynamicState._find_barostat(
+                        minimization_context.getSystem()
+                    )
+                    is None
+            )
+
             # Minimization must not modify the persistent thermodynamic states.
             for thermodynamic_state in sampler._thermodynamic_states:
                 assert isinstance(thermodynamic_state, states.CompoundThermodynamicState)
