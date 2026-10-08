@@ -30,7 +30,6 @@ import yaml
 
 import pytest
 import requests
-from coverage.data import debug_data_file
 
 try:
     import openmm
@@ -1723,8 +1722,8 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
         """
         Test MultiStateSampler minimize method.
 
-        The purpose of this test is:        
-        - Ensure that MPI doesn't mix the information of the minimized 
+        The purpose of this test is:
+        - Ensure that MPI doesn't mix the information of the minimized
           StateSamplers when it communicates the new positions
         - Checks that energies decrease
         - Barostats are temporarily disabled during minimization
@@ -1808,11 +1807,11 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                 sampler._energy_thermodynamic_states[i, j]
                 for i, j in enumerate(state_indices)
             ]
-            
+
             # Wrap _minimize_replica to track temporary systems
             original_minimize = sampler._minimize_replica
             systems_used_in_minimization = []
-    
+
             def tracking_minimize(replica_id, tolerance, max_iterations):
                 thermodynamic_state_id = sampler._replica_thermodynamic_states[replica_id]
                 thermodynamic_state = sampler._thermodynamic_states[thermodynamic_state_id]
@@ -1825,7 +1824,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                         min_system.removeForce(i)
                 systems_used_in_minimization.append(min_system)
                 return original_minimize(replica_id, tolerance, max_iterations)
-    
+
             sampler._minimize_replica = tracking_minimize
 
             # Loose tolerance and capped iterations: we only need energy to
@@ -1871,7 +1870,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     new_sampler_states, stored_sampler_states
                 ):
                     assert np.allclose(new_state.positions, stored_state.positions)
-            
+
             # Check that the barostat was removed during minimization
             for system in systems_used_in_minimization:
                 forces = system.getForces()
@@ -1879,7 +1878,7 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
                     isinstance(f, self.BAROSTAT_TYPES)
                     for f in forces
                 ), "Barostat should be disabled during minimization"
-        
+
             # Check that the barostat is present after the minimization
             for thermodynamic_state in sampler._thermodynamic_states:
                 # Get all forces
