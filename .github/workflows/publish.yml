@@ -1,4 +1,4 @@
-ame: Build and publish package
+name: Build and publish package
 
 on:
   pull_request:
