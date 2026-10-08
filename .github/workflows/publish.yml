@@ -91,6 +91,26 @@ jobs:
         run: |
           python -m pip install dist/*.whl
 
+      - name: Verify installed wheel version
+        env:
+          PACKAGE: openmmtools
+        run: |
+          python -I - <<'PY'
+          import importlib
+          import os
+          from importlib.metadata import version
+
+          package = os.environ["PACKAGE"]
+          module = importlib.import_module(package)
+          installed_version = version(os.getenv("DISTRIBUTION", package))
+
+          print(f"Package path: {module.__file__}")
+          print(f"Module version: {module.__version__}")
+          print(f"Installed version: {installed_version}")
+
+          assert module.__version__ == installed_version
+          PY
+
       - name: Run tests
         # Use isolated directory and --import-mode=importlib to avoid hiding
         # packing bugs by running in checked out repo
