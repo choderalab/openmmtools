@@ -1827,17 +1827,13 @@ class TestMultiStateSampler(TestBaseMultistateSampler):
             sampler.minimize(tolerance=10.0 * unit.kilojoules_per_mole / unit.nanometers,
                               max_iterations=25)
 
-            # Every Context created during minimization must be barostat-free.
+            # The Context created during minimization should not have a barostat
             assert len(sampler.energy_context_cache) == 1
 
-            for context_id in sampler.energy_context_cache._lru:
-                context = sampler.energy_context_cache._lru[context_id]
-                assert (
-                        states.ThermodynamicState._find_barostat(
-                            context.getSystem()
-                        )
-                        is None
-                )
+            context_id = next(iter(sampler.energy_context_cache._lru))
+            context = sampler.energy_context_cache._lru[context_id]
+
+            assert (states.ThermodynamicState._find_barostat(context.getSystem()) is None)
 
             # Minimization should not modify the barostat
             for thermodynamic_state in sampler._thermodynamic_states:
