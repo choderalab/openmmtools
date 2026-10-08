@@ -92,6 +92,7 @@ jobs:
             python==3.12.*
             openmm==8.5.2
             pymbar==4.*
+            pytest
           condarc: |
             channels:
               - conda-forge
