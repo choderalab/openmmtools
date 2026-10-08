@@ -108,7 +108,7 @@ jobs:
         # packing bugs by running in checked out repo
         working-directory: /tmp
         run: |
-          pytest -n logical --import-mode=importlib -v --color=yes --durations=10 $GITHUB_WORKSPACE/tests/
+          python -m pytest -n logical --import-mode=importlib -v --color=yes --durations=10 $GITHUB_WORKSPACE/tests/
 
   publish:
     name: Publish to PyPI
