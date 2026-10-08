@@ -82,32 +82,21 @@ jobs:
           path: dist
           merge-multiple: true
 
-
-      - name: Setup micromamba
-        uses: mamba-org/setup-micromamba@v2
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: openmmtools-test
-          create-args: >-
-            python==3.12.*
-            openmm==8.5.2
-            pymbar==4.*
-            pytest
-          condarc: |
-            channels:
-              - conda-forge
+          python-version: "3.12"
 
       - name: Install package
         run: |
           python -m pip install dist/*.whl
-          micromamba list
-          micromamba info
 
       - name: Run tests
         # Use isolated directory and --import-mode=importlib to avoid hiding
         # packing bugs by running in checked out repo
         working-directory: /tmp
         run: |
+          python -m pip install pytest pytest-rerunfailures
           python -m pytest -n logical --import-mode=importlib -v --color=yes --durations=10 $GITHUB_WORKSPACE/tests/
 
   publish:
