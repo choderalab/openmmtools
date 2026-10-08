@@ -77,4 +77,18 @@ setup(
         'test-openmm-platforms = openmmtools.scripts.test_openmm_platforms:main',
         'benchmark-alchemy = openmmtools.tests.test_alchemy:benchmark_alchemy_from_pdb',
         ]},
+    install_requires = [
+       "mdtraj",
+       "mpiplus",
+       "netcdf4 >=1.5",
+       "numba",
+       "numpy >1.9",
+       "openmm >=7.3.1",
+       "pandas",
+       "pdbfixer",
+       "pymbar",
+       "pyyaml",
+       "scipy  >=1.15.0",
+       "setuptools",
+    ]
     )
