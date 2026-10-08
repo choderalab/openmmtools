@@ -89,7 +89,7 @@ jobs:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: openmmtools-test
           create-args: >-
-            python=="3.12"
+            python=="3.12.*"
             openmm=="8.5.2"
             pymbar=="4.*"
           condarc: |
