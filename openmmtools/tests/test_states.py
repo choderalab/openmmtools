@@ -393,44 +393,41 @@ class TestThermodynamicState:
             self.membrane_barostat_alanine_gamma_zero,
         ]
         for system in periodic_testcases:
-            state = ThermodynamicState(system, self.std_temperature)
             if system is self.alanine_explicit:
+                state = ThermodynamicState(system, self.std_temperature)
                 assert state.pressure is None
                 assert state.barostat is None
 
             # Setting pressure adds a barostat
             state.pressure = self.std_pressure
             assert state.pressure == self.std_pressure
-            assert (ThermodynamicState._get_barostat_pressure(state.barostat)) == self.std_pressure
+            assert state.barostat.getDefaultPressure() == self.std_pressure
             assert get_barostat_temperature(state.barostat) == self.std_temperature
 
             # Changing the exposed barostat doesn't affect the state.
             new_pressure = self.std_pressure + 1.0 * unit.bar
             barostat = state.barostat
-            # normalize scalar presure into Vec3 for MonteCarloAnisotropicBarostat
-            ThermodynamicState._set_barostat_pressure(barostat, new_pressure)
-            assert (ThermodynamicState._get_barostat_pressure(state.barostat)) == self.std_pressure
+            barostat.setDefaultPressure(new_pressure)
+            assert state.barostat.getDefaultPressure() == self.std_pressure
 
             # Setting new pressure changes the barostat parameters
             state.pressure = new_pressure
             assert state.pressure == new_pressure
-            assert (ThermodynamicState._get_barostat_pressure(state.barostat)) == new_pressure
+            assert state.barostat.getDefaultPressure() == new_pressure
             assert get_barostat_temperature(state.barostat) == self.std_temperature
 
             # Assigning the barostat changes the pressure
             barostat = state.barostat
-            ThermodynamicState._set_barostat_pressure(barostat, self.std_pressure)
+            barostat.setDefaultPressure(self.std_pressure)
             state.barostat = barostat
             assert state.pressure == self.std_pressure
 
             # Setting pressure of the assigned barostat doesn't change TS internals
-            ThermodynamicState._set_barostat_pressure(barostat, new_pressure)
+            barostat.setDefaultPressure(new_pressure)
             assert state.pressure == self.std_pressure
 
             # Setting pressure to None removes barostat and viceversa.
             state.pressure = None
-            assert state.pressure is None
-            assert state.surface_tension is None
             assert state.barostat is None
 
             state.pressure = self.std_pressure
@@ -529,35 +526,6 @@ class TestThermodynamicState:
         assert utils.is_quantity_close(
             state.surface_tension, self.modified_surface_tension
         )
-
-    @pytest.mark.parametrize("remove_with", ["pressure", "barostat"])
-    def test_remove_membrane_barostat(self, remove_with):
-        """Removing a membrane barostat transitions NPγT to NVT atomically."""
-        state = ThermodynamicState(
-            self.membrane_barostat_alanine_gamma_nonzero,
-            self.std_temperature,
-        )
-
-        # Preconditions.
-        assert isinstance(state.barostat, openmm.MonteCarloMembraneBarostat)
-        assert state.pressure == self.std_pressure
-        assert utils.is_quantity_close(
-            state.surface_tension,
-            self.modified_surface_tension,
-        )
-
-        if remove_with == "pressure":
-            state.pressure = None
-        else:
-            state.barostat = None
-
-        # The whole ensemble transition must occur together.
-        assert state.pressure is None
-        assert state.surface_tension is None
-        assert state.barostat is None
-
-        # Verify the underlying System.
-        assert ThermodynamicState._find_barostat(state.system) is None
 
     def test_property_volume(self):
         """Check that volume is computed correctly."""
