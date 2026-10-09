@@ -276,7 +276,7 @@ def test_serialize_deserialize():
     # Test serialization.
     serialization = serialize(my_instance)
     expected_serialization = {
-        "_serialized__module_name": "test_utils",
+        "_serialized__module_name": MyClass.__module__,
         "_serialized__class_name": "MyClass",
         "a": 4,
         "b": 5,
