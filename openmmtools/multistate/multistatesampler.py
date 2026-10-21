@@ -695,7 +695,9 @@ class MultiStateSampler:
             self._compute_energies()
 
             # Update thermodynamic states
+            states_before_mix = np.array(self._replica_thermodynamic_states, copy=True)
             self._replica_thermodynamic_states = self._mix_replicas()
+            self._rescale_velocities_after_temperature_permutation(states_before_mix)
 
             # Computing timing information
             iteration_time = timer.stop('Equilibration Iteration')
@@ -772,7 +774,9 @@ class MultiStateSampler:
             timer.start('Iteration')
 
             # Update thermodynamic states
+            states_before_mix = np.array(self._replica_thermodynamic_states, copy=True)
             self._replica_thermodynamic_states = self._mix_replicas()
+            self._rescale_velocities_after_temperature_permutation(states_before_mix)
 
             # Propagate replicas.
             self._propagate_replicas()
@@ -1474,6 +1478,30 @@ class MultiStateSampler:
 
         # Return the new energies.
         return energy_neighborhood_states, energy_unsampled_states
+
+    def _rescale_velocities_after_temperature_permutation(self, states_before_mix):
+        """Scale replica velocities by sqrt(T_new/T_old) after a label permutation.
+
+        Mix kernels only permute thermodynamic-state labels. Sampler velocities
+        stay on the replica slot. One permutation scale is the composition of
+        per-swap Sugita-Okamoto factors and covers both the Python and numba
+        mix paths. Runs on every rank after the mixed labels are broadcast.
+        """
+        sampler_states = getattr(self, "_sampler_states", None)
+        if sampler_states is None:
+            return
+        for replica_index, sampler_state in enumerate(sampler_states):
+            if getattr(sampler_state, "velocities", None) is None:
+                continue
+            old_state = int(states_before_mix[replica_index])
+            new_state = int(self._replica_thermodynamic_states[replica_index])
+            if old_state == new_state:
+                continue
+            t_old = self._thermodynamic_states[old_state].temperature
+            t_new = self._thermodynamic_states[new_state].temperature
+            if t_old == t_new:
+                continue
+            sampler_state.velocities = sampler_state.velocities * ((t_new / t_old) ** 0.5)
 
     # -------------------------------------------------------------------------
     # Internal-usage: Replicas mixing.
