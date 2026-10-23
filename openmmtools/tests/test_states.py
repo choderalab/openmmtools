@@ -2718,3 +2718,4 @@ def test_create_thermodynamic_state_protocol():
     )
     for state in states:
         assert state.temperature == 500 * unit.kelvin
+        
