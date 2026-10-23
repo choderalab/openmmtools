@@ -468,14 +468,12 @@ class TestContextCache:
         del context
 
 
-def _alanine_barostatted_replicas(n_replicas):
-    """n_replicas distinct, but mutually Context-compatible, NPT thermodynamic states.
+def _alanine_multistate_replicas(n_replicas, with_barostat):
+    """n_replicas distinct, but mutually Context-compatible, thermodynamic states.
 
-    Each replica gets its own ThermodynamicState/system, differing only in
-    temperature, mirroring how a real multi-replica simulation (e.g. one
-    lambda window per replica) is set up: distinct ThermodynamicState objects
-    that nonetheless standardize to the same system and should therefore be
-    served by a single shared Context (see TestContextCache.compatible_states).
+    Replicas differ only in temperature. With ``with_barostat=True`` they are
+    NPT (exercises the branch of ``_minimize_replica`` fixed by issue #818);
+    with ``with_barostat=False`` they are NVT (the other, unaffected branch).
     """
     alanine_test = testsystems.AlanineDipeptideExplicit(constraints=None)
     box_vectors = alanine_test.system.getDefaultPeriodicBoxVectors()
@@ -485,10 +483,14 @@ def _alanine_barostatted_replicas(n_replicas):
     for replica_index in range(n_replicas):
         temperature = (300 + replica_index) * unit.kelvin
         system = copy.deepcopy(alanine_test.system)
-        system.addForce(openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 25))
+        if with_barostat:
+            system.addForce(openmm.MonteCarloBarostat(1.0 * unit.atmosphere, temperature, 25))
+            pressure = 1.0 * unit.atmosphere
+        else:
+            pressure = None
         thermodynamic_states.append(
             states.ThermodynamicState(
-                system=system, temperature=temperature, pressure=1.0 * unit.atmosphere
+                system=system, temperature=temperature, pressure=pressure
             )
         )
         sampler_states.append(
@@ -499,18 +501,8 @@ def _alanine_barostatted_replicas(n_replicas):
     return thermodynamic_states, sampler_states
 
 
-def test_multistate_sampler_minimize_shares_barostatted_context():
-    """Regression test for issue #818.
-
-    MultiStateSampler.minimize() must reuse the same Context already shared
-    for propagation/energy evaluation, even when the thermodynamic states
-    carry a barostat. Before the fix, ``_minimize_replica`` built a throwaway
-    NVT copy of each replica's system with the barostat removed, leaking one
-    extra Context into the (unbounded) energy_context_cache per replica on
-    top of the one already shared by the other mutually compatible replicas.
-    """
-    thermodynamic_states, sampler_states = _alanine_barostatted_replicas(n_replicas=3)
-
+def _assert_minimize_shares_context(thermodynamic_states, sampler_states):
+    """Shared assertions for the barostatted/NVT context-sharing tests below."""
     with temporary_directory() as tmp_dir_path:
         storage_path = os.path.join(tmp_dir_path, "test_storage.nc")
         sampler = multistate.MultiStateSampler()
@@ -530,3 +522,19 @@ def test_multistate_sampler_minimize_shares_barostatted_context():
 
         # Minimization must reuse that same shared Context
         assert len(sampler.energy_context_cache) == 1
+
+
+def test_multistate_sampler_minimize_shares_barostatted_context():
+    """Regression test for issue #818: NPT replicas share one Context through minimize()."""
+    thermodynamic_states, sampler_states = _alanine_multistate_replicas(
+        n_replicas=3, with_barostat=True
+    )
+    _assert_minimize_shares_context(thermodynamic_states, sampler_states)
+
+
+def test_multistate_sampler_minimize_shares_nvt_context():
+    """Companion to the barostatted test above: NVT replicas also share one Context."""
+    thermodynamic_states, sampler_states = _alanine_multistate_replicas(
+        n_replicas=3, with_barostat=False
+    )
+    _assert_minimize_shares_context(thermodynamic_states, sampler_states)
