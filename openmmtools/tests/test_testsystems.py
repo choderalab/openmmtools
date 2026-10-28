@@ -106,6 +106,22 @@ def test_properties_all_testsystems():
         check_properties(testsystem)
 
 
+@pytest.mark.parametrize(
+    "testsystem_class",
+    [testsystems.HarmonicOscillator, testsystems.HarmonicOscillatorArray],
+)
+def test_harmonic_oscillator_potential_statistics(testsystem_class):
+    """The potential of ndof harmonic terms is (kT/2) chi-squared(ndof)."""
+    testsystem = testsystem_class()
+    state = testsystems.ThermodynamicState(temperature=300.0 * unit.kelvin)
+    kT = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA * state.temperature
+    ndof = testsystem.ndof
+    assert testsystem.get_potential_expectation(state) / kT == pytest.approx(ndof / 2.0)
+    assert testsystem.get_potential_standard_deviation(state) / kT == pytest.approx(
+        np.sqrt(ndof / 2.0)
+    )
+
+
 fast_testsystems = [
     "HarmonicOscillator",
     "PowerOscillator",
