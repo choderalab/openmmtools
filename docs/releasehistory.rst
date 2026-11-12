@@ -1,6 +1,17 @@
 Release History
 ***************
 
+0.27.1
+======
+
+- Stop removing the barostat before minimizing a replica in ``MultiStateSampler._minimize_replica``.
+  ``LocalEnergyMinimizer`` no longer requires a barostat-free system, so minimization now reuses the
+  same ``Context`` already cached for that thermodynamic state instead of creating (and leaking, since
+  ``energy_context_cache`` is typically unbounded) a separate NVT ``Context`` per replica.
+  PR `#821 <https://github.com/choderalab/openmmtools/pull/821>`_
+- Added regression tests confirming compatible replicas (e.g. differing only by alchemical lambda)
+  share a single ``Context`` through minimization, and that the barostat/periodic box are left intact.
+
 0.27.0
 ======
 
