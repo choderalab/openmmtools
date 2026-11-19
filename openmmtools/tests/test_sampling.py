@@ -57,6 +57,10 @@ MultiStateSampler._global_citation_silence = True
 
 kB = unit.BOLTZMANN_CONSTANT_kB * unit.AVOGADRO_CONSTANT_NA  # Boltzmann constant
 
+# Seed for the statistical (harmonic oscillator) tests. Override with the
+# OPENMMTOOLS_TEST_SEED environment variable, e.g. to sweep over seeds.
+DEFAULT_TEST_SEED = 0
+
 
 # ==============================================================================
 # SUBROUTINES
@@ -82,6 +86,46 @@ def check_thermodynamic_states_equality(original_states, restored_states):
                 original_state.lambda_electrostatics
                 == restored_state.lambda_electrostatics
             )
+
+
+def assert_within_nsigma(estimate, stderr, expected, label, max_sigma=6.0):
+    """Assert that ``estimate`` agrees with ``expected`` within ``max_sigma`` standard errors.
+
+    Entries with zero standard error are skipped.
+
+    Parameters
+    ----------
+    estimate : np.ndarray
+        Estimated matrix (e.g. delta_f_ij).
+    stderr : np.ndarray
+        Standard error of ``estimate``.
+    expected : np.ndarray or float
+        Analytical expectation.
+    label : str
+        Name of the quantity, used in the failure message.
+    max_sigma : float, optional
+        Maximum allowed number of standard errors.
+    """
+    error = np.abs(estimate - expected)
+    nstates = estimate.shape[0]
+    indices = np.where(stderr > 0.0)
+    nsigma = np.zeros([nstates, nstates], np.float32)
+    nsigma[indices] = error[indices] / stderr[indices]
+    if np.any(nsigma > max_sigma):
+        with np.printoptions(precision=3):
+            details = "\n".join(
+                f"{key}:\n{value}"
+                for key, value in {
+                    "estimate": estimate,
+                    "expected": expected,
+                    "error": error,
+                    "stderr": stderr,
+                    "nsigma": nsigma,
+                }.items()
+            )
+        raise AssertionError(
+            f"{label} exceeds MAX_SIGMA of {max_sigma:.1f}\n{details}"
+        )
 
 
 # ==============================================================================
@@ -164,6 +208,12 @@ class TestHarmonicOscillatorsMultiStateSampler:
         from openmmtools import cache
 
         cache.global_context_cache = cls.old_global_context_cache
+
+    @pytest.fixture(autouse=True)
+    def seed_rng(self):
+        """Seed the global numpy RNG (used by MC moves and replica swaps) for reproducibility."""
+        seed = int(os.environ.get("OPENMMTOOLS_TEST_SEED", DEFAULT_TEST_SEED))
+        np.random.seed(seed)
 
     def run(self, include_unsampled_states=False):
         # Create and configure simulation object
@@ -283,27 +333,12 @@ class TestHarmonicOscillatorsMultiStateSampler:
                 nstates == nstates_expected
             ), f"analyzer.get_free_energy() returned {delta_f_ij.shape} but expected {nstates_expected,nstates_expected}"
 
-            error = np.abs(delta_f_ij - delta_f_ij_analytical)
-            indices = np.where(delta_f_ij_stderr > 0.0)
-            nsigma = np.zeros([nstates, nstates], np.float32)
-            nsigma[indices] = error[indices] / delta_f_ij_stderr[indices]
-            MAX_SIGMA = 6.0  # maximum allowed number of standard errors
-            if np.any(nsigma > MAX_SIGMA):
-                np.set_printoptions(precision=3)
-                print("delta_f_ij")
-                print(delta_f_ij)
-                print("delta_f_ij_analytical")
-                print(delta_f_ij_analytical)
-                print("error")
-                print(error)
-                print("stderr")
-                print(delta_f_ij_stderr)
-                print("nsigma")
-                print(nsigma)
-                raise Exception(
-                    "Dimensionless free energy difference exceeds MAX_SIGMA of %.1f"
-                    % MAX_SIGMA
-                )
+            assert_within_nsigma(
+                delta_f_ij,
+                delta_f_ij_stderr,
+                delta_f_ij_analytical,
+                "Dimensionless free energy difference",
+            )
 
         # Clean up.
         del simulation
@@ -315,7 +350,6 @@ class TestHarmonicOscillatorsMultiStateSampler:
     # on windows we get a ZeroDivisionError: float division by zero
     # when measuring the timing data
     @pytest.mark.skipif(sys.platform.startswith("win"), reason="Test fails on windows")
-    @pytest.mark.flaky(reruns=3)
     def test_without_unsampled_states(self):
         """Test multistate sampler on a harmonic oscillator without unsampled endstates"""
         self.run(include_unsampled_states=False)
@@ -396,24 +430,12 @@ class TestHarmonicOscillatorsMultiStateSampler:
                 nstates == nstates_expected
         ), f"analyzer.get_entropy() returned {delta_s_ij.shape} but expected {nstates_expected, nstates_expected}"
 
-        error = np.abs(delta_s_ij + delta_f_ij_analytical)  # We expect dS = -dF
-        indices = np.where(delta_s_ij_stderr > 0.0)
-        nsigma = np.zeros([nstates, nstates], np.float32)
-        nsigma[indices] = error[indices] / delta_s_ij_stderr[indices]
-        MAX_SIGMA = 6.0  # maximum allowed number of standard errors
-        if np.any(nsigma > MAX_SIGMA):
-            np.set_printoptions(precision=3)
-            debug_data = {
-                "delta_s_ij": delta_s_ij,
-                "delta_s_ij_analytical": delta_f_ij_analytical,
-                "error": error,
-                "stderr": delta_s_ij_stderr,
-                "nsigma": nsigma,
-            }
-            print("\n[DEBUG] Entropy test failed. Details:")
-            for key, value in debug_data.items():
-                print(f"{key}: {value}")
-            assert False, f"Dimensionless (reduced) entropy exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+        assert_within_nsigma(
+            delta_s_ij,
+            delta_s_ij_stderr,
+            -delta_f_ij_analytical,  # We expect dS = -dF
+            "Dimensionless (reduced) entropy",
+        )
 
         # Check enthalpy
         delta_u_ij, delta_u_ij_stderr = analyzer.get_enthalpy()
@@ -429,24 +451,12 @@ class TestHarmonicOscillatorsMultiStateSampler:
                 nstates == nstates_expected
         ), f"analyzer.get_entropy() returned {delta_u_ij.shape} but expected {nstates_expected, nstates_expected}"
 
-        error = np.abs(delta_u_ij)  # We expect du = 0
-        indices = np.where(delta_u_ij_stderr > 0.0)
-        nsigma = np.zeros([nstates, nstates], np.float32)
-        nsigma[indices] = error[indices] / delta_u_ij_stderr[indices]
-        MAX_SIGMA = 6.0  # maximum allowed number of standard errors
-        if np.any(nsigma > MAX_SIGMA):
-            np.set_printoptions(precision=3)
-            debug_data = {
-                "delta_u_ij": delta_u_ij,
-                "delta_u_ij_analytical": 0,
-                "error": error,
-                "stderr": delta_u_ij_stderr,
-                "nsigma": nsigma,
-            }
-            print("\n[DEBUG] Enthalpy test failed. Details:")
-            for key, value in debug_data.items():
-                print(f"{key}:{value}")
-            assert False, f"Dimensionless (reduced) potential (enthalpy) difference exceeds MAX_SIGMA of {MAX_SIGMA:.1f}"
+        assert_within_nsigma(
+            delta_u_ij,
+            delta_u_ij_stderr,
+            0.0,  # We expect dU = 0
+            "Dimensionless (reduced) potential (enthalpy) difference",
+        )
 
 
 
