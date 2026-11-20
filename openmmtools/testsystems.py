@@ -723,7 +723,7 @@ class HarmonicOscillator(TestSystem):
 
     The standard deviation in position in each dimension is sigma = (kT / K)^(1/2)
 
-    The expectation and standard deviation of the potential energy of a 3D harmonic oscillator is (3/2)kT.
+    The expectation of the potential energy of a 3D harmonic oscillator is (3/2)kT and its standard deviation is sqrt(3/2)kT.
 
     Examples
     --------
@@ -837,7 +837,7 @@ class HarmonicOscillator(TestSystem):
 
         """
 
-        return (3. / 2.) * kB * state.temperature
+        return np.sqrt(3. / 2.) * kB * state.temperature
 
 
 class PowerOscillator(TestSystem):
@@ -1551,7 +1551,7 @@ class HarmonicOscillatorArray(TestSystem):
 
         """
 
-        return (self.ndof / 2.) * kB * state.temperature
+        return np.sqrt(self.ndof / 2.) * kB * state.temperature
 
 #=============================================================================================
 # Sodium chloride FCC crystal.
